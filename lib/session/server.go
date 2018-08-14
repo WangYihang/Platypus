@@ -36,7 +36,7 @@ func (s Server) Listen() (*net.TCPListener, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Server running at: ", s.Desc())
+	fmt.Println("Server running at: ", s.FullDesc())
 	return listener, nil
 }
 
@@ -52,7 +52,21 @@ func (s Server) Run(listener *net.TCPListener) {
 	}
 }
 
-func (s Server) Desc() string {
+func (s Server) OnelineDesc() string {
+	var buffer bytes.Buffer
+	buffer.WriteString(
+		fmt.Sprintf(
+			"[%s] %s:%d (%d online clients)",
+			s.ts.Format("2006-01-02 15:04:05"),
+			s.host,
+			s.port,
+			len(s.clients),
+		),
+	)
+	return buffer.String()
+}
+
+func (s Server) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -75,23 +89,23 @@ func (s Server) Desc() string {
 }
 
 func (s Server) Stop() {
-	// TODO
+	fmt.Println("Stoping server: ", s.OnelineDesc())
+	for _, client := range s.clients {
+		client.Close()
+	}
+	for _, client := range s.clients {
+		s.DeleteClient(client)
+	}
 }
 
 func (s Server) AddClient(client *Client) {
 	s.clients[client.Hash()] = client
 }
 
-func (s Server) DeleteClient(client Client) {
+func (s Server) DeleteClient(client *Client) {
 	delete(s.clients, client.Desc())
 }
 
 func (s Server) GetAllClients() map[string](*Client) {
 	return s.clients
-}
-
-func (s Server) Cleanup() {
-	for _, client := range s.clients {
-		client.conn.Close()
-	}
 }

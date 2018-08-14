@@ -27,7 +27,7 @@ func (c Client) Hash() string {
 }
 
 func (c Client) Close() {
-	delete(server.clients, c.Hash())
+	fmt.Println("Stoping client: ", c.Desc())
 	c.conn.Close()
 }
 

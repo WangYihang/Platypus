@@ -38,14 +38,14 @@ func CommandDispatcher() {
 		switch input {
 		case "exit":
 			for _, server := range servers {
-				server.Cleanup()
+				server.Stop()
 			}
 			exitFlag = true
 			break
 		case "list":
 			fmt.Println(fmt.Sprintf("Listing %d servers", len(servers)))
 			for _, server := range servers {
-				fmt.Println(server.Desc())
+				fmt.Println(server.FullDesc())
 			}
 		case "run":
 			s := session.CreateServer("0.0.0.0", 4444)
