@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"time"
 )
+
+type client struct {
+	addr net.Addr
+	ts   time.Time
+}
+
+var clients map[string]client
 
 func checkError(err error) {
 	if err != nil {
@@ -20,12 +28,19 @@ func handleClient(conn net.Conn) {
 	conn.Write([]byte(daytime))
 }
 
-func main() {
-	service := ":4444"
+func startServer(host string, port int16) {
+	service := fmt.Sprintf("%s:%d", host, port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
-	checkError(err)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
-	checkError(err)
+	fmt.Println("Server running at: ", service)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -33,4 +48,34 @@ func main() {
 		}
 		go handleClient(conn)
 	}
+}
+
+func commandDispatcher() {
+	inputReader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Println("Please enter some input: ")
+		input, err := inputReader.ReadString('\n')
+		if err == nil {
+			fmt.Printf("The input was: %s\n", input)
+		}
+		exitFlag := false
+		switch input {
+		case "exit\n":
+			fmt.Println("exiting...")
+			exitFlag = true
+			break
+		case "run\n":
+			go startServer("0.0.0.0", 4444)
+			break
+		default:
+			fmt.Println("Unsupported command: ", input)
+		}
+		if exitFlag {
+			break
+		}
+	}
+}
+
+func main() {
+	commandDispatcher()
 }
