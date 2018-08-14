@@ -25,7 +25,7 @@ func CreateClient(conn net.Conn) *Client {
 }
 
 func (c Client) Hash() string {
-	return MD5(c.Desc())
+	return MD5(c.conn.RemoteAddr().String())
 }
 
 func (c Client) Close() {
