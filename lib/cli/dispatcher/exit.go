@@ -13,7 +13,7 @@ func (ctx Dispatcher) Exit(args []string) {
 	}
 	for _, server := range Servers {
 		server.Stop()
-		delete(Servers, server.Hash())
+		delete(Servers, server.Hash)
 	}
 	os.Exit(1)
 }
