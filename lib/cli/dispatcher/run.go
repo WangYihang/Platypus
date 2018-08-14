@@ -17,7 +17,10 @@ func (ctx Dispatcher) Run(args []string) {
 }
 
 func (ctx Dispatcher) RunHelp(args []string) {
-
+	fmt.Println("Usage of Run")
+	fmt.Println("\tRun [HOST] [PORT]")
+	fmt.Println("\tHOST\tTHe host you want to listen on")
+	fmt.Println("\tPORT\tTHe port you want to listen on")
 }
 
 func (ctx Dispatcher) RunDesc(args []string) {
