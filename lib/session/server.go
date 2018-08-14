@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/WangYihang/Platypus/lib/utils/log"
+	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 type Server struct {

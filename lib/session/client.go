@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	log "github.com/WangYihang/Platypus/lib/utils/log"
+	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 type Client struct {
