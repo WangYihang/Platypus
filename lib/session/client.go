@@ -34,7 +34,7 @@ func (c Client) Close() {
 
 func (c Client) Desc() string {
 	addr := c.Conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s (connected at: %s)", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp))
+	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
 }
 
 func MD5(data string) string {
