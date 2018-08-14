@@ -21,5 +21,6 @@ func (ctx Dispatcher) RunHelp(args []string) {
 }
 
 func (ctx Dispatcher) RunDesc(args []string) {
-
+	fmt.Println("Run")
+	fmt.Println("\tThis command will try to run a server, listening on a port, waiting for client to connect")
 }
