@@ -22,7 +22,13 @@ func (ctx Dispatcher) Execute(args []string) {
 		for _, client := range server.Clients {
 			if client.Interactive {
 				log.Info("Executing on %s: %s", client.Desc(), command[0:len(command)-1])
-				client.Conn.Write([]byte(command + "\n"))
+				size, err := client.Conn.Write([]byte(command + "\n"))
+				fmt.Println(size)
+				if err != nil {
+					log.Error("Write error: ", err)
+					server.DeleteClient(client)
+					continue
+				}
 				n++
 			}
 		}
