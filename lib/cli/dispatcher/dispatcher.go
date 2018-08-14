@@ -34,6 +34,7 @@ func ParseInput(input string) (string, []string) {
 
 func Run() {
 	inputReader := bufio.NewReader(os.Stdin)
+	reflection.Invoke(Dispatcher{}, "Help", []string{})
 	for {
 		log.CommandPrompt(command_prompt)
 		input, err := inputReader.ReadString('\n')
