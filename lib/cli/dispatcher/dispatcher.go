@@ -15,6 +15,7 @@ import (
 type Dispatcher struct{}
 
 var Servers map[string](*session.Server)
+var Current *session.Client
 
 var command_prompt = ">> "
 
