@@ -5,26 +5,64 @@ import (
 	"time"
 )
 
-func Info(message string) {
-	fmt.Println(fmt.Sprintf("[%s][INFO] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+const (
+	colorRed = uint8(iota + 91)
+	colorGreen
+	colorYellow
+	colorBlue
+	colorMagenta
+
+	debug   = "[TRAC]"
+	info    = "[INFO]"
+	err     = "[ERROR]"
+	warn    = "[WARN]"
+	success = "[SUCCESS]"
+)
+
+func Debug(format string, a ...interface{}) {
+	prefix := yellow(debug)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
-func Error(message string) {
-	fmt.Println(fmt.Sprintf("[%s][ERROR] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+func Info(format string, a ...interface{}) {
+	prefix := blue(info)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
-func Debug(message string) {
-	fmt.Println(fmt.Sprintf("[%s][DEBUG] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+func Error(format string, a ...interface{}) {
+	prefix := red(err)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+func Warn(format string, a ...interface{}) {
+	prefix := magenta(warn)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
-func Warn(message string) {
-	fmt.Println(fmt.Sprintf("[%s][WARN] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+func Success(format string, a ...interface{}) {
+	prefix := green(success)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
-func Fatal(message string) {
-	fmt.Println(fmt.Sprintf("[%s][FATAL] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+func red(s string) string {
+	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorRed, s)
 }
 
-func Panic(message string) {
-	fmt.Println(fmt.Sprintf("[%s][PANIC] %s", time.Now().Format("2006-01-02 15:04:05"), message))
+func green(s string) string {
+	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorGreen, s)
+}
+
+func yellow(s string) string {
+	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorYellow, s)
+}
+
+func blue(s string) string {
+	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorBlue, s)
+}
+
+func magenta(s string) string {
+	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorMagenta, s)
+}
+
+func formatLog(prefix string) string {
+	return time.Now().Format("2006/01/02 15:04:05") + " " + prefix + " "
 }

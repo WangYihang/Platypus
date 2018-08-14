@@ -25,7 +25,7 @@ func (ctx Dispatcher) Help(args []string) {
 		if reflection.Contains(methods, method) && reflection.Contains(methods, help_method) {
 			reflection.Invoke(Dispatcher{}, help_method, []string{})
 		} else {
-			log.Warn("No such command")
+			log.Error("No such command")
 		}
 	}
 }
