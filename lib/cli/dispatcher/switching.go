@@ -16,8 +16,8 @@ func (ctx Dispatcher) Switching(args []string) {
 	for _, server := range Servers {
 		for _, client := range server.Clients {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				log.Success("[%t->%t] %s", client.Interactive, !client.Interactive, client.Desc())
 				client.Interactive = !client.Interactive
+				log.Success("[%t->%t] %s", !client.Interactive, client.Interactive, client.Desc())
 				return
 			}
 		}
