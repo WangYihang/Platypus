@@ -26,19 +26,21 @@ func CreateServer(host string, port int16) *Server {
 	}
 }
 
-func (s Server) Run() {
+func (s Server) Listen() (*net.TCPListener, error) {
 	service := fmt.Sprintf("%s:%d", s.host, s.port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return nil, err
 	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
-	fmt.Println("Server running at: ", service)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return nil, err
 	}
+	fmt.Println("Server running at: ", s.Desc())
+	return listener, nil
+}
+
+func (s Server) Run(listener *net.TCPListener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
