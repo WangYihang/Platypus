@@ -26,16 +26,16 @@ func ParseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
 	args := strings.Split(strings.TrimSpace(input), " ")
 	if !reflection.Contains(methods, args[0]) {
-		log.Error("No such command")
+		log.Error("No such command, use `Help` to get more information")
 		return "Help", []string{}
 	}
 	return str.UpperCaseFirstChar(args[0]), args[1:]
 }
 
-func Serve() {
+func Run() {
 	inputReader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print(command_prompt)
+		log.CommandPrompt(command_prompt)
 		input, err := inputReader.ReadString('\n')
 		if err != nil {
 			fmt.Println()
