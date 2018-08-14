@@ -8,34 +8,33 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/dustin/go-humanize"
 )
 
 type Client struct {
-	ts          time.Time
-	conn        net.Conn
-	interactive bool
+	TimeStamp   time.Time
+	Conn        net.Conn
+	Interactive bool
+	Hash        string
 }
 
 func CreateClient(conn net.Conn) *Client {
 	return &Client{
-		ts:          time.Now(),
-		conn:        conn,
-		interactive: false,
+		TimeStamp:   time.Now(),
+		Conn:        conn,
+		Interactive: false,
+		Hash:        MD5(conn.RemoteAddr().String()),
 	}
 }
 
-func (c Client) Hash() string {
-	return MD5(c.conn.RemoteAddr().String())
-}
-
 func (c Client) Close() {
-	log.Info(fmt.Sprintf("Stoping client: ", c.Desc()))
-	c.conn.Close()
+	log.Info(fmt.Sprintf("Stoping client: %s", c.Desc()))
+	c.Conn.Close()
 }
 
 func (c Client) Desc() string {
-	addr := c.conn.RemoteAddr()
-	return fmt.Sprintf("%s://%s", addr.Network(), addr.String())
+	addr := c.Conn.RemoteAddr()
+	return fmt.Sprintf("[%s] %s://%s (connected at: %s)", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp))
 }
 
 func MD5(data string) string {

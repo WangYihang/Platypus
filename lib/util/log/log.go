@@ -43,6 +43,10 @@ func Success(format string, a ...interface{}) {
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
+func CommandPrompt(commandPrompt string) {
+	fmt.Print(blue(commandPrompt))
+}
+
 func red(s string) string {
 	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", colorRed, s)
 }

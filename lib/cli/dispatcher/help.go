@@ -21,11 +21,11 @@ func (ctx Dispatcher) Help(args []string) {
 		}
 	} else {
 		method := args[0]
-		help_method := args[0] + "Help"
-		if reflection.Contains(methods, method) && reflection.Contains(methods, help_method) {
-			reflection.Invoke(Dispatcher{}, help_method, []string{})
+		helpMethod := args[0] + "Help"
+		if reflection.Contains(methods, method) && reflection.Contains(methods, helpMethod) {
+			reflection.Invoke(Dispatcher{}, helpMethod, []string{})
 		} else {
-			log.Error("No such command")
+			log.Error("No such command, use `Help` to get more information")
 		}
 	}
 }

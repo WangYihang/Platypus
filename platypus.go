@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	dispatcher.Serve()
+	dispatcher.Run()
 }
