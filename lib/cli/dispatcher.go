@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/lib/session"
+	log "github.com/WangYihang/Platypus/lib/utils/log"
 )
 
 var commands = map[string]string{
@@ -31,7 +32,7 @@ func CommandDispatcher() {
 		fmt.Print(">> ")
 		input, err := inputReader.ReadString('\n')
 		if err != nil {
-			fmt.Println("Read from stdin failed")
+			log.Error("A walrus appears")
 		}
 		input = strings.TrimSpace(input)
 		exitFlag := false
@@ -43,7 +44,7 @@ func CommandDispatcher() {
 			exitFlag = true
 			break
 		case "list":
-			fmt.Println(fmt.Sprintf("Listing %d servers", len(servers)))
+			log.Info(fmt.Sprintf("Listing %d servers", len(servers)))
 			for _, server := range servers {
 				fmt.Println(server.FullDesc())
 			}

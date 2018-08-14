@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	log "github.com/WangYihang/Platypus/lib/utils/log"
 )
 
 type Server struct {
@@ -36,7 +38,7 @@ func (s Server) Listen() (*net.TCPListener, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Server running at: ", s.FullDesc())
+	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
 	return listener, nil
 }
 
@@ -56,8 +58,7 @@ func (s Server) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients)",
-			s.ts.Format("2006-01-02 15:04:05"),
+			"%s:%d (%d online clients)",
 			s.host,
 			s.port,
 			len(s.clients),
@@ -70,8 +71,7 @@ func (s Server) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients)",
-			s.ts.Format("2006-01-02 15:04:05"),
+			"%s:%d (%d online clients)",
 			s.host,
 			s.port,
 			len(s.clients),
@@ -89,7 +89,7 @@ func (s Server) FullDesc() string {
 }
 
 func (s Server) Stop() {
-	fmt.Println("Stoping server: ", s.OnelineDesc())
+	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.clients {
 		client.Close()
 	}

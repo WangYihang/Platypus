@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	log "github.com/WangYihang/Platypus/lib/utils/log"
 )
 
 type Client struct {
@@ -27,7 +29,7 @@ func (c Client) Hash() string {
 }
 
 func (c Client) Close() {
-	fmt.Println("Stoping client: ", c.Desc())
+	log.Info(fmt.Sprintf("Stoping client: ", c.Desc()))
 	c.conn.Close()
 }
 
