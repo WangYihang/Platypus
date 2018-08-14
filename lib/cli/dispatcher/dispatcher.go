@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/lib/session"
-	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 	"github.com/WangYihang/Platypus/lib/util/str"
 )
@@ -37,7 +36,8 @@ func Serve() {
 		fmt.Print(command_prompt)
 		input, err := inputReader.ReadString('\n')
 		if err != nil {
-			log.Error("Read from stdin failed")
+			fmt.Println()
+			continue
 		}
 		method, args := ParseInput(input)
 		reflection.Invoke(Dispatcher{}, method, args)

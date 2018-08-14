@@ -1,6 +1,7 @@
 package dispatcher
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/WangYihang/Platypus/lib/util/ui"
@@ -22,5 +23,7 @@ func (ctx Dispatcher) ExitHelp(args []string) {
 }
 
 func (ctx Dispatcher) ExitDesc(args []string) {
-
+	fmt.Println("Exit")
+	fmt.Println("\tThis command will try to exit the whole process")
+	fmt.Println("\tIf there is any listening server, it will ask you to stop them or not")
 }
