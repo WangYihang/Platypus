@@ -14,7 +14,8 @@ func (ctx Dispatcher) List(args []string) {
 }
 
 func (ctx Dispatcher) ListHelp(args []string) {
-
+	fmt.Println("Usage of List")
+	fmt.Println("\tList")
 }
 
 func (ctx Dispatcher) ListDesc(args []string) {

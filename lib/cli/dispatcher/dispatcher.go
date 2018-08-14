@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/lib/session"
+	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 	"github.com/WangYihang/Platypus/lib/util/str"
 )
@@ -25,6 +26,7 @@ func ParseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
 	args := strings.Split(strings.TrimSpace(input), " ")
 	if !reflection.Contains(methods, args[0]) {
+		log.Error("No such command")
 		return "Help", []string{}
 	}
 	return str.UpperCaseFirstChar(args[0]), args[1:]

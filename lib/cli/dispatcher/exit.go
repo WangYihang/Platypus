@@ -19,7 +19,8 @@ func (ctx Dispatcher) Exit(args []string) {
 }
 
 func (ctx Dispatcher) ExitHelp(args []string) {
-
+	fmt.Println("Usage of Exit")
+	fmt.Println("\tExit")
 }
 
 func (ctx Dispatcher) ExitDesc(args []string) {
