@@ -19,7 +19,7 @@ func (ctx Dispatcher) Info(args []string) {
 			return
 		}
 		for _, client := range server.Clients {
-			if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
+			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				fmt.Println("[CLIENT]: \n\t", client.Desc())
 				return
 			}

@@ -116,7 +116,3 @@ func (s Server) DeleteClient(client *Client) {
 func (s Server) GetAllClients() map[string](*Client) {
 	return s.Clients
 }
-
-func (s Server) String() string {
-	return s.OnelineDesc()
-}
