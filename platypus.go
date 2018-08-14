@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	cli.CommandDispatcher()
+	cli.Serve()
 }
