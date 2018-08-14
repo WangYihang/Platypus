@@ -97,7 +97,9 @@ func (s Server) Stop() {
 		s.DeleteClient(client)
 	}
 }
-
+func (s Server) Hash() string {
+	return MD5(fmt.Sprintf("%s:%s:%s", s.host, s.port, s.ts))
+}
 func (s Server) AddClient(client *Client) {
 	s.clients[client.Hash()] = client
 }
