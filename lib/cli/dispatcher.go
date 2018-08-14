@@ -43,13 +43,19 @@ func CommandDispatcher() {
 			exitFlag = true
 			break
 		case "list":
+			fmt.Println(fmt.Sprintf("Listing %d servers", len(servers)))
 			for _, server := range servers {
 				fmt.Println(server.Desc())
 			}
 		case "run":
 			s := session.CreateServer("0.0.0.0", 4444)
+			listener, err := s.Listen()
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 			servers = append(servers, *s)
-			go s.Run()
+			go s.Run(listener)
 			break
 		default:
 			Help()
