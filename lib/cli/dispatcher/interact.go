@@ -49,7 +49,7 @@ func (ctx Dispatcher) Interact(args []string) {
 				Current = nil
 				break
 			}
-			if Current.Interactive {
+			if Current != nil {
 				fmt.Print(string(buffer[:n]))
 			}
 		}
