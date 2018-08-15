@@ -10,44 +10,34 @@ import (
 
 func (ctx Dispatcher) Interact(args []string) {
 	if Current == nil {
-		log.Error("Interactive session is not set, please use `jump` command to set the interactive Interact")
+		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	// go func() {
-	for Current != nil && Current.Interactive {
+	log.Info("Interacting with %s", Current.Desc())
+	inputChannel := make(chan []byte, 1024)
+	go func() {
+		for {
+			select {
+			case data := <-inputChannel:
+				Current.Conn.Write(data)
+			}
+		}
+	}()
+
+	for {
 		inputReader := bufio.NewReader(os.Stdin)
 		command, err := inputReader.ReadString('\n')
-		if command == "exit\n" {
-			log.Info("Exiting interactive Interact")
-			Current.Interactive = false
-		}
 		if err != nil {
 			log.Error("Empty command")
 			fmt.Println()
 			return
 		}
-		_, err = Current.Conn.Write([]byte(command))
-		if err != nil {
-			log.Error("Write error: ", err)
-			Current.Interactive = false
-			Current = nil
+		if command == "exit\n" {
 			break
 		}
+		inputChannel <- []byte(command)
 	}
-	// }()
-	go func() {
-		for Current != nil && Current.Interactive {
-			buffer := make([]byte, 256)
-			n, err := Current.Conn.Read(buffer)
-			if err != nil {
-				log.Error("Read error: ", err)
-				Current.Interactive = false
-				Current = nil
-				break
-			}
-			fmt.Print(buffer[:n])
-		}
-	}()
+	log.Info("Detach from %s", Current.Desc())
 }
 
 func (ctx Dispatcher) InteractHelp(args []string) {
