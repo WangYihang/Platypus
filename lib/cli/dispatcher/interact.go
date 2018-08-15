@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 
 	"github.com/WangYihang/Platypus/lib/context"
-	"github.com/WangYihang/Platypus/lib/model"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -18,26 +16,6 @@ func (ctx Dispatcher) Interact(args []string) {
 		return
 	}
 	log.Info("Interacting with %s", context.Ctx.Current.Desc())
-
-	// Signal Handler
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTSTP)
-	go func(client *model.Client) {
-		for {
-			select {
-			case s := <-c:
-				log.Info("Signal %s captured, sending signal via network", s)
-				switch s {
-				case os.Interrupt:
-					client.Conn.Write([]byte("\u0003"))
-					break
-				case syscall.SIGTSTP:
-					client.Conn.Write([]byte("\u001A"))
-					break
-				}
-			}
-		}
-	}(context.Ctx.Current)
 
 	ChannelOpen := true
 
@@ -67,14 +45,24 @@ func (ctx Dispatcher) Interact(args []string) {
 			log.Error("Read from stdin failed")
 			continue
 		}
-		if command == "exit\n" {
+		command = strings.TrimSpace(command)
+		if command == "exit" {
 			break
 		}
-		if command == "shell\n" {
-			command = "python -c 'import pty;pty.spawn(\"/bin/sh\")'\n"
+		if command == "shell" {
+			command = "python -c 'import pty;pty.spawn(\"/bin/sh\")'"
+		}
+		if command == "^C" {
+			command = "\x03"
+		}
+		if command == "^Z" {
+			command = "\x1A"
+		}
+		if strings.HasPrefix(command, "^V") {
+			command = "\x1B\x1B\x1B" + command[2:] + "\r"
 		}
 		if ChannelOpen {
-			context.Ctx.Current.InPipe <- []byte(command)
+			context.Ctx.Current.InPipe <- []byte(command + "\n")
 		} else {
 			// Channel closed, do cleanup
 			context.Ctx.DeleteClient(context.Ctx.Current)
