@@ -37,5 +37,5 @@ func (ctx Dispatcher) InfoHelp(args []string) {
 
 func (ctx Dispatcher) InfoDesc(args []string) {
 	fmt.Println("Info")
-	fmt.Println("\tThis command will display the infomation of a node, using the hash of the node")
+	fmt.Println("\tDisplay the infomation of a node, using the hash of the node")
 }

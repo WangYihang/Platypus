@@ -34,5 +34,5 @@ func (ctx Dispatcher) JumpHelp(args []string) {
 
 func (ctx Dispatcher) JumpDesc(args []string) {
 	fmt.Println("Jump")
-	fmt.Println("\tThis command will jump to a node, waiting to interactive with it")
+	fmt.Println("\tJump to a node, waiting to interactive with it")
 }
