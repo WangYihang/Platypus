@@ -21,5 +21,5 @@ func (ctx Dispatcher) ListHelp(args []string) {
 
 func (ctx Dispatcher) ListDesc(args []string) {
 	fmt.Println("List")
-	fmt.Println("\tThis command will try list all listening servers and connected clients")
+	fmt.Println("\tTry list all listening servers and connected clients")
 }
