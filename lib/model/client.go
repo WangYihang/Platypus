@@ -32,10 +32,7 @@ func CreateClient(conn net.Conn) *Client {
 }
 
 func (c Client) Close() {
-	log.Info(fmt.Sprintf("Stopping client: %s", c.Desc()))
 	c.Conn.Close()
-	close(c.InPipe)
-	close(c.OutPipe)
 }
 
 func (c Client) Read() {
@@ -45,6 +42,7 @@ func (c Client) Read() {
 		if err != nil {
 			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
 			close(c.OutPipe)
+			close(c.InPipe)
 			return
 		}
 		c.OutPipe <- buffer
@@ -54,10 +52,15 @@ func (c Client) Read() {
 func (c Client) Write() {
 	for {
 		select {
-		case data := <-c.InPipe:
+		case data, ok := <-c.InPipe:
+			if !ok {
+				log.Error("Channel of %s closed", c.Desc())
+				return
+			}
 			n, err := c.Conn.Write(data)
 			if err != nil {
 				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
+				close(c.OutPipe)
 				close(c.InPipe)
 				return
 			}
