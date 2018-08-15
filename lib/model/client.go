@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
-	"github.com/WangYihang/Platypus/lib/util/log"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -33,40 +32,6 @@ func CreateClient(conn net.Conn) *Client {
 
 func (c Client) Close() {
 	c.Conn.Close()
-}
-
-func (c Client) Read() {
-	for {
-		buffer := make([]byte, 1024)
-		_, err := c.Conn.Read(buffer)
-		if err != nil {
-			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
-			close(c.OutPipe)
-			close(c.InPipe)
-			return
-		}
-		c.OutPipe <- buffer
-	}
-}
-
-func (c Client) Write() {
-	for {
-		select {
-		case data, ok := <-c.InPipe:
-			if !ok {
-				log.Error("Channel of %s closed", c.Desc())
-				return
-			}
-			n, err := c.Conn.Write(data)
-			if err != nil {
-				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
-				close(c.OutPipe)
-				close(c.InPipe)
-				return
-			}
-			log.Info("%d bytes sent", n)
-		}
-	}
 }
 
 func (c Client) Desc() string {
