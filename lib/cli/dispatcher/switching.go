@@ -34,6 +34,6 @@ func (ctx Dispatcher) SwitchingHelp(args []string) {
 
 func (ctx Dispatcher) SwitchingDesc(args []string) {
 	fmt.Println("Switching")
-	fmt.Println("\tThis command will switch the interactive field of a node, allows you to interactive with it")
+	fmt.Println("\tSwitch the interactive field of a node, allows you to interactive with it")
 	fmt.Println("\tIf the current status is ON, it will turns to OFF. If OFF, turns ON")
 }
