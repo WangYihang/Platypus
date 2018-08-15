@@ -19,6 +19,26 @@ func (ctx Dispatcher) Interact(args []string) {
 	}
 	log.Info("Interacting with %s", context.Ctx.Current.Desc())
 
+	// Signal Handler
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTSTP)
+	go func(client *model.Client) {
+		for {
+			select {
+			case s := <-c:
+				log.Info("Signal %s captured, sending signal via network", s)
+				switch s {
+				case os.Interrupt:
+					client.Conn.Write([]byte("\u0003"))
+					break
+				case syscall.SIGTSTP:
+					client.Conn.Write([]byte("\u001A"))
+					break
+				}
+			}
+		}
+	}(context.Ctx.Current)
+
 	ChannelOpen := true
 
 	go func() {
@@ -35,24 +55,6 @@ func (ctx Dispatcher) Interact(args []string) {
 			}
 		}
 	}()
-	// Signal Handler
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGSTOP, syscall.SIGTSTP)
-
-	go func(client *model.Client) {
-		select {
-		case s := <-c:
-			log.Info("Signal %s captured, sending signal via network", s)
-			switch s {
-			case os.Interrupt:
-				client.Conn.Write([]byte("\u0003"))
-			case syscall.SIGSTOP:
-				client.Conn.Write([]byte("\u001A"))
-			case syscall.SIGTSTP:
-				client.Conn.Write([]byte("\u001A"))
-			}
-		}
-	}(context.Ctx.Current)
 
 	// Read commands from stdin, Write to client channel
 	for {
