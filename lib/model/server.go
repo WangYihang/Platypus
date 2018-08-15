@@ -111,6 +111,7 @@ func (s Server) AddClient(client *Client) {
 }
 
 func (s Server) DeleteClient(client *Client) {
+	client.Close()
 	delete(s.Clients, client.Hash)
 }
 
