@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -18,7 +19,7 @@ func (ctx Dispatcher) DataDispatcher(args []string) {
 		return
 	}
 	n := 0
-	for _, server := range Servers {
+	for _, server := range context.Servers {
 		for _, client := range server.Clients {
 			if client.Interactive {
 				log.Info("Executing on %s: %s", client.Desc(), command[0:len(command)-1])

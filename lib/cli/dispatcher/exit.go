@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/ui"
 )
 
 func (ctx Dispatcher) Exit(args []string) {
-	if len(Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
+	if len(context.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
 		return
 	}
-	for _, server := range Servers {
+	for _, server := range context.Servers {
 		server.Stop()
-		delete(Servers, server.Hash)
+		delete(context.Servers, server.Hash)
 	}
 	os.Exit(1)
 }
