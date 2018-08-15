@@ -48,20 +48,6 @@ func (s Server) Listen() (*net.TCPListener, error) {
 	return listener, nil
 }
 
-func (s Server) Run(listener *net.TCPListener) {
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-		client := CreateClient(conn)
-		log.Info("New client %s Connected", client.Desc())
-		s.AddClient(client)
-		go client.Read()
-		go client.Write()
-	}
-}
-
 func (s Server) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
