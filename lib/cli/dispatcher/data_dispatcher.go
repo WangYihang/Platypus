@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (ctx Dispatcher) Execute(args []string) {
+func (ctx Dispatcher) DataDispatcher(args []string) {
 	fmt.Print("Input command: ")
 	inputReader := bufio.NewReader(os.Stdin)
 	command, err := inputReader.ReadString('\n')
@@ -33,16 +33,16 @@ func (ctx Dispatcher) Execute(args []string) {
 			}
 		}
 	}
-	log.Success("Execution finished, %d node executed", n)
+	log.Success("Execution finished, %d node DataDispatcherd", n)
 }
 
-func (ctx Dispatcher) ExecuteHelp(args []string) {
-	fmt.Println("Usage of Execute")
-	fmt.Println("\tExecute")
-	fmt.Println("\tCMD\tCommand to execute on the clients which are interactive")
+func (ctx Dispatcher) DataDispatcherHelp(args []string) {
+	fmt.Println("Usage of DataDispatcher")
+	fmt.Println("\tDataDispatcher")
+	fmt.Println("\tCMD\tCommand to DataDispatcher on the clients which are interactive")
 }
 
-func (ctx Dispatcher) ExecuteDesc(args []string) {
-	fmt.Println("Execute")
-	fmt.Println("\tThis command will execute command on all clients which are interactive")
+func (ctx Dispatcher) DataDispatcherDesc(args []string) {
+	fmt.Println("DataDispatcher")
+	fmt.Println("\tThis command will DataDispatcher command on all clients which are interactive")
 }
