@@ -15,22 +15,56 @@ type Client struct {
 	Conn        net.Conn
 	Interactive bool
 	Hash        string
-	Pipe        chan []byte
+	InPipe      chan []byte
+	OutPipe     chan []byte
 }
 
 func CreateClient(conn net.Conn) *Client {
-	return &Client{
+	client := &Client{
 		TimeStamp:   time.Now(),
 		Conn:        conn,
 		Interactive: false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
-		Pipe:        make(chan []byte),
+		InPipe:      make(chan []byte),
+		OutPipe:     make(chan []byte),
 	}
+	go client.Read()
+	go client.Write()
+	return client
 }
 
 func (c Client) Close() {
-	log.Info(fmt.Sprintf("Stoping client: %s", c.Desc()))
+	log.Info(fmt.Sprintf("Stopping client: %s", c.Desc()))
 	c.Conn.Close()
+}
+
+func (c Client) Read() {
+	for {
+		buffer := make([]byte, 1024)
+		n, err := c.Conn.Read(buffer)
+		if err != nil {
+			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
+			c.Close()
+			return
+		}
+		log.Info("%d bytes recieved", n)
+		c.OutPipe <- buffer
+	}
+}
+
+func (c Client) Write() {
+	for {
+		select {
+		case data := <-c.InPipe:
+			n, err := c.Conn.Write(data)
+			if err != nil {
+				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
+				c.Close()
+				return
+			}
+			log.Info("%d bytes sent", n)
+		}
+	}
 }
 
 func (c Client) Desc() string {

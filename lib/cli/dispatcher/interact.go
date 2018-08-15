@@ -10,54 +10,25 @@ import (
 )
 
 func (ctx Dispatcher) Interact(args []string) {
-	if context.Current == nil {
+	if context.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", context.Current.Desc())
-	// write to socket fd
-	inputChannel := make(chan []byte, 1024)
+	log.Info("Interacting with %s", context.Ctx.Current.Desc())
+
 	go func() {
+		// Read commands from client channel, Write to stdout
 		for {
 			select {
-			case data := <-inputChannel:
-				if context.Current == nil {
-					return
-				}
-				context.Current.Conn.Write(data)
-			}
-		}
-	}()
-	// read from socket fd
-	go func() {
-		for {
-			buffer := make([]byte, 1024)
-			if context.Current == nil {
-				return
-			}
-			n, err := context.Current.Conn.Read(buffer)
-			if err != nil {
-				log.Error("Read failed from %s , error message: %s", context.Current.Desc(), err)
-				// Clean up
-				for _, server := range context.Servers {
-					for _, client := range server.Clients {
-						if client.Hash == context.Current.Hash {
-							server.DeleteClient(client)
-						}
-					}
-				}
-				// Set Current to nil
-				context.Current = nil
-				break
-			}
-			if context.Current != nil {
-				fmt.Print(string(buffer[:n]))
+			case data := <-context.Ctx.Current.OutPipe:
+				fmt.Print(data)
 			}
 		}
 	}()
 
+	// Read commands from stdin, Write to client channel
 	for {
-		if context.Current == nil {
+		if context.Ctx.Current == nil {
 			return
 		}
 		inputReader := bufio.NewReader(os.Stdin)
@@ -70,8 +41,9 @@ func (ctx Dispatcher) Interact(args []string) {
 		if command == "exit\n" {
 			break
 		}
-		inputChannel <- []byte(command)
+		context.Ctx.Current.InPipe <- []byte(command)
 	}
+
 }
 
 func (ctx Dispatcher) InteractHelp(args []string) {

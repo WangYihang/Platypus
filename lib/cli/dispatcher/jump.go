@@ -14,10 +14,10 @@ func (ctx Dispatcher) Jump(args []string) {
 		ctx.JumpHelp([]string{})
 		return
 	}
-	for _, server := range context.Servers {
+	for _, server := range context.Ctx.Servers {
 		for _, client := range server.Clients {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				context.Current = client
+				context.Ctx.Current = client
 				log.Success("The current interactive shell is set to: %s", client.Desc())
 				return
 			}

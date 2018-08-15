@@ -9,12 +9,12 @@ import (
 )
 
 func (ctx Dispatcher) Exit(args []string) {
-	if len(context.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
+	if len(context.Ctx.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
 		return
 	}
-	for _, server := range context.Servers {
+	for _, server := range context.Ctx.Servers {
 		server.Stop()
-		delete(context.Servers, server.Hash)
+		delete(context.Ctx.Servers, server.Hash)
 	}
 	os.Exit(1)
 }

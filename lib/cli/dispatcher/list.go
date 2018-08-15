@@ -8,8 +8,8 @@ import (
 )
 
 func (ctx Dispatcher) List(args []string) {
-	log.Info(fmt.Sprintf("Listing %d servers", len(context.Servers)))
-	for _, server := range context.Servers {
+	log.Info(fmt.Sprintf("Listing %d servers", len(context.Ctx.Servers)))
+	for _, server := range context.Ctx.Servers {
 		fmt.Println(server.FullDesc())
 	}
 }
