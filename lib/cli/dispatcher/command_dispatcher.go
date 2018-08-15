@@ -34,6 +34,7 @@ func Run() {
 			fmt.Println()
 			continue
 		}
+		input = strings.TrimSpace(input)
 		method, args := ParseInput(input)
 		reflection.Invoke(Dispatcher{}, method, args)
 	}
