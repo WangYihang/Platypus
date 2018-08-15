@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
+	"github.com/WangYihang/Platypus/lib/util/log"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -31,6 +32,7 @@ func CreateClient(conn net.Conn) *Client {
 }
 
 func (c Client) Close() {
+	log.Info("Closeing client: %s", c.Desc())
 	c.Conn.Close()
 }
 
