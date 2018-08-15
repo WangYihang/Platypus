@@ -16,11 +16,18 @@ func (ctx Dispatcher) Interact(args []string) {
 	}
 	log.Info("Interacting with %s", context.Ctx.Current.Desc())
 
+	ChannelOpen := true
+
 	go func() {
 		// Read commands from client channel, Write to stdout
 		for {
 			select {
-			case data := <-context.Ctx.Current.OutPipe:
+			case data, ok := <-context.Ctx.Current.OutPipe:
+				if !ok {
+					log.Error("Channel of %s closed", context.Ctx.Current.Desc())
+					ChannelOpen = false
+					return
+				}
 				fmt.Print(data)
 			}
 		}
@@ -41,9 +48,14 @@ func (ctx Dispatcher) Interact(args []string) {
 		if command == "exit\n" {
 			break
 		}
-		context.Ctx.Current.InPipe <- []byte(command)
+		if ChannelOpen {
+			context.Ctx.Current.InPipe <- []byte(command)
+		} else {
+			// Channel closed, do cleanup
+			context.Ctx.DeleteClient(context.Ctx.Current)
+			return
+		}
 	}
-
 }
 
 func (ctx Dispatcher) InteractHelp(args []string) {

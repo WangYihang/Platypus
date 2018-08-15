@@ -55,8 +55,10 @@ func (s Server) Run(listener *net.TCPListener) {
 			continue
 		}
 		client := CreateClient(conn)
-		fmt.Println(client.Desc())
-		go s.AddClient(client)
+		log.Info("New client %s Connected", client.Desc())
+		s.AddClient(client)
+		go client.Read()
+		go client.Write()
 	}
 }
 
