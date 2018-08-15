@@ -34,6 +34,8 @@ func CreateClient(conn net.Conn) *Client {
 func (c Client) Close() {
 	log.Info(fmt.Sprintf("Stopping client: %s", c.Desc()))
 	c.Conn.Close()
+	close(c.InPipe)
+	close(c.OutPipe)
 }
 
 func (c Client) Read() {
