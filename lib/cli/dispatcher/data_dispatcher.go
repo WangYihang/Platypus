@@ -40,10 +40,9 @@ func (ctx Dispatcher) DataDispatcher(args []string) {
 func (ctx Dispatcher) DataDispatcherHelp(args []string) {
 	fmt.Println("Usage of DataDispatcher")
 	fmt.Println("\tDataDispatcher")
-	fmt.Println("\tCMD\tCommand to DataDispatcher on the clients which are interactive")
 }
 
 func (ctx Dispatcher) DataDispatcherDesc(args []string) {
 	fmt.Println("DataDispatcher")
-	fmt.Println("\tThis command will DataDispatcher command on all clients which are interactive")
+	fmt.Println("\tDataDispatcher command on all clients which are interactive")
 }

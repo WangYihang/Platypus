@@ -78,5 +78,5 @@ func (ctx Dispatcher) InteractHelp(args []string) {
 
 func (ctx Dispatcher) InteractDesc(args []string) {
 	fmt.Println("Interact")
-	fmt.Println("\tThis command will pop up a interactive session, you can communicate with it via stdin/stdout")
+	fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
 }
