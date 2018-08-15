@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 func (ctx Dispatcher) Interact(args []string) {
-	if Current == nil {
+	if context.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", Current.Desc())
+	log.Info("Interacting with %s", context.Current.Desc())
 	// write to socket fd
 	inputChannel := make(chan []byte, 1024)
 	go func() {
 		for {
 			select {
 			case data := <-inputChannel:
-				if Current == nil {
+				if context.Current == nil {
 					return
 				}
-				Current.Conn.Write(data)
+				context.Current.Conn.Write(data)
 			}
 		}
 	}()
@@ -31,32 +32,32 @@ func (ctx Dispatcher) Interact(args []string) {
 	go func() {
 		for {
 			buffer := make([]byte, 1024)
-			if Current == nil {
+			if context.Current == nil {
 				return
 			}
-			n, err := Current.Conn.Read(buffer)
+			n, err := context.Current.Conn.Read(buffer)
 			if err != nil {
-				log.Error("Read failed from %s , error message: %s", Current.Desc(), err)
+				log.Error("Read failed from %s , error message: %s", context.Current.Desc(), err)
 				// Clean up
-				for _, server := range Servers {
+				for _, server := range context.Servers {
 					for _, client := range server.Clients {
-						if client.Hash == Current.Hash {
+						if client.Hash == context.Current.Hash {
 							server.DeleteClient(client)
 						}
 					}
 				}
 				// Set Current to nil
-				Current = nil
+				context.Current = nil
 				break
 			}
-			if Current != nil {
+			if context.Current != nil {
 				fmt.Print(string(buffer[:n]))
 			}
 		}
 	}()
 
 	for {
-		if Current == nil {
+		if context.Current == nil {
 			return
 		}
 		inputReader := bufio.NewReader(os.Stdin)

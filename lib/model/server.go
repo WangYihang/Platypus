@@ -1,4 +1,4 @@
-package session
+package model
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	humanize "github.com/dustin/go-humanize"
 )
@@ -28,7 +29,7 @@ func CreateServer(host string, port int16) *Server {
 		Port:      port,
 		Clients:   make(map[string](*Client)),
 		TimeStamp: ts,
-		Hash:      MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
+		Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 	}
 	return server
 }

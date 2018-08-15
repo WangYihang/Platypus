@@ -6,22 +6,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/WangYihang/Platypus/lib/session"
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 	"github.com/WangYihang/Platypus/lib/util/str"
 )
 
 type Dispatcher struct{}
-
-var Servers map[string](*session.Server)
-var Current *session.Client
-
-var command_prompt = ">> "
-
-func init() {
-	Servers = make(map[string](*session.Server))
-}
 
 func ParseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
@@ -37,7 +28,7 @@ func Run() {
 	inputReader := bufio.NewReader(os.Stdin)
 	reflection.Invoke(Dispatcher{}, "Help", []string{})
 	for {
-		log.CommandPrompt(command_prompt)
+		log.CommandPrompt(context.CommandPrompt)
 		input, err := inputReader.ReadString('\n')
 		if err != nil {
 			fmt.Println()
