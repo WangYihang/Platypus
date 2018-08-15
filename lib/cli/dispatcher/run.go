@@ -27,7 +27,7 @@ func (ctx Dispatcher) Run(args []string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	context.Servers[server.Hash] = server
+	context.Ctx.Servers[server.Hash] = server
 	go server.Run(listener)
 }
 

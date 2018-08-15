@@ -19,7 +19,7 @@ func (ctx Dispatcher) DataDispatcher(args []string) {
 		return
 	}
 	n := 0
-	for _, server := range context.Servers {
+	for _, server := range context.Ctx.Servers {
 		for _, client := range server.Clients {
 			if client.Interactive {
 				log.Info("Executing on %s: %s", client.Desc(), command[0:len(command)-1])
