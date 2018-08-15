@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -13,7 +14,7 @@ func (ctx Dispatcher) Info(args []string) {
 		ctx.InfoHelp([]string{})
 		return
 	}
-	for _, server := range Servers {
+	for _, server := range context.Servers {
 		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
 			fmt.Println("[SERVER]: \n\t", server.FullDesc())
 			return

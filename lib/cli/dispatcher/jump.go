@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -13,10 +14,10 @@ func (ctx Dispatcher) Jump(args []string) {
 		ctx.JumpHelp([]string{})
 		return
 	}
-	for _, server := range Servers {
+	for _, server := range context.Servers {
 		for _, client := range server.Clients {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				Current = client
+				context.Current = client
 				log.Success("The current interactive shell is set to: %s", client.Desc())
 				return
 			}
