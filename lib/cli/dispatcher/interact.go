@@ -8,9 +8,9 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (ctx Dispatcher) Shell(args []string) {
+func (ctx Dispatcher) Interact(args []string) {
 	if Current == nil {
-		log.Error("Interactive shell is not set, please use `jump` command to set the interactive shell")
+		log.Error("Interactive session is not set, please use `jump` command to set the interactive Interact")
 		return
 	}
 	// go func() {
@@ -18,7 +18,7 @@ func (ctx Dispatcher) Shell(args []string) {
 		inputReader := bufio.NewReader(os.Stdin)
 		command, err := inputReader.ReadString('\n')
 		if command == "exit\n" {
-			log.Info("Exiting interactive shell")
+			log.Info("Exiting interactive Interact")
 			Current.Interactive = false
 		}
 		if err != nil {
@@ -50,12 +50,12 @@ func (ctx Dispatcher) Shell(args []string) {
 	}()
 }
 
-func (ctx Dispatcher) ShellHelp(args []string) {
-	fmt.Println("Usage of Shell")
-	fmt.Println("\tShell")
+func (ctx Dispatcher) InteractHelp(args []string) {
+	fmt.Println("Usage of Interact")
+	fmt.Println("\tInteract")
 }
 
-func (ctx Dispatcher) ShellDesc(args []string) {
-	fmt.Println("Shell")
-	fmt.Println("\tThis command will pop up a interactive shell")
+func (ctx Dispatcher) InteractDesc(args []string) {
+	fmt.Println("Interact")
+	fmt.Println("\tThis command will pop up a interactive session, you can communicate with it via stdin/stdout")
 }
