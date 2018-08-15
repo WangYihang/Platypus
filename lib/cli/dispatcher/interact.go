@@ -28,7 +28,7 @@ func (ctx Dispatcher) Interact(args []string) {
 					ChannelOpen = false
 					return
 				}
-				fmt.Print(data)
+				fmt.Print(string(data))
 			}
 		}
 	}()
