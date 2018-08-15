@@ -28,8 +28,6 @@ func CreateClient(conn net.Conn) *Client {
 		InPipe:      make(chan []byte),
 		OutPipe:     make(chan []byte),
 	}
-	go client.Read()
-	go client.Write()
 	return client
 }
 
@@ -41,13 +39,12 @@ func (c Client) Close() {
 func (c Client) Read() {
 	for {
 		buffer := make([]byte, 1024)
-		n, err := c.Conn.Read(buffer)
+		_, err := c.Conn.Read(buffer)
 		if err != nil {
 			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
-			c.Close()
+			close(c.OutPipe)
 			return
 		}
-		log.Info("%d bytes recieved", n)
 		c.OutPipe <- buffer
 	}
 }
@@ -59,7 +56,7 @@ func (c Client) Write() {
 			n, err := c.Conn.Write(data)
 			if err != nil {
 				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
-				c.Close()
+				close(c.InPipe)
 				return
 			}
 			log.Info("%d bytes sent", n)

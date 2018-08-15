@@ -13,15 +13,20 @@ type Context struct {
 var Ctx *Context
 
 func init() {
-	Ctx = &Context{
-		Servers:       make(map[string](*model.Server)),
-		Current:       nil,
-		CommandPrompt: ">> ",
+	if Ctx == nil {
+		Ctx = &Context{
+			Servers:       make(map[string](*model.Server)),
+			Current:       nil,
+			CommandPrompt: ">> ",
+		}
 	}
 }
 
 func (ctx Context) DeleteClient(c *model.Client) {
 	for _, server := range ctx.Servers {
 		server.DeleteClient(c)
+	}
+	if c == ctx.Current {
+		ctx.Current = nil
 	}
 }
