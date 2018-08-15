@@ -2,12 +2,26 @@ package dispatcher
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/WangYihang/Platypus/lib/session"
+	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 func (ctx Dispatcher) Run(args []string) {
-	server := session.CreateServer("0.0.0.0", 4444)
+	if len(args) != 2 {
+		log.Error("Argments error, use `Help Run` to get more information")
+		ctx.RunHelp([]string{})
+		return
+	}
+	host := args[0]
+	port, err := strconv.ParseInt(args[1], 10, 32)
+	if err != nil {
+		log.Error("Invalid port: %s, use `Help Run` to get more information", args[1])
+		ctx.RunHelp([]string{})
+		return
+	}
+	server := session.CreateServer(host, int16(port))
 	listener, err := server.Listen()
 	if err != nil {
 		fmt.Println(err)
