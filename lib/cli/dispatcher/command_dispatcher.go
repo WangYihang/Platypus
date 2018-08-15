@@ -28,7 +28,7 @@ func Run() {
 	inputReader := bufio.NewReader(os.Stdin)
 	reflection.Invoke(Dispatcher{}, "Help", []string{})
 	for {
-		log.CommandPrompt(context.CommandPrompt)
+		log.CommandPrompt(context.Ctx.CommandPrompt)
 		input, err := inputReader.ReadString('\n')
 		if err != nil {
 			fmt.Println()

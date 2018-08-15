@@ -1,12 +1,27 @@
 package context
 
-import "github.com/WangYihang/Platypus/lib/model"
+import (
+	"github.com/WangYihang/Platypus/lib/model"
+)
 
-var Servers map[string](*model.Server)
-var Current *model.Client
+type Context struct {
+	Servers       map[string](*model.Server)
+	Current       *model.Client
+	CommandPrompt string
+}
 
-var CommandPrompt = ">> "
+var Ctx *Context
 
 func init() {
-	Servers = make(map[string](*model.Server))
+	Ctx = &Context{
+		Servers:       make(map[string](*model.Server)),
+		Current:       nil,
+		CommandPrompt: ">> ",
+	}
+}
+
+func (ctx Context) DeleteClient(c *model.Client) {
+	for _, server := range ctx.Servers {
+		server.DeleteClient(c)
+	}
 }

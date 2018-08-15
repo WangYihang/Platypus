@@ -14,7 +14,7 @@ func (ctx Dispatcher) Info(args []string) {
 		ctx.InfoHelp([]string{})
 		return
 	}
-	for _, server := range context.Servers {
+	for _, server := range context.Ctx.Servers {
 		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
 			fmt.Println("[SERVER]: \n\t", server.FullDesc())
 			return
