@@ -16,7 +16,7 @@ func (ctx Dispatcher) Exit(args []string) {
 		server.Stop()
 		delete(context.Ctx.Servers, server.Hash)
 	}
-	os.Exit(1)
+	os.Exit(0)
 }
 
 func (ctx Dispatcher) ExitHelp(args []string) {
