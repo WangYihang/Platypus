@@ -1,12 +1,15 @@
 package model
 
 import (
+	"bytes"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -39,4 +42,66 @@ func (c Client) Close() {
 func (c Client) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
+}
+
+func (c Client) Readfile(filename string) string {
+	if c.FileExists(filename) {
+		return c.SystemToken("cat " + filename)
+	} else {
+		return ""
+	}
+}
+
+func (c Client) FileExists(path string) bool {
+	return c.SystemToken("ls "+path) == path+"\n"
+}
+
+func (c Client) System(command string) {
+	c.Conn.Write([]byte(command + "\n"))
+}
+
+func (c Client) SystemToken(command string) string {
+	tokenA := str.RandomString(0x10)
+	tokenB := str.RandomString(0x10)
+	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
+	c.System(input)
+	c.ReadUntil(tokenA)
+	output := c.ReadUntil(tokenB)
+	log.Info(output)
+	return output
+}
+
+func (c Client) ReadUntil(token string) string {
+	inputBuffer := make([]byte, 1)
+	var outputBuffer bytes.Buffer
+	log.Info("Start loop")
+	for {
+		n, err := c.Conn.Read(inputBuffer)
+		log.Info("%d bytes read", n)
+		if err != nil {
+			return outputBuffer.String()
+		}
+		log.Info(string(inputBuffer[:n]))
+		log.Info("Save to buffer: %s", string(inputBuffer[:n]))
+		outputBuffer.Write(inputBuffer[:n])
+		if strings.HasSuffix(outputBuffer.String(), token) {
+			return outputBuffer.String()
+		}
+	}
+}
+
+func (c Client) ReadAll() string {
+	inputBuffer := make([]byte, 1024)
+	var outputBuffer bytes.Buffer
+	for {
+		n, err := c.Conn.Read(inputBuffer)
+		if err != nil {
+			return outputBuffer.String()
+		}
+		if n == 0 {
+			break
+		}
+		outputBuffer.Write(inputBuffer[:n])
+	}
+	return outputBuffer.String()
 }
