@@ -1,4 +1,4 @@
-package model
+package context
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -45,33 +44,6 @@ func (c *Client) Close() {
 func (c *Client) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
-}
-
-func (c *Client) Readfile(filename string) string {
-	if c.FileExists(filename) {
-		return c.SystemToken("cat " + filename)
-	} else {
-		return ""
-	}
-}
-
-func (c *Client) FileExists(path string) bool {
-	return c.SystemToken("ls "+path) == path+"\n"
-}
-
-func (c *Client) System(command string) {
-	c.Conn.Write([]byte(command + "\n"))
-}
-
-func (c *Client) SystemToken(command string) string {
-	tokenA := str.RandomString(0x10)
-	tokenB := str.RandomString(0x10)
-	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
-	c.System(input)
-	c.ReadUntil(tokenA)
-	output := c.ReadUntil(tokenB)
-	log.Info(output)
-	return output
 }
 
 func (c *Client) ReadUntil(token string) string {

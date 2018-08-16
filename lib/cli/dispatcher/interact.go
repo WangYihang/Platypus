@@ -7,20 +7,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/lib/model"
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/timeout"
 )
 
 func (dispatcher Dispatcher) Interact(args []string) {
-	if model.Ctx.Current == nil {
+	if context.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", model.Ctx.Current.Desc())
+	log.Info("Interacting with %s", context.Ctx.Current.Desc())
 
 	// Set to interactive
-	model.Ctx.Current.Interactive = true
+	context.Ctx.Current.Interactive = true
 	inputChannel := make(chan []byte, 1024)
 
 	// write to socket fd
@@ -28,10 +28,10 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		for {
 			select {
 			case data := <-inputChannel:
-				if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
+				if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
 					return
 				}
-				model.Ctx.Current.Write(data)
+				context.Ctx.Current.Write(data)
 			}
 		}
 	}()
@@ -41,11 +41,11 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	// read from socket fd
 	go func() {
 		for {
-			if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
+			if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
 				return
 			}
 
-			buffer, is_timeout := model.Ctx.Current.Read(timeout.GenerateTimeout())
+			buffer, is_timeout := context.Ctx.Current.Read(timeout.GenerateTimeout())
 			fmt.Print(buffer)
 
 			// Sleep time trade off
@@ -60,7 +60,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	}()
 
 	for {
-		if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
+		if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
 			return
 		}
 		// Read command
@@ -72,7 +72,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}
 		command = strings.TrimSpace(command)
 		if command == "exit" {
-			model.Ctx.Current.Interactive = false
+			context.Ctx.Current.Interactive = false
 			break
 		}
 		if command == "shell" {
