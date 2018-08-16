@@ -34,17 +34,17 @@ func CreateClient(conn net.Conn) *Client {
 	return client
 }
 
-func (c Client) Close() {
+func (c *Client) Close() {
 	log.Info("Closeing client: %s", c.Desc())
 	c.Conn.Close()
 }
 
-func (c Client) Desc() string {
+func (c *Client) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
 }
 
-func (c Client) Readfile(filename string) string {
+func (c *Client) Readfile(filename string) string {
 	if c.FileExists(filename) {
 		return c.SystemToken("cat " + filename)
 	} else {
@@ -52,15 +52,15 @@ func (c Client) Readfile(filename string) string {
 	}
 }
 
-func (c Client) FileExists(path string) bool {
+func (c *Client) FileExists(path string) bool {
 	return c.SystemToken("ls "+path) == path+"\n"
 }
 
-func (c Client) System(command string) {
+func (c *Client) System(command string) {
 	c.Conn.Write([]byte(command + "\n"))
 }
 
-func (c Client) SystemToken(command string) string {
+func (c *Client) SystemToken(command string) string {
 	tokenA := str.RandomString(0x10)
 	tokenB := str.RandomString(0x10)
 	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
@@ -71,7 +71,7 @@ func (c Client) SystemToken(command string) string {
 	return output
 }
 
-func (c Client) ReadUntil(token string) string {
+func (c *Client) ReadUntil(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	log.Info("Start loop")
@@ -90,7 +90,7 @@ func (c Client) ReadUntil(token string) string {
 	}
 }
 
-func (c Client) ReadAll() string {
+func (c *Client) ReadAll() string {
 	inputBuffer := make([]byte, 1024)
 	var outputBuffer bytes.Buffer
 	for {
@@ -104,4 +104,40 @@ func (c Client) ReadAll() string {
 		outputBuffer.Write(inputBuffer[:n])
 	}
 	return outputBuffer.String()
+}
+
+func (c *Client) Read() {
+	for {
+		buffer := make([]byte, 1024)
+		_, err := c.Conn.Read(buffer)
+		if err != nil {
+			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
+			close(c.OutPipe)
+			Ctx.DeleteClient(c)
+			return
+		}
+		c.OutPipe <- buffer
+	}
+}
+
+func (c *Client) Write() {
+	for {
+		select {
+		case data, ok := <-c.InPipe:
+			if !ok {
+				log.Error("Channel of %s closed", c.Desc())
+				close(c.InPipe)
+				Ctx.DeleteClient(c)
+				return
+			}
+			n, err := c.Conn.Write(data)
+			if err != nil {
+				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
+				close(c.InPipe)
+				Ctx.DeleteClient(c)
+				return
+			}
+			log.Info("%d bytes sent", n)
+		}
+	}
 }
