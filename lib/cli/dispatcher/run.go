@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/WangYihang/Platypus/lib/model"
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -21,13 +21,13 @@ func (dispatcher Dispatcher) Run(args []string) {
 		dispatcher.RunHelp([]string{})
 		return
 	}
-	server := model.CreateServer(host, int16(port))
+	server := context.CreateServer(host, int16(port))
 	listener, err := server.Listen()
 	if err != nil {
 		fmt.Println(err)
 	}
-	model.Ctx.Servers[server.Hash] = server
-	go model.Ctx.RunServer(server, listener)
+	context.Ctx.Servers[server.Hash] = server
+	go context.Ctx.RunServer(server, listener)
 }
 
 func (dispatcher Dispatcher) RunHelp(args []string) {
