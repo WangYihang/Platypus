@@ -2,10 +2,10 @@ package main
 
 import (
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
-	"github.com/WangYihang/Platypus/lib/model"
+	"github.com/WangYihang/Platypus/lib/context"
 )
 
 func main() {
-	model.InitContext()
+	context.InitContext()
 	dispatcher.Run()
 }

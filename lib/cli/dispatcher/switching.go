@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/lib/model"
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -14,7 +14,7 @@ func (dispatcher Dispatcher) Switching(args []string) {
 		dispatcher.SwitchingHelp([]string{})
 		return
 	}
-	for _, server := range model.Ctx.Servers {
+	for _, server := range context.Ctx.Servers {
 		for _, client := range server.Clients {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				client.Group = !client.Group
