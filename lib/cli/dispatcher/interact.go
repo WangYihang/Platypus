@@ -58,6 +58,10 @@ func (ctx Dispatcher) Interact(args []string) {
 		if command == "^Z" {
 			command = "\x1A"
 		}
+		if command == "Readfile" {
+			context.Ctx.Current.Readfile("/etc/passwd")
+			return
+		}
 		if strings.HasPrefix(command, "^V") {
 			command = "\x1B\x1B\x1B" + command[2:] + "\r"
 		}
