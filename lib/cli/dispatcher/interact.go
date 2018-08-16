@@ -6,16 +6,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/model"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (ctx Dispatcher) Interact(args []string) {
-	if context.Ctx.Current == nil {
+func (dispatcher Dispatcher) Interact(args []string) {
+	if model.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", context.Ctx.Current.Desc())
+	log.Info("Interacting with %s", model.Ctx.Current.Desc())
 
 	ChannelOpen := true
 
@@ -23,9 +23,9 @@ func (ctx Dispatcher) Interact(args []string) {
 		// Read commands from client channel, Write to stdout
 		for {
 			select {
-			case data, ok := <-context.Ctx.Current.OutPipe:
+			case data, ok := <-model.Ctx.Current.OutPipe:
 				if !ok {
-					log.Error("Channel of %s closed", context.Ctx.Current.Desc())
+					log.Error("Channel of %s closed", model.Ctx.Current.Desc())
 					ChannelOpen = false
 					return
 				}
@@ -36,7 +36,7 @@ func (ctx Dispatcher) Interact(args []string) {
 
 	// Read commands from stdin, Write to client channel
 	for {
-		if context.Ctx.Current == nil {
+		if model.Ctx.Current == nil {
 			return
 		}
 		inputReader := bufio.NewReader(os.Stdin)
@@ -58,29 +58,29 @@ func (ctx Dispatcher) Interact(args []string) {
 		if command == "^Z" {
 			command = "\x1A"
 		}
-		if command == "Readfile" {
-			context.Ctx.Current.Readfile("/etc/passwd")
-			return
-		}
+		// if command == "Readfile" {
+		// 	model.Ctx.Current.Readfile("/etc/passwd")
+		// 	return
+		// }
 		if strings.HasPrefix(command, "^V") {
 			command = "\x1B\x1B\x1B" + command[2:] + "\r"
 		}
 		if ChannelOpen {
-			context.Ctx.Current.InPipe <- []byte(command + "\n")
+			model.Ctx.Current.InPipe <- []byte(command + "\n")
 		} else {
 			// Channel closed, do cleanup
-			context.Ctx.DeleteClient(context.Ctx.Current)
+			model.Ctx.DeleteClient(model.Ctx.Current)
 			return
 		}
 	}
 }
 
-func (ctx Dispatcher) InteractHelp(args []string) {
+func (dispatcher Dispatcher) InteractHelp(args []string) {
 	fmt.Println("Usage of Interact")
 	fmt.Println("\tInteract")
 }
 
-func (ctx Dispatcher) InteractDesc(args []string) {
+func (dispatcher Dispatcher) InteractDesc(args []string) {
 	fmt.Println("Interact")
 	fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
 }

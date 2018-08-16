@@ -34,7 +34,7 @@ func CreateServer(host string, port int16) *Server {
 	return server
 }
 
-func (s Server) Listen() (*net.TCPListener, error) {
+func (s *Server) Listen() (*net.TCPListener, error) {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s Server) Listen() (*net.TCPListener, error) {
 	return listener, nil
 }
 
-func (s Server) OnelineDesc() string {
+func (s *Server) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -61,7 +61,7 @@ func (s Server) OnelineDesc() string {
 	return buffer.String()
 }
 
-func (s Server) FullDesc() string {
+func (s *Server) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -84,7 +84,7 @@ func (s Server) FullDesc() string {
 	return buffer.String()
 }
 
-func (s Server) Stop() {
+func (s *Server) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.Clients {
 		client.Close()
@@ -94,15 +94,15 @@ func (s Server) Stop() {
 	}
 }
 
-func (s Server) AddClient(client *Client) {
+func (s *Server) AddClient(client *Client) {
 	s.Clients[client.Hash] = client
 }
 
-func (s Server) DeleteClient(client *Client) {
+func (s *Server) DeleteClient(client *Client) {
 	client.Close()
 	delete(s.Clients, client.Hash)
 }
 
-func (s Server) GetAllClients() map[string](*Client) {
+func (s *Server) GetAllClients() map[string](*Client) {
 	return s.Clients
 }
