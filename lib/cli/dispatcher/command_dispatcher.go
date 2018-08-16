@@ -19,7 +19,7 @@ func ParseInput(input string) (string, []string) {
 	args := strings.Split(strings.TrimSpace(input), " ")
 	if !reflection.Contains(methods, args[0]) {
 		log.Error("No such command, use `Help` to get more information")
-		return "Help", []string{}
+		return "", []string{}
 	}
 	return str.UpperCaseFirstChar(args[0]), args[1:]
 }
@@ -36,6 +36,9 @@ func Run() {
 		}
 		input = strings.TrimSpace(input)
 		method, args := ParseInput(input)
+		if method == "" {
+			continue
+		}
 		reflection.Invoke(Dispatcher{}, method, args)
 	}
 }

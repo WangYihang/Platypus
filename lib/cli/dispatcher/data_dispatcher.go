@@ -21,7 +21,7 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 	n := 0
 	for _, server := range model.Ctx.Servers {
 		for _, client := range server.Clients {
-			if client.Interactive {
+			if client.Group {
 				log.Info("Executing on %s: %s", client.Desc(), command[0:len(command)-1])
 				size, err := client.Conn.Write([]byte(command + "\n"))
 				fmt.Println(size)
