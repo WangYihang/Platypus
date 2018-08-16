@@ -20,7 +20,8 @@ type Client struct {
 	Interactive bool
 	Group       bool
 	Hash        string
-	lock        *sync.Mutex
+	ReadLock    *sync.Mutex
+	WriteLock   *sync.Mutex
 }
 
 func CreateClient(conn net.Conn) *Client {
@@ -30,7 +31,8 @@ func CreateClient(conn net.Conn) *Client {
 		Interactive: false,
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
-		lock:        new(sync.Mutex),
+		ReadLock:    new(sync.Mutex),
+		WriteLock:   new(sync.Mutex),
 	}
 	return client
 }
@@ -76,7 +78,9 @@ func (c *Client) ReadUntil(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
+		c.ReadLock.Lock()
 		n, err := c.Conn.Read(inputBuffer)
+		c.ReadLock.Unlock()
 		if err != nil {
 			log.Error("Read from client failed")
 			c.Interactive = false
@@ -101,9 +105,9 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 	var outputBuffer bytes.Buffer
 	var is_timeout bool
 	for {
-		c.lock.Lock()
+		c.ReadLock.Lock()
 		n, err := c.Conn.Read(inputBuffer)
-		c.lock.Unlock()
+		c.ReadLock.Unlock()
 		if err != nil {
 
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -133,9 +137,9 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 }
 
 func (c *Client) Write(data []byte) int {
-	c.lock.Lock()
+	c.WriteLock.Lock()
 	n, err := c.Conn.Write(data)
-	c.lock.Unlock()
+	c.WriteLock.Unlock()
 	if err != nil {
 		log.Error("Write to client failed")
 		c.Interactive = false
