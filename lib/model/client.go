@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
@@ -17,9 +18,9 @@ type Client struct {
 	TimeStamp   time.Time
 	Conn        net.Conn
 	Interactive bool
+	Group       bool
 	Hash        string
-	InPipe      chan []byte
-	OutPipe     chan []byte
+	lock        *sync.Mutex
 }
 
 func CreateClient(conn net.Conn) *Client {
@@ -27,9 +28,9 @@ func CreateClient(conn net.Conn) *Client {
 		TimeStamp:   time.Now(),
 		Conn:        conn,
 		Interactive: false,
+		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
-		InPipe:      make(chan []byte),
-		OutPipe:     make(chan []byte),
+		lock:        new(sync.Mutex),
 	}
 	return client
 }
@@ -74,70 +75,72 @@ func (c *Client) SystemToken(command string) string {
 func (c *Client) ReadUntil(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
-	log.Info("Start loop")
 	for {
 		n, err := c.Conn.Read(inputBuffer)
-		log.Info("%d bytes read", n)
 		if err != nil {
+			log.Error("Read from client failed")
+			c.Interactive = false
+			Ctx.DeleteClient(c)
 			return outputBuffer.String()
 		}
-		log.Info(string(inputBuffer[:n]))
-		log.Info("Save to buffer: %s", string(inputBuffer[:n]))
 		outputBuffer.Write(inputBuffer[:n])
+		// If found token, then finish reading
 		if strings.HasSuffix(outputBuffer.String(), token) {
-			return outputBuffer.String()
+			break
 		}
 	}
+	log.Info("%d bytes read from client", len(outputBuffer.String()))
+	return outputBuffer.String()
 }
 
-func (c *Client) ReadAll() string {
+func (c *Client) Read(timeout time.Duration) (string, bool) {
+	// Set read time out
+	c.Conn.SetReadDeadline(time.Now().Add(timeout))
+
 	inputBuffer := make([]byte, 1024)
 	var outputBuffer bytes.Buffer
+	var is_timeout bool
 	for {
+		c.lock.Lock()
 		n, err := c.Conn.Read(inputBuffer)
+		c.lock.Unlock()
 		if err != nil {
-			return outputBuffer.String()
+
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				// log.Info("Read timeout")
+				is_timeout = true
+			} else {
+				log.Error("Read from client failed")
+				c.Interactive = false
+				Ctx.DeleteClient(c)
+				is_timeout = false
+			}
+			break
 		}
+		// log.Info("%d bytes read from client", n)
+		// If read size equals zero, then finish reading
 		if n == 0 {
 			break
 		}
 		outputBuffer.Write(inputBuffer[:n])
 	}
-	return outputBuffer.String()
+	// log.Info("%d bytes read from client totally", len(outputBuffer.String()))
+
+	// Reset read time out
+	c.Conn.SetReadDeadline(time.Time{})
+
+	return outputBuffer.String(), is_timeout
 }
 
-func (c *Client) Read() {
-	for {
-		buffer := make([]byte, 1024)
-		_, err := c.Conn.Read(buffer)
-		if err != nil {
-			log.Error("Read failed from %s , error message: %s", c.Desc(), err)
-			close(c.OutPipe)
-			Ctx.DeleteClient(c)
-			return
-		}
-		c.OutPipe <- buffer
+func (c *Client) Write(data []byte) int {
+	c.lock.Lock()
+	n, err := c.Conn.Write(data)
+	c.lock.Unlock()
+	if err != nil {
+		log.Error("Write to client failed")
+		c.Interactive = false
+		Ctx.DeleteClient(c)
 	}
-}
-
-func (c *Client) Write() {
-	for {
-		select {
-		case data, ok := <-c.InPipe:
-			if !ok {
-				log.Error("Channel of %s closed", c.Desc())
-				close(c.InPipe)
-				Ctx.DeleteClient(c)
-				return
-			}
-			n, err := c.Conn.Write(data)
-			if err != nil {
-				log.Error("Write failed to %s , error message: %s", c.Desc(), err)
-				close(c.InPipe)
-				Ctx.DeleteClient(c)
-				return
-			}
-			log.Info("%d bytes sent", n)
-		}
-	}
+	log.Info("%d bytes sent to client", n)
+	return n
 }

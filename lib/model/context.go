@@ -32,9 +32,6 @@ func (ctx Context) DeleteClient(c *Client) {
 	for _, server := range Ctx.Servers {
 		server.DeleteClient(c)
 	}
-	// if c == Ctx.Current {
-	// 	Ctx.Current = nil
-	// }
 }
 
 func (ctx Context) RunServer(server *Server, listener *net.TCPListener) {
@@ -46,7 +43,5 @@ func (ctx Context) RunServer(server *Server, listener *net.TCPListener) {
 		client := CreateClient(conn)
 		log.Info("New client %s Connected", client.Desc())
 		server.AddClient(client)
-		go client.Read()
-		go client.Write()
 	}
 }

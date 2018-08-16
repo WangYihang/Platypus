@@ -87,9 +87,6 @@ func (s *Server) FullDesc() string {
 func (s *Server) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.Clients {
-		client.Close()
-	}
-	for _, client := range s.Clients {
 		s.DeleteClient(client)
 	}
 }
