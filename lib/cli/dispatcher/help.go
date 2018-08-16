@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 )
 
-func (ctx Dispatcher) Help(args []string) {
+func (dispatcher Dispatcher) Help(args []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
 	if len(args) == 0 {
 		fmt.Println("Usage: ")
