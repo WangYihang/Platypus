@@ -48,11 +48,11 @@ func (dispatcher Dispatcher) Interact(args []string) {
 			buffer, is_timeout := model.Ctx.Current.Read(timeout.GenerateTimeout())
 			fmt.Print(buffer)
 
-			// Trade off sleep time
+			// Sleep time trade off
 			if is_timeout {
 				sleep_time = sleep_time * 2
 			}
-			if sleep_time > time.Second*3 {
+			if sleep_time > time.Microsecond*0x400 {
 				sleep_time = timeout.GenerateTimeout()
 			}
 			time.Sleep(sleep_time)
@@ -84,14 +84,9 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		if command == "^Z" {
 			command = "\x1A"
 		}
-		// if command == "Readfile" {
-		// 	model.Ctx.Current.Readfile("/etc/passwd")
-		// 	return
-		// }
 		if strings.HasPrefix(command, "^V") {
-			command = "\x1B\x1B\x1B" + command[2:] + "\r"
+			command = "\x1B" + command[2:] + "\r"
 		}
-
 		// Send command
 		inputChannel <- []byte(command + "\n")
 
