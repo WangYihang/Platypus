@@ -12,7 +12,15 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-type Server struct {
+type TCPServer interface {
+	Host() string
+	Port() int16
+	Clients() map[string](*Client)
+	TimeStamp() time.Time
+	Hash() string
+}
+
+type BaseTCPServer struct {
 	Host      string
 	Port      int16
 	Clients   map[string](*Client)
@@ -20,9 +28,9 @@ type Server struct {
 	Hash      string
 }
 
-func CreateServer(host string, port int16) *Server {
+func CreateServer(host string, port int16) *BaseTCPServer {
 	ts := time.Now()
-	return &Server{
+	return &BaseTCPServer{
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*Client)),
@@ -31,7 +39,7 @@ func CreateServer(host string, port int16) *Server {
 	}
 }
 
-func (s *Server) Run() {
+func (s *BaseTCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
@@ -56,7 +64,7 @@ func (s *Server) Run() {
 	}
 }
 
-func (s *Server) OnelineDesc() string {
+func (s *BaseTCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -69,7 +77,7 @@ func (s *Server) OnelineDesc() string {
 	return buffer.String()
 }
 
-func (s *Server) FullDesc() string {
+func (s *BaseTCPServer) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -92,22 +100,22 @@ func (s *Server) FullDesc() string {
 	return buffer.String()
 }
 
-func (s *Server) Stop() {
+func (s *BaseTCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.Clients {
 		s.DeleteClient(client)
 	}
 }
 
-func (s *Server) AddClient(client *Client) {
+func (s *BaseTCPServer) AddClient(client *Client) {
 	s.Clients[client.Hash] = client
 }
 
-func (s *Server) DeleteClient(client *Client) {
+func (s *BaseTCPServer) DeleteClient(client *Client) {
 	client.Close()
 	delete(s.Clients, client.Hash)
 }
 
-func (s *Server) GetAllClients() map[string](*Client) {
+func (s *BaseTCPServer) GetAllClients() map[string](*Client) {
 	return s.Clients
 }
