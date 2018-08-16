@@ -20,32 +20,40 @@ type Server struct {
 	Hash      string
 }
 
-var server *Server
-
 func CreateServer(host string, port int16) *Server {
 	ts := time.Now()
-	server := &Server{
+	return &Server{
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*Client)),
 		TimeStamp: ts,
 		Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 	}
-	return server
 }
 
-func (s *Server) Listen() (*net.TCPListener, error) {
+func (s *Server) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
-		return nil, err
+		log.Error("Resolve TCP address failed: ", err)
+		return
 	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		return nil, err
+		log.Error("Listen failed: ", err)
+		return
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
-	return listener, nil
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		client := CreateClient(conn)
+		log.Info("New client %s Connected", client.Desc())
+		s.AddClient(client)
+	}
 }
 
 func (s *Server) OnelineDesc() string {
