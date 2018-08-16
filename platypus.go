@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	context.InitContext()
+	context.CreateContext()
 	dispatcher.Run()
 }

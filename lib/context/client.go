@@ -24,7 +24,7 @@ type Client struct {
 }
 
 func CreateClient(conn net.Conn) *Client {
-	client := &Client{
+	return &Client{
 		TimeStamp:   time.Now(),
 		Conn:        conn,
 		Interactive: false,
@@ -33,7 +33,6 @@ func CreateClient(conn net.Conn) *Client {
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
 	}
-	return client
 }
 
 func (c *Client) Close() {

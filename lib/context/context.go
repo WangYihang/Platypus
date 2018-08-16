@@ -1,11 +1,5 @@
 package context
 
-import (
-	"net"
-
-	"github.com/WangYihang/Platypus/lib/util/log"
-)
-
 type Context struct {
 	Servers       map[string](*Server)
 	Current       *Client
@@ -14,7 +8,7 @@ type Context struct {
 
 var Ctx *Context
 
-func InitContext() {
+func CreateContext() {
 	if Ctx == nil {
 		Ctx = &Context{
 			Servers:       make(map[string](*Server)),
@@ -28,20 +22,17 @@ func GetContext() *Context {
 	return Ctx
 }
 
+func (ctx Context) AddServer(s *Server) {
+	ctx.Servers[s.Hash] = s
+}
+
+func (ctx Context) DeleteServer(s *Server) {
+	s.Stop()
+	delete(ctx.Servers, s.Hash)
+}
+
 func (ctx Context) DeleteClient(c *Client) {
 	for _, server := range Ctx.Servers {
 		server.DeleteClient(c)
-	}
-}
-
-func (ctx Context) RunServer(server *Server, listener *net.TCPListener) {
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-		client := CreateClient(conn)
-		log.Info("New client %s Connected", client.Desc())
-		server.AddClient(client)
 	}
 }
