@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/lib/model"
+	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -14,10 +14,10 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		dispatcher.JumpHelp([]string{})
 		return
 	}
-	for _, server := range model.Ctx.Servers {
+	for _, server := range context.Ctx.Servers {
 		for _, client := range server.Clients {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				model.Ctx.Current = client
+				context.Ctx.Current = client
 				log.Success("The current interactive shell is set to: %s", client.Desc())
 				return
 			}
