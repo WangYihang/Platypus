@@ -7,7 +7,7 @@ import (
 )
 
 type ReverseClient struct {
-	TCPClient context.Client
+	context.Client
 }
 
 func (c *ReverseClient) Readfile(filename string) string {
@@ -24,7 +24,7 @@ func (c *ReverseClient) FileExists(path string) bool {
 }
 
 func (c *ReverseClient) System(command string) {
-	c.TCPClient.Conn.Write([]byte(command + "\n"))
+	c.Conn.Write([]byte(command + "\n"))
 }
 
 func (c *ReverseClient) SystemToken(command string) string {
@@ -32,8 +32,8 @@ func (c *ReverseClient) SystemToken(command string) string {
 	tokenB := str.RandomString(0x10)
 	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
 	c.System(input)
-	c.TCPClient.ReadUntil(tokenA)
-	output := c.TCPClient.ReadUntil(tokenB)
+	c.ReadUntil(tokenA)
+	output := c.ReadUntil(tokenB)
 	log.Info(output)
 	return output
 }
