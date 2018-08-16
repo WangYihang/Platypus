@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/model/reverse"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -21,13 +22,9 @@ func (dispatcher Dispatcher) Run(args []string) {
 		dispatcher.RunHelp([]string{})
 		return
 	}
-	server := context.CreateServer(host, int16(port))
-	listener, err := server.Listen()
-	if err != nil {
-		fmt.Println(err)
-	}
-	context.Ctx.Servers[server.Hash] = server
-	go context.Ctx.RunServer(server, listener)
+	server := reverse.CreateReverseServer(host, int16(port))
+	go server.TCPServer.Run()
+	context.Ctx.AddServer(server.TCPServer)
 }
 
 func (dispatcher Dispatcher) RunHelp(args []string) {
