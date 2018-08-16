@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/WangYihang/Platypus/lib/model"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/timeout"
 )
 
 func (dispatcher Dispatcher) Interact(args []string) {
@@ -17,28 +19,51 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	}
 	log.Info("Interacting with %s", model.Ctx.Current.Desc())
 
-	ChannelOpen := true
+	// Set to interactive
+	model.Ctx.Current.Interactive = true
+	inputChannel := make(chan []byte, 1024)
 
+	// write to socket fd
 	go func() {
-		// Read commands from client channel, Write to stdout
 		for {
 			select {
-			case data, ok := <-model.Ctx.Current.OutPipe:
-				if !ok {
-					log.Error("Channel of %s closed", model.Ctx.Current.Desc())
-					ChannelOpen = false
+			case data := <-inputChannel:
+				if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
 					return
 				}
-				fmt.Print(string(data))
+				model.Ctx.Current.Write(data)
 			}
 		}
 	}()
 
-	// Read commands from stdin, Write to client channel
+	var sleep_time = timeout.GenerateTimeout()
+
+	// read from socket fd
+	go func() {
+		for {
+			if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
+				return
+			}
+
+			buffer, is_timeout := model.Ctx.Current.Read(timeout.GenerateTimeout())
+			fmt.Print(buffer)
+
+			// Trade off sleep time
+			if is_timeout {
+				sleep_time = sleep_time * 2
+			}
+			if sleep_time > time.Second*3 {
+				sleep_time = timeout.GenerateTimeout()
+			}
+			time.Sleep(sleep_time)
+		}
+	}()
+
 	for {
-		if model.Ctx.Current == nil {
+		if model.Ctx.Current == nil || !model.Ctx.Current.Interactive {
 			return
 		}
+		// Read command
 		inputReader := bufio.NewReader(os.Stdin)
 		command, err := inputReader.ReadString('\n')
 		if err != nil {
@@ -47,6 +72,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}
 		command = strings.TrimSpace(command)
 		if command == "exit" {
+			model.Ctx.Current.Interactive = false
 			break
 		}
 		if command == "shell" {
@@ -65,13 +91,11 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		if strings.HasPrefix(command, "^V") {
 			command = "\x1B\x1B\x1B" + command[2:] + "\r"
 		}
-		if ChannelOpen {
-			model.Ctx.Current.InPipe <- []byte(command + "\n")
-		} else {
-			// Channel closed, do cleanup
-			model.Ctx.DeleteClient(model.Ctx.Current)
-			return
-		}
+
+		// Send command
+		inputChannel <- []byte(command + "\n")
+
+		sleep_time = timeout.GenerateTimeout()
 	}
 }
 
