@@ -4,13 +4,14 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 )
 
-type ReverseServer struct {
-	TCPServer *context.Server
+type ReverseTCPServer interface {
+	context.TCPServer
 }
 
-func CreateReverseServer(host string, port int16) *ReverseServer {
-	server := &ReverseServer{
-		TCPServer: context.CreateServer(host, port),
-	}
-	return server
+type BaseReverseTCPServer struct {
+	context.BaseTCPServer
+}
+
+func CreateReverseServer(host string, port int16) *BaseReverseTCPServer {
+	return &BaseReverseTCPServer{}
 }
