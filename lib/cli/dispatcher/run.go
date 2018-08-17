@@ -27,7 +27,7 @@ func (dispatcher Dispatcher) Run(args []string) {
 	module := args[2]
 
 	if module == "R" {
-		server := reverse.CreateReverseTCPServer(host, int16(port))
+		server := reverse.CreateReverseServer(host, int16(port))
 		go server.Run()
 		context.Ctx.AddServer(&server.TCPServer)
 	} else if module == "C" {
@@ -35,7 +35,7 @@ func (dispatcher Dispatcher) Run(args []string) {
 		go server.Run()
 		context.Ctx.AddServer(server)
 	} else if module == "P" {
-		server := platypus.CreatePlatypusTCPServer(host, int16(port))
+		server := platypus.CreatePlatypusServer(host, int16(port))
 		go server.Run()
 		context.Ctx.AddServer(&server.TCPServer)
 	} else {

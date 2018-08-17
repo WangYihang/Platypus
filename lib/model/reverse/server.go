@@ -8,18 +8,18 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 )
 
-type ReverseTCPServer struct {
+type ReverseServer struct {
 	context.TCPServer
 }
 
-func CreateReverseTCPServer(host string, port int16) *ReverseTCPServer {
+func CreateReverseServer(host string, port int16) *ReverseServer {
 	ts := time.Now()
-	return &ReverseTCPServer{
+	return &ReverseServer{
 		context.TCPServer{
 			Name:      "Reverse",
 			Host:      host,
 			Port:      port,
-			Clients:   make(map[string](*context.Client)),
+			Clients:   make(map[string](*context.TCPClient)),
 			TimeStamp: ts,
 			Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 		},

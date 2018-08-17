@@ -13,7 +13,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-type Client struct {
+type TCPClient struct {
 	TimeStamp   time.Time
 	Conn        net.Conn
 	Interactive bool
@@ -23,8 +23,8 @@ type Client struct {
 	WriteLock   *sync.Mutex
 }
 
-func CreateClient(conn net.Conn) *Client {
-	return &Client{
+func CreateTCPClient(conn net.Conn) *TCPClient {
+	return &TCPClient{
 		TimeStamp:   time.Now(),
 		Conn:        conn,
 		Interactive: false,
@@ -35,17 +35,17 @@ func CreateClient(conn net.Conn) *Client {
 	}
 }
 
-func (c *Client) Close() {
+func (c *TCPClient) Close() {
 	log.Info("Closeing client: %s", c.Desc())
 	c.Conn.Close()
 }
 
-func (c *Client) Desc() string {
+func (c *TCPClient) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
 }
 
-func (c *Client) ReadUntil(token string) string {
+func (c *TCPClient) ReadUntil(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
@@ -55,7 +55,7 @@ func (c *Client) ReadUntil(token string) string {
 		if err != nil {
 			log.Error("Read from client failed")
 			c.Interactive = false
-			Ctx.DeleteClient(c)
+			Ctx.DeleteTCPClient(c)
 			return outputBuffer.String()
 		}
 		outputBuffer.Write(inputBuffer[:n])
@@ -68,7 +68,7 @@ func (c *Client) ReadUntil(token string) string {
 	return outputBuffer.String()
 }
 
-func (c *Client) Read(timeout time.Duration) (string, bool) {
+func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 	// Set read time out
 	c.Conn.SetReadDeadline(time.Now().Add(timeout))
 
@@ -86,7 +86,7 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
-				Ctx.DeleteClient(c)
+				Ctx.DeleteTCPClient(c)
 				isTimeout = false
 			}
 			break
@@ -103,14 +103,14 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 	return outputBuffer.String(), isTimeout
 }
 
-func (c *Client) Write(data []byte) int {
+func (c *TCPClient) Write(data []byte) int {
 	c.WriteLock.Lock()
 	n, err := c.Conn.Write(data)
 	c.WriteLock.Unlock()
 	if err != nil {
 		log.Error("Write to client failed")
 		c.Interactive = false
-		Ctx.DeleteClient(c)
+		Ctx.DeleteTCPClient(c)
 	}
 	log.Info("%d bytes sent to client", n)
 	return n
