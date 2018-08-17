@@ -20,7 +20,7 @@ type TCPServer struct {
 	Hash      string
 }
 
-func CreateServer(host string, port int16) *TCPServer {
+func CreateTCPServer(host string, port int16) *TCPServer {
 	ts := time.Now()
 	return &TCPServer{
 		Host:      host,
