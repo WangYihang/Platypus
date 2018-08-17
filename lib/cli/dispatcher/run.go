@@ -22,9 +22,9 @@ func (dispatcher Dispatcher) Run(args []string) {
 		dispatcher.RunHelp([]string{})
 		return
 	}
-	server := reverse.CreateReverseServer(host, int16(port))
+	server := reverse.CreateReverseTCPServer(host, int16(port))
 	go server.Run()
-	context.Ctx.AddServer(server)
+	context.Ctx.AddServer(&server.TCPServer)
 }
 
 func (dispatcher Dispatcher) RunHelp(args []string) {
