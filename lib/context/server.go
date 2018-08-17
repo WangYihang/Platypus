@@ -13,6 +13,7 @@ import (
 )
 
 type TCPServer struct {
+	Name      string
 	Host      string
 	Port      int16
 	Clients   map[string](*Client)
@@ -23,6 +24,7 @@ type TCPServer struct {
 func CreateTCPServer(host string, port int16) *TCPServer {
 	ts := time.Now()
 	return &TCPServer{
+		Name:      "Common",
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*Client)),
@@ -60,7 +62,8 @@ func (s *TCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"%s:%d (%d online clients)",
+			"[%s] %s:%d (%d online clients)",
+			s.Name,
 			s.Host,
 			s.Port,
 			len(s.Clients),
@@ -73,7 +76,8 @@ func (s *TCPServer) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients) (started at: %s)",
+			"[%s][%s] %s:%d (%d online clients) (started at: %s)",
+			s.Name,
 			s.Hash,
 			s.Host,
 			s.Port,

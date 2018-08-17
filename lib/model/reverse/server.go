@@ -16,6 +16,7 @@ func CreateReverseTCPServer(host string, port int16) *ReverseTCPServer {
 	ts := time.Now()
 	return &ReverseTCPServer{
 		context.TCPServer{
+			Name:      "Reverse",
 			Host:      host,
 			Port:      port,
 			Clients:   make(map[string](*context.Client)),
