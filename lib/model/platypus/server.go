@@ -49,11 +49,12 @@ func (s *PlatypusServer) Run() {
 			continue
 		}
 		client := CreatePlatypusClient(conn)
-		log.Info("New client %s Connected", client.Desc())
+		log.Info("New client %s Connected", client.OnelineDesc())
 		if client.Auth() {
+			log.Warn("Client %s auth succeed", client.OnelineDesc())
 			s.AddPlatypusClient(&client.TCPClient)
 		} else {
-			log.Warn("Client %s auth failed", client.Desc())
+			log.Warn("Client %s auth failed, connection reseted by server", client.OnelineDesc())
 			client.Close()
 		}
 	}

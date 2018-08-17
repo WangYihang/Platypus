@@ -40,6 +40,11 @@ func (c *TCPClient) Close() {
 	c.Conn.Close()
 }
 
+func (c *TCPClient) OnelineDesc() string {
+	addr := c.Conn.RemoteAddr()
+	return fmt.Sprintf("[%s] %s://%s", c.Hash, addr.Network(), addr.String())
+}
+
 func (c *TCPClient) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
