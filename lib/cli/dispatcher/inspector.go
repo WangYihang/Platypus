@@ -9,12 +9,16 @@ import (
 )
 
 func (dispatcher Dispatcher) Inspector(args []string) {
-	log.Info(fmt.Sprintf("Inspectoring %d servers", len(context.Ctx.Servers)))
+	// Make sure banner be printed only once
+	banner := true
 	for _, server := range context.Ctx.Servers {
 		for _, client := range server.Clients {
+			if banner {
+				log.Info(fmt.Sprintf("Inspectoring %d servers", len(context.Ctx.Servers)))
+				banner = false
+			}
 			payload := "echo " + str.RandomString(0x10) + "\n"
 			client.Write([]byte(payload))
-			client.ReadUntil(payload)
 		}
 	}
 }
