@@ -16,7 +16,7 @@ type TCPServer struct {
 	Name      string
 	Host      string
 	Port      int16
-	Clients   map[string](*Client)
+	Clients   map[string](*TCPClient)
 	TimeStamp time.Time
 	Hash      string
 }
@@ -27,7 +27,7 @@ func CreateTCPServer(host string, port int16) *TCPServer {
 		Name:      "Common",
 		Host:      host,
 		Port:      port,
-		Clients:   make(map[string](*Client)),
+		Clients:   make(map[string](*TCPClient)),
 		TimeStamp: ts,
 		Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 	}
@@ -52,9 +52,8 @@ func (s *TCPServer) Run() {
 		if err != nil {
 			continue
 		}
-		client := CreateClient(conn)
+		client := CreateTCPClient(conn)
 		log.Info("New client %s Connected", client.Desc())
-		s.AddClient(client)
 	}
 }
 
@@ -99,19 +98,19 @@ func (s *TCPServer) FullDesc() string {
 func (s *TCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.Clients {
-		s.DeleteClient(client)
+		s.DeleteTCPClient(client)
 	}
 }
 
-func (s *TCPServer) AddClient(client *Client) {
+func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	s.Clients[client.Hash] = client
 }
 
-func (s *TCPServer) DeleteClient(client *Client) {
+func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
 	client.Close()
 	delete(s.Clients, client.Hash)
 }
 
-func (s *TCPServer) GetAllClients() map[string](*Client) {
+func (s *TCPServer) GetAllTCPClients() map[string](*TCPClient) {
 	return s.Clients
 }
