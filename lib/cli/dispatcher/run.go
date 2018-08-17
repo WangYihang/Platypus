@@ -10,11 +10,12 @@ import (
 )
 
 func (dispatcher Dispatcher) Run(args []string) {
-	if len(args) != 2 {
+	if len(args) != 3 {
 		log.Error("Argments error, use `Help Run` to get more information")
 		dispatcher.RunHelp([]string{})
 		return
 	}
+
 	host := args[0]
 	port, err := strconv.ParseInt(args[1], 10, 32)
 	if err != nil {
@@ -22,16 +23,31 @@ func (dispatcher Dispatcher) Run(args []string) {
 		dispatcher.RunHelp([]string{})
 		return
 	}
-	server := reverse.CreateReverseTCPServer(host, int16(port))
-	go server.Run()
-	context.Ctx.AddServer(&server.TCPServer)
+	module := args[2]
+
+	if module == "R" {
+		server := reverse.CreateReverseTCPServer(host, int16(port))
+		go server.Run()
+		context.Ctx.AddServer(&server.TCPServer)
+	} else if module == "C" {
+		server := context.CreateTCPServer(host, int16(port))
+		go server.Run()
+		context.Ctx.AddServer(server)
+	} else {
+		log.Error("Invalid module: %s, use `Help Run` to get more information", args[1])
+		dispatcher.RunHelp([]string{})
+		return
+	}
 }
 
 func (dispatcher Dispatcher) RunHelp(args []string) {
 	fmt.Println("Usage of Run")
-	fmt.Println("\tRun [HOST] [PORT]")
+	fmt.Println("\tRun [HOST] [PORT] [MODELE]")
 	fmt.Println("\tHOST\tTHe host you want to listen on")
 	fmt.Println("\tPORT\tTHe port you want to listen on")
+	fmt.Println("\tMODELE")
+	fmt.Println("\t\tR\tReverse TCP Listener")
+	fmt.Println("\t\tC\tCommon TCP Listener")
 }
 
 func (dispatcher Dispatcher) RunDesc(args []string) {
