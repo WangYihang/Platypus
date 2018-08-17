@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/gob"
 	"net"
+	"sync"
 
 	"github.com/WangYihang/Platypus/lib/model/platypus"
 	"github.com/WangYihang/Platypus/lib/util/crypto"
@@ -33,12 +34,18 @@ func main() {
 		log.Error("Connection failed, %s", err)
 		return
 	}
-
+	lock := new(sync.Mutex)
+	decoder := gob.NewDecoder(conn)
 	for {
-		dec := gob.NewDecoder(conn)
 		var message platypus.Message
-		err = dec.Decode(&message)
+		lock.Lock()
+		err = decoder.Decode(&message)
+		lock.Unlock()
 		if err != nil {
+			if err.Error() == "EOF" {
+				log.Error("Read from server failed: %s", err)
+				break
+			}
 			log.Error("decode error: %s", err)
 			continue
 		}
