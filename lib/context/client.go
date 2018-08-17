@@ -68,6 +68,30 @@ func (c *TCPClient) ReadUntil(token string) string {
 	return outputBuffer.String()
 }
 
+func (c *TCPClient) ReadSize(size int) string {
+	readSize := 0
+	inputBuffer := make([]byte, 1)
+	var outputBuffer bytes.Buffer
+	for {
+		c.ReadLock.Lock()
+		n, err := c.Conn.Read(inputBuffer)
+		c.ReadLock.Unlock()
+		if err != nil {
+			c.Interactive = false
+			Ctx.DeleteTCPClient(c)
+			break
+		}
+		// If read size equals zero, then finish reading
+		outputBuffer.Write(inputBuffer[:n])
+		readSize += n
+		if readSize >= size {
+			break
+		}
+	}
+	log.Info("(%d/%d) bytes read from client", len(outputBuffer.String()), size)
+	return outputBuffer.String()
+}
+
 func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 	// Set read time out
 	c.Conn.SetReadDeadline(time.Now().Add(timeout))
@@ -80,7 +104,6 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 		n, err := c.Conn.Read(inputBuffer)
 		c.ReadLock.Unlock()
 		if err != nil {
-
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				isTimeout = true
 			} else {
@@ -89,10 +112,6 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 				Ctx.DeleteTCPClient(c)
 				isTimeout = false
 			}
-			break
-		}
-		// If read size equals zero, then finish reading
-		if n == 0 {
 			break
 		}
 		outputBuffer.Write(inputBuffer[:n])
