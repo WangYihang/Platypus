@@ -34,6 +34,7 @@ func (c *PlatypusClient) Auth() bool {
 	key := "VnwkyMTUgmzVxUi6"
 	tokenLenth := 0x100
 	token := str.RandomString(tokenLenth)
+	log.Info("Auth token: %s", token)
 	cipher, err := crypto.Encrypt([]byte(key), token)
 	if err != nil {
 		log.Info("Encrypting token failed: %s", err)
