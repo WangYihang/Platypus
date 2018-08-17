@@ -36,7 +36,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}
 	}()
 
-	var sleep_time = timeout.GenerateTimeout()
+	var sleepTime = timeout.GenerateTimeout()
 
 	// read from socket fd
 	go func() {
@@ -45,17 +45,17 @@ func (dispatcher Dispatcher) Interact(args []string) {
 				return
 			}
 
-			buffer, is_timeout := context.Ctx.Current.Read(timeout.GenerateTimeout())
+			buffer, isTimeout := context.Ctx.Current.Read(timeout.GenerateTimeout())
 			fmt.Print(buffer)
 
 			// Sleep time trade off
-			if is_timeout {
-				sleep_time = sleep_time * 2
+			if isTimeout {
+				sleepTime = sleepTime * 2
 			}
-			if sleep_time > time.Microsecond*0x400 {
-				sleep_time = timeout.GenerateTimeout()
+			if sleepTime > time.Microsecond*0x400 {
+				sleepTime = timeout.GenerateTimeout()
 			}
-			time.Sleep(sleep_time)
+			time.Sleep(sleepTime)
 		}
 	}()
 
@@ -90,7 +90,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		// Send command
 		inputChannel <- []byte(command + "\n")
 
-		sleep_time = timeout.GenerateTimeout()
+		sleepTime = timeout.GenerateTimeout()
 	}
 }
 
