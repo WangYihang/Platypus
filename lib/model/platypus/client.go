@@ -1,6 +1,7 @@
 package platypus
 
 import (
+	"encoding/gob"
 	"net"
 	"sync"
 	"time"
@@ -14,6 +15,15 @@ import (
 
 type PlatypusClient struct {
 	context.TCPClient
+}
+
+const (
+	AUTH = iota
+)
+
+type Message struct {
+	Type    int
+	Content []byte
 }
 
 func CreatePlatypusClient(conn net.Conn) *PlatypusClient {
@@ -34,16 +44,28 @@ func (c *PlatypusClient) Auth() bool {
 	key := []byte("VnwkyMTUgmzVxUi6")
 	tokenLenth := 0x100
 	token := str.RandomString(tokenLenth)
-	log.Info("Auth token: %s", []byte(token))
 	cipher, err := crypto.Encrypt(key, []byte(token))
 	if err != nil {
 		log.Info("Encrypting token failed: %s", err)
 		return false
 	}
-	c.Write([]byte(cipher))
+	message := Message{
+		Type:    AUTH,
+		Content: cipher,
+	}
+	c.WriteMessage(message)
 	answer := c.ReadSize(tokenLenth)
 	if answer != token {
 		return false
 	}
 	return true
+}
+
+func (c *PlatypusClient) WriteMessage(i interface{}) {
+	encoder := gob.NewEncoder(c.Conn)
+	err := encoder.Encode(i)
+	if err != nil {
+		log.Error("encoderode error: %s", err)
+		return
+	}
 }
