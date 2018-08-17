@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/gob"
 	"net"
 
+	"github.com/WangYihang/Platypus/lib/model/platypus"
 	"github.com/WangYihang/Platypus/lib/util/crypto"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
@@ -14,13 +16,16 @@ func main() {
 		return
 	}
 	key := []byte("VnwkyMTUgmzVxUi6")
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
+
+	// Decode message
+	dec := gob.NewDecoder(conn)
+	var message platypus.Message
+	err = dec.Decode(&message)
 	if err != nil {
-		log.Error("Read from server failed, %s", err)
+		log.Error("decode error: %s", err)
 	}
-	log.Success("%d bytes read from server", n)
-	token, err := crypto.Decrypt(key, buffer[:n])
+
+	token, err := crypto.Decrypt(key, message.Content)
 	if err != nil {
 		log.Error("Decrypt challenge failed, %s", err)
 	}
