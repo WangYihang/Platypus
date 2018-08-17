@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/model/platypus"
 	"github.com/WangYihang/Platypus/lib/model/reverse"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
@@ -33,6 +34,10 @@ func (dispatcher Dispatcher) Run(args []string) {
 		server := context.CreateTCPServer(host, int16(port))
 		go server.Run()
 		context.Ctx.AddServer(server)
+	} else if module == "P" {
+		server := platypus.CreatePlatypusTCPServer(host, int16(port))
+		go server.Run()
+		context.Ctx.AddServer(&server.TCPServer)
 	} else {
 		log.Error("Invalid module: %s, use `Help Run` to get more information", args[1])
 		dispatcher.RunHelp([]string{})
@@ -48,6 +53,7 @@ func (dispatcher Dispatcher) RunHelp(args []string) {
 	fmt.Println("\tMODELE")
 	fmt.Println("\t\tR\tReverse TCP Listener")
 	fmt.Println("\t\tC\tCommon TCP Listener")
+	fmt.Println("\t\tP\tPlatypus TCP Listener")
 }
 
 func (dispatcher Dispatcher) RunDesc(args []string) {
