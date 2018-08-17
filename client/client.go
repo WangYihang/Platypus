@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Error("Read from server failed, %s", err)
 	}
-	log.Success("%d bytes read from server", string(n))
+	log.Success("%d bytes read from server", n)
 	token, err := crypto.Decrypt(key, buffer[:n])
 	if err != nil {
 		log.Error("Decrypt challenge failed, %s", err)
