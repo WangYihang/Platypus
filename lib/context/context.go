@@ -1,7 +1,7 @@
 package context
 
 type Context struct {
-	Servers       map[string](*BaseTCPServer)
+	Servers       map[string](*TCPServer)
 	Current       *Client
 	CommandPrompt string
 }
@@ -11,7 +11,7 @@ var Ctx *Context
 func CreateContext() {
 	if Ctx == nil {
 		Ctx = &Context{
-			Servers:       make(map[string](*BaseTCPServer)),
+			Servers:       make(map[string](*TCPServer)),
 			Current:       nil,
 			CommandPrompt: ">> ",
 		}
@@ -22,11 +22,11 @@ func GetContext() *Context {
 	return Ctx
 }
 
-func (ctx Context) AddServer(s *BaseTCPServer) {
+func (ctx Context) AddServer(s *TCPServer) {
 	ctx.Servers[s.Hash] = s
 }
 
-func (ctx Context) DeleteServer(s *BaseTCPServer) {
+func (ctx Context) DeleteServer(s *TCPServer) {
 	s.Stop()
 	delete(ctx.Servers, s.Hash)
 }

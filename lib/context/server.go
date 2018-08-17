@@ -12,15 +12,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-type TCPServer interface {
-	Host() string
-	Port() int16
-	Clients() map[string](*Client)
-	TimeStamp() time.Time
-	Hash() string
-}
-
-type BaseTCPServer struct {
+type TCPServer struct {
 	Host      string
 	Port      int16
 	Clients   map[string](*Client)
@@ -28,9 +20,9 @@ type BaseTCPServer struct {
 	Hash      string
 }
 
-func CreateServer(host string, port int16) *BaseTCPServer {
+func CreateServer(host string, port int16) *TCPServer {
 	ts := time.Now()
-	return &BaseTCPServer{
+	return &TCPServer{
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*Client)),
@@ -39,7 +31,7 @@ func CreateServer(host string, port int16) *BaseTCPServer {
 	}
 }
 
-func (s *BaseTCPServer) Run() {
+func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
@@ -64,7 +56,7 @@ func (s *BaseTCPServer) Run() {
 	}
 }
 
-func (s *BaseTCPServer) OnelineDesc() string {
+func (s *TCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -77,7 +69,7 @@ func (s *BaseTCPServer) OnelineDesc() string {
 	return buffer.String()
 }
 
-func (s *BaseTCPServer) FullDesc() string {
+func (s *TCPServer) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
@@ -100,22 +92,22 @@ func (s *BaseTCPServer) FullDesc() string {
 	return buffer.String()
 }
 
-func (s *BaseTCPServer) Stop() {
+func (s *TCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	for _, client := range s.Clients {
 		s.DeleteClient(client)
 	}
 }
 
-func (s *BaseTCPServer) AddClient(client *Client) {
+func (s *TCPServer) AddClient(client *Client) {
 	s.Clients[client.Hash] = client
 }
 
-func (s *BaseTCPServer) DeleteClient(client *Client) {
+func (s *TCPServer) DeleteClient(client *Client) {
 	client.Close()
 	delete(s.Clients, client.Hash)
 }
 
-func (s *BaseTCPServer) GetAllClients() map[string](*Client) {
+func (s *TCPServer) GetAllClients() map[string](*Client) {
 	return s.Clients
 }

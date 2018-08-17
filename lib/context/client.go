@@ -74,7 +74,7 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 
 	inputBuffer := make([]byte, 1024)
 	var outputBuffer bytes.Buffer
-	var is_timeout bool
+	var isTimeout bool
 	for {
 		c.ReadLock.Lock()
 		n, err := c.Conn.Read(inputBuffer)
@@ -82,29 +82,25 @@ func (c *Client) Read(timeout time.Duration) (string, bool) {
 		if err != nil {
 
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				// log.Info("Read timeout")
-				is_timeout = true
+				isTimeout = true
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
 				Ctx.DeleteClient(c)
-				is_timeout = false
+				isTimeout = false
 			}
 			break
 		}
-		// log.Info("%d bytes read from client", n)
 		// If read size equals zero, then finish reading
 		if n == 0 {
 			break
 		}
 		outputBuffer.Write(inputBuffer[:n])
 	}
-	// log.Info("%d bytes read from client totally", len(outputBuffer.String()))
-
 	// Reset read time out
 	c.Conn.SetReadDeadline(time.Time{})
 
-	return outputBuffer.String(), is_timeout
+	return outputBuffer.String(), isTimeout
 }
 
 func (c *Client) Write(data []byte) int {
