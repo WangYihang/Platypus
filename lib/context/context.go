@@ -2,7 +2,7 @@ package context
 
 type Context struct {
 	Servers       map[string](*TCPServer)
-	Current       *Client
+	Current       *TCPClient
 	CommandPrompt string
 }
 
@@ -31,8 +31,8 @@ func (ctx Context) DeleteServer(s *TCPServer) {
 	delete(ctx.Servers, s.Hash)
 }
 
-func (ctx Context) DeleteClient(c *Client) {
+func (ctx Context) DeleteTCPClient(c *TCPClient) {
 	for _, server := range Ctx.Servers {
-		server.DeleteClient(c)
+		server.DeleteTCPClient(c)
 	}
 }

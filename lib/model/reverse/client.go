@@ -7,7 +7,7 @@ import (
 )
 
 type ReverseClient struct {
-	context.Client
+	context.TCPClient
 }
 
 func (c *ReverseClient) Readfile(filename string) string {

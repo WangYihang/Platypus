@@ -27,7 +27,7 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 				fmt.Println(size)
 				if err != nil {
 					log.Error("Write error: ", err)
-					server.DeleteClient(client)
+					server.DeleteTCPClient(client)
 					continue
 				}
 				n++
