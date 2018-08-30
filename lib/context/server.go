@@ -54,6 +54,7 @@ func (s *TCPServer) Run() {
 		}
 		client := CreateTCPClient(conn)
 		log.Info("New client %s Connected", client.Desc())
+		s.AddTCPClient(client)
 	}
 }
 
