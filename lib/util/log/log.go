@@ -17,6 +17,7 @@ const (
 
 func printMessagePrefix(colorNumber color.Attribute, message string) {
 	color.New(colorNumber).Printf(message + " ")
+	
 	color.New(color.FgHiBlack).Printf(formatTime() + " ")
 }
 
