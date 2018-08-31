@@ -15,32 +15,32 @@ const (
 	success = "[SUCCESS]"
 )
 
-func Debug(format string, a ...interface{}) {
-	color.New(color.FgYellow).Printf(debug + " ")
+func printMessagePrefix(colorNumber color.Attribute) {
+	color.New(colorNumber).Printf(debug + " ")
 	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+}
+
+func Debug(format string, a ...interface{}) {
+	printMessagePrefix(color.FgYellow)
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, a...))
 }
 
 func Info(format string, a ...interface{}) {
-	color.New(color.FgBlue).Printf(info + " ")
-	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+	printMessagePrefix(color.FgBlue)
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, a...))
 }
 
 func Error(format string, a ...interface{}) {
-	color.New(color.FgRed).Printf(err + " ")
-	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+	printMessagePrefix(color.FgRed)
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, a...))
 }
 func Warn(format string, a ...interface{}) {
-	color.New(color.FgMagenta).Printf(warn + " ")
-	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+	printMessagePrefix(color.FgMagenta)
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, a...))
 }
 
 func Success(format string, a ...interface{}) {
-	color.New(color.FgGreen).Printf(success + " ")
-	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+	printMessagePrefix(color.FgGreen)
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, a...))
 }
 
