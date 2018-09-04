@@ -12,37 +12,57 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
+type AbstractTCPServer interface{
+	Run()
+	OnelineDesc() string
+	FullDesc() string
+	Stop()
+	AddTCPClient(client *TCPClient)
+	DeleteTCPClient(client *TCPClient)
+	GetAllTCPClients() map[string](*TCPClient)
+	SystemToken(string) string
+	Hash() string
+}
+
 type TCPServer struct {
 	Name      string
 	Host      string
 	Port      int16
 	Clients   map[string](*TCPClient)
 	TimeStamp time.Time
-	Hash      string
 }
 
-func CreateTCPServer(host string, port int16) *TCPServer {
+func CreateTCPServer(host string, port int16) *AbstractTCPServer {
+	var abstractTCPServer AbstractTCPServer
 	ts := time.Now()
-	return &TCPServer{
+	abstractTCPServer = &TCPServer{
 		Name:      "Common",
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*TCPClient)),
 		TimeStamp: ts,
-		Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 	}
+	return &abstractTCPServer
+}
+
+func (s *TCPServer) SystemToken(string) string {
+	return "Implement me!"
+}
+
+func (s *TCPServer) Hash() string {
+	return hash.MD5(fmt.Sprintf("%s:%d:%s", s.Host, s.Port, s.TimeStamp))
 }
 
 func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
-		log.Error("Resolve TCP address failed: ", err)
+		log.Error("Resolve TCP address failed: %s", err)
 		return
 	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		log.Error("Listen failed: ", err)
+		log.Error("Listen failed: %s", err)
 		return
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
@@ -78,7 +98,7 @@ func (s *TCPServer) FullDesc() string {
 		fmt.Sprintf(
 			"[%s][%s] %s:%d (%d online clients) (started at: %s)",
 			s.Name,
-			s.Hash,
+			s.Hash(),
 			s.Host,
 			s.Port,
 			len(s.Clients),

@@ -28,16 +28,16 @@ func (dispatcher Dispatcher) Run(args []string) {
 
 	if module == "R" {
 		server := reverse.CreateReverseServer(host, int16(port))
-		go server.Run()
-		context.Ctx.AddServer(&server.TCPServer)
+		go (*server).Run()
+		context.Ctx.AddServer(server)
 	} else if module == "C" {
 		server := context.CreateTCPServer(host, int16(port))
-		go server.Run()
+		go (*server).Run()
 		context.Ctx.AddServer(server)
 	} else if module == "P" {
 		server := platypus.CreatePlatypusServer(host, int16(port))
-		go server.Run()
-		context.Ctx.AddServer(&server.TCPServer)
+		go (*server).Run()
+		context.Ctx.AddServer(server)
 	} else {
 		log.Error("Invalid module: %s, use `Help Run` to get more information", args[1])
 		dispatcher.RunHelp([]string{})

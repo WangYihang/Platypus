@@ -20,14 +20,14 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 	}
 	n := 0
 	for _, server := range context.Ctx.Servers {
-		for _, client := range server.Clients {
+		for _, client := range (*server).GetAllTCPClients() {
 			if client.Group {
 				log.Info("Executing on %s: %s", client.Desc(), command[0:len(command)-1])
 				size, err := client.Conn.Write([]byte(command + "\n"))
 				fmt.Println(size)
 				if err != nil {
 					log.Error("Write error: ", err)
-					server.DeleteTCPClient(client)
+					(*server).DeleteTCPClient(client)
 					continue
 				}
 				n++
