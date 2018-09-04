@@ -20,7 +20,6 @@ type AbstractTCPServer interface{
 	AddTCPClient(client *TCPClient)
 	DeleteTCPClient(client *TCPClient)
 	GetAllTCPClients() map[string](*TCPClient)
-	SystemToken(string) string
 	Hash() string
 }
 
@@ -43,10 +42,6 @@ func CreateTCPServer(host string, port int16) *AbstractTCPServer {
 		TimeStamp: ts,
 	}
 	return &abstractTCPServer
-}
-
-func (s *TCPServer) SystemToken(string) string {
-	return "Implement me!"
 }
 
 func (s *TCPServer) Hash() string {
