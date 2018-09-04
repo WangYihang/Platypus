@@ -13,6 +13,11 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
+type AbstractTCPClient interface{
+
+	Hash() string
+}
+
 type TCPClient struct {
 	TimeStamp   time.Time
 	Conn        net.Conn

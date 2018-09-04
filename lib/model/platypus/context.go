@@ -23,12 +23,12 @@ func GetContext() *Context {
 }
 
 func (ctx Context) AddServer(s *PlatypusServer) {
-	ctx.Servers[s.Hash] = s
+	ctx.Servers[s.Hash()] = s
 }
 
 func (ctx Context) DeleteServer(s *PlatypusServer) {
 	s.Stop()
-	delete(ctx.Servers, s.Hash)
+	delete(ctx.Servers, s.Hash())
 }
 
 func (ctx Context) DeleteClient(c *PlatypusClient) {
