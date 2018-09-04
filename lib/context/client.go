@@ -14,9 +14,10 @@ import (
 )
 
 type AbstractTCPClient interface{
-
+	SystemToken(string) string
 	Hash() string
 }
+
 
 type TCPClient struct {
 	TimeStamp   time.Time
@@ -38,6 +39,11 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
 	}
+}
+
+
+func (c *TCPClient) SystemToken(string) string {
+	return "Implement me!"
 }
 
 func (c *TCPClient) Close() {
