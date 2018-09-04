@@ -11,9 +11,12 @@ import (
 func (dispatcher Dispatcher) Order(args []string) {
 	log.Info(fmt.Sprintf("Ordering %d servers", len(context.Ctx.Servers)))
 	for _, server := range context.Ctx.Servers {
-		(*server).SystemToken(
-			config.Cfg.Section("Batch").Key("Command").MustString("/bin/cat /flag"),
-		)
+		for _, client := range (*server).GetAllTCPClients(){
+			(*client).SystemToken(
+				config.Cfg.Section("Batch").Key("Command").MustString("/bin/cat /flag"),
+			)
+		}
+		
 	} 
 }
 
