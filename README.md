@@ -1,7 +1,6 @@
 # Platypus
 
-A handful tool in pentesting which help you to go through firewalls
-
+A modern reverse shell session manager written in go
 
 # LICENSE
 
