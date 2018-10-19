@@ -12,36 +12,20 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-type AbstractTCPServer interface{
-	Run()
-	OnelineDesc() string
-	FullDesc() string
-	Stop()
-	AddTCPClient(client *TCPClient)
-	DeleteTCPClient(client *TCPClient)
-	GetAllTCPClients() map[string](*TCPClient)
-	Hash() string
-}
-
 type TCPServer struct {
-	Name      string
 	Host      string
 	Port      int16
 	Clients   map[string](*TCPClient)
 	TimeStamp time.Time
 }
 
-func CreateTCPServer(host string, port int16) *AbstractTCPServer {
-	var abstractTCPServer AbstractTCPServer
-	ts := time.Now()
-	abstractTCPServer = &TCPServer{
-		Name:      "Common",
+func CreateTCPServer(host string, port int16) *TCPServer {
+	return &TCPServer{
 		Host:      host,
 		Port:      port,
 		Clients:   make(map[string](*TCPClient)),
-		TimeStamp: ts,
+		TimeStamp: time.Now(),
 	}
-	return &abstractTCPServer
 }
 
 func (s *TCPServer) Hash() string {
@@ -77,8 +61,7 @@ func (s *TCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients)",
-			s.Name,
+			"%s:%d (%d online clients)",
 			s.Host,
 			s.Port,
 			len(s.Clients),
@@ -91,8 +74,7 @@ func (s *TCPServer) FullDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s][%s] %s:%d (%d online clients) (started at: %s)",
-			s.Name,
+			"[%s] %s:%d (%d online clients) (started at: %s)",
 			s.Hash(),
 			s.Host,
 			s.Port,
