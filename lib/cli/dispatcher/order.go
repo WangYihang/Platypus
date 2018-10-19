@@ -12,11 +12,13 @@ func (dispatcher Dispatcher) Order(args []string) {
 	log.Info(fmt.Sprintf("Ordering %d servers", len(context.Ctx.Servers)))
 	for _, server := range context.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients(){
-			(*client).SystemToken(
-				config.Cfg.Section("Batch").Key("Command").MustString("/bin/cat /flag"),
+			command := config.Cfg.Section("Batch").Key("Command").MustString("/bin/cat /flag")
+			log.Info("Executing: %s on %s", command, client.OnelineDesc())
+			response := ((*client)).SystemToken(
+				command,
 			)
+			log.Info("Response of %s: %s", client.OnelineDesc(), response)
 		}
-		
 	} 
 }
 
