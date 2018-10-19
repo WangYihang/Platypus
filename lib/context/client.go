@@ -10,14 +10,9 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 )
-
-type AbstractTCPClient interface{
-	SystemToken(string) string
-	Hash() string
-}
-
 
 type TCPClient struct {
 	TimeStamp   time.Time
@@ -41,10 +36,6 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 	}
 }
 
-
-func (c *TCPClient) SystemToken(string) string {
-	return "Implement me!"
-}
 
 func (c *TCPClient) Close() {
 	log.Info("Closeing client: %s", c.Desc())
@@ -155,4 +146,33 @@ func (c *TCPClient) Write(data []byte) int {
 	}
 	log.Info("%d bytes sent to client", n)
 	return n
+}
+
+
+func (c *TCPClient) Readfile(filename string) string {
+	if c.FileExists(filename) {
+		return c.SystemToken("cat " + filename)
+	} else {
+		log.Error("No such file")
+		return ""
+	}
+}
+
+func (c *TCPClient) FileExists(path string) bool {
+	return c.SystemToken("ls "+path) == path+"\n"
+}
+
+func (c *TCPClient) System(command string) {
+	c.Conn.Write([]byte(command + "\n"))
+}
+
+func (c *TCPClient) SystemToken(command string) string {
+	tokenA := str.RandomString(0x10)
+	tokenB := str.RandomString(0x10)
+	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
+	c.System(input)
+	c.ReadUntil(tokenA)
+	output := c.ReadUntil(tokenB)
+	log.Info(output)
+	return output
 }
