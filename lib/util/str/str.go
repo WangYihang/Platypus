@@ -3,7 +3,6 @@ package str
 import (
 	"math/rand"
 	"strings"
-	"time"
 )
 
 func UpperCaseFirstChar(str string) string {
@@ -12,9 +11,9 @@ func UpperCaseFirstChar(str string) string {
 
 func RandomString(length int) string {
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = charset[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(charset))]
-	}
-	return string(result)
+    b := make([]byte, length)
+    for i := range b {
+        b[i] = charset[rand.Intn(len(charset))]
+    }
+    return string(b)
 }
