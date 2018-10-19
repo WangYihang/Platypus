@@ -172,8 +172,9 @@ func (c *TCPClient) SystemToken(command string) string {
 	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
 	log.Info("Executing: %s", input)
 	c.System(input)
-	c.ReadUntil(tokenA)
+	c.ReadUntil(tokenA + "\n")
 	output := c.ReadUntil(tokenB)
-	log.Info(output)
-	return output
+	result := strings.Split(output, tokenB)[0]
+	log.Info(result)
+	return result
 }
