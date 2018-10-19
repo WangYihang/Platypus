@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 type ReverseServer struct {
@@ -11,6 +12,7 @@ type ReverseServer struct {
 }
 
 func CreateReverseServer(host string, port int16) *context.AbstractTCPServer {
+	log.Info("Creating reverse server")
 	var abstractTCPServer context.AbstractTCPServer
 	ts := time.Now()
 	abstractTCPServer = &ReverseServer{
