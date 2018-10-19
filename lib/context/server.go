@@ -61,7 +61,7 @@ func (s *TCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
 		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients)",
+			"%s:%d (%d online clients)",
 			s.Host,
 			s.Port,
 			len(s.Clients),
