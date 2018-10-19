@@ -26,7 +26,7 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 				size, err := client.Conn.Write([]byte(command + "\n"))
 				fmt.Println(size)
 				if err != nil {
-					log.Error("Write error: ", err)
+					log.Error("Write error: %s", err)
 					(*server).DeleteTCPClient(client)
 					continue
 				}
