@@ -9,6 +9,12 @@ import (
 )
 
 func (dispatcher Dispatcher) Command(args []string) {
+	if len(args) == 0 {
+		log.Error("Argments error, use `Help Command` to get more information")
+		dispatcher.CommandHelp([]string{})
+		return
+	}
+
 	if context.Ctx.Current == nil {
 		log.Error("Current session is not set, please use `Jump` command to set the interactive Command")
 		return
@@ -22,11 +28,12 @@ func (dispatcher Dispatcher) Command(args []string) {
 }
 
 func (dispatcher Dispatcher) CommandHelp(args []string) {
-	fmt.Println("Usage of Command")
+	fmt.Println("Usage of Command [CMD]")
 	fmt.Println("\tCommand")
+	fmt.Println("\tCMD\tThe command that you want to execute on the current session")
 }
 
 func (dispatcher Dispatcher) CommandDesc(args []string) {
 	fmt.Println("Command")
-	fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
+	fmt.Println("\texecute a command on the current session")
 }
