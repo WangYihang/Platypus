@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/context"
-	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
@@ -14,18 +13,19 @@ type PlatypusServer struct {
 	context.TCPServer
 }
 
-func CreatePlatypusServer(host string, port int16) *PlatypusServer {
+func CreatePlatypusServer(host string, port int16) *context.AbstractTCPServer {
+	var abstractTCPServer context.AbstractTCPServer
 	ts := time.Now()
-	return &PlatypusServer{
+	abstractTCPServer = &PlatypusServer{
 		context.TCPServer{
 			Name:      "Platypus",
 			Host:      host,
 			Port:      port,
 			Clients:   make(map[string](*context.TCPClient)),
 			TimeStamp: ts,
-			Hash:      hash.MD5(fmt.Sprintf("%s:%s:%s", host, port, ts)),
 		},
 	}
+	return &abstractTCPServer
 }
 
 func (s *PlatypusServer) Run() {
