@@ -169,6 +169,9 @@ func (c *TCPClient) System(command string) {
 func (c *TCPClient) SystemToken(command string) string {
 	tokenA := str.RandomString(0x10)
 	tokenB := str.RandomString(0x10)
+	// For Windows client
+	// input := "echo " + tokenA + " && " + command + "& echo " + tokenB
+	// For Linux client
 	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
 	log.Info("Executing: %s", input)
 	c.System(input)
