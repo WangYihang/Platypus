@@ -11,8 +11,9 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 #### Example
 ```
-root@kali:~# go get https://github.com/WangYihang/Platypus
-root@kali:~# go run Platypus.go
+# Download binary from https://github.com/WangYihang/Platypus/releases
+root@kali:~# chmod +x ./Platypus_linux_amd64
+root@kali:~# ./Platypus_linux_amd64
 >> Help
 Usage: 
 	Help [COMMANDS]
