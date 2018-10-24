@@ -79,3 +79,4 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
 - [ ] Use crontab
+- [ ] Use HR package to detect the status of client (maybe 'echo $random_string')
