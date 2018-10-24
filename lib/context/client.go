@@ -37,7 +37,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 }
 
 func (c *TCPClient) Close() {
-	log.Info("Closeing client: %s", c.Desc())
+	log.Info("Closing client: %s", c.Desc())
 	c.Conn.Close()
 }
 
@@ -166,7 +166,7 @@ func (c *TCPClient) Write(data []byte) int {
 		c.Interactive = false
 		Ctx.DeleteTCPClient(c)
 	}
-	log.Info("%d bytes sent to client", n)
+	log.Debug("%d bytes sent to client", n)
 	return n
 }
 
