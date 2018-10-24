@@ -28,23 +28,11 @@ var enabled = []string{
 	// debug,
 	success,
 	// data,
-	tunnel,
 }
 
 func printMessagePrefix(colorNumber color.Attribute, message string) {
 	color.New(colorNumber).Printf(message + " ")
 	color.New(color.FgHiBlack).Printf(formatTime() + " ")
-}
-
-func Tunnel(format string, a ...interface{}) {
-	for _, mode := range enabled {
-		if mode == "[TUNNEL]" {
-			color.Set(color.FgCyan)
-			logger.Print(fmt.Sprintf(format, a...))
-			color.Unset()
-			return
-		}
-	}
 }
 
 func Data(format string, a ...interface{}) {
