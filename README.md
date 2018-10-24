@@ -12,7 +12,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 #### Use Platypus from source code
 ```
 go get github.com/WangYihang/Platypus
-cd $GOPATH/src/github.com/WangYihang/Platypus
+cd go/src/github.com/WangYihang/Platypus
 go run Platypus.go
 ```
 
