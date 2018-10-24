@@ -3,10 +3,11 @@
 A modern multiple reverse shell sessions/clients manager via terminal written in go
 
 #### Features
-- [x] Multiple listening port
+- [x] Multiple service listening port
+- [x] Multiple client connections
 - [x] RESTful API
-- [x] Upgrade common reverse shell session into full interactive session
 - [x] Reverse shell as a service
+- [ ] Upgrade common reverse shell session into full interactive session
 
 #### Usage
 ```
