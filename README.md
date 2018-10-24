@@ -23,7 +23,7 @@ go run platypus.go
 # ./Platypus_linux_amd64
 ```
 
-#### Use Case
+#### Network Topology
 ```
 Attack IP: 192.168.1.2
     Reverse Shell Service: 0.0.0.0:8080
