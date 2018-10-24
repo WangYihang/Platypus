@@ -36,7 +36,6 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 	}
 }
 
-
 func (c *TCPClient) Close() {
 	log.Info("Closeing client: %s", c.Desc())
 	c.Conn.Close()
@@ -50,6 +49,29 @@ func (c *TCPClient) OnelineDesc() string {
 func (c *TCPClient) Desc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
+}
+
+func (c *TCPClient) ReadUntilClean(token string) string {
+	inputBuffer := make([]byte, 1)
+	var outputBuffer bytes.Buffer
+	for {
+		c.ReadLock.Lock()
+		n, err := c.Conn.Read(inputBuffer)
+		c.ReadLock.Unlock()
+		if err != nil {
+			log.Error("Read from client failed")
+			c.Interactive = false
+			Ctx.DeleteTCPClient(c)
+			return outputBuffer.String()
+		}
+		outputBuffer.Write(inputBuffer[:n])
+		// If found token, then finish reading
+		if strings.HasSuffix(outputBuffer.String(), token) {
+			break
+		}
+	}
+	log.Debug("%d bytes read from client", len(outputBuffer.String()))
+	return outputBuffer.String()[:len(outputBuffer.String())-len(token)]
 }
 
 func (c *TCPClient) ReadUntil(token string) string {
@@ -147,7 +169,6 @@ func (c *TCPClient) Write(data []byte) int {
 	log.Info("%d bytes sent to client", n)
 	return n
 }
-
 
 func (c *TCPClient) Readfile(filename string) string {
 	if c.FileExists(filename) {
