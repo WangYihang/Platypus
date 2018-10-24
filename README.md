@@ -9,7 +9,14 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Reverse shell as a service
 - [ ] Upgrade common reverse shell session into full interactive session
 
-#### Example
+#### Use Platypus from source code
+```
+go get https://github.com/WangYihang/Platypus
+cd $GOPATH/src/github.com/WangYihang/Platypus
+go run Platypus.go
+```
+
+#### Use Platypus from release binaries
 ```
 # Download binary from https://github.com/WangYihang/Platypus/releases
 root@kali:~# chmod +x ./Platypus_linux_amd64
