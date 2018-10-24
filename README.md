@@ -8,6 +8,9 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] RESTful API
 - [x] Reverse shell as a service
 
+#### Screenshot
+![](https://upload-images.jianshu.io/upload_images/2355077-9ef699f1de815f9e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
 #### Network Topology
 ```
 Attack IP: 192.168.1.2
