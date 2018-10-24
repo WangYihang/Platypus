@@ -1,5 +1,9 @@
 # Platypus
 
+[![GitHub stars](https://img.shields.io/github/stars/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus/stargazers)
+[![GitHub license](https://img.shields.io/github/license/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus)
+
+
 A modern multiple reverse shell sessions/clients manager via terminal written in go
 
 #### Features
@@ -10,6 +14,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 #### Screenshot
 ![](https://upload-images.jianshu.io/upload_images/2355077-9ef699f1de815f9e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 #### Network Topology
 ```
