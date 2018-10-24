@@ -1,3 +1,4 @@
 app.ini
-.vscode
+.vscode/
 *.log
+dist/
