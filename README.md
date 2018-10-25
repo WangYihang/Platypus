@@ -24,18 +24,18 @@ Attack IP: 192.168.1.2
 Victim IP: 192.168.1.3
 ```
 
-#### Use Platypus from source code
+#### Run Platypus from source code
 ```
 go get github.com/WangYihang/Platypus
 cd go/src/github.com/WangYihang/Platypus
 go run platypus.go
 ```
 
-#### Use Platypus from release binaries
+#### Run Platypus from release binaries
 ```
 // Download binary from https://github.com/WangYihang/Platypus/releases
-# chmod +x ./Platypus_linux_amd64
-# ./Platypus_linux_amd64
+chmod +x ./Platypus_linux_amd64
+./Platypus_linux_amd64
 ```
 
 #### Victim side
