@@ -10,7 +10,7 @@ import (
 
 func (dispatcher Dispatcher) Switching(args []string) {
 	if len(args) != 1 {
-		log.Error("Argments error, use `Help Switching` to get more Switchingrmation")
+		log.Error("Arguments error, use `Help Switching` to get more Switchingrmation")
 		dispatcher.SwitchingHelp([]string{})
 		return
 	}
