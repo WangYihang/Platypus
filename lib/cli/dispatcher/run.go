@@ -10,7 +10,7 @@ import (
 
 func (dispatcher Dispatcher) Run(args []string) {
 	if len(args) != 2 {
-		log.Error("Argments error, use `Help Run` to get more information")
+		log.Error("Arguments error, use `Help Run` to get more information")
 		dispatcher.RunHelp([]string{})
 		return
 	}
