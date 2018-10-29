@@ -37,5 +37,5 @@ func (dispatcher Dispatcher) InfoHelp(args []string) {
 
 func (dispatcher Dispatcher) InfoDesc(args []string) {
 	fmt.Println("Info")
-	fmt.Println("\tDisplay the infomation of a node, using the hash of the node")
+	fmt.Println("\tDisplay the information of a node, using the hash of the node")
 }
