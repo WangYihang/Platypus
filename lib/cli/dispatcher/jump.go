@@ -10,7 +10,7 @@ import (
 
 func (dispatcher Dispatcher) Jump(args []string) {
 	if len(args) != 1 {
-		log.Error("Argments error, use `Help Jump` to get more Jumprmation")
+		log.Error("Arguments error, use `Help Jump` to get more Jumprmation")
 		dispatcher.JumpHelp([]string{})
 		return
 	}
