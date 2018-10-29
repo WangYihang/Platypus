@@ -2,8 +2,8 @@ package dispatcher
 
 import (
 	"fmt"
-	"strconv"
 	"io/ioutil"
+	"strconv"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -12,7 +12,7 @@ import (
 
 func (dispatcher Dispatcher) REST(args []string) {
 	if len(args) != 2 {
-		log.Error("Argments error, use `Help REST` to get more information")
+		log.Error("Arguments error, use `Help REST` to get more information")
 		dispatcher.RunHelp([]string{})
 		return
 	}
@@ -31,7 +31,7 @@ func (dispatcher Dispatcher) REST(args []string) {
 	gin.DefaultWriter = ioutil.Discard
 	rest := gin.Default()
 	rest.GET("/client", func(c *gin.Context) {
-		clients := []string{} 
+		clients := []string{}
 		for _, server := range context.Ctx.Servers {
 			for _, client := range (*server).GetAllTCPClients() {
 				clients = append(clients, client.Conn.RemoteAddr().String())
@@ -39,7 +39,7 @@ func (dispatcher Dispatcher) REST(args []string) {
 		}
 		c.JSON(200, gin.H{
 			"status": true,
-			"msg": clients,
+			"msg":    clients,
 		})
 	})
 	rest.POST("/client/:hash", func(c *gin.Context) {
@@ -50,14 +50,14 @@ func (dispatcher Dispatcher) REST(args []string) {
 		for _, server := range context.Ctx.Servers {
 			for _, client := range (*server).GetAllTCPClients() {
 				if hash == client.Hash {
-					response =  client.SystemToken(cmd)
+					response = client.SystemToken(cmd)
 					flag = true
 				}
 			}
 		}
 		c.JSON(200, gin.H{
 			"status": flag,
-			"msg": response,
+			"msg":    response,
 		})
 	})
 	go rest.Run(fmt.Sprintf("%s:%d", host, port))
