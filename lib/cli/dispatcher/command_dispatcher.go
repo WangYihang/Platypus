@@ -50,11 +50,11 @@ func Run() {
 
 	// Construct the IO
 	l, err := readline.NewEx(&readline.Config{
-		Prompt:              context.Ctx.CommandPrompt,
-		HistoryFile:         "/tmp/platypus.history",
-		AutoComplete:        completer,
-		InterruptPrompt:     "^C",
-		EOFPrompt:           "exit",
+		Prompt:          context.Ctx.CommandPrompt,
+		HistoryFile:     "~/.platypus.history",
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
 		HistorySearchFold:   true,
 		FuncFilterInputRune: filterInput,
 	})
