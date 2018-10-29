@@ -4,11 +4,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/chzyer/readline"
-	"github.com/WangYihang/Platypus/lib/util/log" 
-	"github.com/WangYihang/Platypus/lib/context" 
+	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 	"github.com/WangYihang/Platypus/lib/util/str"
+	"github.com/chzyer/readline"
 )
 
 type Dispatcher struct{}
@@ -16,11 +16,15 @@ type Dispatcher struct{}
 func parseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
 	args := strings.Split(strings.TrimSpace(input), " ")
-	if !reflection.Contains(methods, args[0]) {
+	if len(args[0]) == 0 {
+		return "", []string{}
+	}
+	arg0 := str.UpperCaseFirstChar(args[0])
+	if !reflection.Contains(methods, arg0) {
 		log.Error("No such command, use `Help` to get more information")
 		return "", []string{}
 	}
-	return str.UpperCaseFirstChar(args[0]), args[1:]
+	return str.UpperCaseFirstChar(arg0), args[1:]
 }
 
 func filterInput(r rune) (rune, bool) {
@@ -46,11 +50,11 @@ func Run() {
 
 	// Construct the IO
 	l, err := readline.NewEx(&readline.Config{
-		Prompt:          context.Ctx.CommandPrompt,
-		HistoryFile:     "/tmp/platypus.history",
-		AutoComplete:    completer,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:              context.Ctx.CommandPrompt,
+		HistoryFile:         "/tmp/platypus.history",
+		AutoComplete:        completer,
+		InterruptPrompt:     "^C",
+		EOFPrompt:           "exit",
 		HistorySearchFold:   true,
 		FuncFilterInputRune: filterInput,
 	})
