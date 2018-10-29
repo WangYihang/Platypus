@@ -10,7 +10,7 @@ import (
 
 func (dispatcher Dispatcher) Command(args []string) {
 	if len(args) == 0 {
-		log.Error("Argments error, use `Help Command` to get more information")
+		log.Error("Arguments error, use `Help Command` to get more information")
 		dispatcher.CommandHelp([]string{})
 		return
 	}
