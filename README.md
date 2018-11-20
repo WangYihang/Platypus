@@ -100,4 +100,8 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 - [ ] Upload file
 - [ ] Download file
 - [ ] List file
+- [ ] Web UI
+- [ ] User guide
+- [ ] Benchmark
+- [ ] Upgrade to Metepreter session
 
