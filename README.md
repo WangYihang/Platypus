@@ -91,6 +91,7 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 ```
 
 #### TODO
+- [ ] Send a specific command to all clients
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
 - [ ] Use crontab
