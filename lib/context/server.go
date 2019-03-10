@@ -141,7 +141,19 @@ func (s *TCPServer) Run() {
 			Ctx.DeleteTCPClient(client)
 			log.Info("RaaS: %s", command)
 		} else {
-			s.AddTCPClient(client)
+			newclientIP := client.Conn.RemoteAddr().String()
+			newclientIP = strings.Split(newclientIP, ":")[0]
+			clientExist := 0
+			for _, client := range s.Clients {
+				clientIP := client.Conn.RemoteAddr().String()
+				clientIP = strings.Split(clientIP, ":")[0]
+				if newclientIP == clientIP {
+					clientExist = 1
+				}
+			}
+			if clientExist == 0 {
+				s.AddTCPClient(client)
+			}
 		}
 	}
 }
