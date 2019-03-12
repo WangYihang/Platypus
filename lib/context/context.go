@@ -4,6 +4,7 @@ type Context struct {
 	Servers       map[string](*TCPServer)
 	Current       *TCPClient
 	CommandPrompt string
+	BlockSameIP int
 }
 
 var Ctx *Context
@@ -14,6 +15,7 @@ func CreateContext() {
 			Servers:       make(map[string](*TCPServer)),
 			Current:       nil,
 			CommandPrompt: ">> ",
+			BlockSameIP:   1,
 		}
 	}
 }
