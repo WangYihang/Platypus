@@ -80,7 +80,6 @@ func (s *TCPServer) Run() {
 			continue
 		}
 		client := CreateTCPClient(conn)
-		log.Info("New client %s Connected", client.Desc())
 		// Reverse shell as a service
 		buffer := make([]byte, 4)
 		client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
@@ -141,7 +140,26 @@ func (s *TCPServer) Run() {
 			Ctx.DeleteTCPClient(client)
 			log.Info("RaaS: %s", command)
 		} else {
-			s.AddTCPClient(client)
+			switch Ctx.BlockSameIP {
+			case 1:
+				newclientIP := client.Conn.RemoteAddr().String()
+				newclientIP = strings.Split(newclientIP, ":")[0]
+				clientExist := 0
+				for _, client := range s.Clients {
+					clientIP := client.Conn.RemoteAddr().String()
+					clientIP = strings.Split(clientIP, ":")[0]
+					if newclientIP == clientIP {
+						clientExist = 1
+					}
+				}
+				if clientExist == 0 {
+					log.Info("New client %s Connected", client.Desc())
+					s.AddTCPClient(client)
+				}
+			case 0:
+				log.Info("New client %s Connected", client.Desc())
+				s.AddTCPClient(client)
+			}
 		}
 	}
 }
