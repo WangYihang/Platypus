@@ -140,7 +140,6 @@ func (s *TCPServer) Run() {
 			Ctx.DeleteTCPClient(client)
 			log.Info("RaaS: %s", command)
 		} else {
-			log.Info("blocksameip: %d", Ctx.BlockSameIP)
 			switch Ctx.BlockSameIP {
 			case 1:
 				newclientIP := client.Conn.RemoteAddr().String()
