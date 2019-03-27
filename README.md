@@ -91,6 +91,10 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 ```
 
 #### TODO
+- [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
+- [ ] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
+- [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
+- [ ] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [ ] Send a specific command to all clients
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
