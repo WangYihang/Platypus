@@ -1,4 +1,5 @@
 app.ini
 .vscode/
+.idea/
 *.log
 dist/
