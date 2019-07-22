@@ -7,7 +7,6 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
-	"github.com/WangYihang/Platypus/lib/util/str"
 	"github.com/chzyer/readline"
 )
 
@@ -19,12 +18,11 @@ func parseInput(input string) (string, []string) {
 	if len(args[0]) == 0 {
 		return "", []string{}
 	}
-	arg0 := str.UpperCaseFirstChar(args[0])
-	if !reflection.Contains(methods, arg0) {
+	if !reflection.Contains(methods, args[0]) {
 		log.Error("No such command, use `Help` to get more information")
 		return "", []string{}
 	}
-	return str.UpperCaseFirstChar(arg0), args[1:]
+	return args[0], args[1:]
 }
 
 func filterInput(r rune) (rune, bool) {
