@@ -131,7 +131,7 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 	// Set read time out
 	c.Conn.SetReadDeadline(time.Now().Add(timeout))
 
-	inputBuffer := make([]byte, 1024)
+	inputBuffer := make([]byte, 0x400)
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {

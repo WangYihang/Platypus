@@ -3,3 +3,4 @@ app.ini
 .idea/
 *.log
 dist/
+platypus.exe
