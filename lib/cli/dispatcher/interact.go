@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -36,8 +35,6 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}
 	}()
 
-	var sleepTime = timeout.GenerateTimeout()
-
 	// read from socket fd
 	go func() {
 		for {
@@ -45,17 +42,8 @@ func (dispatcher Dispatcher) Interact(args []string) {
 				return
 			}
 
-			buffer, isTimeout := context.Ctx.Current.Read(timeout.GenerateTimeout())
+			buffer, _ := context.Ctx.Current.Read(timeout.GenerateTimeout())
 			fmt.Print(buffer)
-
-			// Sleep time trade off
-			if isTimeout {
-				sleepTime = sleepTime * 2
-			}
-			if sleepTime > time.Microsecond*0x400 {
-				sleepTime = timeout.GenerateTimeout()
-			}
-			time.Sleep(sleepTime)
 		}
 	}()
 
@@ -90,7 +78,6 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		// Send command
 		inputChannel <- []byte(command + "\n")
 
-		sleepTime = timeout.GenerateTimeout()
 	}
 }
 
