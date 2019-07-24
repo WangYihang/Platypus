@@ -5,5 +5,5 @@ import (
 )
 
 func GenerateTimeout() time.Duration {
-	return time.Microsecond * 0x10
+	return time.Millisecond * 0x100
 }
