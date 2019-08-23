@@ -33,7 +33,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] RESTful API should auth
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
-- [ ] Upgrade common reverse shell session into full interactive session
 - [ ] Provide full kernel API
 - [ ] Upload file
 - [ ] Download file
@@ -43,6 +42,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] User guide
 - [ ] Benchmark
 - [ ] Upgrade to Metepreter session
+- [x] Upgrade common reverse shell session into full interactive session
 - [x] Docker support (Added by [yeya24](https://github.com/yeya24))
 
 
