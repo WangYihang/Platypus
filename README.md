@@ -16,7 +16,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
   - [x] Using CTRL+C and CTRL+Z in reverse shell
 
 #### Usage
-* [Attacker guide](./USAGE.md)
+* [Attackers' guide](./USAGE.md)
 
 #### Screenshot
 
