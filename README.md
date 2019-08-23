@@ -10,7 +10,10 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Multiple service listening port
 - [x] Multiple client connections
 - [x] RESTful API
-- [x] Reverse shell as a service
+- [x] Reverse shell as a service (Pop a reverse shell without remembering idle commands)
+- [x] Full interactive shell
+  - [x] Using vim gracefully in reverse shell
+  - [x] Using CTRL+C and CTRL+Z in reverse shell
 
 #### Usage
 * [Attacker guide](./USAGE.md)
