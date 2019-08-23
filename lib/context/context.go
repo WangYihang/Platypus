@@ -2,6 +2,7 @@ package context
 
 import (
 	"os"
+	"syscall"
 	"os/signal"
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
@@ -21,7 +22,8 @@ func Signal() {
 	c := make(chan os.Signal, 1)
 
 	// Notify SIGHUP
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTSTP)
+
 	log.Error("Signal installed")
 	// signal.Notify(c, syscall.SIGTSTP)
 
@@ -30,15 +32,19 @@ func Signal() {
             switch sig := <-c; sig {
 			case os.Interrupt:
 				if Ctx.AllowInterrupt {
+					// CTRL C
 					log.Error("%s signal found", sig)
 					i := Ctx.Current.Write([]byte("\x03"))
 					log.Error("%d bytes written", i)
 
 				}
-			// For Linux
-			// case syscall.SIGTSTP:
-			// 	log.Error("%s signal found", sig)
-            //     // signal.Reset(syscall.SIGINT)
+			case syscall.SIGTSTP:
+				if Ctx.AllowInterrupt {
+					// CTRL Z
+					log.Error("%s signal found", sig)
+					i := Ctx.Current.Write([]byte("\x1A"))
+					log.Error("%d bytes written", i)
+				}
             }
         }
     }()

@@ -68,15 +68,6 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		if command == "shell" {
 			command = "python -c 'import pty;pty.spawn(\"/bin/sh\")'"
 		}
-		if command == "^C" {
-			command = "\x03"
-		}
-		if command == "^Z" {
-			command = "\x1A"
-		}
-		if strings.HasPrefix(command, "^V") {
-			command = "\x1B" + command[2:] + "\r"
-		}
 		// Send command
 		inputChannel <- []byte(command + "\n")
 
