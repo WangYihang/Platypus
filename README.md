@@ -28,7 +28,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [ ] [#6 Send one command to all clients at once(Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
-- [ ] Send a specific command to all clients
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
 - [ ] Use crontab
