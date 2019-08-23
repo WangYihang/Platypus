@@ -12,6 +12,7 @@ import (
 )
 
 func (dispatcher Dispatcher) Interact(args []string) {
+	context.Ctx.AllowInterrupt = true
 	if context.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
@@ -61,6 +62,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		command = strings.TrimSpace(command)
 		if command == "exit" {
 			context.Ctx.Current.Interactive = false
+			context.Ctx.AllowInterrupt = false
 			break
 		}
 		if command == "shell" {
