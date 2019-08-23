@@ -99,7 +99,7 @@ func (s *TCPServer) Run() {
 			requestURI := client.ReadUntilClean(" ")
 			// Read HTTP Version
 			client.ReadUntilClean("\r\n")
-			httpHost := fmt.Sprintf("%d:%n", s.Host, s.Port)
+			httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
 			for {
 				var line = client.ReadUntilClean("\r\n")
 				// End of headers
