@@ -18,11 +18,17 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 #### Usage
 * [Attackers' guide](./USAGE.md)
 
-#### Screenshot
+#### Materials
+##### Sides
+* https://github.com/WangYihang/Presentations/blob/master/Platypus/Platypus.pdf
+
+##### Screenshots
 
 ![](https://upload-images.jianshu.io/upload_images/2355077-9ef699f1de815f9e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 ![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
+##### Videoes
+* [Platypus Usage Demo](TODO)
 
 #### TODO
 - [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
