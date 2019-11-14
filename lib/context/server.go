@@ -208,6 +208,7 @@ func (s *TCPServer) Stop() {
 }
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
+	client.DetectOS()
 	s.Clients[client.Hash] = client
 }
 
