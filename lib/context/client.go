@@ -75,6 +75,9 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 }
 
 func (c *TCPClient) ReadUntil(token string) string {
+	// Set read time out
+	c.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
@@ -82,10 +85,17 @@ func (c *TCPClient) ReadUntil(token string) string {
 		n, err := c.Conn.Read(inputBuffer)
 		c.ReadLock.Unlock()
 		if err != nil {
-			log.Error("Read from client failed")
-			c.Interactive = false
-			Ctx.DeleteTCPClient(c)
-			return outputBuffer.String()
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					log.Error("Read response timeout from client")
+					break
+				} else {
+					log.Error("Read from client failed")
+					c.Interactive = false
+					Ctx.DeleteTCPClient(c)
+					return outputBuffer.String()
+				}
+			}
 		}
 		outputBuffer.Write(inputBuffer[:n])
 		// If found token, then finish reading
@@ -196,6 +206,10 @@ func (c *TCPClient) SystemToken(command string) string {
 	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
 	log.Info("Executing: %s", input)
 	c.System(input)
+
+	// For Windows client
+	// c.ReadUntil(tokenA + " \r\n")
+	// For Linux client
 	c.ReadUntil(tokenA + "\n")
 	output := c.ReadUntil(tokenB)
 	result := strings.Split(output, tokenB)[0]
