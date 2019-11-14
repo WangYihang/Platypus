@@ -184,6 +184,9 @@ func (c *TCPClient) Write(data []byte) int {
 
 func (c *TCPClient) Readfile(filename string) string {
 	if c.FileExists(filename) {
+		if c.OS == "Windows" {
+			return c.SystemToken("type " + filename)
+		}
 		return c.SystemToken("cat " + filename)
 	} else {
 		log.Error("No such file")
