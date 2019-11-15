@@ -51,6 +51,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] User guide
 - [ ] Benchmark
 - [ ] Upgrade to Metepreter session
+- [x] Delete command by [@EddieIvan01](https://github.com/EddieIvan01)
 - [x] OS Detection (Linux|Windows) by [@EddieIvan01](https://github.com/EddieIvan01)
 - [x] Upgrade common reverse shell session into full interactive session
 - [x] Docker support (Added by [@yeya24](https://github.com/yeya24))
