@@ -20,6 +20,7 @@ type TCPClient struct {
 	Interactive bool
 	Group       bool
 	Hash        string
+	OS          string
 	ReadLock    *sync.Mutex
 	WriteLock   *sync.Mutex
 }
@@ -48,7 +49,8 @@ func (c *TCPClient) OnelineDesc() string {
 
 func (c *TCPClient) Desc() string {
 	addr := c.Conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%t]", c.Hash, addr.Network(), addr.String(), humanize.Time(c.TimeStamp), c.Interactive)
+	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
+		humanize.Time(c.TimeStamp), c.OS, c.Group)
 }
 
 func (c *TCPClient) ReadUntilClean(token string) string {
@@ -74,18 +76,28 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	return outputBuffer.String()[:len(outputBuffer.String())-len(token)]
 }
 
-func (c *TCPClient) ReadUntil(token string) string {
+func (c *TCPClient) ReadUntil(token string) (string, bool) {
+	// Set read time out
+	c.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
+	var isTimeout bool
 	for {
 		c.ReadLock.Lock()
 		n, err := c.Conn.Read(inputBuffer)
 		c.ReadLock.Unlock()
 		if err != nil {
-			log.Error("Read from client failed")
-			c.Interactive = false
-			Ctx.DeleteTCPClient(c)
-			return outputBuffer.String()
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				log.Error("Read response timeout from client")
+				isTimeout = true
+			} else {
+				log.Error("Read from client failed")
+				c.Interactive = false
+				Ctx.DeleteTCPClient(c)
+				isTimeout = false
+			}
+			break
 		}
 		outputBuffer.Write(inputBuffer[:n])
 		// If found token, then finish reading
@@ -94,7 +106,7 @@ func (c *TCPClient) ReadUntil(token string) string {
 		}
 	}
 	log.Info("%d bytes read from client", len(outputBuffer.String()))
-	return outputBuffer.String()
+	return outputBuffer.String(), isTimeout
 }
 
 func (c *TCPClient) ReadSize(size int) string {
@@ -172,6 +184,9 @@ func (c *TCPClient) Write(data []byte) int {
 
 func (c *TCPClient) Readfile(filename string) string {
 	if c.FileExists(filename) {
+		if c.OS == "Windows" {
+			return c.SystemToken("type " + filename)
+		}
 		return c.SystemToken("cat " + filename)
 	} else {
 		log.Error("No such file")
@@ -190,15 +205,58 @@ func (c *TCPClient) System(command string) {
 func (c *TCPClient) SystemToken(command string) string {
 	tokenA := str.RandomString(0x10)
 	tokenB := str.RandomString(0x10)
-	// For Windows client
-	// input := "echo " + tokenA + " && " + command + "& echo " + tokenB
-	// For Linux client
-	input := "echo " + tokenA + " && " + command + "; echo " + tokenB
+
+	var input string
+	if c.OS == "Windows" {
+		// For Windows client
+		input = "echo " + tokenA + " && " + command + " & echo " + tokenB
+	} else {
+		// For Linux client
+		input = "echo " + tokenA + " && " + command + "&& echo " + tokenB
+	}
 	log.Info("Executing: %s", input)
 	c.System(input)
-	c.ReadUntil(tokenA + "\n")
-	output := c.ReadUntil(tokenB)
+
+	var isTimeout bool
+	if c.OS == "Windows" {
+		// For Windows client
+		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
+	} else {
+		// For Linux client
+		_, isTimeout = c.ReadUntil(tokenA + "\n")
+	}
+
+	// If read response timeout from client, returns directly
+	if isTimeout {
+		return ""
+	}
+
+	output, _ := c.ReadUntil(tokenB)
 	result := strings.Split(output, tokenB)[0]
 	log.Info(result)
 	return result
+}
+
+func (c *TCPClient) DetectOS() {
+	log.Info("Detect [%s] OS", c.Hash)
+
+	c.System("uname")
+	output, _ := c.Read(time.Second * 3)
+	if strings.Contains(output, "Linux") {
+		c.OS = "Linux"
+		log.Info("[%s] OS is Linux", c.Hash)
+		return
+	}
+
+	c.System("ver")
+	output, _ = c.Read(time.Second * 3)
+	if strings.Contains(output, "Windows") {
+		c.OS = "Windows"
+		log.Info("[%s] OS is Windows", c.Hash)
+		return
+	}
+
+	// Unknown OS
+	log.Info("Unknown OS, set [%s] to Linux in default", c.Hash)
+	c.OS = "Linux"
 }
