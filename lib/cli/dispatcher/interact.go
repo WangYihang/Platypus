@@ -9,6 +9,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/timeout"
+	"github.com/fatih/color"
 )
 
 func (dispatcher Dispatcher) Interact(args []string) {
@@ -37,6 +38,8 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	}()
 
 	// read from socket fd
+	printer := color.New(color.FgCyan)
+
 	go func() {
 		for {
 			if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
@@ -44,7 +47,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 			}
 
 			buffer, _ := context.Ctx.Current.Read(timeout.GenerateTimeout())
-			fmt.Print(buffer)
+			printer.Print(buffer)
 		}
 	}()
 
@@ -70,7 +73,6 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}
 		// Send command
 		inputChannel <- []byte(command + "\n")
-
 	}
 }
 
