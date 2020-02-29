@@ -13,7 +13,7 @@ import (
 func (dispatcher Dispatcher) REST(args []string) {
 	if len(args) != 2 {
 		log.Error("Arguments error, use `Help REST` to get more information")
-		dispatcher.RunHelp([]string{})
+		dispatcher.RESTHelp([]string{})
 		return
 	}
 
@@ -21,7 +21,7 @@ func (dispatcher Dispatcher) REST(args []string) {
 	port, err := strconv.ParseInt(args[1], 10, 32)
 	if err != nil {
 		log.Error("Invalid port: %s, use `Help REST` to get more information", args[1])
-		dispatcher.RunHelp([]string{})
+		dispatcher.RESTHelp([]string{})
 		return
 	}
 
