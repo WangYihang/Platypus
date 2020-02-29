@@ -35,7 +35,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
 - [ ] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
-- [ ] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [ ] [#6 Send one command to all clients at once(Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
 - [ ] Test driven development
@@ -46,12 +45,14 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] Provide full kernel API
 - [ ] Upload file
 - [ ] Download file
+- [ ] Add config file
 - [ ] List file
 - [ ] Web UI
-- [ ] Global Config (eg. BlockSameIP)
 - [ ] User guide
 - [ ] Benchmark
 - [ ] Upgrade to Metepreter session
+- [x] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
+- [x] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [x] [#23 Case insensitive CLI](https://github.com/WangYihang/Platypus/issues/23)
 - [x] Delete command by [@EddieIvan01](https://github.com/EddieIvan01)
 - [x] OS Detection (Linux|Windows) by [@EddieIvan01](https://github.com/EddieIvan01)
