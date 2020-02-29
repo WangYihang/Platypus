@@ -19,17 +19,17 @@ func parseInput(input string) (string, []string) {
 		return "", []string{}
 	}
 
-	args[0] = strings.Title(args[0])
-
-	validCommand := false
+	target := ""
 	for _, method := range methods {
-		if method == args[0] {
-			validCommand = true
+		if strings.ToLower(method) == strings.ToLower(args[0]) {
+			target = method
+
+			break
 		}
 	}
 
-	if validCommand {
-		return args[0], args[1:]
+	if target != "" {
+		return target, args[1:]
 	} else {
 		log.Error("No such command, use `Help` to get more information")
 		return "", []string{}
