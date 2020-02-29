@@ -244,23 +244,27 @@ func (c *TCPClient) SystemToken(command string) string {
 	tokenB := str.RandomString(0x10)
 
 	var input string
+
+	// Construct command to execute
+	// ; echo tokenB and & echo tokenB are for commands which will be execute unsuccessfully
 	if c.OS == Linux {
+		// For Linux client
+		input = "echo " + tokenA + " && " + command + " ; echo " + tokenB
+	} else {
 		// For Windows client
 		input = "echo " + tokenA + " && " + command + " & echo " + tokenB
-	} else {
-		// For Linux client
-		input = "echo " + tokenA + " && " + command + "&& echo " + tokenB
 	}
+
 	log.Info("Executing: %s", input)
 	c.System(input)
 
 	var isTimeout bool
 	if c.OS == Linux {
-		// For Windows client
-		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
-	} else {
 		// For Linux client
 		_, isTimeout = c.ReadUntil(tokenA + "\n")
+	} else {
+		// For Windows client
+		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
 	}
 
 	// If read response timeout from client, returns directly
