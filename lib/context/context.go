@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/fatih/color"
 )
 
 type Context struct {
@@ -56,7 +57,7 @@ func CreateContext() {
 		Ctx = &Context{
 			Servers:        make(map[string](*TCPServer)),
 			Current:        nil,
-			CommandPrompt:  ">> ",
+			CommandPrompt:  color.CyanString("» "),
 			BlockSameIP:    1,
 			AllowInterrupt: false,
 		}
