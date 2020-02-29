@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/jedib0t/go-pretty/table"
 )
 
 type TCPServer struct {
@@ -160,15 +162,49 @@ func (s *TCPServer) Run() {
 						}
 					}
 					if clientExist == 0 {
-						log.Info("New client %s Connected", client.Desc())
+						log.Info("New client %s Connected", client.FullDesc())
 						s.AddTCPClient(client)
 					}
 				case 0:
-					log.Info("New client %s Connected", client.Desc())
+					log.Info("New client %s Connected", client.FullDesc())
 					s.AddTCPClient(client)
 				}
 			}
 		}
+	}
+}
+
+func (s *TCPServer) AsTable() {
+	if len(s.Clients) > 0 {
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.SetTitle(fmt.Sprintf(
+			"[%s] Listening on %s:%d, %d Clients",
+			s.Hash(),
+			(*s).Host,
+			(*s).Port,
+			len((*s).Clients),
+		))
+		t.AppendHeader(table.Row{"ID", "Hash", "Network", "OS", "Time"})
+		i := 0
+		for chash, client := range s.Clients {
+			i++
+			t.AppendRow([]interface{}{
+				i,
+				chash,
+				client.Conn.RemoteAddr().String(),
+				client.OS,
+				humanize.Time(client.TimeStamp),
+			})
+		}
+		t.Render()
+	} else {
+		log.Warn(fmt.Sprintf(
+			"[%s] listening on %s:%d, 0 clients",
+			s.Hash(),
+			(*s).Host,
+			(*s).Port,
+		))
 	}
 }
 
@@ -199,7 +235,7 @@ func (s *TCPServer) FullDesc() string {
 	)
 	var descs []string
 	for _, client := range s.Clients {
-		descs = append(descs, fmt.Sprintf("\t%s", client.Desc()))
+		descs = append(descs, fmt.Sprintf("\t%s", client.FullDesc()))
 	}
 	if len(descs) > 0 {
 		buffer.WriteString("\n")
@@ -226,8 +262,8 @@ func (s *TCPServer) Stop() {
 }
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
-	client.DetectOS()
 	s.Clients[client.Hash] = client
+	client.DetectOS()
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
