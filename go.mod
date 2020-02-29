@@ -10,4 +10,9 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.9.0
 	github.com/gin-gonic/gin v1.5.0
+	github.com/go-openapi/strfmt v0.19.4 // indirect
+	github.com/jedib0t/go-pretty v4.3.0+incompatible
+	github.com/kataras/tablewriter v0.0.0-20180708051242-e063d29b7c23
+	github.com/lensesio/tableprinter v0.0.0-20200104100433-ae9249991eb1
+	github.com/mattn/go-runewidth v0.0.8 // indirect
 )
