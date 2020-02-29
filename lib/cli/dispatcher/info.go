@@ -16,12 +16,12 @@ func (dispatcher Dispatcher) Info(args []string) {
 	}
 	for _, server := range context.Ctx.Servers {
 		if strings.HasPrefix((*server).Hash(), strings.ToLower(args[0])) {
-			fmt.Println("[SERVER]: \n\t", (*server).FullDesc())
+			server.AsTable()
 			return
 		}
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				fmt.Println("[CLIENT]: \n\t", client.Desc())
+				client.AsTable()
 				return
 			}
 		}

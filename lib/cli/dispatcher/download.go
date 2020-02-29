@@ -26,7 +26,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 				// Check existence of the src file on target machine
 				// TODO: download, (use go-pretty to show the download progress)
 
-				fmt.Println("[CLIENT]: \n\t", client.Desc())
+				fmt.Println("[CLIENT]: \n\t", client.FullDesc())
 
 				return
 			}

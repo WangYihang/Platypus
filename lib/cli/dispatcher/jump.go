@@ -18,7 +18,7 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				context.Ctx.Current = client
-				log.Success("The current interactive shell is set to: %s", client.Desc())
+				log.Success("The current interactive shell is set to: %s", client.FullDesc())
 				return
 			}
 		}
