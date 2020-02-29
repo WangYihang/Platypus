@@ -7,7 +7,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
-	"github.com/chzyer/readline"
+	"github.com/WangYihang/readline"
 )
 
 type Dispatcher struct{}
@@ -19,9 +19,9 @@ func parseInput(input string) (string, []string) {
 		return "", []string{}
 	}
 
-	args[0] = strings.Title(strings.ToLower(args[0]))
+	args[0] = strings.Title(args[0])
 
-	var validCommand = false
+	validCommand := false
 	for _, method := range methods {
 		if method == args[0] {
 			validCommand = true
@@ -46,7 +46,7 @@ func filterInput(r rune) (rune, bool) {
 
 func Run() {
 	// Register all commands
-	var completer = readline.NewPrefixCompleter()
+	completer := readline.NewPrefixCompleter()
 	children := []readline.PrefixCompleterInterface{}
 	methods := reflection.GetAllMethods(Dispatcher{})
 	for _, method := range methods {

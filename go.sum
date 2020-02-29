@@ -1,3 +1,5 @@
+github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3 h1:vnLf9dGMiEb3kgfPpSUs9RCC3HjY+xmwh3EktxwBg3E=
+github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3/go.mod h1:S7Ulsa01ssaZKuWV9IRCrAdCtCdI4dQIt39FYOzAEa4=
 github.com/chzyer/logex v1.1.10 h1:Swpa1K6QvQznwJRcfTfQJmTE72DqScAa40E+fbHEXEE=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e h1:fY5BOSpyZCqRo5OhCuC+XN+r/bBCmeuuJtjz+bCNIf8=
