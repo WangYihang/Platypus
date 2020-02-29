@@ -2,16 +2,17 @@ package context
 
 import (
 	"os"
-	"syscall"
 	"os/signal"
+	"syscall"
+
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
 type Context struct {
-	Servers       map[string](*TCPServer)
-	Current       *TCPClient
-	CommandPrompt string
-	BlockSameIP int
+	Servers        map[string](*TCPServer)
+	Current        *TCPClient
+	CommandPrompt  string
+	BlockSameIP    int
 	AllowInterrupt bool
 }
 
@@ -28,8 +29,8 @@ func Signal() {
 	// signal.Notify(c, syscall.SIGTSTP)
 
 	go func() {
-        for {
-            switch sig := <-c; sig {
+		for {
+			switch sig := <-c; sig {
 			case os.Interrupt:
 				if Ctx.AllowInterrupt {
 					// CTRL C
@@ -45,18 +46,18 @@ func Signal() {
 					i := Ctx.Current.Write([]byte("\x1A"))
 					log.Error("%d bytes written", i)
 				}
-            }
-        }
-    }()
+			}
+		}
+	}()
 }
 
 func CreateContext() {
 	if Ctx == nil {
 		Ctx = &Context{
-			Servers:       make(map[string](*TCPServer)),
-			Current:       nil,
-			CommandPrompt: ">> ",
-			BlockSameIP:   1,
+			Servers:        make(map[string](*TCPServer)),
+			Current:        nil,
+			CommandPrompt:  ">> ",
+			BlockSameIP:    1,
 			AllowInterrupt: false,
 		}
 	}
