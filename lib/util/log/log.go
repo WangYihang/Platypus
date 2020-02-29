@@ -9,7 +9,7 @@ import (
 	"github.com/fatih/color"
 )
 
-var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime)
+var Logger = log.New(os.Stderr, "", log.Ldate|log.Ltime)
 
 const (
 	debug   = "[DEBUG]"
@@ -39,7 +39,7 @@ func Data(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[DATA]" {
 			color.Set(color.FgMagenta)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
@@ -50,7 +50,7 @@ func Debug(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[DEBUG]" {
 			color.Set(color.FgYellow)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
@@ -61,7 +61,7 @@ func Info(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[INFO]" {
 			color.Set(color.FgBlue)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
@@ -72,7 +72,7 @@ func Error(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[ERROR]" {
 			color.Set(color.FgRed)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
@@ -82,7 +82,7 @@ func Warn(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[WARN]" {
 			color.Set(color.FgMagenta)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
@@ -93,7 +93,7 @@ func Success(format string, a ...interface{}) {
 	for _, mode := range enabled {
 		if mode == "[SUCCESS]" {
 			color.Set(color.FgGreen)
-			logger.Print(fmt.Sprintf(format, a...))
+			Logger.Print(fmt.Sprintf(format, a...))
 			color.Unset()
 			return
 		}
