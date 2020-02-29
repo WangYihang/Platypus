@@ -5,6 +5,7 @@ import (
 )
 
 func (dispatcher Dispatcher) Upload(args []string) {
+	// TODO: upload, (use go-pretty to show the upload progress)
 	fmt.Println("TO BE IMPLEMENTED.")
 }
 
