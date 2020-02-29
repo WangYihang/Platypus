@@ -18,11 +18,22 @@ func parseInput(input string) (string, []string) {
 	if len(args[0]) == 0 {
 		return "", []string{}
 	}
-	if !reflection.Contains(methods, args[0]) {
+
+	args[0] = strings.Title(strings.ToLower(args[0]))
+
+	var validCommand = false
+	for _, method := range methods {
+		if method == args[0] {
+			validCommand = true
+		}
+	}
+
+	if validCommand {
+		return args[0], args[1:]
+	} else {
 		log.Error("No such command, use `Help` to get more information")
 		return "", []string{}
 	}
-	return args[0], args[1:]
 }
 
 func filterInput(r rune) (rune, bool) {
@@ -48,11 +59,11 @@ func Run() {
 
 	// Construct the IO
 	l, err := readline.NewEx(&readline.Config{
-		Prompt:          context.Ctx.CommandPrompt,
-		HistoryFile:     "~/.platypus.history",
-		AutoComplete:    completer,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:              context.Ctx.CommandPrompt,
+		HistoryFile:         "~/.platypus.history",
+		AutoComplete:        completer,
+		InterruptPrompt:     "^C",
+		EOFPrompt:           "exit",
 		HistorySearchFold:   true,
 		FuncFilterInputRune: filterInput,
 	})
@@ -61,6 +72,8 @@ func Run() {
 		panic(err)
 	}
 	defer l.Close()
+
+	log.Logger.SetOutput(l.Stderr())
 
 	// Command loop
 	for {
