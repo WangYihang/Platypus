@@ -18,7 +18,7 @@ func (dispatcher Dispatcher) Switching(args []string) {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				client.Group = !client.Group
-				log.Success("[%t->%t] %s", !client.Group, client.Group, client.Desc())
+				log.Success("[%t->%t] %s", !client.Group, client.Group, client.FullDesc())
 				return
 			}
 		}

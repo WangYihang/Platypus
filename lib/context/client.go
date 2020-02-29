@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/jedib0t/go-pretty/table"
 )
 
 type TCPClient struct {
@@ -32,14 +34,28 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Interactive: false,
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
+		OS:          "Unknown",
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
 	}
 }
 
 func (c *TCPClient) Close() {
-	log.Info("Closing client: %s", c.Desc())
+	log.Info("Closing client: %s", c.FullDesc())
 	c.Conn.Close()
+}
+
+func (c *TCPClient) AsTable() {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "Time"})
+	t.AppendRow([]interface{}{
+		c.Hash,
+		c.Conn.RemoteAddr().String(),
+		c.OS,
+		humanize.Time(c.TimeStamp),
+	})
+	t.Render()
 }
 
 func (c *TCPClient) OnelineDesc() string {
@@ -47,7 +63,7 @@ func (c *TCPClient) OnelineDesc() string {
 	return fmt.Sprintf("[%s] %s://%s", c.Hash, addr.Network(), addr.String())
 }
 
-func (c *TCPClient) Desc() string {
+func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
 		humanize.Time(c.TimeStamp), c.OS, c.Group)

@@ -21,7 +21,7 @@ func (dispatcher Dispatcher) Command(args []string) {
 	}
 
 	command := strings.Join(args, " ")
-	log.Info("Execute %s on %s", command, context.Ctx.Current.Desc())
+	log.Info("Execute %s on %s", command, context.Ctx.Current.FullDesc())
 
 	result := context.Ctx.Current.SystemToken(command)
 	log.Info("Result: %s", result)
