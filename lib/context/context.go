@@ -27,7 +27,6 @@ func Signal() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTSTP)
 
 	log.Error("Signal installed")
-	// signal.Notify(c, syscall.SIGTSTP)
 
 	go func() {
 		for {

@@ -16,13 +16,25 @@ import (
 	"github.com/jedib0t/go-pretty/table"
 )
 
+type OperatingSystem int
+
+const (
+	Unknown OperatingSystem = iota
+	Linux
+	Windows
+)
+
+func (os OperatingSystem) String() string {
+	return [...]string{"Unknown", "Linux", "Windows"}[os]
+}
+
 type TCPClient struct {
 	TimeStamp   time.Time
 	Conn        net.Conn
 	Interactive bool
 	Group       bool
 	Hash        string
-	OS          string
+	OS          OperatingSystem
 	ReadLock    *sync.Mutex
 	WriteLock   *sync.Mutex
 }
@@ -34,7 +46,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Interactive: false,
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
-		OS:          "Unknown",
+		OS:          Unknown,
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
 	}
@@ -52,7 +64,7 @@ func (c *TCPClient) AsTable() {
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
-		c.OS,
+		c.OS.String(),
 		humanize.Time(c.TimeStamp),
 	})
 	t.Render()
@@ -60,13 +72,13 @@ func (c *TCPClient) AsTable() {
 
 func (c *TCPClient) OnelineDesc() string {
 	addr := c.Conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s", c.Hash, addr.Network(), addr.String())
+	return fmt.Sprintf("[%s] %s://%s (%s)", c.Hash, addr.Network(), addr.String(), c.OS.String())
 }
 
 func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
-		humanize.Time(c.TimeStamp), c.OS, c.Group)
+		humanize.Time(c.TimeStamp), c.OS.String(), c.Group)
 }
 
 func (c *TCPClient) ReadUntilClean(token string) string {
@@ -200,7 +212,7 @@ func (c *TCPClient) Write(data []byte) int {
 
 func (c *TCPClient) Readfile(filename string) string {
 	if c.FileExists(filename) {
-		if c.OS == "Windows" {
+		if c.OS == Linux {
 			return c.SystemToken("type " + filename)
 		}
 		return c.SystemToken("cat " + filename)
@@ -211,7 +223,16 @@ func (c *TCPClient) Readfile(filename string) string {
 }
 
 func (c *TCPClient) FileExists(path string) bool {
-	return c.SystemToken("ls "+path) == path+"\n"
+	switch c.OS {
+	case Linux:
+		return c.SystemToken("ls "+path) == path+"\n"
+	case Windows:
+		log.Error("Unsupported operating system: %s", c.OS.String())
+		return false
+	default:
+		log.Error("Unrecognized operating system.")
+		return false
+	}
 }
 
 func (c *TCPClient) System(command string) {
@@ -223,7 +244,7 @@ func (c *TCPClient) SystemToken(command string) string {
 	tokenB := str.RandomString(0x10)
 
 	var input string
-	if c.OS == "Windows" {
+	if c.OS == Linux {
 		// For Windows client
 		input = "echo " + tokenA + " && " + command + " & echo " + tokenB
 	} else {
@@ -234,7 +255,7 @@ func (c *TCPClient) SystemToken(command string) string {
 	c.System(input)
 
 	var isTimeout bool
-	if c.OS == "Windows" {
+	if c.OS == Linux {
 		// For Windows client
 		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
 	} else {
@@ -258,21 +279,22 @@ func (c *TCPClient) DetectOS() {
 
 	c.System("uname")
 	output, _ := c.Read(time.Second * 3)
-	if strings.Contains(output, "Linux") {
-		c.OS = "Linux"
+	if strings.Contains(strings.ToLower(output), "linux") {
+		c.OS = Linux
+
 		log.Info("[%s] OS is Linux", c.Hash)
 		return
 	}
 
 	c.System("ver")
 	output, _ = c.Read(time.Second * 3)
-	if strings.Contains(output, "Windows") {
-		c.OS = "Windows"
+	if strings.Contains(strings.ToLower(output), "windows") {
+		c.OS = Windows
 		log.Info("[%s] OS is Windows", c.Hash)
 		return
 	}
 
 	// Unknown OS
 	log.Info("Unknown OS, set [%s] to Linux in default", c.Hash)
-	c.OS = "Linux"
+	c.OS = Linux
 }
