@@ -18,7 +18,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", context.Ctx.Current.Desc())
+	log.Info("Interacting with %s", context.Ctx.Current.FullDesc())
 
 	// Set to interactive
 	context.Ctx.Current.Interactive = true
