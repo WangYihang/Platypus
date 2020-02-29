@@ -17,12 +17,14 @@ func (dispatcher Dispatcher) Download(args []string) {
 
 	for _, server := range context.Ctx.Servers {
 		if strings.HasPrefix((*server).Hash(), strings.ToLower(args[0])) {
+			// TODO: add some output to indicate cannot download file from server.
 			fmt.Println("[SERVER]: \n\t", (*server).FullDesc())
 			return
 		}
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				// Check existence of the src file on target machine
+				// TODO: download, (use go-pretty to show the download progress)
 
 				fmt.Println("[CLIENT]: \n\t", client.Desc())
 
