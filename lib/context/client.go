@@ -2,6 +2,7 @@ package context
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -34,6 +35,7 @@ type TCPClient struct {
 	Interactive bool
 	Group       bool
 	Hash        string
+	User        string
 	OS          OperatingSystem
 	ReadLock    *sync.Mutex
 	WriteLock   *sync.Mutex
@@ -47,6 +49,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
 		OS:          Unknown,
+		User:        "",
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
 	}
@@ -60,11 +63,12 @@ func (c *TCPClient) Close() {
 func (c *TCPClient) AsTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "Time"})
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time"})
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
 		c.OS.String(),
+		c.User,
 		humanize.Time(c.TimeStamp),
 	})
 	t.Render()
@@ -100,7 +104,7 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 			break
 		}
 	}
-	log.Debug("%d bytes read from client", len(outputBuffer.String()))
+	// log.Debug("%d bytes read from client", len(outputBuffer.String()))
 	return outputBuffer.String()[:len(outputBuffer.String())-len(token)]
 }
 
@@ -133,7 +137,7 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 			break
 		}
 	}
-	log.Info("%d bytes read from client", len(outputBuffer.String()))
+	// log.Info("%d bytes read from client", len(outputBuffer.String()))
 	return outputBuffer.String(), isTimeout
 }
 
@@ -163,7 +167,7 @@ func (c *TCPClient) ReadSize(size int) string {
 			break
 		}
 	}
-	log.Info("(%d/%d) bytes read from client", len(outputBuffer.String()), size)
+	// log.Info("(%d/%d) bytes read from client", len(outputBuffer.String()), size)
 	return outputBuffer.String()
 }
 
@@ -210,15 +214,14 @@ func (c *TCPClient) Write(data []byte) int {
 	return n
 }
 
-func (c *TCPClient) Readfile(filename string) string {
+func (c *TCPClient) Readfile(filename string) (string, error) {
 	if c.FileExists(filename) {
 		if c.OS == Linux {
-			return c.SystemToken("type " + filename)
+			return c.SystemToken("cat " + filename), nil
 		}
-		return c.SystemToken("cat " + filename)
+		return c.SystemToken("type " + filename), nil
 	} else {
-		log.Error("No such file")
-		return ""
+		return "", errors.New("No such file")
 	}
 }
 
@@ -278,6 +281,18 @@ func (c *TCPClient) SystemToken(command string) string {
 	return result
 }
 
+func (c *TCPClient) DetectUser() {
+	log.Info("Detect [%s] User", c.Hash)
+	switch c.OS {
+	case Linux:
+		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+	case Windows:
+		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+	default:
+		log.Error("Unknown OS")
+	}
+}
+
 func (c *TCPClient) DetectOS() {
 	log.Info("Detect [%s] OS", c.Hash)
 
@@ -300,5 +315,5 @@ func (c *TCPClient) DetectOS() {
 
 	// Unknown OS
 	log.Info("Unknown OS, set [%s] to Linux in default", c.Hash)
-	c.OS = Linux
+	c.OS = Unknown
 }

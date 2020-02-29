@@ -185,7 +185,8 @@ func (s *TCPServer) AsTable() {
 			(*s).Port,
 			len((*s).Clients),
 		))
-		t.AppendHeader(table.Row{"ID", "Hash", "Network", "OS", "Time"})
+		t.AppendHeader(table.Row{"ID", "Hash", "Network", "OS", "User", "Time"})
+
 		i := 0
 		for chash, client := range s.Clients {
 			i++
@@ -193,9 +194,11 @@ func (s *TCPServer) AsTable() {
 				i,
 				chash,
 				client.Conn.RemoteAddr().String(),
-				client.OS,
+				client.OS.String(),
+				client.User,
 				humanize.Time(client.TimeStamp),
 			})
+
 		}
 		t.Render()
 	} else {
@@ -264,6 +267,7 @@ func (s *TCPServer) Stop() {
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	s.Clients[client.Hash] = client
 	client.DetectOS()
+	client.DetectUser()
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
