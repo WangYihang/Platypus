@@ -31,6 +31,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 #### TODO
+- [ ] [#23 Case insensitive CLI](https://github.com/WangYihang/Platypus/issues/19)
 - [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
 - [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
 - [ ] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
