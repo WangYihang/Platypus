@@ -5,32 +5,34 @@
 
 A modern multiple reverse shell sessions/clients manager via terminal written in go
 
-#### Features
+## Features
 
 - [x] Multiple service listening port
 - [x] Multiple client connections
 - [x] RESTful API
 - [x] Reverse shell as a service (Pop a reverse shell without remembering idle commands)
+- [x] Download/Upload file
 - [x] Full interactive shell
   - [x] Using vim gracefully in reverse shell
   - [x] Using CTRL+C and CTRL+Z in reverse shell
 
-#### Usage
+## Materials
+
+#### User Guide
 * [Attackers' guide](./USAGE.md)
 
-#### Materials
-##### Sides
+#### Introduction Slide
 * [[2019-08-24] KCon - Introduction of Platypus ](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20of%20Platypus%20(KCon)/Introduction%20of%20Platypus.pdf)
 
-##### Videoes
+#### Demo Video
 [![](http://img.youtube.com/vi/Yfy6w8qXcQs/0.jpg)](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
 
-##### Screenshots
+#### Screenshots
 
 ![](https://upload-images.jianshu.io/upload_images/2355077-9ef699f1de815f9e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 ![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-#### TODO
+## TODOs
 - [ ] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [ ] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
 - [ ] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
@@ -50,8 +52,8 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] Add config file
 - [ ] List file
 - [ ] Web UI
-- [ ] User guide
 - [ ] Benchmark
+- [x] User guide
 - [x] Upload file
 - [x] Download file
 - [x] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
