@@ -69,11 +69,13 @@ func (s *TCPServer) Run() {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
 		log.Error("Resolve TCP address failed: %s", err)
+		Ctx.DeleteServer(s)
 		return
 	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
 		log.Error("Listen failed: %s", err)
+		Ctx.DeleteServer(s)
 		return
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
@@ -179,7 +181,7 @@ func (s *TCPServer) AsTable() {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
 		t.SetTitle(fmt.Sprintf(
-			"[%s] Listening on %s:%d, %d Clients",
+			"%s Listening on %s:%d, %d Clients",
 			s.Hash(),
 			(*s).Host,
 			(*s).Port,
@@ -263,6 +265,7 @@ func (s *TCPServer) Stop() {
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	s.Clients[client.Hash] = client
+	log.Info("Gathering information from client...")
 	client.DetectOS()
 	client.DetectUser()
 }

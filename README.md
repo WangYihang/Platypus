@@ -39,7 +39,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
 - [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
-- [ ] Upload file
 - [ ] Upgrade to Metepreter session
 - [ ] Test driven development
 - [ ] Heart beating packet
@@ -53,6 +52,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] Web UI
 - [ ] User guide
 - [ ] Benchmark
+- [x] Upload file
 - [x] Download file
 - [x] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
 - [x] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
