@@ -31,26 +31,30 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 #### TODO
-- [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
-- [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
-- [ ] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
+- [ ] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
+- [ ] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
+- [ ] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
-- [ ] [#6 Send one command to all clients at once(Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
+- [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
+- [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
+- [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
+- [ ] Upload file
+- [ ] Upgrade to Metepreter session
 - [ ] Test driven development
+- [ ] Heart beating packet
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Provide full kernel API
-- [ ] Upload file
-- [ ] Download file
 - [ ] Add config file
 - [ ] List file
 - [ ] Web UI
 - [ ] User guide
 - [ ] Benchmark
-- [ ] Upgrade to Metepreter session
+- [x] Download file
+- [x] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
 - [x] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
 - [x] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [x] [#23 Case insensitive CLI](https://github.com/WangYihang/Platypus/issues/23)
