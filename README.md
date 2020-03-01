@@ -20,7 +20,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 #### Materials
 ##### Sides
-* https://github.com/WangYihang/Presentations/blob/master/Platypus/Platypus.pdf
+* [[2019-08-24] KCon - Introduction of Platypus ](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20of%20Platypus%20(KCon)/Introduction%20of%20Platypus.pdf)
 
 ##### Videoes
 [![](http://img.youtube.com/vi/Yfy6w8qXcQs/0.jpg)](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
