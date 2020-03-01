@@ -15,6 +15,7 @@ require (
 	github.com/kataras/tablewriter v0.0.0-20180708051242-e063d29b7c23
 	github.com/lensesio/tableprinter v0.0.0-20200104100433-ae9249991eb1
 	github.com/mattn/go-runewidth v0.0.8 // indirect
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v4 v4.12.1
 )
