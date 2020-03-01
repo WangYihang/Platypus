@@ -185,13 +185,10 @@ func (s *TCPServer) AsTable() {
 			(*s).Port,
 			len((*s).Clients),
 		))
-		t.AppendHeader(table.Row{"ID", "Hash", "Network", "OS", "User", "Time"})
+		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time"})
 
-		i := 0
 		for chash, client := range s.Clients {
-			i++
 			t.AppendRow([]interface{}{
-				i,
 				chash,
 				client.Conn.RemoteAddr().String(),
 				client.OS.String(),

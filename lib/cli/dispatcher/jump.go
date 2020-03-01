@@ -6,6 +6,7 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/fatih/color"
 )
 
 func (dispatcher Dispatcher) Jump(args []string) {
@@ -19,6 +20,25 @@ func (dispatcher Dispatcher) Jump(args []string) {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				context.Ctx.Current = client
 				log.Success("The current interactive shell is set to: %s", client.FullDesc())
+
+				// Update prompt
+				// BUG:
+				// The prompt will set only at the `Jump` command once.
+				// If we jump to a client before the os & user is detected
+				// So the prompt will be:
+				// (Unknown) 127.0.0.1:43802 [unknown] »
+				var user string
+				if client.User == "" {
+					user = "unknown"
+				} else {
+					user = client.User
+				}
+				ReadLineInstance.SetPrompt(color.CyanString(
+					"(%s) %s [%s] » ",
+					client.OS.String(),
+					client.Conn.RemoteAddr().String(),
+					user,
+				))
 				return
 			}
 		}
