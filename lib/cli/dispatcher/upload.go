@@ -38,6 +38,9 @@ func (dispatcher Dispatcher) Upload(args []string) {
 		return
 	}
 
+	// Check writablity of remote path
+	// TODO
+
 	if dstExists {
 		log.Error("The target path is occupied, please select another destination")
 		return
