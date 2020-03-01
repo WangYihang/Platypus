@@ -72,7 +72,8 @@ func Run() {
 	})
 
 	if err != nil {
-		panic(err)
+		log.Error(err.Error())
+		return
 	}
 	// defer l.Close()
 

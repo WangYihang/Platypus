@@ -23,6 +23,9 @@ const (
 	Unknown OperatingSystem = iota
 	Linux
 	Windows
+	SunOS
+	MacOS
+	FreeBSD
 )
 
 func (os OperatingSystem) String() string {
@@ -215,7 +218,12 @@ func (c *TCPClient) Write(data []byte) int {
 }
 
 func (c *TCPClient) Readfile(filename string) (string, error) {
-	if c.FileExists(filename) {
+	exists, err := c.FileExists(filename)
+	if err != nil {
+		return "", err
+	}
+
+	if exists {
 		if c.OS == Linux {
 			return c.SystemToken("cat " + filename), nil
 		}
@@ -225,16 +233,14 @@ func (c *TCPClient) Readfile(filename string) (string, error) {
 	}
 }
 
-func (c *TCPClient) FileExists(path string) bool {
+func (c *TCPClient) FileExists(path string) (bool, error) {
 	switch c.OS {
 	case Linux:
-		return c.SystemToken("ls "+path) == path+"\n"
+		return c.SystemToken("ls "+path) == path+"\n", nil
 	case Windows:
-		log.Error("Unsupported operating system: %s", c.OS.String())
-		return false
+		return false, errors.New(fmt.Sprintf("Unsupported operating system: %s", c.OS.String()))
 	default:
-		log.Error("Unrecognized operating system.")
-		return false
+		return false, errors.New("Unrecognized operating system")
 	}
 }
 
@@ -250,24 +256,23 @@ func (c *TCPClient) SystemToken(command string) string {
 
 	// Construct command to execute
 	// ; echo tokenB and & echo tokenB are for commands which will be execute unsuccessfully
-	if c.OS == Linux {
-		// For Linux client
-		input = "echo " + tokenA + " && " + command + " ; echo " + tokenB
-	} else {
+	if c.OS == Windows {
 		// For Windows client
 		input = "echo " + tokenA + " && " + command + " & echo " + tokenB
+	} else {
+		// For Linux client
+		input = "echo " + tokenA + " && " + command + " ; echo " + tokenB
 	}
 
-	log.Info("Executing: %s", input)
 	c.System(input)
 
 	var isTimeout bool
-	if c.OS == Linux {
-		// For Linux client
-		_, isTimeout = c.ReadUntil(tokenA + "\n")
-	} else {
+	if c.OS == Windows {
 		// For Windows client
 		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
+	} else {
+		// For Linux client
+		_, isTimeout = c.ReadUntil(tokenA + "\n")
 	}
 
 	// If read response timeout from client, returns directly
@@ -277,43 +282,50 @@ func (c *TCPClient) SystemToken(command string) string {
 
 	output, _ := c.ReadUntil(tokenB)
 	result := strings.Split(output, tokenB)[0]
-	log.Info(result)
 	return result
 }
 
 func (c *TCPClient) DetectUser() {
-	log.Info("Detect [%s] User", c.Hash)
 	switch c.OS {
 	case Linux:
 		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+		log.Info("[%s] User detected: %s", c.Hash, c.User)
 	case Windows:
 		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+		log.Info("[%s] User detected: %s", c.Hash, c.User)
 	default:
-		log.Error("Unknown OS")
+		log.Error("Unrecognized operating system")
 	}
 }
 
 func (c *TCPClient) DetectOS() {
-	log.Info("Detect [%s] OS", c.Hash)
-
+	// For Unix-Like OSs
 	c.System("uname")
-	output, _ := c.Read(time.Second * 3)
-	if strings.Contains(strings.ToLower(output), "linux") {
-		c.OS = Linux
-
-		log.Info("[%s] OS is Linux", c.Hash)
-		return
+	output, _ := c.Read(time.Second * 2)
+	kwos := map[string]OperatingSystem{
+		"linux":   Linux,
+		"sunos":   SunOS,
+		"freebsd": FreeBSD,
+		"darwin":  MacOS,
+	}
+	for keyword, os := range kwos {
+		if strings.Contains(strings.ToLower(output), keyword) {
+			c.OS = os
+			log.Info("[%s] OS detected: %s", c.Hash, c.OS.String())
+			return
+		}
 	}
 
+	// For Windows
 	c.System("ver")
-	output, _ = c.Read(time.Second * 3)
+	output, _ = c.Read(time.Second * 2)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		c.OS = Windows
-		log.Info("[%s] OS is Windows", c.Hash)
+		log.Info("[%s] OS detected: %s", c.Hash, c.OS.String())
 		return
 	}
 
 	// Unknown OS
-	log.Info("Unknown OS, set [%s] to Linux in default", c.Hash)
+	log.Info("OS detection failed, set [%s] to `Unknown`", c.Hash)
 	c.OS = Unknown
 }
