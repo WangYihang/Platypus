@@ -12,6 +12,8 @@ import (
 
 type Dispatcher struct{}
 
+var ReadLineInstance *readline.Instance
+
 func parseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
 	args := strings.Split(strings.TrimSpace(input), " ")
@@ -58,7 +60,8 @@ func Run() {
 	completer.SetChildren(children)
 
 	// Construct the IO
-	l, err := readline.NewEx(&readline.Config{
+	var err error
+	ReadLineInstance, err = readline.NewEx(&readline.Config{
 		Prompt:              context.Ctx.CommandPrompt,
 		HistoryFile:         "/tmp/platypus.history",
 		AutoComplete:        completer,
@@ -71,13 +74,13 @@ func Run() {
 	if err != nil {
 		panic(err)
 	}
-	defer l.Close()
+	// defer l.Close()
 
-	log.Logger.SetOutput(l.Stderr())
+	log.Logger.SetOutput(ReadLineInstance.Stderr())
 
 	// Command loop
 	for {
-		line, err := l.Readline()
+		line, err := ReadLineInstance.Readline()
 		if err == readline.ErrInterrupt {
 			if len(line) == 0 {
 				break
