@@ -66,13 +66,14 @@ func (c *TCPClient) Close() {
 func (c *TCPClient) AsTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time"})
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "Group"})
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
 		c.OS.String(),
 		c.User,
 		humanize.Time(c.TimeStamp),
+		c.Group,
 	})
 	t.Render()
 }

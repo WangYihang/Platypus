@@ -33,7 +33,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 ## TODOs
-- [ ] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [ ] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
 - [ ] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
@@ -54,6 +53,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] List file
 - [ ] Web UI
 - [ ] Benchmark
+- [x] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [x] User guide
 - [x] Upload file
 - [x] Download file
