@@ -42,7 +42,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
-- [ ] Test driven development
+- [ ] Test driven development [WIP]
 - [ ] Heart beating packet
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
