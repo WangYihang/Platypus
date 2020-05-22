@@ -3,12 +3,13 @@ package dispatcher
 import (
 	"encoding/base64"
 	"fmt"
+	"time"
 	"io/ioutil"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/vbauerster/mpb"
-	"github.com/vbauerster/mpb/decor"
+	"github.com/vbauerster/mpb/v5"
+	"github.com/vbauerster/mpb/v5/decor"
 )
 
 func (dispatcher Dispatcher) Upload(args []string) {
@@ -59,15 +60,19 @@ func (dispatcher Dispatcher) Upload(args []string) {
 	segments := totalBytes / segmentSize
 	overflowedBytes := totalBytes - segments*segmentSize
 
-	p := mpb.New(mpb.WithWidth(64))
+	p := mpb.New(
+		mpb.WithWidth(64),
+		mpb.WithRefreshRate(180*time.Millisecond),
+	)
+
 	bar := p.AddBar(int64(totalBytes), mpb.BarStyle("[=>-|"),
 		mpb.PrependDecorators(
 			decor.CountersKibiByte("% .2f / % .2f"),
 		),
 		mpb.AppendDecorators(
-			decor.EwmaETA(decor.ET_STYLE_GO, 90),
+			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 90),
 			decor.Name(" ] "),
-			decor.EwmaSpeed(decor.UnitKiB, "% .2f", 60),
+			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
 		),
 	)
 
