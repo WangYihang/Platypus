@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strconv"
+	"encoding/base64"
 	"net"
 	"os"
 	"strings"
@@ -216,6 +218,44 @@ func (c *TCPClient) Write(data []byte) int {
 	}
 	log.Debug("%d bytes sent to client", n)
 	return n
+}
+
+func (c *TCPClient) FileSize(filename string) (int, error) {
+	exists, err := c.FileExists(filename)
+	if err != nil {
+		return 0, err
+	}
+
+	if exists {
+		command := "python -c 'print(len(open(__import__(\"base64\").b64decode(\"" + base64.StdEncoding.EncodeToString([]byte(filename)) + "\")).read()))'"
+		size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
+		if err != nil {
+			return 0, err
+		} else {
+			return size, nil
+		}
+	} else {
+		return 0, errors.New("No such file")
+	}
+}
+
+func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, error) {
+	exists, err := c.FileExists(filename)
+	if err != nil {
+		return "", err
+	}
+
+	if exists {
+		command := fmt.Sprintf(
+			"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"));f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
+			base64.StdEncoding.EncodeToString([]byte(filename)),
+			start,
+			length,
+		)
+		return c.SystemToken(command), nil
+	} else {
+		return "", errors.New("No such file")
+	}
 }
 
 func (c *TCPClient) Readfile(filename string) (string, error) {
