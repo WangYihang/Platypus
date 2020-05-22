@@ -23,7 +23,6 @@ require (
 	github.com/lensesio/tableprinter v0.0.0-20200104100433-ae9249991eb1
 	github.com/leodido/go-urn v1.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
-	github.com/mattn/go-runewidth v0.0.8 // indirect
 	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
@@ -32,9 +31,9 @@ require (
 	github.com/tidwall/pretty v1.0.1 // indirect
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v4 v4.12.1
+	github.com/vbauerster/mpb/v5 v5.2.1
 	go.mongodb.org/mongo-driver v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d // indirect
-	golang.org/x/sys v0.0.0-20200301204400-5d559ad92b82 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
