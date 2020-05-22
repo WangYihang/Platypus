@@ -41,7 +41,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 		}
     }
 
-	dstfd, err := os.OpenFile(dst, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	dstfd, err := os.OpenFile(dst, os.O_APPEND|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Error("Failed to open target file: %s", err)
 		return

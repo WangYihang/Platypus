@@ -227,12 +227,24 @@ func (c *TCPClient) FileSize(filename string) (int, error) {
 	}
 
 	if exists {
-		command := "python -c 'print(len(open(__import__(\"base64\").b64decode(\"" + base64.StdEncoding.EncodeToString([]byte(filename)) + "\")).read()))'"
-		size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
-		if err != nil {
-			return 0, err
+		if c.OS == Linux {
+			command := "python -c 'print(len(open(__import__(\"base64\").b64decode(\"" + base64.StdEncoding.EncodeToString([]byte(filename)) + "\"), \"rb\").read()))'"
+			size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
+			if err != nil {
+				return 0, err
+			} else {
+				return size, nil
+			}
+		} else if c.OS == Windows {
+			command := "python -c \"print(len(open(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(filename)) + "'), 'rb').read()))\""
+			size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
+			if err != nil {
+				return 0, err
+			} else {
+				return size, nil
+			}
 		} else {
-			return size, nil
+			return 0, errors.New(fmt.Sprintf("Unsupported OS: %s", c.OS))
 		}
 	} else {
 		return 0, errors.New("No such file")
@@ -246,13 +258,27 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 	}
 
 	if exists {
-		command := fmt.Sprintf(
-			"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"));f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
-			base64.StdEncoding.EncodeToString([]byte(filename)),
-			start,
-			length,
-		)
-		return c.SystemToken(command), nil
+		if c.OS == Linux {
+			command := fmt.Sprintf(
+				"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
+				base64.StdEncoding.EncodeToString([]byte(filename)),
+				start,
+				length,
+			)
+			return c.SystemToken(command), nil
+		} else if c.OS == Windows {
+			command := fmt.Sprintf(
+				"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.buffer.write(__import__('base64').b64encode(f.read(%d)));\"",
+				base64.StdEncoding.EncodeToString([]byte(filename)),
+				start,
+				length,
+			)
+			decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
+			return string(decoded), nil
+		} else {
+			return "", errors.New(fmt.Sprintf("Unsupported OS: %s", c.OS))
+		}
+
 	} else {
 		return "", errors.New("No such file")
 	}
@@ -279,7 +305,9 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 	case Linux:
 		return c.SystemToken("ls "+path) == path+"\n", nil
 	case Windows:
-		return false, errors.New(fmt.Sprintf("Unsupported operating system: %s", c.OS.String()))
+		command := "python -c \"print(__import__('os').path.exists(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(path)) + "')))\""
+		log.Info(command)
+		return strings.TrimSpace(c.SystemToken(command)) == "True", nil
 	default:
 		return false, errors.New("Unrecognized operating system")
 	}
@@ -329,10 +357,10 @@ func (c *TCPClient) SystemToken(command string) string {
 func (c *TCPClient) DetectUser() {
 	switch c.OS {
 	case Linux:
-		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+		c.User = strings.TrimSpace(c.SystemToken("whoami"))
 		log.Info("[%s] User detected: %s", c.Hash, c.User)
 	case Windows:
-		c.User = strings.Trim(c.SystemToken("whoami"), "\r\n\t ")
+		c.User = strings.TrimSpace(c.SystemToken("whoami"))
 		log.Info("[%s] User detected: %s", c.Hash, c.User)
 	default:
 		log.Error("Unrecognized operating system")
