@@ -90,6 +90,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 	bar.IncrBy(n)
 
 	for i := 0; i < totalBytes / blockSize; i++ {
+		start := time.Now()
 		content, err := context.Ctx.Current.ReadfileEx(src, firstBlockSize + i * blockSize, blockSize)
 		if err != nil {
 			log.Error("%s", err)
@@ -100,17 +101,9 @@ func (dispatcher Dispatcher) Download(args []string) {
 			return
 		}
 		bar.IncrBy(n)
+		bar.DecoratorEwmaUpdate(time.Since(start))
 	}
-
 	p.Wait()
-
-	// //  Write to local file
-	// err = ioutil.WriteFile(dst, []byte(content), 0644)
-	// if err != nil {
-	// 	log.Error("%s", err)
-	// 	return
-	// }
-	// log.Info("%d bytes is written", len(content))
 }
 
 func (dispatcher Dispatcher) DownloadHelp(args []string) {
