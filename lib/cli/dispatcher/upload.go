@@ -86,12 +86,14 @@ func (dispatcher Dispatcher) Upload(args []string) {
 
 	// Secondly, use `>>` to append all segments left except the final one
 	for i := 0; i < segments; i++ {
+		start := time.Now()
 		context.Ctx.Current.SystemToken(fmt.Sprintf(
 			"echo %s| base64 -d >> %s",
 			base64.StdEncoding.EncodeToString(content[overflowedBytes+i*segmentSize:overflowedBytes+(i+1)*segmentSize]),
 			dst,
 		))
 		bar.IncrBy(segmentSize)
+		bar.DecoratorEwmaUpdate(time.Since(start))
 	}
 	p.Wait()
 
