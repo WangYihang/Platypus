@@ -31,7 +31,7 @@ const (
 )
 
 func (os OperatingSystem) String() string {
-	return [...]string{"Unknown", "Linux", "Windows"}[os]
+	return [...]string{"Unknown", "🐧", "❖", "SunOS", "🍎", "FreeBSD"}[os]
 }
 
 type TCPClient struct {
@@ -42,8 +42,8 @@ type TCPClient struct {
 	Hash        string
 	User        string
 	OS          OperatingSystem
-	Python2     bool
-	Python3     bool
+	Python2     string
+	Python3     string
 	ReadLock    *sync.Mutex
 	WriteLock   *sync.Mutex
 }
@@ -56,8 +56,8 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
 		OS:          Unknown,
-		Python2:     false,
-		Python3:     false,
+		Python2:     "",
+		Python3:     "",
 		User:        "",
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
@@ -224,31 +224,58 @@ func (c *TCPClient) Write(data []byte) int {
 	return n
 }
 
+func (c *TCPClient) SelectPython() string {
+	if c.Python3 != "" {
+		return c.Python3
+	}
+	if c.Python2 != "" {
+		return c.Python2
+	}
+	return ""
+}
+
 func (c *TCPClient) FileSize(filename string) (int, error) {
 	exists, err := c.FileExists(filename)
 	if err != nil {
 		return 0, err
 	}
 
+	python := c.SelectPython()
 	if exists {
 		if c.OS == Linux {
-			command := "python -c 'print(len(open(__import__(\"base64\").b64decode(\"" + base64.StdEncoding.EncodeToString([]byte(filename)) + "\"), \"rb\").read()))'"
-			size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
-			if err != nil {
-				return 0, err
+			if python != "" {
+				command := fmt.Sprintf(
+					"%s -c 'print(len(open(__import__(\"base64\").b64decode(b\"%s\"), \"rb\").read()))'",
+					python,
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+				)
+				size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
+				if err != nil {
+					return 0, err
+				} else {
+					return size, nil
+				}
 			} else {
-				return size, nil
+				return 0, errors.New("No python on target machine")
 			}
 		} else if c.OS == Windows {
-			command := "python -c \"print(len(open(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(filename)) + "'), 'rb').read()))\""
-			size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
-			if err != nil {
-				return 0, err
+			if python != "" {
+				command := fmt.Sprintf(
+					"%s -c \"print(len(open(__import__('base64').b64decode(b'%s'), 'rb').read()))\"",
+					python,
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+				)
+				size, err := strconv.Atoi(strings.TrimSpace(c.SystemToken(command)))
+				if err != nil {
+					return 0, err
+				} else {
+					return size, nil
+				}
 			} else {
-				return size, nil
+				return 0, errors.New("No python on target machine")
 			}
 		} else {
-			return 0, errors.New(fmt.Sprintf("Unsupported OS: %s", c.OS))
+			return 0, fmt.Errorf("Unsupported OS: %s", c.OS)
 		}
 	} else {
 		return 0, errors.New("No such file")
@@ -260,50 +287,59 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 	if err != nil {
 		return "", err
 	}
-
 	if exists {
 		if c.OS == Linux {
-			if c.Python3 {
+			if c.Python3 != "" {
 				command := fmt.Sprintf(
-					"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(\"\".join(map(chr,f.read(%d))));'",
+					"%s -c 'f=open(__import__(\"base64\").b64decode(b\"%s\"), \"rb\");f.seek(%d);print(str(__import__(\"base64\").b64encode(f.read(%d)),encoding=\"utf-8\"));'",
+					c.Python3,
 					base64.StdEncoding.EncodeToString([]byte(filename)),
 					start,
 					length,
 				)
-				return c.SystemToken(command), nil
-			}
-			if c.Python2 {
+				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
+				return string(decoded), nil
+			} else if c.Python2 != "" {
 				command := fmt.Sprintf(
-					"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
+					"%s -c 'f=open(__import__(\"base64\").b64decode(b\"%s\"), \"rb\");f.seek(%d);print(__import__(\"base64\").b64encode(f.read(%d)));'",
+					c.Python2,
 					base64.StdEncoding.EncodeToString([]byte(filename)),
 					start,
 					length,
 				)
-				return c.SystemToken(command), nil
+				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
+				return string(decoded), nil
+			} else {
+				log.Error("No python on target machine, trying to read file using premitive method.")
+				return c.Readfile(filename)
 			}
 		} else if c.OS == Windows {
-			if c.Python3 {
+			if c.Python3 != "" {
 				command := fmt.Sprintf(
-					"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.buffer.write(__import__('base64').b64encode(f.read(%d)));\"",
+					"%s -c \"f=open(__import__('base64').b64decode(b'%s'), 'rb');f.seek(%d);print(str(__import__('base64').b64encode(f.read(%d)),encoding='utf-8'));\"",
+					c.Python3,
 					base64.StdEncoding.EncodeToString([]byte(filename)),
 					start,
 					length,
 				)
 				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
 				return string(decoded), nil
-			}
-			if c.Python2 {
+			} else if c.Python2 != "" {
 				command := fmt.Sprintf(
-					"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.write(__import__('base64').b64encode(f.read(%d)));\"",
+					"%s -c \"f=open(__import__('base64').b64decode(b'%s'), 'rb');f.seek(%d);print(__import__('base64').b64encode(f.read(%d)));\"",
+					c.Python2,
 					base64.StdEncoding.EncodeToString([]byte(filename)),
 					start,
 					length,
 				)
 				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
 				return string(decoded), nil
+			} else {
+				log.Error("No python on target machine, trying to read file using premitive method.")
+				return c.Readfile(filename)
 			}
 		} else {
-			return "", errors.New(fmt.Sprintf("Unsupported OS: %s", c.OS))
+			return "", fmt.Errorf("Unsupported OS: %s", c.OS)
 		}
 
 	} else {
@@ -328,14 +364,22 @@ func (c *TCPClient) Readfile(filename string) (string, error) {
 }
 
 func (c *TCPClient) FileExists(path string) (bool, error) {
+	python := c.SelectPython()
 	switch c.OS {
 	case Linux:
 		return c.SystemToken("ls "+path) == path+"\n", nil
 	case Windows:
-		// Python2 and Python3 all works fine in this situation
-		command := "python3 -c \"print(__import__('os').path.exists(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(path)) + "')))\""
-		log.Info(command)
-		return strings.TrimSpace(c.SystemToken(command)) == "True", nil
+		if python != "" {
+			// Python2 and Python3 all works fine in this situation
+			command := fmt.Sprintf(
+				"%s -c \"print(__import__('os').path.exists(__import__('base64').b64decode(b'%s')))\"",
+				python,
+				base64.StdEncoding.EncodeToString([]byte(path)),
+			)
+			return strings.TrimSpace(c.SystemToken(command)) == "True", nil
+		} else {
+			return false, errors.New("No python on the target machine")
+		}
 	default:
 		return false, errors.New("Unrecognized operating system")
 	}
@@ -397,26 +441,46 @@ func (c *TCPClient) DetectUser() {
 
 func (c *TCPClient) DetectPython() {
 	var result string
+	var version string
 	if c.OS == Windows {
-		result = strings.TrimSpace(c.SystemToken("where python2"))
-		if strings.HasSuffix(result, "python2.exe") {
-			c.Python2 = true
-			log.Info("Python2 found: %s", result)
-		}
-		result = strings.TrimSpace(c.SystemToken("where python3"))
-		if strings.HasSuffix(result, "python3.exe") {
-			c.Python3 = true
-			log.Info("Python3 found: %s", result)
+		// On windows platform, there is a fake python interpreter:
+		// %HOME%\AppData\Local\Microsoft\WindowsApps\python.exe
+		// The windows app store will be opened if the user didn't install python from the store
+		// This situation will be fuzzy to us.
+		result = strings.TrimSpace(c.SystemToken("where python"))
+		if strings.HasSuffix(result, "python.exe") {
+			version = strings.TrimSpace(c.SystemToken("python --version"))
+			if strings.HasPrefix(version, "Python 3") {
+				c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
+				log.Info("Python3 found: %s", c.Python3)
+				result = strings.TrimSpace(c.SystemToken("where python2"))
+				if strings.HasSuffix(result, "python2.exe") {
+					c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
+					log.Info("Python2 found: %s", result)
+				}
+			} else if strings.HasPrefix(version, "Python 2") {
+				c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
+				log.Info("Python2 found: %s", c.Python2)
+				result = strings.TrimSpace(c.SystemToken("where python3"))
+				if strings.HasSuffix(result, "python3.exe") {
+					c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
+					log.Info("Python3 found: %s", result)
+				}
+			} else {
+				log.Error("Unrecognized python version: %s", version)
+			}
+		} else {
+			log.Error("No python on traget machine.")
 		}
 	} else if c.OS == Linux {
 		result = strings.TrimSpace(c.SystemToken("which python2"))
 		if result != "" {
-			c.Python2 = true
+			c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
 			log.Info("Python2 found: %s", result)
 		}
 		result = strings.TrimSpace(c.SystemToken("which python3"))
 		if result != "" {
-			c.Python3 = true
+			c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
 			log.Info("Python3 found: %s", result)
 		}
 	} else {
