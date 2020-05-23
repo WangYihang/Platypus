@@ -13,11 +13,11 @@ import (
 )
 
 func fileExists(filename string) bool {
-    info, err := os.Stat(filename)
-    if os.IsNotExist(err) {
-        return false
-    }
-    return !info.IsDir()
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
 }
 
 func (dispatcher Dispatcher) Download(args []string) {
@@ -39,7 +39,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 		if !ui.PromptYesNo("The target file exists, do you want to overwrite it?") {
 			return
 		}
-    }
+	}
 
 	dstfd, err := os.OpenFile(dst, os.O_APPEND|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
@@ -54,12 +54,15 @@ func (dispatcher Dispatcher) Download(args []string) {
 		log.Error("Failed to get file size: %s", err)
 		return
 	}
-	log.Info("Filesize: %d", totalBytes)
+	if totalBytes > 1 {
+		log.Info("Filesize: %d bytes", totalBytes)
+	} else {
+		log.Info("Filesize: %d byte", totalBytes)
+	}
 
 	// Progress bar
 	p := mpb.New(
 		mpb.WithWidth(64),
-		mpb.WithRefreshRate(180*time.Millisecond),
 	)
 
 	bar := p.AddBar(int64(totalBytes), mpb.BarStyle("[=>-|"),
@@ -67,7 +70,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 			decor.CountersKibiByte("% .2f / % .2f"),
 		),
 		mpb.AppendDecorators(
-			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 90),
+			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
 			decor.Name(" ] "),
 			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
 		),
@@ -76,8 +79,9 @@ func (dispatcher Dispatcher) Download(args []string) {
 	blockSize := 1024 * 64
 	firstBlockSize := totalBytes % blockSize
 	n := 0
-	
+
 	// Read from remote client
+	start := time.Now()
 	content, err := context.Ctx.Current.ReadfileEx(src, 0, firstBlockSize)
 	if err != nil {
 		log.Error("%s", err)
@@ -88,10 +92,11 @@ func (dispatcher Dispatcher) Download(args []string) {
 		return
 	}
 	bar.IncrBy(n)
+	bar.DecoratorEwmaUpdate(time.Since(start))
 
-	for i := 0; i < totalBytes / blockSize; i++ {
-		start := time.Now()
-		content, err := context.Ctx.Current.ReadfileEx(src, firstBlockSize + i * blockSize, blockSize)
+	for i := 0; i < totalBytes/blockSize; i++ {
+		start = time.Now()
+		content, err := context.Ctx.Current.ReadfileEx(src, firstBlockSize+i*blockSize, blockSize)
 		if err != nil {
 			log.Error("%s", err)
 			return
