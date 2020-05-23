@@ -1,15 +1,7 @@
-FROM golang:1.12.6-alpine as builder
-
-ENV GOPROXY https://goproxy.io
-
-WORKDIR /Platypus
-
+FROM golang:latest as builder
 COPY . /Platypus
-
-RUN go build -o platypus platypus.go
-
-FROM alpine:3.9
-
-COPY --from=builder /Platypus/platypus /bin/platypus
-
-ENTRYPOINT ["sh", "-c", "/bin/platypus"]
+WORKDIR /Platypus
+RUN go env -w GO111MODULE=on
+RUN go env -w GOPROXY=https://goproxy.cn,direct
+RUN go build -ldflags "-s -w" -o platypus platypus.go
+ENTRYPOINT ["sh", "-c", "/Platypus/platypus"]
