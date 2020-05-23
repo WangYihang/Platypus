@@ -8,3 +8,19 @@ go:
 
 script:
   - go test ./...
+  - mkdir ./build
+  - go get github.com/mitchellh/gox
+  - ~/go/bin/gox -ldflags "-s -w" platypus.go
+
+deploy:
+  provider: releases
+  skip_cleanup: true
+  file: 
+    - "$TRAVIS_BUILD_DIR/Platypus_linux_mipsle"
+    - "$TRAVIS_BUILD_DIR/Platypus_darwin_386"
+    - "$TRAVIS_BUILD_DIR/Platypus_darwin_amd64"
+  api_key:
+    secure: "$API_KEY"
+  on:
+    tags: true
+    draft: false
