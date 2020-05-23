@@ -9,7 +9,7 @@ go:
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
-  - gox -ldflags "-s -w" platypus.go
+  - gox
 
 deploy:
   provider: releases
