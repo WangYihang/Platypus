@@ -51,8 +51,8 @@ func Signal() {
 					i := Ctx.Current.Write([]byte("\x1A"))
 					log.Error("%d bytes written", i)
 				}
-			}
 			*/
+			}
 		}
 	}()
 }
