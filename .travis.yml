@@ -1,20 +1,18 @@
 language: go
-
 go:
   - 1.11.x
   - 1.12.x
   - 1.13.x
   - 1.14.x
-
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
   - gox
-
 deploy:
   provider: releases
-  skip_cleanup: true
-  file: 
+  api_key:
+    secure: $SECURE
+  file:
     - "$TRAVIS_BUILD_DIR/Platypus_darwin_386"
     - "$TRAVIS_BUILD_DIR/Platypus_darwin_amd64"
     - "$TRAVIS_BUILD_DIR/Platypus_freebsd_386"
@@ -33,9 +31,7 @@ deploy:
     - "$TRAVIS_BUILD_DIR/Platypus_netbsd_arm"
     - "$TRAVIS_BUILD_DIR/Platypus_openbsd_386"
     - "$TRAVIS_BUILD_DIR/Platypus_openbsd_amd64"
-    - "$TRAVIS_BUILD_DIR/Platypus_windows_386.exe"
-    - "$TRAVIS_BUILD_DIR/Platypus_windows_amd64.exe"
-  api_key: $GITHUB_OAUTH_TOKEN
   on:
+    repo: WangYihang/Platypus
     tags: true
-    draft: false
+  skip_cleanup: 'true'
