@@ -2,12 +2,12 @@ package context
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"strconv"
-	"encoding/base64"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +42,8 @@ type TCPClient struct {
 	Hash        string
 	User        string
 	OS          OperatingSystem
+	Python2     bool
+	Python3     bool
 	ReadLock    *sync.Mutex
 	WriteLock   *sync.Mutex
 }
@@ -54,6 +56,8 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Group:       false,
 		Hash:        hash.MD5(conn.RemoteAddr().String()),
 		OS:          Unknown,
+		Python2:     false,
+		Python3:     false,
 		User:        "",
 		ReadLock:    new(sync.Mutex),
 		WriteLock:   new(sync.Mutex),
@@ -364,6 +368,35 @@ func (c *TCPClient) DetectUser() {
 		log.Info("[%s] User detected: %s", c.Hash, c.User)
 	default:
 		log.Error("Unrecognized operating system")
+	}
+}
+
+func (c *TCPClient) DetectPython() {
+	var result string
+	if c.OS == Windows {
+		result = strings.TrimSpace(c.SystemToken("where python2"))
+		if strings.HasSuffix(result, "python2.exe") {
+			c.Python2 = true
+			log.Info("Python2 found: %s", result)
+		}
+		result = strings.TrimSpace(c.SystemToken("where python3"))
+		if strings.HasSuffix(result, "python3.exe") {
+			c.Python3 = true
+			log.Info("Python3 found: %s", result)
+		}
+	} else if c.OS == Linux {
+		result = strings.TrimSpace(c.SystemToken("which python2"))
+		if result != "" {
+			c.Python2 = true
+			log.Info("Python2 found: %s", result)
+		}
+		result = strings.TrimSpace(c.SystemToken("which python3"))
+		if result != "" {
+			c.Python3 = true
+			log.Info("Python3 found: %s", result)
+		}
+	} else {
+		log.Error("Unknown OS: %s", c.OS.String())
 	}
 }
 
