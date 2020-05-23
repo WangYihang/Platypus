@@ -1,7 +1,11 @@
 package dispatcher
 
 import (
+	"bytes"
+	"fmt"
 	"io"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/WangYihang/Platypus/lib/context"
@@ -13,6 +17,34 @@ import (
 type Dispatcher struct{}
 
 var ReadLineInstance *readline.Instance
+
+func System(command string) (error, string, string) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	os := runtime.GOOS
+	switch os {
+	case "windows":
+		cmd := exec.Command("cmd", "/C", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return err, stdout.String(), stderr.String()
+	case "darwin":
+		cmd := exec.Command("/bin/sh", "-c", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return err, stdout.String(), stderr.String()
+	case "linux":
+		cmd := exec.Command("/bin/sh", "-c", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return err, stdout.String(), stderr.String()
+	default:
+		return fmt.Errorf("Unsupported OS type: %s", os), "", ""
+	}
+}
 
 func parseInput(input string) (string, []string) {
 	methods := reflection.GetAllMethods(Dispatcher{})
@@ -34,6 +66,9 @@ func parseInput(input string) (string, []string) {
 		return target, args[1:]
 	} else {
 		log.Error("No such command, use `Help` to get more information")
+		_, stdout, _ := System(input)
+		log.Info("Executing locally: %s", input)
+		fmt.Printf(stdout)
 		return "", []string{}
 	}
 }
