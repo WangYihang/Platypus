@@ -3,7 +3,7 @@ package context
 import (
 	"os"
 	"os/signal"
-	"syscall"
+	// "syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/fatih/color"
