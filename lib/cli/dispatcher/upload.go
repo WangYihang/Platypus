@@ -3,8 +3,8 @@ package dispatcher
 import (
 	"encoding/base64"
 	"fmt"
-	"time"
 	"io/ioutil"
+	"time"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -62,7 +62,6 @@ func (dispatcher Dispatcher) Upload(args []string) {
 
 	p := mpb.New(
 		mpb.WithWidth(64),
-		mpb.WithRefreshRate(180*time.Millisecond),
 	)
 
 	bar := p.AddBar(int64(totalBytes), mpb.BarStyle("[=>-|"),
@@ -70,23 +69,25 @@ func (dispatcher Dispatcher) Upload(args []string) {
 			decor.CountersKibiByte("% .2f / % .2f"),
 		),
 		mpb.AppendDecorators(
-			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 90),
+			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
 			decor.Name(" ] "),
 			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
 		),
 	)
 
 	// Firstly, use redirect `>` to create file, and write the overflowed bytes
+	start := time.Now()
 	context.Ctx.Current.SystemToken(fmt.Sprintf(
 		"echo %s| base64 -d > %s",
 		base64.StdEncoding.EncodeToString(content[0:overflowedBytes]),
 		dst,
 	))
 	bar.IncrBy(overflowedBytes)
+	bar.DecoratorEwmaUpdate(time.Since(start))
 
 	// Secondly, use `>>` to append all segments left except the final one
 	for i := 0; i < segments; i++ {
-		start := time.Now()
+		start = time.Now()
 		context.Ctx.Current.SystemToken(fmt.Sprintf(
 			"echo %s| base64 -d >> %s",
 			base64.StdEncoding.EncodeToString(content[overflowedBytes+i*segmentSize:overflowedBytes+(i+1)*segmentSize]),
