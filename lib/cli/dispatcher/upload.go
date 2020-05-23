@@ -54,7 +54,7 @@ func (dispatcher Dispatcher) Upload(args []string) {
 		return
 	}
 
-	segmentSize := 0x100
+	segmentSize := 0x400
 
 	totalBytes := len(content)
 	segments := totalBytes / segmentSize
