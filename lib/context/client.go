@@ -263,22 +263,45 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 
 	if exists {
 		if c.OS == Linux {
-			command := fmt.Sprintf(
-				"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
-				base64.StdEncoding.EncodeToString([]byte(filename)),
-				start,
-				length,
-			)
-			return c.SystemToken(command), nil
+			if c.Python3 {
+				command := fmt.Sprintf(
+					"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(\"\".join(map(chr,f.read(%d))));'",
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+					start,
+					length,
+				)
+				return c.SystemToken(command), nil
+			}
+			if c.Python2 {
+				command := fmt.Sprintf(
+					"python -c 'f=open(__import__(\"base64\").b64decode(\"%s\"), \"rb\");f.seek(%d);__import__(\"sys\").stdout.write(f.read(%d));'",
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+					start,
+					length,
+				)
+				return c.SystemToken(command), nil
+			}
 		} else if c.OS == Windows {
-			command := fmt.Sprintf(
-				"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.buffer.write(__import__('base64').b64encode(f.read(%d)));\"",
-				base64.StdEncoding.EncodeToString([]byte(filename)),
-				start,
-				length,
-			)
-			decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
-			return string(decoded), nil
+			if c.Python3 {
+				command := fmt.Sprintf(
+					"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.buffer.write(__import__('base64').b64encode(f.read(%d)));\"",
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+					start,
+					length,
+				)
+				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
+				return string(decoded), nil
+			}
+			if c.Python2 {
+				command := fmt.Sprintf(
+					"python -c \"f=open(__import__('base64').b64decode('%s'), 'rb');f.seek(%d);__import__('sys').stdout.write(__import__('base64').b64encode(f.read(%d)));\"",
+					base64.StdEncoding.EncodeToString([]byte(filename)),
+					start,
+					length,
+				)
+				decoded, _ := base64.StdEncoding.DecodeString(c.SystemToken(command))
+				return string(decoded), nil
+			}
 		} else {
 			return "", errors.New(fmt.Sprintf("Unsupported OS: %s", c.OS))
 		}
@@ -309,7 +332,8 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 	case Linux:
 		return c.SystemToken("ls "+path) == path+"\n", nil
 	case Windows:
-		command := "python -c \"print(__import__('os').path.exists(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(path)) + "')))\""
+		// Python2 and Python3 all works fine in this situation
+		command := "python3 -c \"print(__import__('os').path.exists(__import__('base64').b64decode('" + base64.StdEncoding.EncodeToString([]byte(path)) + "')))\""
 		log.Info(command)
 		return strings.TrimSpace(c.SystemToken(command)) == "True", nil
 	default:
