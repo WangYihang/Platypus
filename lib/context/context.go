@@ -24,7 +24,11 @@ func Signal() {
 	c := make(chan os.Signal, 1)
 
 	// Notify SIGHUP
-	signal.Notify(c, os.Interrupt, syscall.SIGTSTP)
+	signal.Notify(
+		c, 
+		os.Interrupt, 
+		// syscall.SIGTSTP,
+	)
 
 	log.Error("Signal installed")
 
@@ -39,6 +43,7 @@ func Signal() {
 					log.Error("%d bytes written", i)
 
 				}
+			/*
 			case syscall.SIGTSTP:
 				if Ctx.AllowInterrupt {
 					// CTRL Z
@@ -47,6 +52,7 @@ func Signal() {
 					log.Error("%d bytes written", i)
 				}
 			}
+			*/
 		}
 	}()
 }
