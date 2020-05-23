@@ -91,6 +91,7 @@ func (s *TCPServer) Run() {
 				continue
 			}
 			client := CreateTCPClient(conn)
+			log.Info("A new income connection from %s", client.Conn.RemoteAddr())
 			// Reverse shell as a service
 			buffer := make([]byte, 4)
 			client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
@@ -102,8 +103,7 @@ func (s *TCPServer) Run() {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					log.Error("Not requesting for service")
 				} else {
-					client.Interactive = false
-					Ctx.DeleteTCPClient(client)
+					client.Close()
 				}
 			}
 			if string(buffer[:n]) == "GET " {
@@ -148,26 +148,32 @@ func (s *TCPServer) Run() {
 				client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
 				client.Write([]byte("\r\n"))
 				client.Write([]byte(command))
-				Ctx.DeleteTCPClient(client)
+				client.Close()
 				log.Info("RaaS: %s", command)
 			} else {
 				switch Ctx.BlockSameIP {
 				case 1:
+					log.Info("BlockSameIP is enabled")
 					newclientIP := client.Conn.RemoteAddr().String()
 					newclientIP = strings.Split(newclientIP, ":")[0]
-					clientExist := 0
+					clientExist := false
 					for _, client := range s.Clients {
 						clientIP := client.Conn.RemoteAddr().String()
 						clientIP = strings.Split(clientIP, ":")[0]
 						if newclientIP == clientIP {
-							clientExist = 1
+							clientExist = true
+							break
 						}
 					}
-					if clientExist == 0 {
+					if clientExist {
+						log.Warn("Incoming connection comes from a machine which has already connected.")
+						client.Close()
+					} else {
 						log.Info("New client %s Connected", client.FullDesc())
 						s.AddTCPClient(client)
 					}
 				case 0:
+					log.Info("BlockSameIP is disabled")
 					log.Info("New client %s Connected", client.FullDesc())
 					s.AddTCPClient(client)
 				}
@@ -269,6 +275,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	log.Info("Gathering information from client...")
 	client.DetectOS()
 	client.DetectUser()
+	client.DetectPython()
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
