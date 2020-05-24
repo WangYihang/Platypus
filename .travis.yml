@@ -35,8 +35,7 @@ deploy:
     - "$TRAVIS_BUILD_DIR/Platypus_openbsd_amd64"
     - "$TRAVIS_BUILD_DIR/Platypus_windows_386.exe"
     - "$TRAVIS_BUILD_DIR/Platypus_windows_amd64.exe"
-  api_key:
-    secure: "$API_KEY"
+  api_key: $GITHUB_OAUTH_TOKEN
   on:
     tags: true
     draft: false
