@@ -17,13 +17,13 @@ import (
 
 type TCPServer struct {
 	Host      string
-	Port      int16
+	Port      uint16
 	Clients   map[string](*TCPClient)
 	TimeStamp time.Time
 	Stopped   chan struct{}
 }
 
-func CreateTCPServer(host string, port int16) *TCPServer {
+func CreateTCPServer(host string, port uint16) *TCPServer {
 	return &TCPServer{
 		Host:      host,
 		Port:      port,
@@ -52,7 +52,7 @@ func GetHostname(host string) string {
 	return strings.Split(host, ":")[0]
 }
 
-func GetPort(host string, default_port int16) int16 {
+func GetPort(host string, default_port uint16) uint16 {
 	pair := strings.Split(host, ":")
 	if len(pair) < 2 {
 		return default_port
@@ -61,7 +61,7 @@ func GetPort(host string, default_port int16) int16 {
 	if err != nil {
 		return default_port
 	}
-	return int16(port)
+	return uint16(port)
 }
 
 func (s *TCPServer) Run() {
