@@ -16,14 +16,14 @@ func (dispatcher Dispatcher) Run(args []string) {
 	}
 
 	host := args[0]
-	port, err := strconv.ParseInt(args[1], 10, 32)
+	port, err := strconv.ParseUint(args[1], 10, 32)
 	if err != nil {
 		log.Error("Invalid port: %s, use `Help Run` to get more information", args[1])
 		dispatcher.RunHelp([]string{})
 		return
 	}
 
-	server := context.CreateTCPServer(host, int16(port))
+	server := context.CreateTCPServer(host, uint16(port))
 	go (*server).Run()
 	context.Ctx.AddServer(server)
 }
