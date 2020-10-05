@@ -386,7 +386,9 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 }
 
 func (c *TCPClient) System(command string) {
-	c.Conn.Write([]byte(command + "\n"))
+	// https://www.technovelty.org/linux/skipping-bash-history-for-command-lines-starting-with-space.html
+	// Make bash not store command history
+	c.Conn.Write([]byte(" " + command + "\n"))
 }
 
 func (c *TCPClient) SystemToken(command string) string {
