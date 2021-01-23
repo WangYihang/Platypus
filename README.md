@@ -145,6 +145,7 @@ Once the command get executed, the reverse shell session will appear in platypus
 - [ ] List file
 - [ ] Web UI
 - [ ] Benchmark
+- [x] [#30 RaaS support specifying language, thanks for @RicterZ](https://github.com/WangYihang/Platypus/issues/30)  
 - [x] Execute user input when input is not a built-in command
 - [x] Download/Upload progress bar
 - [x] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
