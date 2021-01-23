@@ -2,6 +2,7 @@ language: go
 go:
   - 1.13.x
   - 1.14.x
+  - 1.15.x
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
@@ -11,7 +12,6 @@ deploy:
   api_key:
     secure: $SECURE
   file:
-    - "$TRAVIS_BUILD_DIR/Platypus_darwin_386"
     - "$TRAVIS_BUILD_DIR/Platypus_darwin_amd64"
     - "$TRAVIS_BUILD_DIR/Platypus_freebsd_386"
     - "$TRAVIS_BUILD_DIR/Platypus_freebsd_amd64"
