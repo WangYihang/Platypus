@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
+	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
@@ -153,17 +154,18 @@ func (s *TCPServer) Run() {
 				}
 
 				// step 2: parse language
-				language := "bash"
-				if len(target) > 0 {
-					// language is the last element of target
-					language = strings.Replace(target[len(target)-1], ".", "", -1)
+				// language is the last element of target
+				language := strings.Replace(target[len(target)-1], ".", "", -1)
+				templateFilename := fmt.Sprintf("lib/template/rsh/%s.tpl", language)
+				if language == "" || !fs.FileExists(templateFilename) {
+					language = "bash"
 				}
 
 				// step 3: read template
 				// template rendering in golang tastes like shit,
 				// here we will trying to use string replace temporarily.
 				// read reverse shell template file from lib/template/rsh/*
-				templateFilename := fmt.Sprintf("lib/template/rsh/%s.tpl", language)
+				templateFilename = fmt.Sprintf("lib/template/rsh/%s.tpl", language)
 				templateContent, _ := ioutil.ReadFile(templateFilename)
 
 				// step 4: render target host and port into template
