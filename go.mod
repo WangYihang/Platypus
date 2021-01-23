@@ -29,9 +29,7 @@ require (
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/tidwall/pretty v1.0.1 // indirect
-	github.com/vbauerster/mpb v3.4.0+incompatible
-	github.com/vbauerster/mpb/v4 v4.12.1
-	github.com/vbauerster/mpb/v5 v5.2.1
+	github.com/vbauerster/mpb/v6 v6.0.2
 	go.mongodb.org/mongo-driver v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect

@@ -8,8 +8,8 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/vbauerster/mpb/v5"
-	"github.com/vbauerster/mpb/v5/decor"
+	"github.com/vbauerster/mpb/v6"
+	"github.com/vbauerster/mpb/v6/decor"
 )
 
 func (dispatcher Dispatcher) Upload(args []string) {
@@ -64,7 +64,7 @@ func (dispatcher Dispatcher) Upload(args []string) {
 		mpb.WithWidth(64),
 	)
 
-	bar := p.AddBar(int64(totalBytes), mpb.BarStyle("[=>-|"),
+	bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
 		mpb.PrependDecorators(
 			decor.CountersKibiByte("% .2f / % .2f"),
 		),

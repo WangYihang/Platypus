@@ -8,8 +8,8 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/ui"
-	"github.com/vbauerster/mpb/v5"
-	"github.com/vbauerster/mpb/v5/decor"
+	"github.com/vbauerster/mpb/v6"
+	"github.com/vbauerster/mpb/v6/decor"
 )
 
 func fileExists(filename string) bool {
@@ -65,7 +65,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 		mpb.WithWidth(64),
 	)
 
-	bar := p.AddBar(int64(totalBytes), mpb.BarStyle("[=>-|"),
+	bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
 		mpb.PrependDecorators(
 			decor.CountersKibiByte("% .2f / % .2f"),
 		),
@@ -76,7 +76,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 		),
 	)
 
-	blockSize := 1024 * 64
+	blockSize := 1024 * 16
 	firstBlockSize := totalBytes % blockSize
 	n := 0
 
