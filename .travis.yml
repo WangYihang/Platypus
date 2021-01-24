@@ -11,7 +11,7 @@ script:
   - go test ./...
   - go get github.com/mitchellh/gox
   - gox -ldflags="-s -w"
-  - upx --best "$TRAVIS_BUILD_DIR/*"
+  - for i in `ls $TRAVIS_BUILD_DIR/*`; do upx --best $i; done
 deploy:
   provider: releases
   api_key:
