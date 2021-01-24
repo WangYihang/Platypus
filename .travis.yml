@@ -10,31 +10,31 @@ addons:
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
-  - gox -ldflags="-s -w"
-  - for i in `ls $TRAVIS_BUILD_DIR/*`; do upx --best $i; done
+  - gox -ldflags="-s -w" -output="$TRAVIS_BUILD_DIR/build/"
+  - for i in `ls $TRAVIS_BUILD_DIR/build/*`; do upx --best $i; done
 deploy:
   provider: releases
   api_key:
     secure: $SECURE
   file:
-    - "$TRAVIS_BUILD_DIR/Platypus_darwin_386"
-    - "$TRAVIS_BUILD_DIR/Platypus_darwin_amd64"
-    - "$TRAVIS_BUILD_DIR/Platypus_freebsd_386"
-    - "$TRAVIS_BUILD_DIR/Platypus_freebsd_amd64"
-    - "$TRAVIS_BUILD_DIR/Platypus_freebsd_arm"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_386"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_amd64"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_arm"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_mips"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_mips64"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_mips64le"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_mipsle"
-    - "$TRAVIS_BUILD_DIR/Platypus_linux_s390x"
-    - "$TRAVIS_BUILD_DIR/Platypus_netbsd_386"
-    - "$TRAVIS_BUILD_DIR/Platypus_netbsd_amd64 "
-    - "$TRAVIS_BUILD_DIR/Platypus_netbsd_arm"
-    - "$TRAVIS_BUILD_DIR/Platypus_openbsd_386"
-    - "$TRAVIS_BUILD_DIR/Platypus_openbsd_amd64"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_darwin_386"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_darwin_amd64"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_freebsd_386"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_freebsd_amd64"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_freebsd_arm"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_386"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_amd64"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_arm"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_mips"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_mips64"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_mips64le"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_mipsle"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_linux_s390x"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_netbsd_386"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_netbsd_amd64 "
+    - "$TRAVIS_BUILD_DIR/build/Platypus_netbsd_arm"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_openbsd_386"
+    - "$TRAVIS_BUILD_DIR/build/Platypus_openbsd_amd64"
   on:
     repo: WangYihang/Platypus
     tags: true
