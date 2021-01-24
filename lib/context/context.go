@@ -3,6 +3,7 @@ package context
 import (
 	"os"
 	"os/signal"
+
 	// "syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -25,8 +26,8 @@ func Signal() {
 
 	// Notify SIGHUP
 	signal.Notify(
-		c, 
-		os.Interrupt, 
+		c,
+		os.Interrupt,
 		// syscall.SIGTSTP,
 	)
 
@@ -43,15 +44,18 @@ func Signal() {
 					log.Error("%d bytes written", i)
 
 				}
-			/*
-			case syscall.SIGTSTP:
-				if Ctx.AllowInterrupt {
-					// CTRL Z
-					log.Error("%s signal found", sig)
-					i := Ctx.Current.Write([]byte("\x1A"))
-					log.Error("%d bytes written", i)
-				}
-			*/
+				// commented for windows platform
+				// windows platform does not support SIGTSTP
+				// so the compilation will fail.
+				/*
+					case syscall.SIGTSTP:
+						if Ctx.AllowInterrupt {
+							// CTRL Z
+							log.Error("%s signal found", sig)
+							i := Ctx.Current.Write([]byte("\x1A"))
+							log.Error("%d bytes written", i)
+						}
+				*/
 			}
 		}
 	}()

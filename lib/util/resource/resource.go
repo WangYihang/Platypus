@@ -1,5 +1,6 @@
 // Code generated for package resource by go-bindata DO NOT EDIT. (@generated)
 // sources:
+// lib/runtime/config.example.yml
 // lib/runtime/template/rsh/awk.tpl
 // lib/runtime/template/rsh/bash.tpl
 // lib/runtime/template/rsh/go.tpl
@@ -83,6 +84,26 @@ func (fi bindataFileInfo) IsDir() bool {
 // Sys return file is sys mode
 func (fi bindataFileInfo) Sys() interface{} {
 	return nil
+}
+
+var _libRuntimeConfigExampleYml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x2a\x4e\x2d\x2a\x4b\x2d\x2a\xb6\x52\xe0\xe5\x52\xd0\x55\xc8\xc8\x2f\x2e\xb1\x52\x50\x32\xd0\x03\x43\x25\x5e\x2e\x05\x05\x85\x82\xfc\xa2\x12\x2b\x05\x43\x63\x63\x73\x02\x4a\xcc\x8d\x8d\x0d\x01\x01\x00\x00\xff\xff\x56\xf9\x3b\x06\x4f\x00\x00\x00")
+
+func libRuntimeConfigExampleYmlBytes() ([]byte, error) {
+	return bindataRead(
+		_libRuntimeConfigExampleYml,
+		"lib/runtime/config.example.yml",
+	)
+}
+
+func libRuntimeConfigExampleYml() (*asset, error) {
+	bytes, err := libRuntimeConfigExampleYmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "lib/runtime/config.example.yml", size: 79, mode: os.FileMode(438), modTime: time.Unix(1611472145, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
 }
 
 var _libRuntimeTemplateRshAwkTpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x4c\x8d\xc1\x4a\xc4\x30\x18\x84\x5f\x65\x0c\x62\x93\x53\x8a\x78\x0b\xed\x41\x10\xf5\x62\x45\x7b\xff\x91\xf4\xaf\x0d\x1b\xd2\xb2\xc9\x6e\x17\xb2\x7d\xf7\xa5\xb4\x87\x3d\xcd\x61\xbe\xf9\xe6\x6f\x3e\xa0\x78\x7d\x7b\xff\xfc\x42\x8e\xa8\x20\xb4\x0b\x9c\x74\xb2\x93\x2e\x35\xd1\x47\xf3\xdb\x12\x69\xa2\xef\xe6\xa7\x25\x12\x06\xf3\xe0\x3c\xcb\x97\x67\x85\x8c\x6e\xcc\x98\x8e\x2e\xa4\x1e\x22\x0e\xec\x7d\x2d\x70\x7d\x42\x34\x88\x6b\xfe\x73\xf2\x2e\x30\xac\x81\xeb\xa5\x55\x79\x1b\x43\x4a\x7b\x57\x2b\xd4\x28\xd5\xe6\xc1\x63\xb9\x0b\xac\x1f\x23\x4b\xab\x0c\x16\x2c\xfb\xa9\xc5\x43\x05\xc1\x17\x97\x84\xda\x81\xb8\x02\x4b\x01\xdd\xf1\x59\x87\x93\xf7\xb7\x00\x00\x00\xff\xff\x70\x0b\x64\xcc\xd0\x00\x00\x00")
@@ -317,6 +338,7 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
+	"lib/runtime/config.example.yml":      libRuntimeConfigExampleYml,
 	"lib/runtime/template/rsh/awk.tpl":    libRuntimeTemplateRshAwkTpl,
 	"lib/runtime/template/rsh/bash.tpl":   libRuntimeTemplateRshBashTpl,
 	"lib/runtime/template/rsh/go.tpl":     libRuntimeTemplateRshGoTpl,
@@ -371,6 +393,7 @@ type bintree struct {
 var _bintree = &bintree{nil, map[string]*bintree{
 	"lib": &bintree{nil, map[string]*bintree{
 		"runtime": &bintree{nil, map[string]*bintree{
+			"config.example.yml": &bintree{libRuntimeConfigExampleYml, map[string]*bintree{}},
 			"template": &bintree{nil, map[string]*bintree{
 				"rsh": &bintree{nil, map[string]*bintree{
 					"awk.tpl":    &bintree{libRuntimeTemplateRshAwkTpl, map[string]*bintree{}},
