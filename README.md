@@ -13,7 +13,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Multiple service listening port
 - [x] Multiple client connections
 - [x] RESTful API
-- [x] Reverse shell as a service (Pop a reverse shell without remembering idle commands)
+- [x] Reverse shell as a service (Pop a reverse shell in multiple languages without remembering idle commands)
 - [x] Download/Upload file with progress bar
 - [x] Full interactive shell
   - [x] Using vim gracefully in reverse shell
@@ -24,18 +24,20 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 > There are multiple ways to run this tool, feel free to choose one of the following method.
 
-###  Run Platypus from source code
+### Run Platypus from source code
 ```
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
+go get -u github.com/go-bindata/go-bindata/...
+go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/template/rsh/
 go run platypus.go
 ```
 ![](figure/install.gif)
-###  Run Platypus from release binaries
+### Run Platypus from release binaries
 1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
 2. Run the downloaded executable file
 
-###  Run Platypus from docker
+### [DEPRECATED due to out of date] Run Platypus from docker
 ```
 // Build your docker image
 docker build -t platypus .
