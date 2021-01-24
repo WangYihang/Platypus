@@ -3,16 +3,14 @@ package context
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/hash"
-	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/raas"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
@@ -37,33 +35,6 @@ func CreateTCPServer(host string, port uint16) *TCPServer {
 
 func (s *TCPServer) Hash() string {
 	return hash.MD5(fmt.Sprintf("%s:%d:%s", s.Host, s.Port, s.TimeStamp))
-}
-
-func LeftStrip(data string) string {
-	var k int = 0
-	var v rune
-	for k, v = range data {
-		if v != '\x20' {
-			break
-		}
-	}
-	return data[k:]
-}
-
-func GetHostname(host string) string {
-	return strings.Split(host, ":")[0]
-}
-
-func GetPort(host string, default_port uint16) uint16 {
-	pair := strings.Split(host, ":")
-	if len(pair) < 2 {
-		return default_port
-	}
-	port, err := strconv.Atoi(pair[len(pair)-1])
-	if err != nil {
-		return default_port
-	}
-	return uint16(port)
 }
 
 func (s *TCPServer) Run() {
@@ -124,57 +95,12 @@ func (s *TCPServer) Run() {
 					delimiter := ":"
 					index := strings.Index(line, delimiter)
 					headerKey := line[:index]
-					headerValue := LeftStrip(line[index+len(delimiter):])
+					headerValue := strings.Trim(line[index+len(delimiter):], " ")
 					if headerKey == "Host" {
 						httpHost = headerValue
 					}
 				}
-
-				// eg:
-				//     "/python"        -> {"", "python"}
-				//     "/8.8.8.8/1337"        -> {"", "8.8.8.8", "1337"}
-				//     "/8.8.8.8/1337/python" -> {"", "8.8.8.8", "1337", "python"}
-				target := strings.Split(requestURI, "/")
-
-				// step 1: parse host and port, default set to the platypus listening port currently
-				host := GetHostname(httpHost)
-				var port uint16
-				port = GetPort(httpHost, s.Port)
-
-				if strings.HasPrefix(requestURI, "/") && len(target) > 2 {
-					host = target[1]
-					// TODO: ensure the format of port is int16
-					t, err := strconv.Atoi(target[2])
-					port = uint16(t)
-					if err != nil {
-						log.Debug("Invalid port number: %s", target[2])
-					}
-				} else {
-					log.Debug("Invalid HTTP Request-Line: %s", buffer[:n])
-				}
-
-				// step 2: parse language
-				// language is the last element of target
-				language := strings.Replace(target[len(target)-1], ".", "", -1)
-				templateFilename := fmt.Sprintf("lib/template/rsh/%s.tpl", language)
-				if language == "" || !fs.FileExists(templateFilename) {
-					language = "bash"
-				}
-
-				// step 3: read template
-				// template rendering in golang tastes like shit,
-				// here we will trying to use string replace temporarily.
-				// read reverse shell template file from lib/template/rsh/*
-				templateFilename = fmt.Sprintf("lib/template/rsh/%s.tpl", language)
-				templateContent, _ := ioutil.ReadFile(templateFilename)
-
-				// step 4: render target host and port into template
-				renderedContent := string(templateContent)
-				renderedContent = strings.Replace(renderedContent, "__HOST__", host, -1)
-				renderedContent = strings.Replace(renderedContent, "__PORT__", strconv.Itoa(int(port)), -1)
-				command := fmt.Sprintf("%s\n", renderedContent)
-
-				// step 5: generate HTTP response
+				command := fmt.Sprintf("%s\n", raas.URI2Command(requestURI, httpHost))
 				client.Write([]byte("HTTP/1.0 200 OK\r\n"))
 				client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
 				client.Write([]byte("\r\n"))
