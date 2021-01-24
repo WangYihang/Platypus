@@ -16,3 +16,6 @@
 
 # Binary files
 build
+
+# config file
+config.yml
