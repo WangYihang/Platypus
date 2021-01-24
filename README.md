@@ -18,6 +18,8 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Full interactive shell
   - [x] Using vim gracefully in reverse shell
   - [x] Using CTRL+C and CTRL+Z in reverse shell
+- [x] Start servers automatically
+- [x] Initialize from configuration file
 
 
 ## Get Start
@@ -29,7 +31,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
 go get -u github.com/go-bindata/go-bindata/...
-go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/template/rsh/
+go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/...
 go run platypus.go
 ```
 ![](figure/install.gif)
@@ -143,10 +145,10 @@ Once the command get executed, the reverse shell session will appear in platypus
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Provide full kernel API
-- [ ] Add config file
 - [ ] List file
 - [ ] Web UI
 - [ ] Benchmark
+- [x] Add config file
 - [x] [#30 RaaS support specifying language, thanks for @RicterZ](https://github.com/WangYihang/Platypus/issues/30)  
 - [x] Execute user input when input is not a built-in command
 - [x] Download/Upload progress bar
