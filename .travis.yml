@@ -2,6 +2,11 @@ language: go
 go:
   - 1.13.x
   - 1.14.x
+before_install:
+  - sudo apt -y install upx
+addons:
+  apt:
+    update: true
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
