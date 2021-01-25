@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"time"
 
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
 	"github.com/WangYihang/Platypus/lib/context"
@@ -36,6 +37,8 @@ func main() {
 	// Init servers from config file
 	for _, s := range config.Servers {
 		server := context.CreateTCPServer(s.Host, uint16(s.Port))
+		// avoid terminal being disrupted
+		time.Sleep(0x100 * time.Millisecond)
 		go (*server).Run()
 		context.Ctx.AddServer(server)
 	}
