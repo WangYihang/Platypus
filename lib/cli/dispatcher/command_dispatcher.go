@@ -110,7 +110,8 @@ func Run() {
 		log.Error(err.Error())
 		return
 	}
-	// defer l.Close()
+
+	context.Ctx.RLInstance = ReadLineInstance
 
 	log.Logger.SetOutput(ReadLineInstance.Stderr())
 
