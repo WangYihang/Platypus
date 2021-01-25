@@ -8,12 +8,14 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/fatih/color"
+	"github.com/WangYihang/readline"
 )
 
 type Context struct {
 	Servers        map[string](*TCPServer)
 	Current        *TCPClient
 	CommandPrompt  string
+	RLInstance       *readline.Instance
 	BlockSameIP    int
 	AllowInterrupt bool
 }
@@ -30,8 +32,6 @@ func Signal() {
 		os.Interrupt,
 		// syscall.SIGTSTP,
 	)
-
-	log.Error("Signal installed")
 
 	go func() {
 		for {
@@ -67,6 +67,7 @@ func CreateContext() {
 			Servers:        make(map[string](*TCPServer)),
 			Current:        nil,
 			CommandPrompt:  color.CyanString("» "),
+			RLInstance:       nil,
 			BlockSameIP:    1,
 			AllowInterrupt: false,
 		}
@@ -89,6 +90,8 @@ func (ctx Context) DeleteServer(s *TCPServer) {
 }
 
 func (ctx Context) DeleteTCPClient(c *TCPClient) {
+	// recover command prompt
+	ctx.RLInstance.SetPrompt(color.CyanString("» "))
 	for _, server := range Ctx.Servers {
 		(*server).DeleteTCPClient(c)
 	}
