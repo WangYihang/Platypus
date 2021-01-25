@@ -495,7 +495,7 @@ func (c *TCPClient) DetectOS() {
 	// For Unix-Like OSs
 	c.System(fmt.Sprintf("uname ; echo %s", token))
 	output, _ := c.ReadUntil(token)
-	log.Info(output)
+
 	kwos := map[string]OperatingSystem{
 		"linux":   Linux,
 		"sunos":   SunOS,
