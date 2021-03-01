@@ -35,32 +35,32 @@ func (os OperatingSystem) String() string {
 }
 
 type TCPClient struct {
-	TimeStamp   time.Time
-	Conn        net.Conn
-	Interactive bool
-	Group       bool
-	Hash        string
-	User        string
-	OS          OperatingSystem
-	Python2     string
-	Python3     string
-	ReadLock    *sync.Mutex
-	WriteLock   *sync.Mutex
+	TimeStamp     time.Time
+	Conn          net.Conn
+	Interactive   bool
+	GroupDispatch bool
+	Hash          string
+	User          string
+	OS            OperatingSystem
+	Python2       string
+	Python3       string
+	ReadLock      *sync.Mutex
+	WriteLock     *sync.Mutex
 }
 
 func CreateTCPClient(conn net.Conn) *TCPClient {
 	return &TCPClient{
-		TimeStamp:   time.Now(),
-		Conn:        conn,
-		Interactive: false,
-		Group:       false,
-		Hash:        hash.MD5(conn.RemoteAddr().String()),
-		OS:          Unknown,
-		Python2:     "",
-		Python3:     "",
-		User:        "",
-		ReadLock:    new(sync.Mutex),
-		WriteLock:   new(sync.Mutex),
+		TimeStamp:     time.Now(),
+		Conn:          conn,
+		Interactive:   false,
+		GroupDispatch: false,
+		Hash:          hash.MD5(conn.RemoteAddr().String()),
+		OS:            Unknown,
+		Python2:       "",
+		Python3:       "",
+		User:          "",
+		ReadLock:      new(sync.Mutex),
+		WriteLock:     new(sync.Mutex),
 	}
 }
 
@@ -72,14 +72,14 @@ func (c *TCPClient) Close() {
 func (c *TCPClient) AsTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "Group"})
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "GroupDispatch"})
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
 		c.OS.String(),
 		c.User,
 		humanize.Time(c.TimeStamp),
-		c.Group,
+		c.GroupDispatch,
 	})
 	t.Render()
 }
@@ -92,7 +92,7 @@ func (c *TCPClient) OnelineDesc() string {
 func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
-		humanize.Time(c.TimeStamp), c.OS.String(), c.Group)
+		humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 }
 
 func (c *TCPClient) ReadUntilClean(token string) string {
