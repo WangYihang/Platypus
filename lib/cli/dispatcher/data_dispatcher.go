@@ -21,7 +21,7 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 	n := 0
 	for _, server := range context.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
-			if client.Group {
+			if client.GroupDispatch {
 				log.Info("Executing on %s: %s", client.FullDesc(), command[0:len(command)-1])
 				size, err := client.Conn.Write([]byte(command + "\n"))
 				fmt.Println(size)
