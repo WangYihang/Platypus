@@ -7,15 +7,15 @@ import (
 	// "syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/fatih/color"
 	"github.com/WangYihang/readline"
+	"github.com/fatih/color"
 )
 
 type Context struct {
 	Servers        map[string](*TCPServer)
 	Current        *TCPClient
 	CommandPrompt  string
-	RLInstance       *readline.Instance
+	RLInstance     *readline.Instance
 	BlockSameIP    int
 	AllowInterrupt bool
 }
@@ -67,9 +67,9 @@ func CreateContext() {
 			Servers:        make(map[string](*TCPServer)),
 			Current:        nil,
 			CommandPrompt:  color.CyanString("» "),
-			RLInstance:       nil,
+			RLInstance:     nil,
 			BlockSameIP:    1,
-			AllowInterrupt: false,
+			AllowInterrupt: true,
 		}
 	}
 	// Signal Handler
