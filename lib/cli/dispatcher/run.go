@@ -23,7 +23,8 @@ func (dispatcher Dispatcher) Run(args []string) {
 		return
 	}
 
-	server := context.CreateTCPServer(host, uint16(port))
+	blockSameIP := true
+	server := context.CreateTCPServer(host, uint16(port), blockSameIP)
 	go (*server).Run()
 	context.Ctx.AddServer(server)
 }
