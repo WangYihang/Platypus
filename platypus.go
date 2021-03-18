@@ -13,8 +13,9 @@ import (
 
 type Config struct {
 	Servers []struct {
-		Host string `yaml:"host"`
-		Port int16  `yaml:"port"`
+		Host        string `yaml:"host"`
+		Port        int16  `yaml:"port"`
+		BlockSameIP bool   `yaml:"blockSameIP"`
 	}
 }
 
@@ -36,7 +37,7 @@ func main() {
 
 	// Init servers from config file
 	for _, s := range config.Servers {
-		server := context.CreateTCPServer(s.Host, uint16(s.Port))
+		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.BlockSameIP)
 		// avoid terminal being disrupted
 		time.Sleep(0x100 * time.Millisecond)
 		go (*server).Run()

@@ -16,7 +16,6 @@ type Context struct {
 	Current        *TCPClient
 	CommandPrompt  string
 	RLInstance     *readline.Instance
-	BlockSameIP    int
 	AllowInterrupt bool
 }
 
@@ -68,7 +67,6 @@ func CreateContext() {
 			Current:        nil,
 			CommandPrompt:  color.CyanString("» "),
 			RLInstance:     nil,
-			BlockSameIP:    1,
 			AllowInterrupt: true,
 		}
 	}

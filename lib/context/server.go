@@ -21,16 +21,18 @@ type TCPServer struct {
 	Port          uint16
 	Clients       map[string](*TCPClient)
 	TimeStamp     time.Time
+	BlockSameIP   bool
 	Stopped       chan struct{}
 }
 
-func CreateTCPServer(host string, port uint16) *TCPServer {
+func CreateTCPServer(host string, port uint16, blockSameIP bool) *TCPServer {
 	return &TCPServer{
 		Host:          host,
 		Port:          port,
 		GroupDispatch: true,
 		Clients:       make(map[string](*TCPClient)),
 		TimeStamp:     time.Now(),
+		BlockSameIP:   blockSameIP,
 		Stopped:       make(chan struct{}, 1),
 	}
 }
@@ -136,8 +138,7 @@ func (s *TCPServer) Run() {
 				client.Close()
 				log.Info("RaaS: %s", command)
 			} else {
-				switch Ctx.BlockSameIP {
-				case 1:
+				if s.BlockSameIP {
 					log.Info("BlockSameIP is enabled")
 					newclientIP := client.Conn.RemoteAddr().String()
 					newclientIP = strings.Split(newclientIP, ":")[0]
@@ -157,7 +158,7 @@ func (s *TCPServer) Run() {
 						log.Info("New client %s Connected", client.FullDesc())
 						s.AddTCPClient(client)
 					}
-				case 0:
+				} else {
 					log.Info("BlockSameIP is disabled")
 					log.Info("New client %s Connected", client.FullDesc())
 					s.AddTCPClient(client)
@@ -171,13 +172,24 @@ func (s *TCPServer) AsTable() {
 	if len(s.Clients) > 0 {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
-		t.SetTitle(fmt.Sprintf(
-			"%s Listening on %s:%d, %d Clients",
-			s.Hash(),
-			(*s).Host,
-			(*s).Port,
-			len((*s).Clients),
-		))
+		if s.BlockSameIP {
+			t.SetTitle(fmt.Sprintf(
+				"%s Listening on %s:%d, %d Clients, connections from same IP are blocked.",
+				s.Hash(),
+				(*s).Host,
+				(*s).Port,
+				len((*s).Clients),
+			))
+		} else {
+			t.SetTitle(fmt.Sprintf(
+				"%s Listening on %s:%d, %d Clients, no limitations on the amount of clients from same IP.",
+				s.Hash(),
+				(*s).Host,
+				(*s).Port,
+				len((*s).Clients),
+			))
+		}
+
 		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "GroupDispatch"})
 
 		for chash, client := range s.Clients {

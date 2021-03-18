@@ -2,7 +2,7 @@ package dispatcher
 
 import (
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -14,28 +14,25 @@ func (dispatcher Dispatcher) BlockSameIP(args []string) {
 		dispatcher.BlockSameIPHelp([]string{})
 		return
 	}
-	parseInt,err := strconv.Atoi(args[0])
-	if err != nil {
-		log.Error("Something error")
-		return
+
+	for _, server := range context.Ctx.Servers {
+		if strings.HasPrefix(server.Hash(), strings.ToLower(args[0])) {
+			server.BlockSameIP = !server.BlockSameIP
+			log.Success("Changing `BlockSameIP` option from %s to %s", !server.BlockSameIP, server.BlockSameIP)
+			return
+		}
 	}
-	if parseInt == 1 {
-		log.Success("BlockSameIP set to 1, will only accept one client from every unique IP")
-		context.Ctx.BlockSameIP = 1
-	} else if parseInt == 0 {
-		log.Success("BlockSameIP set to 0, every IP can have many clients")
-		context.Ctx.BlockSameIP = 0
-	}
+	log.Error("No such node")
 }
 
 func (dispatcher Dispatcher) BlockSameIPHelp(args []string) {
 	fmt.Println("Usage of BlockSameIP")
-	fmt.Println("\tBlockSameIP [01]")
-	fmt.Println("\tWhen BlockSameIP set to 1, will only accept one client from every unique IP, by default")
-	fmt.Println("\tWhen BlockSameIP set to 0, every IP can have many clients")
+	fmt.Println("\tBlockSameIP [Server Hash]")
+	fmt.Println("\tFlipping `BlockSameIP`, if true, Platypus will make sure that there is only one client from every unique IP")
+	fmt.Println("\tFlipping `BlockSameIP`, if false, there is no limit on the amount of clients from every unique IP")
 }
 
 func (dispatcher Dispatcher) BlockSameIPDesc(args []string) {
 	fmt.Println("BlockSameIP")
-	fmt.Println("\tIf a client is online, decline other requests from the same IP")
+	fmt.Println("\tDecline subsequent requests from the same IP")
 }

@@ -87,7 +87,7 @@ func (fi bindataFileInfo) Sys() interface{} {
 	return nil
 }
 
-var _libRuntimeConfigExampleYml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x2a\x4e\x2d\x2a\x4b\x2d\x2a\xb6\x52\xe0\x52\xd0\x55\xc8\xc8\x2f\x2e\xb1\x52\x50\x32\xd0\x03\x43\x25\x2e\x05\x05\x85\x82\xfc\xa2\x12\x2b\x05\x43\x63\x63\x73\x42\x0a\x2c\xb8\x00\x01\x00\x00\xff\xff\xdd\xe2\x4d\xe7\x4c\x00\x00\x00")
+var _libRuntimeConfigExampleYml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x2a\x4e\x2d\x2a\x4b\x2d\x2a\xb6\x52\xe0\xe5\x52\xd0\x55\xc8\xc8\x2f\x2e\xb1\x52\x50\x32\xd0\x03\x43\x25\x5e\x2e\x05\x05\x85\x82\xfc\xa2\x12\x2b\x05\x43\x63\x63\x73\x30\x37\x29\x27\x3f\x39\x3b\x38\x31\x37\xd5\x33\xc0\x4a\x21\x2d\x31\xa7\x38\x95\xb0\x4e\x0b\x4c\x9d\x25\x45\xa5\xa9\xbc\x5c\x80\x00\x00\x00\xff\xff\x9c\xa4\x57\x63\x7e\x00\x00\x00")
 
 func libRuntimeConfigExampleYmlBytes() ([]byte, error) {
 	return bindataRead(
@@ -102,7 +102,7 @@ func libRuntimeConfigExampleYml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/config.example.yml", size: 76, mode: os.FileMode(436), modTime: time.Unix(1611566617, 0)}
+	info := bindataFileInfo{name: "lib/runtime/config.example.yml", size: 126, mode: os.FileMode(438), modTime: time.Unix(1616055028, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -122,7 +122,7 @@ func libRuntimeTemplateRshBashTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/bash.tpl", size: 77, mode: os.FileMode(436), modTime: time.Unix(1611493702, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/bash.tpl", size: 77, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -142,7 +142,7 @@ func libRuntimeTemplateRshGoTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/go.tpl", size: 289, mode: os.FileMode(436), modTime: time.Unix(1611495332, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/go.tpl", size: 289, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -162,7 +162,7 @@ func libRuntimeTemplateRshLuaTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/lua.tpl", size: 186, mode: os.FileMode(436), modTime: time.Unix(1611505400, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/lua.tpl", size: 186, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -182,7 +182,7 @@ func libRuntimeTemplateRshNcTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/nc.tpl", size: 124, mode: os.FileMode(436), modTime: time.Unix(1611502634, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/nc.tpl", size: 124, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -202,7 +202,7 @@ func libRuntimeTemplateRshPerlTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/perl.tpl", size: 244, mode: os.FileMode(436), modTime: time.Unix(1611505142, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/perl.tpl", size: 244, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -222,7 +222,7 @@ func libRuntimeTemplateRshPhpTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/php.tpl", size: 119, mode: os.FileMode(436), modTime: time.Unix(1611500614, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/php.tpl", size: 119, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -242,7 +242,7 @@ func libRuntimeTemplateRshPythonTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/python.tpl", size: 240, mode: os.FileMode(436), modTime: time.Unix(1611500361, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/python.tpl", size: 240, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -262,7 +262,7 @@ func libRuntimeTemplateRshPython2Tpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/python2.tpl", size: 241, mode: os.FileMode(436), modTime: time.Unix(1611500371, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/python2.tpl", size: 241, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -282,7 +282,7 @@ func libRuntimeTemplateRshPython3Tpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/python3.tpl", size: 241, mode: os.FileMode(436), modTime: time.Unix(1611500377, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/python3.tpl", size: 241, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -302,7 +302,7 @@ func libRuntimeTemplateRshRubyTpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "lib/runtime/template/rsh/ruby.tpl", size: 128, mode: os.FileMode(436), modTime: time.Unix(1611502052, 0)}
+	info := bindataFileInfo{name: "lib/runtime/template/rsh/ruby.tpl", size: 128, mode: os.FileMode(438), modTime: time.Unix(1614563570, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
