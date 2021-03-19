@@ -241,6 +241,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.DetectPython()
 	client.DetectNetworkInterfaces()
 	client.Hash = client.MakeHash(s.HashFormat)
+	client.Mature = true
 	if _, exists := s.Clients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
 		client.Close()
@@ -248,7 +249,6 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 		log.Success("Fire in the hole: %s", client.OnelineDesc())
 		s.Clients[client.Hash] = client
 	}
-	client.Mature = true
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {

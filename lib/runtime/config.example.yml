@@ -7,7 +7,9 @@ servers:
     # `%u` Username
     # `%m` MAC address
     # `%o` Operating System
+    # `%t` Income TimeStamp
     hashFormat: "%i %u %m %o"
   - host: "0.0.0.0"
     port: 1338
-    hashFormat: "%i %u %m %o"
+    # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
+    hashFormat: "%i %u %m %o %t"
