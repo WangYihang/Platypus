@@ -98,6 +98,7 @@ func (c *TCPClient) MakeHash(hashFormat string) string {
 			"%u": c.User,
 			"%o": c.OS.String(),
 			"%m": fmt.Sprintf("%s", c.NetworkInterfaces),
+			"%t": c.TimeStamp.String(),
 		}
 		for _, component := range components {
 			if value, exists := mapping[component]; exists {
@@ -126,10 +127,10 @@ func (c *TCPClient) OnelineDesc() string {
 func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
 	if c.Mature {
-		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
+		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	} else {
-		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
+		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	}
 }
