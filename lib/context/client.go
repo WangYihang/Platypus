@@ -35,64 +35,103 @@ func (os OperatingSystem) String() string {
 }
 
 type TCPClient struct {
-	TimeStamp     time.Time
-	Conn          net.Conn
-	Interactive   bool
-	GroupDispatch bool
-	Hash          string
-	User          string
-	OS            OperatingSystem
-	Python2       string
-	Python3       string
-	ReadLock      *sync.Mutex
-	WriteLock     *sync.Mutex
+	TimeStamp         time.Time
+	Conn              net.Conn
+	Interactive       bool
+	GroupDispatch     bool
+	Hash              string
+	User              string
+	OS                OperatingSystem
+	NetworkInterfaces map[string]string
+	Python2           string
+	Python3           string
+	ReadLock          *sync.Mutex
+	WriteLock         *sync.Mutex
+	Mature            bool
 }
 
 func CreateTCPClient(conn net.Conn) *TCPClient {
 	return &TCPClient{
-		TimeStamp:     time.Now(),
-		Conn:          conn,
-		Interactive:   false,
-		GroupDispatch: false,
-		Hash:          hash.MD5(conn.RemoteAddr().String()),
-		OS:            Unknown,
-		Python2:       "",
-		Python3:       "",
-		User:          "",
-		ReadLock:      new(sync.Mutex),
-		WriteLock:     new(sync.Mutex),
+		TimeStamp:         time.Now(),
+		Conn:              conn,
+		Interactive:       false,
+		GroupDispatch:     false,
+		Hash:              "",
+		NetworkInterfaces: map[string]string{},
+		OS:                Unknown,
+		Python2:           "",
+		Python3:           "",
+		User:              "",
+		ReadLock:          new(sync.Mutex),
+		WriteLock:         new(sync.Mutex),
+		Mature:            false,
 	}
 }
 
 func (c *TCPClient) Close() {
-	log.Info("Closing client: %s", c.FullDesc())
+	log.Debug("Closing client: %s", c.FullDesc())
 	c.Conn.Close()
 }
 
 func (c *TCPClient) AsTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "GroupDispatch"})
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "GroupDispatch"})
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
 		c.OS.String(),
 		c.User,
+		c.Python2 != "" || c.Python3 != "",
 		humanize.Time(c.TimeStamp),
 		c.GroupDispatch,
 	})
 	t.Render()
 }
 
+func (c *TCPClient) MakeHash(hashFormat string) string {
+	data := ""
+	if c.OS == Linux {
+		components := strings.Split(hashFormat, " ")
+		mapping := map[string]string{
+			"%i": strings.Split(c.Conn.RemoteAddr().String(), ":")[0],
+			"%u": c.User,
+			"%o": c.OS.String(),
+			"%m": fmt.Sprintf("%s", c.NetworkInterfaces),
+		}
+		for _, component := range components {
+			if value, exists := mapping[component]; exists {
+				data += value
+				data += "\n"
+			} else {
+				data += component
+			}
+		}
+	} else {
+		data = c.Conn.RemoteAddr().String()
+	}
+	log.Debug("Hashing: %s", data)
+	return hash.MD5(data)
+}
+
 func (c *TCPClient) OnelineDesc() string {
 	addr := c.Conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s (%s)", c.Hash, addr.Network(), addr.String(), c.OS.String())
+	if c.Mature {
+		return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
+	} else {
+		return fmt.Sprintf("[Premature Death] %s://%s [%s]", addr.Network(), addr.String(), c.OS.String())
+	}
 }
 
 func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
-		humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
+	if c.Mature {
+		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
+			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
+	} else {
+		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
+			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
+	}
 }
 
 func (c *TCPClient) ReadUntilClean(token string) string {
@@ -367,7 +406,7 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 	python := c.SelectPython()
 	switch c.OS {
 	case Linux:
-		return c.SystemToken("ls "+path) == path+"\n", nil
+		return strings.TrimSpace(c.SystemToken("ls "+path)) == strings.TrimSpace(path), nil
 	case Windows:
 		if python != "" {
 			// Python2 and Python3 all works fine in this situation
@@ -432,12 +471,12 @@ func (c *TCPClient) DetectUser() {
 	switch c.OS {
 	case Linux:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
-		log.Info("[%s] User detected: %s", c.Hash, c.User)
+		log.Debug("[%s] User detected: %s", c.Conn.RemoteAddr().String(), c.User)
 	case Windows:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
-		log.Info("[%s] User detected: %s", c.Hash, c.User)
+		log.Debug("[%s] User detected: %s", c.Conn.RemoteAddr().String(), c.User)
 	default:
-		log.Error("Unrecognized operating system")
+		log.Error("[%s] Unrecognized operating system", c.Conn.RemoteAddr().String())
 	}
 }
 
@@ -454,39 +493,54 @@ func (c *TCPClient) DetectPython() {
 			version = strings.TrimSpace(c.SystemToken("python --version"))
 			if strings.HasPrefix(version, "Python 3") {
 				c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-				log.Info("Python3 found: %s", c.Python3)
+				log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), c.Python3)
 				result = strings.TrimSpace(c.SystemToken("where python2"))
 				if strings.HasSuffix(result, "python2.exe") {
 					c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-					log.Info("Python2 found: %s", result)
+					log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), result)
 				}
 			} else if strings.HasPrefix(version, "Python 2") {
 				c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-				log.Info("Python2 found: %s", c.Python2)
+				log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), c.Python2)
 				result = strings.TrimSpace(c.SystemToken("where python3"))
 				if strings.HasSuffix(result, "python3.exe") {
 					c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-					log.Info("Python3 found: %s", result)
+					log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), result)
 				}
 			} else {
-				log.Error("Unrecognized python version: %s", version)
+				log.Error("[%s] Unrecognized python version: %s", c.Conn.RemoteAddr().String(), version)
 			}
 		} else {
-			log.Error("No python on traget machine.")
+			log.Error("[%s] No python on traget machine.", c.Conn.RemoteAddr().String())
 		}
 	} else if c.OS == Linux {
 		result = strings.TrimSpace(c.SystemToken("which python2"))
 		if result != "" {
 			c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-			log.Info("Python2 found: %s", result)
+			log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), result)
 		}
 		result = strings.TrimSpace(c.SystemToken("which python3"))
 		if result != "" {
 			c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-			log.Info("Python3 found: %s", result)
+			log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), result)
 		}
 	} else {
-		log.Error("Unknown OS: %s", c.OS.String())
+		log.Error("[%s] Unknown OS: %s", c.Conn.RemoteAddr().String(), c.OS.String())
+	}
+}
+
+func (c *TCPClient) DetectNetworkInterfaces() {
+	if c.OS == Linux {
+		ifnames := strings.Split(strings.TrimSpace(c.SystemToken("ls /sys/class/net")), "\n")
+		for _, ifname := range ifnames {
+			mac, err := c.Readfile(fmt.Sprintf("/sys/class/net/%s/address", ifname))
+			if err != nil {
+				log.Error("[%s] Detect network interfaces failed: %s", c.Conn.RemoteAddr().String(), err)
+				return
+			}
+			c.NetworkInterfaces[ifname] = strings.TrimSpace(mac)
+			log.Debug("[%s] Network Interface (%s): %s", c.Conn.RemoteAddr().String(), ifname, mac)
+		}
 	}
 }
 
@@ -505,7 +559,7 @@ func (c *TCPClient) DetectOS() {
 	for keyword, os := range kwos {
 		if strings.Contains(strings.ToLower(output), keyword) {
 			c.OS = os
-			log.Info("[%s] OS detected: %s", c.Hash, c.OS.String())
+			log.Debug("[%s] OS detected: %s", c.Conn.RemoteAddr().String(), c.OS.String())
 			return
 		}
 	}
@@ -515,11 +569,11 @@ func (c *TCPClient) DetectOS() {
 	output, _ = c.ReadUntil(token)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		c.OS = Windows
-		log.Info("[%s] OS detected: %s", c.Hash, c.OS.String())
+		log.Debug("[%s] OS detected: %s", c.Conn.RemoteAddr().String(), c.OS.String())
 		return
 	}
 
 	// Unknown OS
-	log.Info("OS detection failed, set [%s] to `Unknown`", c.Hash)
+	log.Error("[%s] OS detection failed, set [%s] to `Unknown`", c.Conn.RemoteAddr().String(), c.Hash)
 	c.OS = Unknown
 }

