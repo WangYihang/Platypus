@@ -151,7 +151,7 @@ func (s *TCPServer) Run() {
 						}
 					}
 					if clientExist {
-						log.Warn("Incoming connection comes from a machine which has already connected.")
+						log.Warn("Incoming connection comes from a machine which has already connected. You can use `BlockSameIP` to switch [ON|OFF]")
 						client.Close()
 					} else {
 						log.Info("New client %s Connected", client.FullDesc())

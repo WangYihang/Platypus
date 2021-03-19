@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
@@ -19,17 +20,13 @@ func (dispatcher Dispatcher) DataDispatcher(args []string) {
 		return
 	}
 	n := 0
+	command = strings.TrimSpace(command)
 	for _, server := range context.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if client.GroupDispatch {
-				log.Info("Executing on %s: %s", client.FullDesc(), command[0:len(command)-1])
-				size, err := client.Conn.Write([]byte(command + "\n"))
-				fmt.Println(size)
-				if err != nil {
-					log.Error("Write error: %s", err)
-					(*server).DeleteTCPClient(client)
-					continue
-				}
+				log.Info("Executing on %s: %s", client.FullDesc(), command)
+				result := client.SystemToken(command)
+				log.Success("%s", result)
 				n++
 			}
 		}
