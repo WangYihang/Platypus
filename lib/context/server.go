@@ -21,18 +21,18 @@ type TCPServer struct {
 	Port          uint16
 	Clients       map[string](*TCPClient)
 	TimeStamp     time.Time
-	BlockSameIP   bool
+	HashFormat    string
 	Stopped       chan struct{}
 }
 
-func CreateTCPServer(host string, port uint16, blockSameIP bool) *TCPServer {
+func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 	return &TCPServer{
 		Host:          host,
 		Port:          port,
 		GroupDispatch: true,
 		Clients:       make(map[string](*TCPClient)),
 		TimeStamp:     time.Now(),
-		BlockSameIP:   blockSameIP,
+		HashFormat:    hashFormat,
 		Stopped:       make(chan struct{}, 1),
 	}
 }
@@ -104,7 +104,7 @@ func (s *TCPServer) Run() {
 			client.Conn.SetReadDeadline(time.Time{})
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					log.Error("Not requesting for service")
+					log.Debug("Not requesting for service")
 				} else {
 					client.Close()
 				}
@@ -135,33 +135,9 @@ func (s *TCPServer) Run() {
 				client.Write([]byte("\r\n"))
 				client.Write([]byte(command))
 				client.Close()
-				log.Info("RaaS: %s", command)
+				log.Info("A RaaS request from %s served", client.Conn.RemoteAddr().String())
 			} else {
-				if s.BlockSameIP {
-					log.Info("BlockSameIP is enabled")
-					newclientIP := client.Conn.RemoteAddr().String()
-					newclientIP = strings.Split(newclientIP, ":")[0]
-					clientExist := false
-					for _, client := range s.Clients {
-						clientIP := client.Conn.RemoteAddr().String()
-						clientIP = strings.Split(clientIP, ":")[0]
-						if newclientIP == clientIP {
-							clientExist = true
-							break
-						}
-					}
-					if clientExist {
-						log.Warn("Incoming connection comes from a machine which has already connected. You can use `BlockSameIP` to switch [ON|OFF]")
-						client.Close()
-					} else {
-						log.Info("New client %s Connected", client.FullDesc())
-						s.AddTCPClient(client)
-					}
-				} else {
-					log.Info("BlockSameIP is disabled")
-					log.Info("New client %s Connected", client.FullDesc())
-					s.AddTCPClient(client)
-				}
+				s.AddTCPClient(client)
 			}
 		}
 	}
@@ -171,25 +147,15 @@ func (s *TCPServer) AsTable() {
 	if len(s.Clients) > 0 {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
-		if s.BlockSameIP {
-			t.SetTitle(fmt.Sprintf(
-				"%s Listening on %s:%d, %d Clients, connections from same IP are blocked.",
-				s.Hash(),
-				(*s).Host,
-				(*s).Port,
-				len((*s).Clients),
-			))
-		} else {
-			t.SetTitle(fmt.Sprintf(
-				"%s Listening on %s:%d, %d Clients, no limitations on the amount of clients from same IP.",
-				s.Hash(),
-				(*s).Host,
-				(*s).Port,
-				len((*s).Clients),
-			))
-		}
+		t.SetTitle(fmt.Sprintf(
+			"%s Listening on %s:%d, %d Clients",
+			s.Hash(),
+			(*s).Host,
+			(*s).Port,
+			len((*s).Clients),
+		))
 
-		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Time", "GroupDispatch"})
+		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "GroupDispatch"})
 
 		for chash, client := range s.Clients {
 			t.AppendRow([]interface{}{
@@ -197,6 +163,7 @@ func (s *TCPServer) AsTable() {
 				client.Conn.RemoteAddr().String(),
 				client.OS.String(),
 				client.User,
+				client.Python2 != "" || client.Python3 != "",
 				humanize.Time(client.TimeStamp),
 				client.GroupDispatch,
 			})
@@ -268,11 +235,20 @@ func (s *TCPServer) Stop() {
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.GroupDispatch = s.GroupDispatch
-	s.Clients[client.Hash] = client
-	log.Info("Gathering information from client...")
+	log.Debug("Gathering information from client...")
 	client.DetectOS()
 	client.DetectUser()
 	client.DetectPython()
+	client.DetectNetworkInterfaces()
+	client.Hash = client.MakeHash(s.HashFormat)
+	if _, exists := s.Clients[client.Hash]; exists {
+		log.Error("Duplicated income connection detected!")
+		client.Close()
+	} else {
+		log.Success("Fire in the hole: %s", client.OnelineDesc())
+		s.Clients[client.Hash] = client
+	}
+	client.Mature = true
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
