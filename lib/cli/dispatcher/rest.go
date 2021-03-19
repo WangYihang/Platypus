@@ -48,11 +48,10 @@ func (dispatcher Dispatcher) REST(args []string) {
 		response := "No such client"
 		flag := false
 		for _, server := range context.Ctx.Servers {
-			for _, client := range (*server).GetAllTCPClients() {
-				if hash == client.Hash {
-					response = client.SystemToken(cmd)
-					flag = true
-				}
+			if client, exist := server.Clients[hash]; exist {
+				response = client.SystemToken(cmd)
+				flag = true
+
 			}
 		}
 		c.JSON(200, gin.H{

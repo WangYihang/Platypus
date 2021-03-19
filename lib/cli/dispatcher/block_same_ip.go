@@ -18,7 +18,7 @@ func (dispatcher Dispatcher) BlockSameIP(args []string) {
 	for _, server := range context.Ctx.Servers {
 		if strings.HasPrefix(server.Hash(), strings.ToLower(args[0])) {
 			server.BlockSameIP = !server.BlockSameIP
-			log.Success("Changing `BlockSameIP` option from %s to %s", !server.BlockSameIP, server.BlockSameIP)
+			log.Success("Changing `BlockSameIP` option from %t to %t", !server.BlockSameIP, server.BlockSameIP)
 			return
 		}
 	}
