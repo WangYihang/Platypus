@@ -1,14 +1,13 @@
 servers: 
- - host: "0.0.0.0"
-  port: 1337
-  # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
-  # All available properties are listed below:
-  # `%i` IP
-  # `%u` Username
-  # `%m` MAC address
-  # `%o` Operating System
-  hashFormat: "%i %u %m %o"
-
- - host: "0.0.0.0"
-  port: 1338
-  hashFormat: "%i %u %m %o"
+  - host: "0.0.0.0"
+    port: 1337
+    # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
+    # All available properties are listed below:
+    # `%i` IP
+    # `%u` Username
+    # `%m` MAC address
+    # `%o` Operating System
+    hashFormat: "%i %u %m %o"
+  - host: "0.0.0.0"
+    port: 1338
+    hashFormat: "%i %u %m %o"
