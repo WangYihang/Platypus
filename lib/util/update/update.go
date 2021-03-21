@@ -16,7 +16,7 @@ func ConfirmAndSelfUpdate() {
 	log.Info("Detecting the latest version...")
 	latest, found, err := selfupdate.DetectLatest("wangyihang/Platypus")
 	if err != nil {
-		log.Error("Error occurred while detecting version:", err)
+		log.Error("Error occurred while detecting version: %s", err)
 		return
 	}
 
@@ -26,7 +26,7 @@ func ConfirmAndSelfUpdate() {
 		return
 	}
 
-	if !ui.PromptYesNo(fmt.Sprintf("Do you want to update to %s?", latest.Version)) {
+	if !ui.PromptYesNo(fmt.Sprintf("Do you want to update to v%s?", latest.Version)) {
 		return
 	}
 
@@ -37,8 +37,8 @@ func ConfirmAndSelfUpdate() {
 	}
 	log.Info("Downloading from %s", latest.AssetURL)
 	if err := selfupdate.UpdateTo(latest.AssetURL, exe); err != nil {
-		log.Error("Error occurred while updating binary:", err)
+		log.Error("Error occurred while updating binary: %s", err)
 		return
 	}
-	log.Success("Successfully updated to version", latest.Version)
+	log.Success("Successfully updated to v%s", latest.Version)
 }
