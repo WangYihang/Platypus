@@ -10,8 +10,9 @@ addons:
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
-  - gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"
-  - for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done
+  - test ${TRAVIS_TAG} && gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"
+  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done
+  - test !${TRAVIS_TAG} && go build
 deploy:
   provider: releases
   api_key: $GITHUB_TOKEN
