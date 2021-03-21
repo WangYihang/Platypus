@@ -8,6 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/resource"
+	"github.com/WangYihang/Platypus/lib/util/update"
 	"gopkg.in/yaml.v2"
 )
 
@@ -20,6 +21,9 @@ type Config struct {
 }
 
 func main() {
+	// Detect new version
+	update.ConfirmAndSelfUpdate()
+
 	// Detect and create config file
 	configFilename := "config.yml"
 	if !fs.FileExists(configFilename) {
