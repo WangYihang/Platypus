@@ -10,8 +10,8 @@ addons:
 script:
   - go test ./...
   - go get github.com/mitchellh/gox
-  - test ${TRAVIS_TAG} && gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"
-  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done
+  - test ${TRAVIS_TAG} && gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
+  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ; echo "Skipping compress with upx..."
   - test !${TRAVIS_TAG} && go build
 deploy:
   provider: releases
