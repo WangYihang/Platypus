@@ -15,12 +15,50 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		dispatcher.JumpHelp([]string{})
 		return
 	}
+	// Search via Hash
 	for _, server := range context.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				context.Ctx.Current = client
 				log.Success("The current interactive shell is set to: %s", client.FullDesc())
-
+				// Update prompt
+				// BUG:
+				// The prompt will set only at the `Jump` command once.
+				// If we jump to a client before the os & user is detected
+				// So the prompt will be:
+				// (Unknown) 127.0.0.1:43802 [unknown] »
+				var user string
+				if client.User == "" {
+					user = "unknown"
+				} else {
+					user = client.User
+				}
+				if client.Alias != "" {
+					ReadLineInstance.SetPrompt(color.CyanString(
+						"[%s] (%s) %s [%s] » ",
+						client.Alias,
+						client.OS.String(),
+						client.Conn.RemoteAddr().String(),
+						user,
+					))
+				} else {
+					ReadLineInstance.SetPrompt(color.CyanString(
+						"(%s) %s [%s] » ",
+						client.OS.String(),
+						client.Conn.RemoteAddr().String(),
+						user,
+					))
+				}
+				return
+			}
+		}
+	}
+	// Search via name
+	for _, server := range context.Ctx.Servers {
+		for _, client := range (*server).GetAllTCPClients() {
+			if strings.HasPrefix(client.Alias, strings.ToLower(args[0])) {
+				context.Ctx.Current = client
+				log.Success("The current interactive shell is set to: %s", client.FullDesc())
 				// Update prompt
 				// BUG:
 				// The prompt will set only at the `Jump` command once.
@@ -34,7 +72,8 @@ func (dispatcher Dispatcher) Jump(args []string) {
 					user = client.User
 				}
 				ReadLineInstance.SetPrompt(color.CyanString(
-					"(%s) %s [%s] » ",
+					"[%s] (%s) %s [%s] » ",
+					client.Alias,
 					client.OS.String(),
 					client.Conn.RemoteAddr().String(),
 					user,
@@ -48,11 +87,12 @@ func (dispatcher Dispatcher) Jump(args []string) {
 
 func (dispatcher Dispatcher) JumpHelp(args []string) {
 	fmt.Println("Usage of Jump")
-	fmt.Println("\tJump [HASH]")
-	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	fmt.Println("\tJump [HASH | NAME]")
+	fmt.Println("\tHASH\tThe hash of a node which you want to interact with.")
+	fmt.Println("\tNAME\tThe name of a node which you want to interact with. The name can be set via `Rename` command.")
 }
 
 func (dispatcher Dispatcher) JumpDesc(args []string) {
 	fmt.Println("Jump")
-	fmt.Println("\tJump to a node, waiting to interactive with it")
+	fmt.Println("\tJump to a node, waiting for interactiving with it.")
 }
