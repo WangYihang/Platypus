@@ -155,7 +155,7 @@ func (s *TCPServer) AsTable() {
 			len((*s).Clients),
 		))
 
-		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "GroupDispatch"})
+		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
 
 		for chash, client := range s.Clients {
 			t.AppendRow([]interface{}{
@@ -165,6 +165,7 @@ func (s *TCPServer) AsTable() {
 				client.User,
 				client.Python2 != "" || client.Python3 != "",
 				humanize.Time(client.TimeStamp),
+				client.Alias,
 				client.GroupDispatch,
 			})
 

@@ -40,6 +40,7 @@ type TCPClient struct {
 	Interactive       bool
 	GroupDispatch     bool
 	Hash              string
+	Alias             string
 	User              string
 	OS                OperatingSystem
 	NetworkInterfaces map[string]string
@@ -57,6 +58,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Interactive:       false,
 		GroupDispatch:     false,
 		Hash:              "",
+		Alias:             "",
 		NetworkInterfaces: map[string]string{},
 		OS:                Unknown,
 		Python2:           "",
@@ -76,7 +78,7 @@ func (c *TCPClient) Close() {
 func (c *TCPClient) AsTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "GroupDispatch"})
+	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
 	t.AppendRow([]interface{}{
 		c.Hash,
 		c.Conn.RemoteAddr().String(),
@@ -84,6 +86,7 @@ func (c *TCPClient) AsTable() {
 		c.User,
 		c.Python2 != "" || c.Python3 != "",
 		humanize.Time(c.TimeStamp),
+		c.Alias,
 		c.GroupDispatch,
 	})
 	t.Render()
@@ -127,10 +130,10 @@ func (c *TCPClient) OnelineDesc() string {
 func (c *TCPClient) FullDesc() string {
 	addr := c.Conn.RemoteAddr()
 	if c.Mature {
-		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
+		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	} else {
-		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
+		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	}
 }

