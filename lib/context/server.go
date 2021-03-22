@@ -41,6 +41,55 @@ func (s *TCPServer) Hash() string {
 	return hash.MD5(fmt.Sprintf("%s:%d:%s", s.Host, s.Port, s.TimeStamp))
 }
 
+func (s *TCPServer) Handle(conn net.Conn) {
+	client := CreateTCPClient(conn)
+	log.Info("A new income connection from %s", client.Conn.RemoteAddr())
+	// Reverse shell as a service
+	buffer := make([]byte, 4)
+	client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+	client.ReadLock.Lock()
+	n, err := client.Conn.Read(buffer)
+	client.ReadLock.Unlock()
+	client.Conn.SetReadDeadline(time.Time{})
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			log.Debug("Not requesting for service")
+		} else {
+			client.Close()
+		}
+	}
+	if string(buffer[:n]) == "GET " {
+		requestURI := client.ReadUntilClean(" ")
+		// Read HTTP Version
+		client.ReadUntilClean("\r\n")
+		httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
+		for {
+			var line = client.ReadUntilClean("\r\n")
+			// End of headers
+			if line == "" {
+				log.Debug("All header read")
+				break
+			}
+			delimiter := ":"
+			index := strings.Index(line, delimiter)
+			headerKey := line[:index]
+			headerValue := strings.Trim(line[index+len(delimiter):], " ")
+			if headerKey == "Host" {
+				httpHost = headerValue
+			}
+		}
+		command := fmt.Sprintf("%s\n", raas.URI2Command(requestURI, httpHost))
+		client.Write([]byte("HTTP/1.0 200 OK\r\n"))
+		client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
+		client.Write([]byte("\r\n"))
+		client.Write([]byte(command))
+		client.Close()
+		log.Info("A RaaS request from %s served", client.Conn.RemoteAddr().String())
+	} else {
+		s.AddTCPClient(client)
+	}
+}
+
 func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
@@ -93,52 +142,7 @@ func (s *TCPServer) Run() {
 			if err != nil {
 				continue
 			}
-			client := CreateTCPClient(conn)
-			log.Info("A new income connection from %s", client.Conn.RemoteAddr())
-			// Reverse shell as a service
-			buffer := make([]byte, 4)
-			client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-			client.ReadLock.Lock()
-			n, err := client.Conn.Read(buffer)
-			client.ReadLock.Unlock()
-			client.Conn.SetReadDeadline(time.Time{})
-			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					log.Debug("Not requesting for service")
-				} else {
-					client.Close()
-				}
-			}
-			if string(buffer[:n]) == "GET " {
-				requestURI := client.ReadUntilClean(" ")
-				// Read HTTP Version
-				client.ReadUntilClean("\r\n")
-				httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
-				for {
-					var line = client.ReadUntilClean("\r\n")
-					// End of headers
-					if line == "" {
-						log.Debug("All header read")
-						break
-					}
-					delimiter := ":"
-					index := strings.Index(line, delimiter)
-					headerKey := line[:index]
-					headerValue := strings.Trim(line[index+len(delimiter):], " ")
-					if headerKey == "Host" {
-						httpHost = headerValue
-					}
-				}
-				command := fmt.Sprintf("%s\n", raas.URI2Command(requestURI, httpHost))
-				client.Write([]byte("HTTP/1.0 200 OK\r\n"))
-				client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
-				client.Write([]byte("\r\n"))
-				client.Write([]byte(command))
-				client.Close()
-				log.Info("A RaaS request from %s served", client.Conn.RemoteAddr().String())
-			} else {
-				s.AddTCPClient(client)
-			}
+			go s.Handle(conn)
 		}
 	}
 }
