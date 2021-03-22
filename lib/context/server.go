@@ -152,7 +152,7 @@ func (s *TCPServer) AsTable() {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
 		t.SetTitle(fmt.Sprintf(
-			"%s Listening on %s:%d, %d Clients",
+			"%s is listening on %s:%d, %d clients",
 			s.Hash(),
 			(*s).Host,
 			(*s).Port,
@@ -175,9 +175,16 @@ func (s *TCPServer) AsTable() {
 
 		}
 		t.Render()
+		log.Success(fmt.Sprintf(
+			"%s is listening on %s:%d, %d clients listed",
+			s.Hash(),
+			(*s).Host,
+			(*s).Port,
+			len((*s).Clients),
+		))
 	} else {
 		log.Warn(fmt.Sprintf(
-			"[%s] listening on %s:%d, 0 clients",
+			"[%s] is listening on %s:%d, 0 clients",
 			s.Hash(),
 			(*s).Host,
 			(*s).Port,
