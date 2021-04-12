@@ -8,6 +8,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func formExistOrAbort(c *gin.Context, params []string) bool {
+	for _, param := range params {
+		if c.PostForm(param) == "" {
+			return panicRESTfully(c, fmt.Sprintf("%s is required", param))
+		}
+	}
+	return true
+}
+
 func paramsExistOrAbort(c *gin.Context, params []string) bool {
 	for _, param := range params {
 		if c.Param(param) == "" {
@@ -57,8 +66,26 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		panicRESTfully(c, "No such server")
 		return
 	})
+	rest.GET("/server/:hash/client", func(c *gin.Context) {
+		if !paramsExistOrAbort(c, []string{"hash"}) {
+			return
+		}
+		hash := c.Param("hash")
+		for _, server := range Ctx.Servers {
+			if server.Hash() == hash {
+				c.JSON(200, gin.H{
+					"status": true,
+					"msg":    server.Clients,
+				})
+				c.Abort()
+				return
+			}
+		}
+		panicRESTfully(c, "No such server")
+		return
+	})
 	rest.POST("/server", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"host", "port"}) {
+		if !formExistOrAbort(c, []string{"host", "port"}) {
 			return
 		}
 		port, err := strconv.Atoi(c.Param("port"))
@@ -69,6 +96,30 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		hashFormat := "%i %u %m %o"
 		server := CreateTCPServer(c.Param("host"), uint16(port), hashFormat)
 		go (*server).Run()
+		c.JSON(200, gin.H{
+			"status": true,
+			"msg":    server,
+		})
+		c.Abort()
+		return
+	})
+	rest.DELETE("/server/:hash", func(c *gin.Context) {
+		if !paramsExistOrAbort(c, []string{"hash"}) {
+			return
+		}
+		hash := c.Param("hash")
+		for _, server := range Ctx.Servers {
+			if server.Hash() == hash {
+				Ctx.DeleteServer(server)
+				c.JSON(200, gin.H{
+					"status": true,
+				})
+				c.Abort()
+				return
+			}
+		}
+		panicRESTfully(c, "No such server")
+		return
 	})
 
 	// Client related
@@ -104,8 +155,29 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		panicRESTfully(c, "No such client")
 		return
 	})
+	rest.DELETE("/client/:hash", func(c *gin.Context) {
+		if !paramsExistOrAbort(c, []string{"hash"}) {
+			return
+		}
+		hash := c.Param("hash")
+		for _, server := range Ctx.Servers {
+			if client, exist := server.Clients[hash]; exist {
+				Ctx.DeleteTCPClient(client)
+				c.JSON(200, gin.H{
+					"status": true,
+				})
+				c.Abort()
+				return
+			}
+		}
+		panicRESTfully(c, "No such client")
+		return
+	})
 	rest.POST("/client/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash", "cmd"}) {
+		if !paramsExistOrAbort(c, []string{"hash"}) {
+			return
+		}
+		if !formExistOrAbort(c, []string{"cmd"}) {
 			return
 		}
 		hash := c.Param("hash")

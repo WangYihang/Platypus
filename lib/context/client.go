@@ -39,6 +39,8 @@ type TCPClient struct {
 	Interactive       bool
 	GroupDispatch     bool              `json:"group_dispatch"`
 	Hash              string            `json:"hash"`
+	Host              string            `json:"host"`
+	Port              int16             `json:"port"`
 	Alias             string            `json:"alias"`
 	User              string            `json:"user"`
 	OS                OperatingSystem   `json:"os"`
@@ -52,12 +54,16 @@ type TCPClient struct {
 }
 
 func CreateTCPClient(conn net.Conn) *TCPClient {
+	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
+	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	return &TCPClient{
 		TimeStamp:         time.Now(),
 		conn:              conn,
 		Interactive:       false,
 		GroupDispatch:     false,
 		Hash:              "",
+		Host:              host,
+		Port:              int16(port),
 		Alias:             "",
 		NetworkInterfaces: map[string]string{},
 		OS:                Unknown,
