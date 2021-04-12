@@ -20,3 +20,5 @@ restful:
   port: 7331
   # `enable: true` means starting RESTful Server when Platypus starts.
   enable: true
+# Check new releases from GitHub when starting Platypus
+update: true
