@@ -25,12 +25,10 @@ type Config struct {
 		Port   int16  `yaml:"port"`
 		Enable bool   `yaml:"enable"`
 	}
+	Update bool
 }
 
 func main() {
-	// Detect new version
-	update.ConfirmAndSelfUpdate()
-
 	// Detect and create config file
 	configFilename := "config.yml"
 	if !fs.FileExists(configFilename) {
@@ -45,6 +43,11 @@ func main() {
 
 	// Create context
 	context.CreateContext()
+
+	// Detect new version
+	if config.Update {
+		update.ConfirmAndSelfUpdate()
+	}
 
 	// Init servers from config file
 	for _, s := range config.Servers {
