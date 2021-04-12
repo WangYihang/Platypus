@@ -13,3 +13,10 @@ servers:
     port: 1338
     # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
     hashFormat: "%i %u %m %o %t"
+restful:
+  # Because RESTful DO NOT support any authentication mechanism,
+  # DO NOT expose the restful server into any external network.
+  host: "127.0.0.1"
+  port: 7331
+  # `enable: true` means starting RESTful Server when Platypus starts.
+  enable: true
