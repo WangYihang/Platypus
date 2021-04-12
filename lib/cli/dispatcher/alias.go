@@ -38,7 +38,7 @@ func (dispatcher Dispatcher) Alias(args []string) {
 		"[%s] (%s) %s [%s] » ",
 		context.Ctx.Current.Alias,
 		context.Ctx.Current.OS.String(),
-		context.Ctx.Current.Conn.RemoteAddr().String(),
+		context.Ctx.Current.GetConnString(),
 		user,
 	))
 }

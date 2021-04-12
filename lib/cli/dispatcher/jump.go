@@ -38,14 +38,14 @@ func (dispatcher Dispatcher) Jump(args []string) {
 						"[%s] (%s) %s [%s] » ",
 						client.Alias,
 						client.OS.String(),
-						client.Conn.RemoteAddr().String(),
+						client.GetConnString(),
 						user,
 					))
 				} else {
 					ReadLineInstance.SetPrompt(color.CyanString(
 						"(%s) %s [%s] » ",
 						client.OS.String(),
-						client.Conn.RemoteAddr().String(),
+						client.GetConnString(),
 						user,
 					))
 				}
@@ -75,7 +75,7 @@ func (dispatcher Dispatcher) Jump(args []string) {
 					"[%s] (%s) %s [%s] » ",
 					client.Alias,
 					client.OS.String(),
-					client.Conn.RemoteAddr().String(),
+					client.GetConnString(),
 					user,
 				))
 				return

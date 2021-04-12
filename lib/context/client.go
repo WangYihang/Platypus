@@ -35,26 +35,26 @@ func (os OperatingSystem) String() string {
 }
 
 type TCPClient struct {
-	TimeStamp         time.Time
-	Conn              net.Conn
+	conn              net.Conn
 	Interactive       bool
-	GroupDispatch     bool
-	Hash              string
-	Alias             string
-	User              string
-	OS                OperatingSystem
-	NetworkInterfaces map[string]string
-	Python2           string
-	Python3           string
-	ReadLock          *sync.Mutex
-	WriteLock         *sync.Mutex
+	GroupDispatch     bool              `json:"group_dispatch"`
+	Hash              string            `json:"hash"`
+	Alias             string            `json:"alias"`
+	User              string            `json:"user"`
+	OS                OperatingSystem   `json:"os"`
+	NetworkInterfaces map[string]string `json:"network_interfaces"`
+	Python2           string            `json:"python2"`
+	Python3           string            `json:"python3"`
+	TimeStamp         time.Time         `json:"timestamp"`
+	readLock          *sync.Mutex
+	writeLock         *sync.Mutex
 	Mature            bool
 }
 
 func CreateTCPClient(conn net.Conn) *TCPClient {
 	return &TCPClient{
 		TimeStamp:         time.Now(),
-		Conn:              conn,
+		conn:              conn,
 		Interactive:       false,
 		GroupDispatch:     false,
 		Hash:              "",
@@ -64,15 +64,19 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Python2:           "",
 		Python3:           "",
 		User:              "",
-		ReadLock:          new(sync.Mutex),
-		WriteLock:         new(sync.Mutex),
+		readLock:          new(sync.Mutex),
+		writeLock:         new(sync.Mutex),
 		Mature:            false,
 	}
 }
 
 func (c *TCPClient) Close() {
 	log.Debug("Closing client: %s", c.FullDesc())
-	c.Conn.Close()
+	c.conn.Close()
+}
+
+func (c *TCPClient) GetConnString() string {
+	return c.conn.RemoteAddr().String()
 }
 
 func (c *TCPClient) AsTable() {
@@ -81,7 +85,7 @@ func (c *TCPClient) AsTable() {
 	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
 	t.AppendRow([]interface{}{
 		c.Hash,
-		c.Conn.RemoteAddr().String(),
+		c.conn.RemoteAddr().String(),
 		c.OS.String(),
 		c.User,
 		c.Python2 != "" || c.Python3 != "",
@@ -97,7 +101,7 @@ func (c *TCPClient) MakeHash(hashFormat string) string {
 	if c.OS == Linux {
 		components := strings.Split(hashFormat, " ")
 		mapping := map[string]string{
-			"%i": strings.Split(c.Conn.RemoteAddr().String(), ":")[0],
+			"%i": strings.Split(c.conn.RemoteAddr().String(), ":")[0],
 			"%u": c.User,
 			"%o": c.OS.String(),
 			"%m": fmt.Sprintf("%s", c.NetworkInterfaces),
@@ -112,14 +116,14 @@ func (c *TCPClient) MakeHash(hashFormat string) string {
 			}
 		}
 	} else {
-		data = c.Conn.RemoteAddr().String()
+		data = c.conn.RemoteAddr().String()
 	}
 	log.Debug("Hashing: %s", data)
 	return hash.MD5(data)
 }
 
 func (c *TCPClient) OnelineDesc() string {
-	addr := c.Conn.RemoteAddr()
+	addr := c.conn.RemoteAddr()
 	if c.Mature {
 		return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
 	} else {
@@ -128,7 +132,7 @@ func (c *TCPClient) OnelineDesc() string {
 }
 
 func (c *TCPClient) FullDesc() string {
-	addr := c.Conn.RemoteAddr()
+	addr := c.conn.RemoteAddr()
 	if c.Mature {
 		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
@@ -142,9 +146,9 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.ReadLock.Lock()
-		n, err := c.Conn.Read(inputBuffer)
-		c.ReadLock.Unlock()
+		c.readLock.Lock()
+		n, err := c.conn.Read(inputBuffer)
+		c.readLock.Unlock()
 		if err != nil {
 			log.Error("Read from client failed")
 			c.Interactive = false
@@ -163,15 +167,15 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 
 func (c *TCPClient) ReadUntil(token string) (string, bool) {
 	// Set read time out
-	c.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+	c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
 
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {
-		c.ReadLock.Lock()
-		n, err := c.Conn.Read(inputBuffer)
-		c.ReadLock.Unlock()
+		c.readLock.Lock()
+		n, err := c.conn.Read(inputBuffer)
+		c.readLock.Unlock()
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Error("Read response timeout from client")
@@ -195,14 +199,14 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 }
 
 func (c *TCPClient) ReadSize(size int) string {
-	c.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+	c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
 	readSize := 0
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.ReadLock.Lock()
-		n, err := c.Conn.Read(inputBuffer)
-		c.ReadLock.Unlock()
+		c.readLock.Lock()
+		n, err := c.conn.Read(inputBuffer)
+		c.readLock.Unlock()
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Error("Read response timeout from client")
@@ -226,15 +230,15 @@ func (c *TCPClient) ReadSize(size int) string {
 
 func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 	// Set read time out
-	c.Conn.SetReadDeadline(time.Now().Add(timeout))
+	c.conn.SetReadDeadline(time.Now().Add(timeout))
 
 	inputBuffer := make([]byte, 0x400)
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {
-		c.ReadLock.Lock()
-		n, err := c.Conn.Read(inputBuffer)
-		c.ReadLock.Unlock()
+		c.readLock.Lock()
+		n, err := c.conn.Read(inputBuffer)
+		c.readLock.Unlock()
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				isTimeout = true
@@ -249,15 +253,15 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 		outputBuffer.Write(inputBuffer[:n])
 	}
 	// Reset read time out
-	c.Conn.SetReadDeadline(time.Time{})
+	c.conn.SetReadDeadline(time.Time{})
 
 	return outputBuffer.String(), isTimeout
 }
 
 func (c *TCPClient) Write(data []byte) int {
-	c.WriteLock.Lock()
-	n, err := c.Conn.Write(data)
-	c.WriteLock.Unlock()
+	c.writeLock.Lock()
+	n, err := c.conn.Write(data)
+	c.writeLock.Unlock()
 	if err != nil {
 		log.Error("Write to client failed")
 		c.Interactive = false
@@ -431,7 +435,7 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 func (c *TCPClient) System(command string) {
 	// https://www.technovelty.org/linux/skipping-bash-history-for-command-lines-starting-with-space.html
 	// Make bash not store command history
-	c.Conn.Write([]byte(" " + command + "\n"))
+	c.conn.Write([]byte(" " + command + "\n"))
 }
 
 func (c *TCPClient) SystemToken(command string) string {
@@ -475,12 +479,12 @@ func (c *TCPClient) DetectUser() {
 	switch c.OS {
 	case Linux:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
-		log.Debug("[%s] User detected: %s", c.Conn.RemoteAddr().String(), c.User)
+		log.Debug("[%s] User detected: %s", c.conn.RemoteAddr().String(), c.User)
 	case Windows:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
-		log.Debug("[%s] User detected: %s", c.Conn.RemoteAddr().String(), c.User)
+		log.Debug("[%s] User detected: %s", c.conn.RemoteAddr().String(), c.User)
 	default:
-		log.Error("[%s] Unrecognized operating system", c.Conn.RemoteAddr().String())
+		log.Error("[%s] Unrecognized operating system", c.conn.RemoteAddr().String())
 	}
 }
 
@@ -497,39 +501,39 @@ func (c *TCPClient) DetectPython() {
 			version = strings.TrimSpace(c.SystemToken("python --version"))
 			if strings.HasPrefix(version, "Python 3") {
 				c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-				log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), c.Python3)
+				log.Debug("[%s] Python3 found: %s", c.conn.RemoteAddr().String(), c.Python3)
 				result = strings.TrimSpace(c.SystemToken("where python2"))
 				if strings.HasSuffix(result, "python2.exe") {
 					c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-					log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), result)
+					log.Debug("[%s] Python2 found: %s", c.conn.RemoteAddr().String(), result)
 				}
 			} else if strings.HasPrefix(version, "Python 2") {
 				c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-				log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), c.Python2)
+				log.Debug("[%s] Python2 found: %s", c.conn.RemoteAddr().String(), c.Python2)
 				result = strings.TrimSpace(c.SystemToken("where python3"))
 				if strings.HasSuffix(result, "python3.exe") {
 					c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-					log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), result)
+					log.Debug("[%s] Python3 found: %s", c.conn.RemoteAddr().String(), result)
 				}
 			} else {
-				log.Error("[%s] Unrecognized python version: %s", c.Conn.RemoteAddr().String(), version)
+				log.Error("[%s] Unrecognized python version: %s", c.conn.RemoteAddr().String(), version)
 			}
 		} else {
-			log.Error("[%s] No python on traget machine.", c.Conn.RemoteAddr().String())
+			log.Error("[%s] No python on traget machine.", c.conn.RemoteAddr().String())
 		}
 	} else if c.OS == Linux {
 		result = strings.TrimSpace(c.SystemToken("which python2"))
 		if result != "" {
 			c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
-			log.Debug("[%s] Python2 found: %s", c.Conn.RemoteAddr().String(), result)
+			log.Debug("[%s] Python2 found: %s", c.conn.RemoteAddr().String(), result)
 		}
 		result = strings.TrimSpace(c.SystemToken("which python3"))
 		if result != "" {
 			c.Python3 = strings.TrimSpace(strings.Split(result, "\n")[0])
-			log.Debug("[%s] Python3 found: %s", c.Conn.RemoteAddr().String(), result)
+			log.Debug("[%s] Python3 found: %s", c.conn.RemoteAddr().String(), result)
 		}
 	} else {
-		log.Error("[%s] Unknown OS: %s", c.Conn.RemoteAddr().String(), c.OS.String())
+		log.Error("[%s] Unknown OS: %s", c.conn.RemoteAddr().String(), c.OS.String())
 	}
 }
 
@@ -539,11 +543,11 @@ func (c *TCPClient) DetectNetworkInterfaces() {
 		for _, ifname := range ifnames {
 			mac, err := c.Readfile(fmt.Sprintf("/sys/class/net/%s/address", ifname))
 			if err != nil {
-				log.Error("[%s] Detect network interfaces failed: %s", c.Conn.RemoteAddr().String(), err)
+				log.Error("[%s] Detect network interfaces failed: %s", c.conn.RemoteAddr().String(), err)
 				return
 			}
 			c.NetworkInterfaces[ifname] = strings.TrimSpace(mac)
-			log.Debug("[%s] Network Interface (%s): %s", c.Conn.RemoteAddr().String(), ifname, mac)
+			log.Debug("[%s] Network Interface (%s): %s", c.conn.RemoteAddr().String(), ifname, mac)
 		}
 	}
 }
@@ -563,7 +567,7 @@ func (c *TCPClient) DetectOS() {
 	for keyword, os := range kwos {
 		if strings.Contains(strings.ToLower(output), keyword) {
 			c.OS = os
-			log.Debug("[%s] OS detected: %s", c.Conn.RemoteAddr().String(), c.OS.String())
+			log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
 			return
 		}
 	}
@@ -573,11 +577,11 @@ func (c *TCPClient) DetectOS() {
 	output, _ = c.ReadUntil(token)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		c.OS = Windows
-		log.Debug("[%s] OS detected: %s", c.Conn.RemoteAddr().String(), c.OS.String())
+		log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
 		return
 	}
 
 	// Unknown OS
-	log.Error("[%s] OS detection failed, set [%s] to `Unknown`", c.Conn.RemoteAddr().String(), c.Hash)
+	log.Error("[%s] OS detection failed, set [%s] to `Unknown`", c.conn.RemoteAddr().String(), c.Hash)
 	c.OS = Unknown
 }

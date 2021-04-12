@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/fs"
+	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/resource"
 	"github.com/WangYihang/Platypus/lib/util/update"
 	"gopkg.in/yaml.v2"
@@ -17,6 +19,11 @@ type Config struct {
 		Host       string `yaml:"host"`
 		Port       int16  `yaml:"port"`
 		HashFormat string `yaml:"hashFormat"`
+	}
+	RESTful struct {
+		Host   string `yaml:"host"`
+		Port   int16  `yaml:"port"`
+		Enable bool   `yaml:"enable"`
 	}
 }
 
@@ -48,6 +55,14 @@ func main() {
 		context.Ctx.AddServer(server)
 	}
 
+	// Init RESTful Server from config file
+	if config.RESTful.Enable {
+		rh := config.RESTful.Host
+		rp := config.RESTful.Port
+		rest := context.CreateRESTfulAPIServer()
+		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
+		log.Info("RESTful HTTP Server running at %s:%d", rh, rp)
+	}
 	// Run main loop
 	dispatcher.Run()
 }

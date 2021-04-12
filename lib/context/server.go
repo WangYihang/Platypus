@@ -16,13 +16,13 @@ import (
 )
 
 type TCPServer struct {
-	Host          string
-	GroupDispatch bool
-	Port          uint16
-	Clients       map[string](*TCPClient)
-	TimeStamp     time.Time
-	HashFormat    string
-	Stopped       chan struct{}
+	Host          string                  `json:"host"`
+	GroupDispatch bool                    `json:"group_dispatch"`
+	Port          uint16                  `json:"port"`
+	Clients       map[string](*TCPClient) `json:"clients"`
+	TimeStamp     time.Time               `json:"timestamp"`
+	hashFormat    string
+	stopped       chan struct{}
 }
 
 func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
@@ -32,25 +32,25 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		GroupDispatch: true,
 		Clients:       make(map[string](*TCPClient)),
 		TimeStamp:     time.Now(),
-		HashFormat:    hashFormat,
-		Stopped:       make(chan struct{}, 1),
+		hashFormat:    hashFormat,
+		stopped:       make(chan struct{}, 1),
 	}
 }
 
 func (s *TCPServer) Hash() string {
-	return hash.MD5(fmt.Sprintf("%s:%d:%s", s.Host, s.Port, s.TimeStamp))
+	return hash.MD5(fmt.Sprintf("%s:%d", s.Host, s.Port))
 }
 
 func (s *TCPServer) Handle(conn net.Conn) {
 	client := CreateTCPClient(conn)
-	log.Info("A new income connection from %s", client.Conn.RemoteAddr())
+	log.Info("A new income connection from %s", client.conn.RemoteAddr())
 	// Reverse shell as a service
 	buffer := make([]byte, 4)
-	client.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-	client.ReadLock.Lock()
-	n, err := client.Conn.Read(buffer)
-	client.ReadLock.Unlock()
-	client.Conn.SetReadDeadline(time.Time{})
+	client.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+	client.readLock.Lock()
+	n, err := client.conn.Read(buffer)
+	client.readLock.Unlock()
+	client.conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			log.Debug("Not requesting for service")
@@ -84,7 +84,7 @@ func (s *TCPServer) Handle(conn net.Conn) {
 		client.Write([]byte("\r\n"))
 		client.Write([]byte(command))
 		client.Close()
-		log.Info("A RaaS request from %s served", client.Conn.RemoteAddr().String())
+		log.Info("A RaaS request from %s served", client.conn.RemoteAddr().String())
 	} else {
 		s.AddTCPClient(client)
 	}
@@ -133,7 +133,7 @@ func (s *TCPServer) Run() {
 
 	for {
 		select {
-		case <-s.Stopped:
+		case <-s.stopped:
 			listener.Close()
 			return
 		default:
@@ -164,7 +164,7 @@ func (s *TCPServer) AsTable() {
 		for chash, client := range s.Clients {
 			t.AppendRow([]interface{}{
 				chash,
-				client.Conn.RemoteAddr().String(),
+				client.conn.RemoteAddr().String(),
 				client.OS.String(),
 				client.User,
 				client.Python2 != "" || client.Python3 != "",
@@ -230,7 +230,7 @@ func (s *TCPServer) FullDesc() string {
 
 func (s *TCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
-	s.Stopped <- struct{}{}
+	s.stopped <- struct{}{}
 
 	// Connect to the listener, in order to call listener.Close() immediately
 	go func() {
@@ -252,7 +252,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.DetectUser()
 	client.DetectPython()
 	client.DetectNetworkInterfaces()
-	client.Hash = client.MakeHash(s.HashFormat)
+	client.Hash = client.MakeHash(s.hashFormat)
 	client.Mature = true
 	if _, exists := s.Clients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
