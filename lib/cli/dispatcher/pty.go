@@ -13,7 +13,7 @@ func (dispatcher Dispatcher) PTY(args []string) {
 		return
 	}
 	if err := context.Ctx.Current.EstablishPTY(); err != nil {
-		log.Error("Establish PTY failed: ", err)
+		log.Error("Establish PTY failed: %s", err)
 	}
 }
 

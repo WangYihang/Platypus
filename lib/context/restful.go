@@ -88,7 +88,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					msg := make([]byte, 0x100)
 					n, err := Ctx.Current.ReadConnLock(msg)
 					if err != nil {
-						log.Error("Read from socket failed: ", err)
+						log.Error("Read from socket failed: %s", err)
 						return
 					}
 					s.WriteBinary([]byte("0" + string(msg[0:n])))
