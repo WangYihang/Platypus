@@ -191,11 +191,12 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			log.Error("Read from client failed")
 			c.Interactive = false
+			Ctx.Current = nil
 			Ctx.DeleteTCPClient(c)
 			return outputBuffer.String()
 		}
@@ -215,7 +216,7 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -224,6 +225,7 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
+				Ctx.Current = nil
 				Ctx.DeleteTCPClient(c)
 				isTimeout = false
 			}
@@ -245,7 +247,7 @@ func (c *TCPClient) ReadSize(size int) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -253,6 +255,7 @@ func (c *TCPClient) ReadSize(size int) string {
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
+				Ctx.Current = nil
 				Ctx.DeleteTCPClient(c)
 			}
 			break
@@ -283,6 +286,7 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
+				Ctx.Current = nil
 				Ctx.DeleteTCPClient(c)
 				isTimeout = false
 			}
@@ -337,13 +341,13 @@ func (c *TCPClient) TryReadEcho(echo string) (bool, string) {
 			} else {
 				log.Error("Read from client failed")
 				c.Interactive = false
+				Ctx.Current = nil
 				Ctx.DeleteTCPClient(c)
 			}
 			break
 		}
 	}
 
-	// fmt.Println("EchoEnabled: ", EchoEnabled)
 	// Return EchoEnabled and misread data (when EchoEnabled is false)
 	return EchoEnabled, outputBuffer.String()
 }
@@ -355,6 +359,7 @@ func (c *TCPClient) Write(data []byte) int {
 	if err != nil {
 		log.Error("Write to client failed")
 		c.Interactive = false
+		Ctx.Current = nil
 		Ctx.DeleteTCPClient(c)
 	} else {
 		// fmt.Println(">>>", n, string(data[0:n]))
