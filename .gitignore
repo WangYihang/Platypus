@@ -19,3 +19,6 @@ build
 
 # config file
 config.yml
+
+# resource file
+lib/util/resource/resource.go
