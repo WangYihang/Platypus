@@ -157,16 +157,17 @@ Use `Upload` command to upload file to the current interacting client.
 ## TODOs
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
 - [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
-- [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
-- [ ] More interfaces in RESTful API
+- [ ] Router through clients
 - [ ] RESTful API should auth
 - [ ] Use crontab
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Provide full kernel API
 - [ ] List file
-- [ ] Web UI
 - [ ] Benchmark
+- [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
+- [x] More interfaces in RESTful API
+- [x] Web UI
 - [x] Continuous Integration
 - [x] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
 - [x] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
