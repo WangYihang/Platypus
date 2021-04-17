@@ -17,7 +17,6 @@ func (dispatcher Dispatcher) Alias(args []string) {
 	}
 
 	// Ensure the interactive session is set
-	context.Ctx.AllowInterrupt = true
 	if context.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
