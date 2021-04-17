@@ -3,8 +3,8 @@ package context
 import (
 	"os"
 	"os/signal"
-
-	// "syscall"
+	"sync"
+	"syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/readline"
@@ -12,49 +12,37 @@ import (
 )
 
 type Context struct {
-	Servers        map[string](*TCPServer)
-	Current        *TCPClient
-	CommandPrompt  string
-	RLInstance     *readline.Instance
-	AllowInterrupt bool
+	Servers       map[string](*TCPServer)
+	Current       *TCPClient
+	CommandPrompt string
+	RLInstance    *readline.Instance
+	Interacting   *sync.Mutex
 }
 
 var Ctx *Context
 
 func Signal() {
 	// Capture Signal
-	c := make(chan os.Signal, 1)
-
-	// Notify SIGHUP
+	c := make(chan os.Signal)
 	signal.Notify(
 		c,
-		os.Interrupt,
 		// syscall.SIGTSTP,
+		syscall.SIGTERM,
+		os.Interrupt,
 	)
 
 	go func() {
 		for {
 			switch sig := <-c; sig {
+			// case syscall.SIGTSTP:
+			// 	log.Info("syscall.SIGTERM, Exit?")
+			case syscall.SIGTERM:
+				log.Info("syscall.SIGTERM, Exit?")
 			case os.Interrupt:
-				if Ctx.AllowInterrupt {
-					// CTRL C
-					log.Error("%s signal found", sig)
-					i := Ctx.Current.Write([]byte("\x03"))
-					log.Error("%d bytes written", i)
-
-				}
-				// commented for windows platform
-				// windows platform does not support SIGTSTP
-				// so the compilation will fail.
-				/*
-					case syscall.SIGTSTP:
-						if Ctx.AllowInterrupt {
-							// CTRL Z
-							log.Error("%s signal found", sig)
-							i := Ctx.Current.Write([]byte("\x1A"))
-							log.Error("%d bytes written", i)
-						}
-				*/
+				// if Ctx.Current.PtyEstablished && Ctx.Current.Interactive {
+				// 	// Exit pty gracefully
+				// }
+				log.Info("os.Interrupt, Exit?")
 			}
 		}
 	}()
@@ -63,11 +51,11 @@ func Signal() {
 func CreateContext() {
 	if Ctx == nil {
 		Ctx = &Context{
-			Servers:        make(map[string](*TCPServer)),
-			Current:        nil,
-			CommandPrompt:  color.CyanString("» "),
-			RLInstance:     nil,
-			AllowInterrupt: true,
+			Servers:       make(map[string](*TCPServer)),
+			Current:       nil,
+			CommandPrompt: color.CyanString("» "),
+			RLInstance:    nil,
+			Interacting:   new(sync.Mutex),
 		}
 	}
 	// Signal Handler

