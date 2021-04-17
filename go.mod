@@ -8,12 +8,15 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.9.0
-	github.com/gin-gonic/gin v1.5.0
+	github.com/gin-contrib/cors v1.3.1
+	github.com/gin-contrib/static v0.0.1
+	github.com/gin-gonic/gin v1.6.3
 	github.com/go-bindata/go-bindata v3.1.2+incompatible // indirect
 	github.com/go-openapi/errors v0.19.3 // indirect
 	github.com/go-openapi/strfmt v0.19.4 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/golang/protobuf v1.5.1 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -29,11 +32,13 @@ require (
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/vbauerster/mpb/v6 v6.0.2
 	go.mongodb.org/mongo-driver v1.3.0 // indirect
-	golang.org/x/crypto v0.0.0-20210317152858-513c2a44f670 // indirect
+	golang.org/x/crypto v0.0.0-20210317152858-513c2a44f670
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4 // indirect
 	golang.org/x/oauth2 v0.0.0-20210313182246-cd4f82c27b84 // indirect
+	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
+	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376
 	gopkg.in/yaml.v2 v2.2.8
 )
