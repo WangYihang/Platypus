@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/WangYihang/Platypus/lib/context"
 	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/WangYihang/Platypus/lib/util/timeout"
-	"github.com/fatih/color"
+	"golang.org/x/term"
 )
 
 func (dispatcher Dispatcher) Interact(args []string) {
-	context.Ctx.AllowInterrupt = true
 	if context.Ctx.Current == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
@@ -21,58 +20,86 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	log.Info("Interacting with %s", context.Ctx.Current.FullDesc())
 
 	// Set to interactive
+	context.Ctx.Current.Interacting.Lock()
+	defer func() { context.Ctx.Current.Interacting.Unlock() }()
 	context.Ctx.Current.Interactive = true
-	inputChannel := make(chan []byte, 1024)
+	defer func() { context.Ctx.Current.Interactive = false }()
 
-	// write to socket fd
-	go func() {
-		for {
-			select {
-			case data := <-inputChannel:
-				if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
-					return
-				}
-				context.Ctx.Current.Write(data)
-			}
-		}
-	}()
+	context.Ctx.Interacting.Lock()
+	defer func() { context.Ctx.Interacting.Unlock() }()
 
-	// read from socket fd
-	printer := color.New(color.FgCyan)
-
-	go func() {
-		for {
-			if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
-				return
-			}
-
-			buffer, _ := context.Ctx.Current.Read(timeout.GenerateTimeout())
-			printer.Print(buffer)
-		}
-	}()
-
-	for {
-		if context.Ctx.Current == nil || !context.Ctx.Current.Interactive {
-			return
-		}
-		// Read command
-		inputReader := bufio.NewReader(os.Stdin)
-		command, err := inputReader.ReadString('\n')
+	if context.Ctx.Current.PtyEstablished {
+		// Step 4: Enable Raw mode of attacker pty
+		log.Info("Setting attacker terminal to raw mode")
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
-			log.Error("Read from stdin failed")
-			continue
+			panic(err)
 		}
-		command = strings.TrimSpace(command)
-		if command == "exit" {
-			context.Ctx.Current.Interactive = false
-			context.Ctx.AllowInterrupt = false
-			break
+		// Restore tty properties
+		defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+
+		var cont bool = true
+
+		// Client output -> Platypus stdout
+		go func() {
+			for context.Ctx.Current.Interactive && context.Ctx.Current.PtyEstablished && cont {
+				context.Ctx.Current.GetConn().SetReadDeadline(time.Time{})
+				m := make([]byte, 1)
+				n, err := context.Ctx.Current.ReadConnLock(m)
+				if err == nil {
+					os.Stdout.Write(m[0:n])
+				}
+			}
+		}()
+		magic := "mamimamihong"
+		inputQueueIndex := 0
+		inputQueueLength := len(magic)
+		inputQueue := make([]byte, inputQueueLength)
+		// Client input <- Platypus stdin
+		for context.Ctx.Current.Interactive && context.Ctx.Current.PtyEstablished && cont {
+			fmt.Println(">>>", string(inputQueue))
+			// Magic exit mantra: 'abaaba' is typed
+			if strings.Contains(string(inputQueue), magic) {
+				cont = false
+				term.Restore(int(os.Stdin.Fd()), oldState)
+			}
+			m := make([]byte, 1)
+			n, err := os.Stdin.Read(m)
+			if err == nil {
+				for i := 0; i < n; i++ {
+					inputQueue[inputQueueIndex] = m[i]
+				}
+				inputQueueIndex += n
+				inputQueueIndex %= inputQueueLength
+				context.Ctx.Current.Write(m[0:n])
+			}
+			// UnEstablish
 		}
-		if command == "shell" {
-			command = "python -c 'import pty;pty.spawn(\"/bin/sh\")'"
+	} else {
+		log.Error("PTY is not established, drop into normal reverse shell mode")
+
+		// Client output -> Platypus stdout
+		go func() {
+			for context.Ctx.Current.Interactive && !context.Ctx.Current.PtyEstablished {
+				context.Ctx.Current.GetConn().SetReadDeadline(time.Time{})
+				m := make([]byte, 0x100)
+				n, err := context.Ctx.Current.ReadConnLock(m)
+				if err == nil {
+					os.Stdout.Write(m[0:n])
+				}
+			}
+		}()
+
+		// Client input <- Platypus stdin
+		for context.Ctx.Current.Interactive && !context.Ctx.Current.PtyEstablished {
+			inputReader := bufio.NewReader(os.Stdin)
+			command, _ := inputReader.ReadString('\n')
+			command = strings.TrimSpace(command)
+			if command == "exit" {
+				break
+			}
+			context.Ctx.Current.Write([]byte(command + "\n"))
 		}
-		// Send command
-		inputChannel <- []byte(command + "\n")
 	}
 }
 
