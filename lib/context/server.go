@@ -11,6 +11,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/raas"
+	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
@@ -233,6 +234,7 @@ func (s *TCPServer) Stop() {
 	s.stopped <- struct{}{}
 
 	// Connect to the listener, in order to call listener.Close() immediately
+	// ???
 	go func() {
 		tmp, _ := net.Dial("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
 		if tmp != nil {
@@ -248,6 +250,8 @@ func (s *TCPServer) Stop() {
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.GroupDispatch = s.GroupDispatch
 	log.Debug("Gathering information from client...")
+	echoEnabled, _ := client.TryReadEcho(str.RandomString(0x10))
+	client.EchoEnabled = echoEnabled
 	client.DetectOS()
 	client.DetectUser()
 	client.DetectPython()
