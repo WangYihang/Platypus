@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title><%= htmlWebpackPlugin.options.title %></title>
+    <link inline rel="icon" type="image/png" href="favicon.png">
+    <% for (const css in htmlWebpackPlugin.files.css) { %>
+    <link inline rel="stylesheet" type="text/css" href="<%= htmlWebpackPlugin.files.css[css] %>">
+    <% } %>
+</head>
+<body>
+<% for (const js in htmlWebpackPlugin.files.js) { %>
+<script inline type="text/javascript" src="<%= htmlWebpackPlugin.files.js[js] %>"></script>
+<% } %>
+</body>
+</html>
