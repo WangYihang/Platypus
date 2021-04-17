@@ -3,13 +3,18 @@ go:
   - 1.13.x
   - 1.14.x
 before_install:
-  - sudo apt -y install upx
+  - curl -fsSL https://deb.nodesource.com/setup_12.x | sudo -E bash -
+  - sudo apt-get install -y upx nodejs npm
+  - sudo npm install --global yarn
 addons:
   apt:
     update: true
 script:
+  - cd html && yarn build && cd ..
   - go test ./...
   - go get github.com/mitchellh/gox
+  - go get -u github.com/go-bindata/go-bindata/...
+  - go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/... ./html/dist
   - test ${TRAVIS_TAG} && gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
   - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ; echo "Skipping compress with upx..."
   - test !${TRAVIS_TAG} && go build
