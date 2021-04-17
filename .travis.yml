@@ -15,7 +15,10 @@ addons:
     update: true
 script:
   - go test ./...
-  - test ${TRAVIS_TAG} && gox -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
+  - test ${TRAVIS_TAG} && gox -os="linux" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
+  - test ${TRAVIS_TAG} && gox -os="windows" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
+  - test ${TRAVIS_TAG} && gox -os="darwin" -arch="arm64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
+  - test ${TRAVIS_TAG} && gox -os="darwin" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
   - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ; echo "Skipping compress with upx..."
   - test !${TRAVIS_TAG} && go build
 deploy:
