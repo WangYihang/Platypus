@@ -2,9 +2,11 @@ package context
 
 import (
 	"fmt"
+	"io/ioutil"
 	"strconv"
 	"time"
 
+	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
@@ -45,9 +47,8 @@ func panicRESTfully(c *gin.Context, msg string) bool {
 }
 
 func CreateRESTfulAPIServer() *gin.Engine {
-	// gin.SetMode(gin.ReleaseMode)
-	gin.SetMode(gin.DebugMode)
-	// gin.DefaultWriter = ioutil.Discard
+	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = ioutil.Discard
 	rest := gin.Default()
 
 	rest.Use(cors.New(cors.Config{
@@ -137,7 +138,10 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 	})
 
-	rest.Use(static.Serve("/", static.LocalFile("./html/dist", false)))
+	// Static files
+	rest.Use(static.Serve("/", fs.BinaryFileSystem("./html/dist")))
+
+	// TODO: Websocket UI Auth (to be implemented)
 	rest.GET("/token", func(c *gin.Context) {
 		c.String(200, "")
 	})
@@ -287,10 +291,17 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		cmd := c.PostForm("cmd")
 		for _, server := range Ctx.Servers {
 			if client, exist := server.Clients[hash]; exist {
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    client.SystemToken(cmd),
-				})
+				if client.PtyEstablished {
+					c.JSON(200, gin.H{
+						"status": false,
+						"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",
+					})
+				} else {
+					c.JSON(200, gin.H{
+						"status": true,
+						"msg":    client.SystemToken(cmd),
+					})
+				}
 				c.Abort()
 				return
 			}
