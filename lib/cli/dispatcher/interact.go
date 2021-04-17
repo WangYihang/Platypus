@@ -51,18 +51,26 @@ func (dispatcher Dispatcher) Interact(args []string) {
 				}
 			}
 		}()
-		magic := "mamimamihong"
+		magic := "exit"
 		inputQueueIndex := 0
-		inputQueueLength := len(magic)
+		inputQueueLength := len(magic) + 2 // + 2 for clrf
 		inputQueue := make([]byte, inputQueueLength)
 		// Client input <- Platypus stdin
 		for context.Ctx.Current.Interactive && context.Ctx.Current.PtyEstablished && cont {
-			fmt.Println(">>>", string(inputQueue))
-			// Magic exit mantra: 'abaaba' is typed
-			if strings.Contains(string(inputQueue), magic) {
+			// Magic exit mantra: 'exit' is typed
+			// Check whether user want to exit pty mode
+			// BUG: Only works in shell prompt,
+			// 		failed in foreground process trying to read from stdin (eg: vim / htop)
+			//		failed in nested shell (eg: bash -> ... -> bash)
+			if strings.Contains(string(inputQueue)+string(inputQueue), "\n"+magic+"\n") ||
+				strings.Contains(string(inputQueue)+string(inputQueue), "\r"+magic+"\r") {
+				// Exit Pty
 				cont = false
+				context.Ctx.Current.PtyEstablished = false
 				term.Restore(int(os.Stdin.Fd()), oldState)
+				break
 			}
+
 			m := make([]byte, 1)
 			n, err := os.Stdin.Read(m)
 			if err == nil {
@@ -73,11 +81,9 @@ func (dispatcher Dispatcher) Interact(args []string) {
 				inputQueueIndex %= inputQueueLength
 				context.Ctx.Current.Write(m[0:n])
 			}
-			// UnEstablish
 		}
 	} else {
 		log.Error("PTY is not established, drop into normal reverse shell mode")
-
 		// Client output -> Platypus stdout
 		go func() {
 			for context.Ctx.Current.Interactive && !context.Ctx.Current.PtyEstablished {
