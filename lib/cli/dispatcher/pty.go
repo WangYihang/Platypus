@@ -19,12 +19,11 @@ func (dispatcher Dispatcher) PTY(args []string) {
 
 func (dispatcher Dispatcher) PTYHelp(args []string) {
 	fmt.Println("Usage of PTY")
-	fmt.Println("\tPTY [HOST] [PORT]")
-	fmt.Println("\tHOST\tTHe host you want to listen on")
-	fmt.Println("\tPORT\tTHe port you want to listen on")
+	fmt.Println("\tFirst use `Jump` to select a client, then type `PTY`, then type `Interact` to drop into a fully interactive shell.")
+	fmt.Println("\tYou can just simply type `exit` to exit pty mode")
 }
 
 func (dispatcher Dispatcher) PTYDesc(args []string) {
 	fmt.Println("PTY")
-	fmt.Println("\tTry to PTY a server, listening on a port, waiting for client to connect")
+	fmt.Println("\tTry to Spawn '/bin/bash' via Python, then the shell is fully interactive (You can use vim / htop and other stuffs)")
 }
