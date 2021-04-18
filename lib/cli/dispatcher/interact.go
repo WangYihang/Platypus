@@ -17,18 +17,20 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
-	log.Info("Interacting with %s", context.Ctx.Current.FullDesc())
+
+	current := context.Ctx.Current
+	log.Info("Interacting with %s", current.FullDesc())
 
 	// Set to interactive
-	context.Ctx.Current.Interacting.Lock()
-	defer func() { context.Ctx.Current.Interacting.Unlock() }()
-	context.Ctx.Current.Interactive = true
-	defer func() { context.Ctx.Current.Interactive = false }()
+	current.Interacting.Lock()
+	defer func() { current.Interacting.Unlock() }()
+	current.Interactive = true
+	defer func() { current.Interactive = false }()
 
 	context.Ctx.Interacting.Lock()
 	defer func() { context.Ctx.Interacting.Unlock() }()
 
-	if context.Ctx.Current.PtyEstablished {
+	if current.PtyEstablished {
 		// Step 4: Enable Raw mode of attacker pty
 		log.Info("Setting attacker terminal to raw mode")
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -42,54 +44,76 @@ func (dispatcher Dispatcher) Interact(args []string) {
 
 		// Client output -> Platypus stdout
 		go func() {
-			for context.Ctx.Current.Interactive && context.Ctx.Current.PtyEstablished && cont {
-				context.Ctx.Current.GetConn().SetReadDeadline(time.Time{})
+			for current.Interactive && current.PtyEstablished && cont {
+				current.GetConn().SetReadDeadline(time.Time{})
 				m := make([]byte, 1)
-				n, err := context.Ctx.Current.ReadConnLock(m)
+				n, err := current.ReadConnLock(m)
 				if err == nil {
 					os.Stdout.Write(m[0:n])
 				}
 			}
 		}()
 		magic := "exit"
+		firstLine := true
 		inputQueueIndex := 0
-		inputQueueLength := len(magic) + 2 // + 2 for clrf
+		inputQueueLength := len(magic) + 1 // + 1 for clrf
 		inputQueue := make([]byte, inputQueueLength)
 		// Client input <- Platypus stdin
-		for context.Ctx.Current.Interactive && context.Ctx.Current.PtyEstablished && cont {
+		for current.Interactive && current.PtyEstablished && cont {
 			// Magic exit mantra: 'exit' is typed
 			// Check whether user want to exit pty mode
 			// BUG: Only works in shell prompt,
 			// 		failed in foreground process trying to read from stdin (eg: vim / htop)
 			//		failed in nested shell (eg: bash -> ... -> bash)
-			if strings.Contains(string(inputQueue)+string(inputQueue), "\n"+magic+"\n") ||
-				strings.Contains(string(inputQueue)+string(inputQueue), "\r"+magic+"\r") {
+			fmt.Println(inputQueue)
+			var pattern string
+			if firstLine {
+				pattern = magic
+			} else {
+				pattern = "\r" + magic
+			}
+			matched := false
+			if strings.Contains(string(inputQueue)+string(inputQueue), pattern) {
 				// Exit Pty
-				cont = false
-				context.Ctx.Current.PtyEstablished = false
-				term.Restore(int(os.Stdin.Fd()), oldState)
-				break
+				matched = true
 			}
 
 			m := make([]byte, 1)
 			n, err := os.Stdin.Read(m)
 			if err == nil {
 				for i := 0; i < n; i++ {
-					inputQueue[inputQueueIndex] = m[i]
+					// Backspace
+					if m[i] == 8 {
+						// inputQueueIndex = int(math.Max(float64(0), float64(inputQueueIndex-1)))
+						inputQueueIndex--
+						if inputQueueIndex < 0 {
+							inputQueueIndex = inputQueueLength + inputQueueIndex
+						}
+					} else {
+						// user typed: `\rexit` + `\r`
+						if m[i] == 13 && matched {
+							firstLine = false
+							cont = false
+							current.PtyEstablished = false
+							term.Restore(int(os.Stdin.Fd()), oldState)
+							break
+						}
+						inputQueue[inputQueueIndex] = m[i]
+						inputQueueIndex += n
+						inputQueueIndex %= inputQueueLength
+					}
 				}
-				inputQueueIndex += n
-				inputQueueIndex %= inputQueueLength
-				context.Ctx.Current.Write(m[0:n])
+				current.Write(m[0:n])
 			}
 		}
 	} else {
-		log.Error("PTY is not established, drop into normal reverse shell mode")
+		log.Error("PTY is not established, drop into normal reverse shell mode. You can use `PTY` command to enable PTY mode.")
 		// Client output -> Platypus stdout
 		go func() {
-			for context.Ctx.Current.Interactive && !context.Ctx.Current.PtyEstablished {
-				context.Ctx.Current.GetConn().SetReadDeadline(time.Time{})
+			for current.Interactive && !current.PtyEstablished {
+				current.GetConn().SetReadDeadline(time.Time{})
 				m := make([]byte, 0x100)
-				n, err := context.Ctx.Current.ReadConnLock(m)
+				n, err := current.ReadConnLock(m)
 				if err == nil {
 					os.Stdout.Write(m[0:n])
 				}
@@ -97,14 +121,14 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}()
 
 		// Client input <- Platypus stdin
-		for context.Ctx.Current.Interactive && !context.Ctx.Current.PtyEstablished {
+		for current.Interactive && !current.PtyEstablished {
 			inputReader := bufio.NewReader(os.Stdin)
 			command, _ := inputReader.ReadString('\n')
 			command = strings.TrimSpace(command)
 			if command == "exit" {
 				break
 			}
-			context.Ctx.Current.Write([]byte(command + "\n"))
+			current.Write([]byte(command + "\n"))
 		}
 	}
 }
