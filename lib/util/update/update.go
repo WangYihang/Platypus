@@ -10,11 +10,11 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-const version = "1.3.3"
+const version = "1.3.4"
 
 func ConfirmAndSelfUpdate() {
 	log.Info("Detecting the latest version...")
-	latest, found, err := selfupdate.DetectLatest("wangyihang/Platypus")
+	latest, found, err := selfupdate.DetectLatest("WangYihang/Platypus")
 	if err != nil {
 		log.Error("Error occurred while detecting version: %s", err)
 		return
