@@ -193,13 +193,20 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	for {
 		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		n, err := c.ReadConnLock(inputBuffer)
+
 		if err != nil {
-			log.Error("Read from client failed")
-			c.Interactive = false
-			Ctx.Current = nil
-			Ctx.DeleteTCPClient(c)
-			return outputBuffer.String()
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				log.Error("Read response timeout from client")
+			} else {
+				log.Error("Read from client failed")
+				c.Interactive = false
+				Ctx.Current = nil
+				Ctx.DeleteTCPClient(c)
+				return outputBuffer.String()
+			}
+			break
 		}
+
 		outputBuffer.Write(inputBuffer[:n])
 		// If found token, then finish reading
 		if strings.HasSuffix(outputBuffer.String(), token) {
@@ -356,14 +363,18 @@ func (c *TCPClient) Write(data []byte) int {
 	c.writeLock.Lock()
 	n, err := c.conn.Write(data)
 	c.writeLock.Unlock()
+
 	if err != nil {
-		log.Error("Write to client failed")
-		c.Interactive = false
-		Ctx.Current = nil
-		Ctx.DeleteTCPClient(c)
-	} else {
-		// fmt.Println(">>>", n, string(data[0:n]))
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			log.Error("Write to client timeout from client")
+		} else {
+			log.Error("Write to client failed, ")
+			c.Interactive = false
+			Ctx.Current = nil
+			Ctx.DeleteTCPClient(c)
+		}
 	}
+
 	log.Debug("%d bytes sent to client", n)
 	return n
 }
