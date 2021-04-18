@@ -70,24 +70,25 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	m.HandleConnect(func(s *melody.Session) {
 		// Set to interactive
 		if Ctx.Current != nil {
+			current := Ctx.Current
 			// Lock
-			Ctx.Current.Interacting.Lock()
-			Ctx.Current.Interactive = true
+			current.Interacting.Lock()
+			current.Interactive = true
 
 			// Incase somebody is interacting via cli
-			Ctx.Current.EstablishPTY()
+			current.EstablishPTY()
 			// SET_WINDOW_TITLE '1'
 			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
 			// SET_PREFERENCES '2'
 			s.WriteBinary([]byte("2" + "{ }"))
 
 			// OUTPUT '0'
-			Ctx.Current.Write([]byte("\n"))
+			current.Write([]byte("\n"))
 			go func(s *melody.Session) {
-				for Ctx.Current != nil && !s.IsClosed() {
-					Ctx.Current.GetConn().SetReadDeadline(time.Time{})
+				for current != nil && !s.IsClosed() {
+					current.GetConn().SetReadDeadline(time.Time{})
 					msg := make([]byte, 0x100)
-					n, err := Ctx.Current.ReadConnLock(msg)
+					n, err := current.ReadConnLock(msg)
 					if err != nil {
 						log.Error("Read from socket failed: %s", err)
 						return
@@ -102,17 +103,18 @@ func CreateRESTfulAPIServer() *gin.Engine {
 
 	m.HandleMessageBinary(func(s *melody.Session, msg []byte) {
 		if Ctx.Current != nil && Ctx.Current.Interactive {
+			current := Ctx.Current
 			opcode := msg[0]
 			body := msg[1:]
 			switch opcode {
 			case '0': // INPUT '0'
-				Ctx.Current.Write(body)
+				current.Write(body)
 			case '1': // RESIZE_TERMINAL '1'
 				// Raw reverse shell does not support resize terminal size when
 				// in interactive foreground program, eg: vim
 				// var ws WindowSize
 				// json.Unmarshal(body, &ws)
-				// Ctx.Current.SetWindowSize(&ws)
+				// current.SetWindowSize(&ws)
 			case '2': // PAUSE '2'
 				// TODO: Pause, support for zmodem
 			case '3': // RESUME '3'
@@ -122,7 +124,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				// in interactive foreground program, eg: vim
 				// var ws WindowSize
 				// json.Unmarshal([]byte("{"+string(body)), &ws)
-				// Ctx.Current.SetWindowSize(&ws)
+				// current.SetWindowSize(&ws)
 			default:
 				fmt.Println("Invalid message: ", string(msg))
 			}
@@ -133,8 +135,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 
 	m.HandleDisconnect(func(s *melody.Session) {
 		if Ctx.Current != nil && Ctx.Current.Interactive {
-			Ctx.Current.Interactive = false
-			Ctx.Current.Interacting.Unlock()
+			current := Ctx.Current
+			current.Interactive = false
+			current.Interacting.Unlock()
 		}
 	})
 
