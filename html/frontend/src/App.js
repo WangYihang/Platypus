@@ -98,9 +98,9 @@ const columns = [
       return (
         <Button>
           <a
-            href={[baseUrl, "/shell" + "/?" + line.hash].join("")}
+            href={baseUrl + "/shell/?" + line.hash}
             target={"_blank"}
-            rel={["noopener", "noreferrer"].join(" ")}
+            rel={"noreferrer"}
           >
             Shell
           </a>
@@ -134,7 +134,8 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    this.state.fetchData = () => {
+    this.setState({
+      fetchData: () => {
       axios
         .get([apiUrl, "/server"].join(""))
         .then((response) => {
@@ -161,10 +162,7 @@ class App extends React.Component {
           if (this.state.clients.length > 0) {
             axios
               .get(
-                [
-                  apiUrl,
-                  "/server" + "/" + this.state.servers[0].hash + "/client",
-                ].join("")
+                  apiUrl + "/server/" + this.state.servers[0].hash + "/client"
               )
               .then((response) => {
                 this.setState({
@@ -177,7 +175,7 @@ class App extends React.Component {
           this.setState({ endPointAlive: false });
           message.error("Cannot connect to API EndPoint: " + error, 5);
         });
-    };
+    }});
 
     this.state.fetchData();
 
@@ -299,11 +297,7 @@ class App extends React.Component {
                     key={value.hash}
                     onClick={(item, key, keyPath, domEvent) => {
                       axios
-                        .get(
-                          [apiUrl, "/server" + "/" + item.key + "/client"].join(
-                            ""
-                          )
-                        )
+                        .get(apiUrl, "/server/" + item.key + "/client")
                         .then((response) => {
                           this.setState({
                             clients: generateClientsArray(response.data.msg),
