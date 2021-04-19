@@ -64,10 +64,12 @@ func main() {
 		rp := config.RESTful.Port
 		rest := context.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
-		log.Info("RESTful HTTP Server running at %s:%d", rh, rp)
+		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
+		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
+		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
+		log.Success("You can use PythonSDK to manager all your clients automatically.")
 	}
 
-	log.Info("You can manager all your clients with any web browser: ")
 	// Run main loop
 	dispatcher.Run()
 }

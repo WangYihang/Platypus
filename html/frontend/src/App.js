@@ -75,7 +75,7 @@ const columns = [
     title: 'Action',
     key: 'x',
     render: (data, line, index) => {
-      return <Button><a href={[baseUrl, "/shell" + "/?" + line.hash].join("")} target={"_blank"}>Shell</a></Button>
+      return <Button><a href={[baseUrl, "/shell" + "/?" + line.hash].join("")} target={"_blank"} rel={["noopener", "noreferrer"].join(" ")}>Shell</a></Button>
     },
   },
 ];
