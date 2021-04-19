@@ -85,6 +85,9 @@ func (ctx Context) DeleteTCPClient(c *TCPClient) {
 }
 
 func (ctx Context) FindTCPClientByAlias(alias string) *TCPClient {
+	if alias == "" {
+		return nil
+	}
 	for _, server := range Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
@@ -96,6 +99,9 @@ func (ctx Context) FindTCPClientByAlias(alias string) *TCPClient {
 }
 
 func (ctx Context) FindTCPClientByHash(hash string) *TCPClient {
+	if hash == "" {
+		return nil
+	}
 	for _, server := range Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
