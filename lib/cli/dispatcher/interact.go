@@ -65,7 +65,6 @@ func (dispatcher Dispatcher) Interact(args []string) {
 			// BUG: Only works in shell prompt,
 			// 		failed in foreground process trying to read from stdin (eg: vim / htop)
 			//		failed in nested shell (eg: bash -> ... -> bash)
-			fmt.Println(inputQueue)
 			var pattern string
 			if firstLine {
 				pattern = magic

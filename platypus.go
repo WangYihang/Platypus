@@ -17,12 +17,12 @@ import (
 type Config struct {
 	Servers []struct {
 		Host       string `yaml:"host"`
-		Port       int16  `yaml:"port"`
+		Port       uint16 `yaml:"port"`
 		HashFormat string `yaml:"hashFormat"`
 	}
 	RESTful struct {
 		Host   string `yaml:"host"`
-		Port   int16  `yaml:"port"`
+		Port   uint16 `yaml:"port"`
 		Enable bool   `yaml:"enable"`
 	}
 	Update bool
@@ -66,6 +66,8 @@ func main() {
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Info("RESTful HTTP Server running at %s:%d", rh, rp)
 	}
+
+	log.Info("You can manager all your clients with any web browser: ")
 	// Run main loop
 	dispatcher.Run()
 }
