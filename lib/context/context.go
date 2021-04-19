@@ -3,6 +3,7 @@ package context
 import (
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -81,4 +82,26 @@ func (ctx Context) DeleteTCPClient(c *TCPClient) {
 	for _, server := range Ctx.Servers {
 		(*server).DeleteTCPClient(c)
 	}
+}
+
+func (ctx Context) FindTCPClientByAlias(alias string) *TCPClient {
+	for _, server := range Ctx.Servers {
+		for _, client := range (*server).GetAllTCPClients() {
+			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
+				return client
+			}
+		}
+	}
+	return nil
+}
+
+func (ctx Context) FindTCPClientByHash(hash string) *TCPClient {
+	for _, server := range Ctx.Servers {
+		for _, client := range (*server).GetAllTCPClients() {
+			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
+				return client
+			}
+		}
+	}
+	return nil
 }
