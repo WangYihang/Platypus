@@ -49,15 +49,6 @@ func main() {
 		update.ConfirmAndSelfUpdate()
 	}
 
-	// Init servers from config file
-	for _, s := range config.Servers {
-		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat)
-		// avoid terminal being disrupted
-		time.Sleep(0x100 * time.Millisecond)
-		go (*server).Run()
-		context.Ctx.AddServer(server)
-	}
-
 	// Init RESTful Server from config file
 	if config.RESTful.Enable {
 		rh := config.RESTful.Host
@@ -68,6 +59,14 @@ func main() {
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")
+	}
+
+	// Init servers from config file
+	for _, s := range config.Servers {
+		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat)
+		// avoid terminal being disrupted
+		time.Sleep(0x100 * time.Millisecond)
+		go (*server).Run()
 	}
 
 	// Run main loop

