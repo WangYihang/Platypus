@@ -42,7 +42,7 @@ type TCPClient struct {
 	GroupDispatch     bool              `json:"group_dispatch"`
 	Hash              string            `json:"hash"`
 	Host              string            `json:"host"`
-	Port              int16             `json:"port"`
+	Port              uint16            `json:"port"`
 	Alias             string            `json:"alias"`
 	User              string            `json:"user"`
 	OS                OperatingSystem   `json:"os"`
@@ -69,7 +69,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		GroupDispatch:     false,
 		Hash:              "",
 		Host:              host,
-		Port:              int16(port),
+		Port:              uint16(port),
 		Alias:             "",
 		NetworkInterfaces: map[string]string{},
 		OS:                Unknown,

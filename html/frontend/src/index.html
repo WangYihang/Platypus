@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <!-- import CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="./css/style.css">
+    <!-- import Vue before Element -->
+    <script src="https://unpkg.com/vue/dist/vue.js"></script>
+    <script src="https://unpkg.com/vue-router/dist/vue-router.js"></script>
+    <!-- import JavaScript -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.11.0/xterm.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <el-container>
+            <el-aside style="background-color: rgb(238, 241, 246)">
+                <el-menu>
+                    <li v-for="(server, hash) in servers">
+                        <el-menu-item index="1-1">{{ serverDescription(server) }}</el-menu-item>
+                    </li>
+                </el-menu>
+            </el-aside>
+
+
+
+            <el-container>
+                <el-main>
+                    <el-table :data="clientsTableData">
+                        <el-table-column type="expand">
+                            <template slot-scope="props">
+                                <p>port: {{ props.row.port }}</p>
+                                <p>alias: {{ props.row.alias }}</p>
+                                <p>python2: {{ props.row.python2 }}</p>
+                                <p>python3: {{ props.row.python3 }}</p>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="host" label="IP"></el-table-column>
+                        <el-table-column prop="port" label="Port"></el-table-column>
+                        <el-table-column prop="alias" label="Alias"></el-table-column>
+                        <el-table-column prop="user" label="Username"></el-table-column>
+                        <el-table-column prop="python2" label="Python2"></el-table-column>
+                        <el-table-column prop="python3" label="Python3"></el-table-column>
+                        <el-table-column prop="timestamp" label="TimeStamp"></el-table-column>
+                    </el-table>
+                </el-main>
+            </el-container>
+        </el-container>
+        <div id="terminal"></div>
+    </div>
+    <script src="./js/index.js"></script>
+</body>
+
+</html>

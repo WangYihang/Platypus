@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/fs"
@@ -49,9 +50,9 @@ func panicRESTfully(c *gin.Context, msg string) bool {
 func CreateRESTfulAPIServer() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
-	rest := gin.Default()
+	endpoint := gin.Default()
 
-	rest.Use(cors.New(cors.Config{
+	endpoint.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "DELETE", "PUT", "PATCH"},
 		AllowHeaders:     []string{"Origin"},
@@ -63,47 +64,55 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// Websocket
 	m := melody.New()
 	m.Upgrader.Subprotocols = []string{"tty"}
-	rest.GET("/ws", func(c *gin.Context) {
+	endpoint.GET("/ws/:hash", func(c *gin.Context) {
+		if !paramsExistOrAbort(c, []string{"hash"}) {
+			return
+		}
+		client := Ctx.FindTCPClientByHash(c.Param("hash"))
+		if client == nil {
+			panicRESTfully(c, fmt.Sprintf("client is not found"))
+			return
+		}
+		log.Success("Poping up websocket shell for: %s", client.OnelineDesc())
 		m.HandleRequest(c.Writer, c.Request)
 	})
 
 	m.HandleConnect(func(s *melody.Session) {
-		// Set to interactive
-		if Ctx.Current != nil {
-			current := Ctx.Current
-			// Lock
-			current.Interacting.Lock()
-			current.Interactive = true
+		// Get client hash
+		hash := strings.Split(s.Request.URL.Path, "/")[2]
+		current := Ctx.FindTCPClientByHash(hash)
+		// Lock
+		current.Interacting.Lock()
+		current.Interactive = true
 
-			// Incase somebody is interacting via cli
-			current.EstablishPTY()
-			// SET_WINDOW_TITLE '1'
-			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
-			// SET_PREFERENCES '2'
-			s.WriteBinary([]byte("2" + "{ }"))
+		// Incase somebody is interacting via cli
+		current.EstablishPTY()
+		// SET_WINDOW_TITLE '1'
+		s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
+		// SET_PREFERENCES '2'
+		s.WriteBinary([]byte("2" + "{ }"))
 
-			// OUTPUT '0'
-			current.Write([]byte("\n"))
-			go func(s *melody.Session) {
-				for current != nil && !s.IsClosed() {
-					current.GetConn().SetReadDeadline(time.Time{})
-					msg := make([]byte, 0x100)
-					n, err := current.ReadConnLock(msg)
-					if err != nil {
-						log.Error("Read from socket failed: %s", err)
-						return
-					}
-					s.WriteBinary([]byte("0" + string(msg[0:n])))
+		// OUTPUT '0'
+		current.Write([]byte("\n"))
+		go func(s *melody.Session) {
+			for current != nil && !s.IsClosed() {
+				current.GetConn().SetReadDeadline(time.Time{})
+				msg := make([]byte, 0x100)
+				n, err := current.ReadConnLock(msg)
+				if err != nil {
+					log.Error("Read from socket failed: %s", err)
+					return
 				}
-			}(s)
-		} else {
-			// TODO: Notify front end
-		}
+				s.WriteBinary([]byte("0" + string(msg[0:n])))
+			}
+		}(s)
 	})
 
 	m.HandleMessageBinary(func(s *melody.Session, msg []byte) {
-		if Ctx.Current != nil && Ctx.Current.Interactive {
-			current := Ctx.Current
+		// Get client hash
+		hash := strings.Split(s.Request.URL.Path, "/")[2]
+		current := Ctx.FindTCPClientByHash(hash)
+		if current.Interactive {
 			opcode := msg[0]
 			body := msg[1:]
 			switch opcode {
@@ -128,190 +137,201 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			default:
 				fmt.Println("Invalid message: ", string(msg))
 			}
-		} else {
-			// TODO: Notify front end
 		}
 	})
 
 	m.HandleDisconnect(func(s *melody.Session) {
-		if Ctx.Current != nil && Ctx.Current.Interactive {
-			current := Ctx.Current
-			current.Interactive = false
-			current.Interacting.Unlock()
-		}
+		// Get client hash
+		hash := strings.Split(s.Request.URL.Path, "/")[2]
+		current := Ctx.FindTCPClientByHash(hash)
+		log.Success("Closing websocket shell for: %s", current.OnelineDesc())
+		current.Interactive = false
+		current.Interacting.Unlock()
 	})
 
 	// Static files
-	rest.Use(static.Serve("/", fs.BinaryFileSystem("./html/dist")))
+	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./html/frontend/build")))
+	// WebSocket TTYd
+	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./html/ttyd/dist")))
 
 	// TODO: Websocket UI Auth (to be implemented)
-	rest.GET("/token", func(c *gin.Context) {
+	endpoint.GET("/token", func(c *gin.Context) {
 		c.String(200, "")
 	})
 
 	// Server related
-	rest.GET("/server", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status": true,
-			"msg":    Ctx.Servers,
-		})
-		c.Abort()
-		return
-	})
-	rest.GET("/server/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		hash := c.Param("hash")
-		for _, server := range Ctx.Servers {
-			if server.Hash() == hash {
+
+	// Simple group: v1
+	RESTfulAPIGroup := endpoint.Group("/api")
+	{
+		serverAPIGroup := RESTfulAPIGroup.Group("/server")
+		{
+			serverAPIGroup.GET("/", func(c *gin.Context) {
+				c.JSON(200, gin.H{
+					"status": true,
+					"msg":    Ctx.Servers,
+				})
+				c.Abort()
+				return
+			})
+			serverAPIGroup.GET("/:hash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if server.Hash() == hash {
+						c.JSON(200, gin.H{
+							"status": true,
+							"msg":    server,
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such server")
+				return
+			})
+			serverAPIGroup.GET("/:hash/client", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if server.Hash() == hash {
+						c.JSON(200, gin.H{
+							"status": true,
+							"msg":    server.Clients,
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such server")
+				return
+			})
+			serverAPIGroup.POST("/", func(c *gin.Context) {
+				if !formExistOrAbort(c, []string{"host", "port"}) {
+					return
+				}
+				port, err := strconv.Atoi(c.Param("port"))
+				if err != nil {
+					panicRESTfully(c, "Invalid port number")
+					return
+				}
+				hashFormat := "%i %u %m %o"
+				server := CreateTCPServer(c.Param("host"), uint16(port), hashFormat)
+				go (*server).Run()
 				c.JSON(200, gin.H{
 					"status": true,
 					"msg":    server,
 				})
 				c.Abort()
 				return
-			}
-		}
-		panicRESTfully(c, "No such server")
-		return
-	})
-	rest.GET("/server/:hash/client", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		hash := c.Param("hash")
-		for _, server := range Ctx.Servers {
-			if server.Hash() == hash {
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    server.Clients,
-				})
-				c.Abort()
-				return
-			}
-		}
-		panicRESTfully(c, "No such server")
-		return
-	})
-	rest.POST("/server", func(c *gin.Context) {
-		if !formExistOrAbort(c, []string{"host", "port"}) {
-			return
-		}
-		port, err := strconv.Atoi(c.Param("port"))
-		if err != nil {
-			panicRESTfully(c, "Invalid port number")
-			return
-		}
-		hashFormat := "%i %u %m %o"
-		server := CreateTCPServer(c.Param("host"), uint16(port), hashFormat)
-		go (*server).Run()
-		c.JSON(200, gin.H{
-			"status": true,
-			"msg":    server,
-		})
-		c.Abort()
-		return
-	})
-	rest.DELETE("/server/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		hash := c.Param("hash")
-		for _, server := range Ctx.Servers {
-			if server.Hash() == hash {
-				Ctx.DeleteServer(server)
-				c.JSON(200, gin.H{
-					"status": true,
-				})
-				c.Abort()
-				return
-			}
-		}
-		panicRESTfully(c, "No such server")
-		return
-	})
-
-	// Client related
-	rest.GET("/client", func(c *gin.Context) {
-		clients := []TCPClient{}
-		for _, server := range Ctx.Servers {
-			for _, client := range (*server).GetAllTCPClients() {
-				clients = append(clients, *client)
-			}
-		}
-		c.JSON(200, gin.H{
-			"status": true,
-			"msg":    clients,
-		})
-		c.Abort()
-		return
-	})
-	rest.GET("/client/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		hash := c.Param("hash")
-		for _, server := range Ctx.Servers {
-			if client, exist := server.Clients[hash]; exist {
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    client,
-				})
-				c.Abort()
-				return
-			}
-		}
-		panicRESTfully(c, "No such client")
-		return
-	})
-	rest.DELETE("/client/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		hash := c.Param("hash")
-		for _, server := range Ctx.Servers {
-			if client, exist := server.Clients[hash]; exist {
-				Ctx.DeleteTCPClient(client)
-				c.JSON(200, gin.H{
-					"status": true,
-				})
-				c.Abort()
-				return
-			}
-		}
-		panicRESTfully(c, "No such client")
-		return
-	})
-	rest.POST("/client/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		if !formExistOrAbort(c, []string{"cmd"}) {
-			return
-		}
-		hash := c.Param("hash")
-		cmd := c.PostForm("cmd")
-		for _, server := range Ctx.Servers {
-			if client, exist := server.Clients[hash]; exist {
-				if client.PtyEstablished {
-					c.JSON(200, gin.H{
-						"status": false,
-						"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",
-					})
-				} else {
-					c.JSON(200, gin.H{
-						"status": true,
-						"msg":    client.SystemToken(cmd),
-					})
+			})
+			serverAPIGroup.DELETE("/:hash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
 				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if server.Hash() == hash {
+						Ctx.DeleteServer(server)
+						c.JSON(200, gin.H{
+							"status": true,
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such server")
+				return
+			})
+		}
+		clientAPIGroup := RESTfulAPIGroup.Group("/client")
+		{
+
+			// Client related
+			clientAPIGroup.GET("/", func(c *gin.Context) {
+				clients := []TCPClient{}
+				for _, server := range Ctx.Servers {
+					for _, client := range (*server).GetAllTCPClients() {
+						clients = append(clients, *client)
+					}
+				}
+				c.JSON(200, gin.H{
+					"status": true,
+					"msg":    clients,
+				})
 				c.Abort()
 				return
-			}
+			})
+			clientAPIGroup.GET("/:hash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if client, exist := server.Clients[hash]; exist {
+						c.JSON(200, gin.H{
+							"status": true,
+							"msg":    client,
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such client")
+				return
+			})
+			clientAPIGroup.DELETE("/:hash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if client, exist := server.Clients[hash]; exist {
+						Ctx.DeleteTCPClient(client)
+						c.JSON(200, gin.H{
+							"status": true,
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such client")
+				return
+			})
+			clientAPIGroup.POST("/:hash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				if !formExistOrAbort(c, []string{"cmd"}) {
+					return
+				}
+				hash := c.Param("hash")
+				cmd := c.PostForm("cmd")
+				for _, server := range Ctx.Servers {
+					if client, exist := server.Clients[hash]; exist {
+						if client.PtyEstablished {
+							c.JSON(200, gin.H{
+								"status": false,
+								"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",
+							})
+						} else {
+							c.JSON(200, gin.H{
+								"status": true,
+								"msg":    client.SystemToken(cmd),
+							})
+						}
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such client")
+				return
+			})
 		}
-		panicRESTfully(c, "No such client")
-		return
-	})
-
-	return rest
+	}
+	return endpoint
 }
