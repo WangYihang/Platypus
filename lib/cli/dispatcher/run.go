@@ -26,8 +26,9 @@ func (dispatcher Dispatcher) Run(args []string) {
 	// TODO: try to read the following variable from config file
 	hashFormat := "%i %u %m %o"
 	server := context.CreateTCPServer(host, uint16(port), hashFormat)
-	go (*server).Run()
-	context.Ctx.AddServer(server)
+	if server != nil {
+		go (*server).Run()
+	}
 }
 
 func (dispatcher Dispatcher) RunHelp(args []string) {

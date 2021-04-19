@@ -10,14 +10,16 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/readline"
 	"github.com/fatih/color"
+	"gopkg.in/olahol/melody.v1"
 )
 
 type Context struct {
-	Servers       map[string](*TCPServer)
-	Current       *TCPClient
-	CommandPrompt string
-	RLInstance    *readline.Instance
-	Interacting   *sync.Mutex
+	Servers         map[string](*TCPServer)
+	NotifyWebSocket *melody.Melody
+	Current         *TCPClient
+	CommandPrompt   string
+	RLInstance      *readline.Instance
+	Interacting     *sync.Mutex
 }
 
 var Ctx *Context
@@ -52,11 +54,12 @@ func Signal() {
 func CreateContext() {
 	if Ctx == nil {
 		Ctx = &Context{
-			Servers:       make(map[string](*TCPServer)),
-			Current:       nil,
-			CommandPrompt: color.CyanString("» "),
-			RLInstance:    nil,
-			Interacting:   new(sync.Mutex),
+			Servers:         make(map[string](*TCPServer)),
+			NotifyWebSocket: nil,
+			Current:         nil,
+			CommandPrompt:   color.CyanString("» "),
+			RLInstance:      nil,
+			Interacting:     new(sync.Mutex),
 		}
 	}
 	// Signal Handler
