@@ -61,9 +61,27 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Notify client online event
+	notifyWebSocket := melody.New()
+	endpoint.GET("/notify", func(c *gin.Context) {
+		notifyWebSocket.HandleRequest(c.Writer, c.Request)
+	})
+	notifyWebSocket.HandleConnect(func(s *melody.Session) {
+		log.Info("Notify client conencted from: %s", s.Request.RemoteAddr)
+	})
+
+	notifyWebSocket.HandleMessage(func(s *melody.Session, msg []byte) {
+		// Nothing to do
+	})
+
+	notifyWebSocket.HandleDisconnect(func(s *melody.Session) {
+		log.Info("Notify client disconencted from: %s", s.Request.RemoteAddr)
+	})
+	Ctx.NotifyWebSocket = notifyWebSocket
+
 	// Websocket
-	m := melody.New()
-	m.Upgrader.Subprotocols = []string{"tty"}
+	ttyWebSocket := melody.New()
+	ttyWebSocket.Upgrader.Subprotocols = []string{"tty"}
 	endpoint.GET("/ws/:hash", func(c *gin.Context) {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
@@ -74,13 +92,14 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			return
 		}
 		log.Success("Poping up websocket shell for: %s", client.OnelineDesc())
-		m.HandleRequest(c.Writer, c.Request)
+		ttyWebSocket.HandleRequest(c.Writer, c.Request)
 	})
 
-	m.HandleConnect(func(s *melody.Session) {
+	ttyWebSocket.HandleConnect(func(s *melody.Session) {
 		// Get client hash
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
 		current := Ctx.FindTCPClientByHash(hash)
+		s.Set("client", current)
 		// Lock
 		current.Interacting.Lock()
 		current.Interactive = true
@@ -108,10 +127,10 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}(s)
 	})
 
-	m.HandleMessageBinary(func(s *melody.Session, msg []byte) {
+	ttyWebSocket.HandleMessageBinary(func(s *melody.Session, msg []byte) {
 		// Get client hash
-		hash := strings.Split(s.Request.URL.Path, "/")[2]
-		current := Ctx.FindTCPClientByHash(hash)
+		value, _ := s.Get("client")
+		current := value.(*TCPClient)
 		if current.Interactive {
 			opcode := msg[0]
 			body := msg[1:]
@@ -140,10 +159,10 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 	})
 
-	m.HandleDisconnect(func(s *melody.Session) {
+	ttyWebSocket.HandleDisconnect(func(s *melody.Session) {
 		// Get client hash
-		hash := strings.Split(s.Request.URL.Path, "/")[2]
-		current := Ctx.FindTCPClientByHash(hash)
+		value, _ := s.Get("client")
+		current := value.(*TCPClient)
 		log.Success("Closing websocket shell for: %s", current.OnelineDesc())
 		current.Interactive = false
 		current.Interacting.Unlock()
@@ -166,7 +185,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	{
 		serverAPIGroup := RESTfulAPIGroup.Group("/server")
 		{
-			serverAPIGroup.GET("/", func(c *gin.Context) {
+			serverAPIGroup.GET("", func(c *gin.Context) {
 				c.JSON(200, gin.H{
 					"status": true,
 					"msg":    Ctx.Servers,
@@ -210,23 +229,31 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				panicRESTfully(c, "No such server")
 				return
 			})
-			serverAPIGroup.POST("/", func(c *gin.Context) {
+			serverAPIGroup.POST("", func(c *gin.Context) {
 				if !formExistOrAbort(c, []string{"host", "port"}) {
 					return
 				}
-				port, err := strconv.Atoi(c.Param("port"))
-				if err != nil {
+				port, err := strconv.Atoi(c.PostForm("port"))
+				if err != nil || port <= 0 || port > 65535 {
 					panicRESTfully(c, "Invalid port number")
 					return
 				}
 				hashFormat := "%i %u %m %o"
-				server := CreateTCPServer(c.Param("host"), uint16(port), hashFormat)
-				go (*server).Run()
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    server,
-				})
-				c.Abort()
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), hashFormat)
+				if server != nil {
+					go (*server).Run()
+					c.JSON(200, gin.H{
+						"status": true,
+						"msg":    server,
+					})
+					c.Abort()
+				} else {
+					c.JSON(200, gin.H{
+						"status": false,
+						"msg":    fmt.Sprintf("The server (%s:%d) already exists", c.PostForm("host"), port),
+					})
+					c.Abort()
+				}
 				return
 			})
 			serverAPIGroup.DELETE("/:hash", func(c *gin.Context) {
@@ -252,7 +279,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		{
 
 			// Client related
-			clientAPIGroup.GET("/", func(c *gin.Context) {
+			clientAPIGroup.GET("", func(c *gin.Context) {
 				clients := []TCPClient{}
 				for _, server := range Ctx.Servers {
 					for _, client := range (*server).GetAllTCPClients() {
