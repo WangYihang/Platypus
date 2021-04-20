@@ -11,6 +11,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/resource"
 	"github.com/WangYihang/Platypus/lib/util/update"
+	"github.com/pkg/browser"
 	"gopkg.in/yaml.v2"
 )
 
@@ -56,6 +57,7 @@ func main() {
 		rest := context.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
+		browser.OpenURL(fmt.Sprintf("http://%s:%d/", rh, rp))
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")
