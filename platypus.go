@@ -26,7 +26,8 @@ type Config struct {
 		Port   uint16 `yaml:"port"`
 		Enable bool   `yaml:"enable"`
 	}
-	Update bool
+	Update      bool `yaml:"update"`
+	OpenBrowser bool `yaml:"openBrowser"`
 }
 
 func main() {
@@ -39,8 +40,13 @@ func main() {
 
 	// Read config file
 	var config Config
-	content, _ := ioutil.ReadFile("config.yml")
-	yaml.Unmarshal(content, &config)
+	var ConfigFilename string = "config.yml"
+	content, _ := ioutil.ReadFile(ConfigFilename)
+	err := yaml.Unmarshal(content, &config)
+	if err != nil {
+		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", ConfigFilename, ConfigFilename)
+		return
+	}
 
 	// Create context
 	context.CreateContext()
@@ -57,7 +63,9 @@ func main() {
 		rest := context.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
-		browser.OpenURL(fmt.Sprintf("http://%s:%d/", rh, rp))
+		if config.OpenBrowser {
+			browser.OpenURL(fmt.Sprintf("http://%s:%d/", rh, rp))
+		}
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")

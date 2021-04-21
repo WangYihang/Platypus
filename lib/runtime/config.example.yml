@@ -22,3 +22,5 @@ restful:
   enable: true
 # Check new releases from GitHub when starting Platypus
 update: true
+# Open web browser to view the Web-UI on starting
+openBrowser: false
