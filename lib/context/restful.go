@@ -101,8 +101,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		current := Ctx.FindTCPClientByHash(hash)
 		s.Set("client", current)
 		// Lock
-		current.Interacting.Lock()
-		current.Interactive = true
+		current.GetInteractingLock().Lock()
+		current.SetInteractive(true)
 
 		// Incase somebody is interacting via cli
 		current.EstablishPTY()
@@ -131,7 +131,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Get client hash
 		value, _ := s.Get("client")
 		current := value.(*TCPClient)
-		if current.Interactive {
+		if current.GetInteractive() {
 			opcode := msg[0]
 			body := msg[1:]
 			switch opcode {
@@ -164,8 +164,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		value, _ := s.Get("client")
 		current := value.(*TCPClient)
 		log.Success("Closing websocket shell for: %s", current.OnelineDesc())
-		current.Interactive = false
-		current.Interacting.Unlock()
+		current.SetInteractive(false)
+		current.GetInteractingLock().Unlock()
 	})
 
 	// Static files
@@ -340,7 +340,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				cmd := c.PostForm("cmd")
 				for _, server := range Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
-						if client.PtyEstablished {
+						if client.GetPtyEstablished() {
 							c.JSON(200, gin.H{
 								"status": false,
 								"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",

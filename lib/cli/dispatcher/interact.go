@@ -22,15 +22,15 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	log.Info("Interacting with %s", current.FullDesc())
 
 	// Set to interactive
-	current.Interacting.Lock()
-	defer func() { current.Interacting.Unlock() }()
-	current.Interactive = true
-	defer func() { current.Interactive = false }()
+	current.GetInteractingLock().Lock()
+	defer func() { current.GetInteractingLock().Unlock() }()
+	current.SetInteractive(true)
+	defer func() { current.SetInteractive(false) }()
 
 	context.Ctx.Interacting.Lock()
 	defer func() { context.Ctx.Interacting.Unlock() }()
 
-	if current.PtyEstablished {
+	if current.GetPtyEstablished() {
 		// Step 4: Enable Raw mode of attacker pty
 		log.Info("Setting attacker terminal to raw mode")
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -44,7 +44,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 
 		// Client output -> Platypus stdout
 		go func() {
-			for current.Interactive && current.PtyEstablished && cont {
+			for current.GetInteractive() && current.GetPtyEstablished() && cont {
 				current.GetConn().SetReadDeadline(time.Time{})
 				m := make([]byte, 1)
 				n, err := current.ReadConnLock(m)
@@ -59,7 +59,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		inputQueueLength := len(magic) + 1 // + 1 for clrf
 		inputQueue := make([]byte, inputQueueLength)
 		// Client input <- Platypus stdin
-		for current.Interactive && current.PtyEstablished && cont {
+		for current.GetInteractive() && current.GetPtyEstablished() && cont {
 			// Magic exit mantra: 'exit' is typed
 			// Check whether user want to exit pty mode
 			// BUG: Only works in shell prompt,
@@ -93,7 +93,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 						if m[i] == 13 && matched {
 							firstLine = false
 							cont = false
-							current.PtyEstablished = false
+							current.SetPtyEstablished(false)
 							term.Restore(int(os.Stdin.Fd()), oldState)
 							break
 						}
@@ -109,7 +109,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		log.Error("PTY is not established, drop into normal reverse shell mode. You can use `PTY` command to enable PTY mode.")
 		// Client output -> Platypus stdout
 		go func() {
-			for current.Interactive && !current.PtyEstablished {
+			for current.GetInteractive() && !current.GetPtyEstablished() {
 				current.GetConn().SetReadDeadline(time.Time{})
 				m := make([]byte, 0x100)
 				n, err := current.ReadConnLock(m)
@@ -120,7 +120,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 		}()
 
 		// Client input <- Platypus stdin
-		for current.Interactive && !current.PtyEstablished {
+		for current.GetInteractive() && !current.GetPtyEstablished() {
 			inputReader := bufio.NewReader(os.Stdin)
 			command, _ := inputReader.ReadString('\n')
 			command = strings.TrimSpace(command)
