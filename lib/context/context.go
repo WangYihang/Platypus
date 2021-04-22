@@ -71,12 +71,12 @@ func GetContext() *Context {
 }
 
 func (ctx Context) AddServer(s *TCPServer) {
-	ctx.Servers[(*s).Hash()] = s
+	ctx.Servers[(*s).Hash] = s
 }
 
 func (ctx Context) DeleteServer(s *TCPServer) {
 	(*s).Stop()
-	delete(ctx.Servers, (*s).Hash())
+	delete(ctx.Servers, (*s).Hash)
 }
 
 func (ctx Context) DeleteTCPClient(c *TCPClient) {

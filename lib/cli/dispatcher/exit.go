@@ -14,7 +14,7 @@ func (dispatcher Dispatcher) Exit(args []string) {
 	}
 	for _, server := range context.Ctx.Servers {
 		(*server).Stop()
-		delete(context.Ctx.Servers, (*server).Hash())
+		delete(context.Ctx.Servers, (*server).Hash)
 	}
 	os.Exit(0)
 }

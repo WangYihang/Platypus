@@ -15,9 +15,9 @@ func (dispatcher Dispatcher) Delete(args []string) {
 		return
 	}
 	for _, server := range context.Ctx.Servers {
-		if strings.HasPrefix(server.Hash(), strings.ToLower(args[0])) {
+		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
 			context.Ctx.DeleteServer(server)
-			log.Success("Delete server node [%s]", server.Hash())
+			log.Success("Delete server node [%s]", server.Hash)
 			return
 		}
 		for _, client := range (*server).GetAllTCPClients() {
