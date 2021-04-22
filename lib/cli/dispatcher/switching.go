@@ -18,7 +18,7 @@ func (dispatcher Dispatcher) Switching(args []string) {
 	// handle the hash represent a server
 	isServer := false
 	for _, server := range context.Ctx.Servers {
-		if strings.HasPrefix(server.Hash(), strings.ToLower(args[0])) {
+		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
 			isServer = true
 			// flip server `GroupDispatch` state
 			server.GroupDispatch = !server.GroupDispatch
