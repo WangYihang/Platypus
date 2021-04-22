@@ -84,15 +84,16 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 	}
 
 	// Try to check
+	log.Info("Trying to create server on: %s", service)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
-		log.Debug("Check Resolve TCP address failed: %s", err)
+		log.Error("Resolve TCP address failed: %s", err)
 		Ctx.DeleteServer(tcpServer)
 		return nil
 	}
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		log.Debug("Check Listen failed: %s", err)
+		log.Error("Listen failed: %s", err)
 		Ctx.DeleteServer(tcpServer)
 		return nil
 	} else {
