@@ -110,7 +110,7 @@ const columns = [
           <a
             href={baseUrl + "/shell/?" + line.hash}
             target={"_blank"}
-            rel={"noreferrer"}
+            rel={"noreferrer noopener"}
           >
             Shell
           </a>
@@ -341,7 +341,7 @@ class App extends React.Component {
         <Header className="header">
           <div className="logo" />
           <h1>
-            <a href="https://github.com/WangYihang/Platypus">Platypus</a>
+            <a href="https://github.com/WangYihang/Platypus" rel="noreferrer noopener">Platypus</a>
           </h1>
         </Header>
         <Layout style={{ height: "100%" }}>
