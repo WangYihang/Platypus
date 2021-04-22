@@ -63,9 +63,6 @@ func main() {
 		rest := context.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
-		if config.OpenBrowser {
-			browser.OpenURL(fmt.Sprintf("http://%s:%d/", rh, rp))
-		}
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")
@@ -77,6 +74,10 @@ func main() {
 		// avoid terminal being disrupted
 		time.Sleep(0x100 * time.Millisecond)
 		go (*server).Run()
+	}
+
+	if config.OpenBrowser {
+		browser.OpenURL(fmt.Sprintf("http://%s:%d/", config.RESTful.Host, config.RESTful.Port))
 	}
 
 	// Run main loop
