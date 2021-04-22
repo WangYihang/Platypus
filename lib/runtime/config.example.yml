@@ -1,6 +1,6 @@
 servers: 
   - host: "0.0.0.0"
-    port: 1337
+    port: 13337
     # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
     # All available properties are listed below:
     # `%i` IP
@@ -10,7 +10,7 @@ servers:
     # `%t` Income TimeStamp
     hashFormat: "%i %u %m %o"
   - host: "0.0.0.0"
-    port: 1338
+    port: 13338
     # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
     hashFormat: "%i %u %m %o %t"
 restful:
