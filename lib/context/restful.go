@@ -199,7 +199,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 				hash := c.Param("hash")
 				for _, server := range Ctx.Servers {
-					if server.Hash() == hash {
+					if server.Hash == hash {
 						c.JSON(200, gin.H{
 							"status": true,
 							"msg":    server,
@@ -217,7 +217,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 				hash := c.Param("hash")
 				for _, server := range Ctx.Servers {
-					if server.Hash() == hash {
+					if server.Hash == hash {
 						c.JSON(200, gin.H{
 							"status": true,
 							"msg":    server.Clients,
@@ -238,8 +238,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					panicRESTfully(c, "Invalid port number")
 					return
 				}
-				hashFormat := "%i %u %m %o"
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), hashFormat)
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
@@ -250,7 +249,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				} else {
 					c.JSON(200, gin.H{
 						"status": false,
-						"msg":    fmt.Sprintf("The server (%s:%d) already exists", c.PostForm("host"), port),
+						"msg":    fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port),
 					})
 					c.Abort()
 				}
@@ -262,7 +261,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 				hash := c.Param("hash")
 				for _, server := range Ctx.Servers {
-					if server.Hash() == hash {
+					if server.Hash == hash {
 						Ctx.DeleteServer(server)
 						c.JSON(200, gin.H{
 							"status": true,

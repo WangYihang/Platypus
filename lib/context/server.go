@@ -27,6 +27,7 @@ type TCPServer struct {
 	Clients       map[string](*TCPClient) `json:"clients"`
 	TimeStamp     time.Time               `json:"timestamp"`
 	Interfaces    []string                `json:"interfaces"`
+	Hash          string                  `json:"hash"`
 	hashFormat    string
 	stopped       chan struct{}
 }
@@ -39,6 +40,11 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		return nil
 	}
 
+	// Default hashFormat
+	if hashFormat == "" {
+		hashFormat = "%i %u %m %o %t"
+	}
+
 	tcpServer := &TCPServer{
 		Host:          host,
 		Port:          port,
@@ -47,6 +53,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		Interfaces:    []string{},
 		TimeStamp:     time.Now(),
 		hashFormat:    hashFormat,
+		Hash:          hash.MD5(fmt.Sprintf("%s:%d", host, port)),
 		stopped:       make(chan struct{}, 1),
 	}
 	Ctx.Servers[hash.MD5(service)] = tcpServer
@@ -76,11 +83,23 @@ func CreateTCPServer(host string, port uint16, hashFormat string) *TCPServer {
 		tcpServer.Interfaces = append(tcpServer.Interfaces, host)
 	}
 
-	return tcpServer
-}
+	// Try to check
+	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
+	if err != nil {
+		log.Debug("Check Resolve TCP address failed: %s", err)
+		Ctx.DeleteServer(tcpServer)
+		return nil
+	}
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		log.Debug("Check Listen failed: %s", err)
+		Ctx.DeleteServer(tcpServer)
+		return nil
+	} else {
+		listener.Close()
+	}
 
-func (s *TCPServer) Hash() string {
-	return hash.MD5(fmt.Sprintf("%s:%d", s.Host, s.Port))
+	return tcpServer
 }
 
 func (s *TCPServer) Handle(conn net.Conn) {
@@ -152,12 +171,6 @@ func (s *TCPServer) Run() {
 		log.Warn("\t`curl http://%s:%d/|sh`", ifname, s.Port)
 	}
 
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: 1, // 0 for client online, 1 for server created
-		Data: s,
-	})
-	Ctx.NotifyWebSocket.Broadcast(msg)
-
 	for {
 		select {
 		case <-s.stopped:
@@ -180,7 +193,7 @@ func (s *TCPServer) AsTable() {
 		t.SetOutputMirror(os.Stdout)
 		t.SetTitle(fmt.Sprintf(
 			"%s is listening on %s:%d, %d clients",
-			s.Hash(),
+			s.Hash,
 			(*s).Host,
 			(*s).Port,
 			len((*s).Clients),
@@ -204,7 +217,7 @@ func (s *TCPServer) AsTable() {
 		t.Render()
 		log.Success(fmt.Sprintf(
 			"%s is listening on %s:%d, %d clients listed",
-			s.Hash(),
+			s.Hash,
 			(*s).Host,
 			(*s).Port,
 			len((*s).Clients),
@@ -212,7 +225,7 @@ func (s *TCPServer) AsTable() {
 	} else {
 		log.Warn(fmt.Sprintf(
 			"[%s] is listening on %s:%d, 0 clients",
-			s.Hash(),
+			s.Hash,
 			(*s).Host,
 			(*s).Port,
 		))
@@ -237,7 +250,7 @@ func (s *TCPServer) FullDesc() string {
 	buffer.WriteString(
 		fmt.Sprintf(
 			"[%s] %s:%d (%d online clients) (started at: %s)",
-			s.Hash(),
+			s.Hash,
 			s.Host,
 			s.Port,
 			len(s.Clients),
@@ -278,6 +291,7 @@ type WebSocketMessageType int
 const (
 	CLIENT_CONNECTED WebSocketMessageType = iota
 	CLIENT_DUPLICATED
+	SERVER_DUPLICATED
 )
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
@@ -294,7 +308,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 			Type: CLIENT_DUPLICATED, // 0 for client online
 			Data: ClientDuplicateMessage{
 				Client:     *client,
-				ServerHash: s.Hash(),
+				ServerHash: s.Hash,
 			},
 		})
 		// Notify to all websocket clients
@@ -312,7 +326,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 			Type: CLIENT_CONNECTED, // 0 for client online
 			Data: ClientOnlineMessage{
 				Client:     *client,
-				ServerHash: s.Hash(),
+				ServerHash: s.Hash,
 			},
 		})
 		// Notify to all websocket clients

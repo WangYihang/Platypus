@@ -15,7 +15,7 @@ func (dispatcher Dispatcher) Info(args []string) {
 		return
 	}
 	for _, server := range context.Ctx.Servers {
-		if strings.HasPrefix((*server).Hash(), strings.ToLower(args[0])) {
+		if strings.HasPrefix((*server).Hash, strings.ToLower(args[0])) {
 			server.AsTable()
 			return
 		}
