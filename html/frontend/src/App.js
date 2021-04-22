@@ -120,16 +120,6 @@ const columns = [
   },
 ];
 
-function generateClientsArray(data) {
-  let clients = [];
-  for (let [k, v] of Object.entries(data)) {
-    v.hash = k;
-    v.key = k;
-    clients.push(v);
-  }
-  return clients;
-}
-
 class App extends React.Component {
   constructor(props) {
     super(props);
