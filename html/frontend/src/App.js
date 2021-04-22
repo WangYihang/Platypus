@@ -11,9 +11,9 @@ import {
   Badge,
   Layout,
   Menu,
-  Input,
   Alert,
   Tabs,
+  Select,
   Descriptions,
   Collapse,
 } from "antd";
@@ -22,12 +22,11 @@ import "./App.css";
 import qs from "qs";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 const { Panel } = Collapse;
-const { Search } = Input;
 const axios = require("axios");
 axios.defaults.headers.post["Content-Type"] =
   "application/x-www-form-urlencoded";
 const { TabPane } = Tabs;
-
+const { Option } = Select;
 const moment = require("moment");
 var W3CWebSocket = require("websocket").w3cwebsocket;
 
@@ -39,10 +38,11 @@ message.config({
 
 const { Header, Content, Sider } = Layout;
 
-// let baseUrl = ["http://", window.location.host].join("");
-let baseUrl = ["http://", "127.0.0.1:7331"].join("");
+let endPoint = window.location.host;
+endPoint = "127.0.0.1:7331";
+let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
-let wsUrl = ["ws://", window.location.host, "/notify"].join("");
+let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 const columns = [
   {
@@ -136,12 +136,11 @@ class App extends React.Component {
     super(props);
     this.state = {
       bottom: "bottomLeft",
-      serversResponse: null,
-      servers: [],
-      clients: [],
-      endPointAlive: true,
-      serverPort: 0,
+      serversMap: null,
+      serversList: [],
       currentServer: null,
+      serverCreateHost: "0.0.0.0",
+      serverCreatePort: Math.floor(Math.random() * 65536),
     };
   }
 
@@ -149,61 +148,41 @@ class App extends React.Component {
     axios
       .get([apiUrl, "/server"].join(""))
       .then((response) => {
-        let servers = [];
-
-        this.setState({ serversResponse: response.data.msg });
-
-        for (let [k, v] of Object.entries(response.data.msg)) {
-          v.hash = k;
-          v.key = k;
-          servers.push(v);
-        }
-
-        if (servers.length > 0) {
-          this.setState({ currentServer: servers[0] });
-
+        if (Object.values(response.data.msg).length > 0) {
           this.setState({
-            clients: generateClientsArray(servers[0].clients),
+            serversMap: response.data.msg,
+            serversList: Object.values(response.data.msg),
+            currentServer: Object.values(response.data.msg)[0],
           });
-        }
-
-        this.setState({ servers: servers });
-      })
-      .then(() => {
-        if (this.state.clients.length > 0) {
-          axios
-            .get(apiUrl + "/server/" + this.state.servers[0].hash + "/client")
-            .then((response) => {
-              this.setState({
-                clients: generateClientsArray(response.data.msg),
-              });
-            });
         }
       })
       .catch((error) => {
-        this.setState({ endPointAlive: false });
         message.error("Cannot connect to API EndPoint: " + error, 5);
       });
   }
 
   componentDidMount() {
-    this.fetchData();
+    let _this = this;
+    _this.fetchData();
 
     var client = new W3CWebSocket(wsUrl);
     client.onerror = () => {
-      message.error("WebSocket connect failed!", 5);
+      // message.error("WebSocket connect failed!", 5);
     };
     client.onopen = () => {
-      message.success("WebSocket connected!", 5);
+      // message.success("WebSocket connected!", 5);
     };
     client.onmessage = (e) => {
       let CLIENT_CONNECTED = 0;
       let CLIENT_DUPLICATED = 1;
+      let SERVER_DUPLICATED = 2;
+      console.log(e);
       let data = JSON.parse(e.data);
       switch (data.Type) {
         case CLIENT_CONNECTED:
           console.log(data);
           let onlinedClient = data.Data.Client;
+          let serverHash = data.Data.ServerHash;
           message.success(
             "New client connected from: " +
               onlinedClient.host +
@@ -211,8 +190,12 @@ class App extends React.Component {
               onlinedClient.port,
             5
           );
-          // Update data
-          this.fetchData();
+
+          let newServersMap = this.state.serversMap;
+          newServersMap[serverHash].clients[onlinedClient.hash] = onlinedClient;
+          _this.setState({
+            serversMap: newServersMap,
+          });
           break;
         case CLIENT_DUPLICATED:
           let duplicatedClient = data.Data.Client;
@@ -222,6 +205,16 @@ class App extends React.Component {
               ":" +
               duplicatedClient.port +
               ", connection reseted.",
+            5
+          );
+          break;
+        case SERVER_DUPLICATED:
+          let duplicatedServer = data.Data;
+          message.error(
+            "Duplicated server: " +
+              duplicatedServer.host +
+              ":" +
+              duplicatedServer.port,
             5
           );
           break;
@@ -240,6 +233,48 @@ class App extends React.Component {
   }
 
   render() {
+    let interfaceMenu;
+    if (this.state.currentServer == null) {
+      interfaceMenu = (
+        <Select
+          showSearch
+          style={{ width: 200 }}
+          placeholder="Select an interface"
+          optionFilterProp="children"
+          onChange={(value) => {
+            this.setState({ serverCreateHost: value });
+          }}
+          filterOption={(input, option) =>
+            option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }
+          defaultValue={this.state.serverCreateHost}
+        >
+          <Option value="0.0.0.0">0.0.0.0</Option>
+          <Option value="127.0.0.1">127.0.0.1</Option>
+        </Select>
+      );
+    } else {
+      interfaceMenu = (
+        <Select
+          showSearch
+          style={{ width: 200 }}
+          placeholder="Select an interface"
+          optionFilterProp="children"
+          onChange={(value) => {
+            this.setState({ serverCreateHost: value });
+          }}
+          filterOption={(input, option) =>
+            option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }
+        >
+          <Option value="0.0.0.0">0.0.0.0</Option>
+          {this.state.currentServer.interfaces.map((value, index) => {
+            return <Option value={value}>{value}</Option>;
+          })}
+        </Select>
+      );
+    }
+
     let hint;
     if (this.state.currentServer == null) {
       hint = (
@@ -254,7 +289,6 @@ class App extends React.Component {
     } else {
       hint = (
         <div>
-          <Divider orientation="left"></Divider>
           <Descriptions title="Server Info">
             <Descriptions.Item label="Address">
               {this.state.currentServer.host +
@@ -262,15 +296,20 @@ class App extends React.Component {
                 this.state.currentServer.port}
             </Descriptions.Item>
             <Descriptions.Item label="Clients">
-              {this.state.currentServer?Object.keys(this.state.currentServer.clients).length:0}
+              {this.state.currentServer
+                ? Object.keys(this.state.currentServer.clients).length
+                : 0}
             </Descriptions.Item>
             <Descriptions.Item label="Started">
-              {moment(this.state.timestamp).fromNow()}
+              {moment(this.state.currentServer.timestamp).fromNow()}
             </Descriptions.Item>
           </Descriptions>
-          <Collapse>
-            <Panel header="Expand to show the server info and the reverse shell commands for the current server">
-              <Tabs defaultActiveKey="1">
+          <Collapse defaultActiveKey={["1"]}>
+            <Panel
+              header="Expand to show the reverse shell commands for the current server"
+              key="1"
+            >
+              <Tabs defaultActiveKey="0">
                 {this.state.currentServer.interfaces.map((value, index) => {
                   let command = [
                     "curl http://",
@@ -317,13 +356,17 @@ class App extends React.Component {
               <InputNumber
                 min={1}
                 max={65565}
-                defaultValue={13337}
+                defaultValue={this.state.serverCreatePort}
+                value={this.state.serverCreatePort}
                 onChange={(data) => {
                   this.setState({
-                    serverPort: parseInt(data),
+                    serverCreatePort: parseInt(data),
                   });
                 }}
               />
+
+              {interfaceMenu}
+
               <Button
                 type="primary"
                 onClick={() => {
@@ -331,8 +374,8 @@ class App extends React.Component {
                     .post(
                       [apiUrl, "/server"].join(""),
                       qs.stringify({
-                        host: "0.0.0.0",
-                        port: this.state.serverPort,
+                        host: this.state.serverCreateHost,
+                        port: this.state.serverCreatePort,
                       })
                     )
                     .then((response) => {
@@ -345,7 +388,16 @@ class App extends React.Component {
                             response.data.msg.port,
                           5
                         );
-                        this.fetchData();
+                        let newServer = response.data.msg;
+                        this.setState({
+                          serversList: [...this.state.serversList, newServer],
+                        });
+                        const newServersMap = this.state.serversMap;
+                        newServersMap[newServer.hash] = newServer;
+                        this.setState({
+                          serversMap: newServersMap,
+                          serverCreatePort: Math.floor(Math.random() * 65536),
+                        });
                       } else {
                         message.error(
                           "Server create failed: " + response.data.msg,
@@ -363,22 +415,26 @@ class App extends React.Component {
               >
                 Add server
               </Button>
-              {this.state.servers.map((value, index) => {
+
+              {this.state.serversList.map((value, index) => {
                 return (
                   <>
-                  <Menu.Item
-                    key={value.hash}
-                    onClick={(item, key, keyPath, domEvent) => {
-                      this.setState({
-                        currentServer: this.state.serversResponse[item.key],
-                      });
-                    }}
-                  >
-                  {value.host + ":" + value.port}
-                  <Badge count={Object.keys(value.clients).length} overflowCount={99} offset={[10, 0]}></Badge>
-                </Menu.Item>
-                
-                </>
+                    <Menu.Item
+                      key={value.hash}
+                      onClick={(item, key, keyPath, domEvent) => {
+                        this.setState({
+                          currentServer: this.state.serversMap[item.key],
+                        });
+                      }}
+                    >
+                      {value.host + ":" + value.port}
+                      <Badge
+                        count={Object.keys(value.clients).length}
+                        overflowCount={99}
+                        offset={[10, 0]}
+                      ></Badge>
+                    </Menu.Item>
+                  </>
                 );
               })}
             </Menu>
@@ -386,19 +442,15 @@ class App extends React.Component {
           <Layout style={{ padding: "0 24px 24px" }}>
             <Content style={{ margin: "0 0" }}>
               {hint}
+              <Divider orientation="left"></Divider>
               <Table
                 columns={columns}
                 pagination={{ position: [this.state.bottom] }}
-                // dataSource={() => {
-                //   return []
-                //   if (!this.state.currentServer) {
-                //     return []
-                //   } else {
-                //     return generateClientsArray(this.state.currentServer.clients)
-                //   }
-                  
-                // }}
-                dataSource={generateClientsArray(this.state.currentServer?this.state.currentServer.clients:[])}
+                dataSource={Object.values(
+                  this.state.currentServer
+                    ? this.state.currentServer.clients
+                    : []
+                )}
               />
             </Content>
           </Layout>
