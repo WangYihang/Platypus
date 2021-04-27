@@ -26,4 +26,3 @@ clean:
 	rm -r termite
 	rm -rf $(mkfile_dir)html/frontend/build
 	rm -rf $(mkfile_dir)html/ttyd/build
-	rm -rf config.yml
