@@ -2,19 +2,14 @@ package context
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/WangYihang/Platypus/lib/util/config"
-	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
 	"github.com/WangYihang/readline"
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 )
 
@@ -40,39 +35,6 @@ type Context struct {
 }
 
 var Ctx *Context
-
-func Signal() {
-	// Capture Signal
-	c := make(chan os.Signal)
-	signal.Notify(
-		c,
-		// syscall.SIGTSTP,
-		syscall.SIGTERM,
-		os.Interrupt,
-		syscall.SIGWINCH,
-	)
-
-	go func() {
-		for {
-			switch sig := <-c; sig {
-			// case syscall.SIGTSTP:
-			// 	log.Info("syscall.SIGTERM, Exit?")
-			case syscall.SIGTERM:
-				log.Info("syscall.SIGTERM, Exit?")
-			case os.Interrupt:
-				// if Ctx.Current.PtyEstablished && Ctx.Current.Interactive {
-				// 	// Exit pty gracefully
-				// }
-				log.Info("os.Interrupt, Exit?")
-			case syscall.SIGWINCH:
-				if Ctx.CurrentTermite != nil {
-					columns, rows, _ := term.GetSize(0)
-					Ctx.CurrentTermite.NotifyPlatypusWindowSize(columns, rows)
-				}
-			}
-		}
-	}()
-}
 
 func CreateContext() {
 	if Ctx == nil {
