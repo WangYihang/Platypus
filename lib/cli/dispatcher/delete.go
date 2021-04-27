@@ -14,20 +14,43 @@ func (dispatcher Dispatcher) Delete(args []string) {
 		dispatcher.DeleteHelp([]string{})
 		return
 	}
-	for _, server := range context.Ctx.Servers {
-		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
-			context.Ctx.DeleteServer(server)
-			log.Success("Delete server node [%s]", server.Hash)
-			return
-		}
-		for _, client := range (*server).GetAllTCPClients() {
-			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
-				context.Ctx.DeleteTCPClient(client)
-				log.Success("Delete client node [%s]", client.Hash)
-				return
-			}
-		}
+
+	clue := strings.ToLower(args[0])
+
+	// Delete TCPClient
+	target := context.Ctx.FindTCPClientByHash(clue)
+	if target == nil {
+		target = context.Ctx.FindTCPClientByAlias(clue)
 	}
+	if target != nil {
+		log.Success("Delete client node [%s]", target.Hash)
+		context.Ctx.DeleteTCPClient(target)
+		return
+	}
+
+	// Delete TermiteClient
+	targetTermite := context.Ctx.FindTermiteClientByHash(clue)
+	if targetTermite == nil {
+		targetTermite = context.Ctx.FindTermiteClientByAlias(clue)
+	}
+	if targetTermite != nil {
+		log.Success("Delete encrypted client node [%s]", targetTermite.Hash)
+		context.Ctx.DeleteTermiteClient(targetTermite)
+		return
+	}
+
+	// Delete Server
+	targetServer := context.Ctx.FindServerByHash(clue)
+	if targetServer != nil {
+		if targetServer.Encrypted {
+			log.Success("Delete encrypted server node [%s]", targetServer.Hash)
+		} else {
+			log.Success("Delete server node [%s]", targetServer.Hash)
+		}
+		context.Ctx.DeleteServer(targetServer)
+		return
+	}
+
 	log.Error("No such node")
 }
 

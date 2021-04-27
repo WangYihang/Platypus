@@ -6,6 +6,7 @@ require (
 	github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/creack/pty v1.1.11 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/fatih/color v1.9.0
@@ -18,6 +19,7 @@ require (
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/golang/protobuf v1.5.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hashicorp/go-version v1.3.0 // indirect
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
