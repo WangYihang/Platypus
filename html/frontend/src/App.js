@@ -38,6 +38,7 @@ const { Option } = Select;
 const moment = require("moment");
 var W3CWebSocket = require("websocket").w3cwebsocket;
 var randomstring = require("randomstring");
+var filesize = require("filesize");
 const { Step } = Steps;
 
 message.config({
@@ -49,7 +50,6 @@ message.config({
 const { Header, Content, Sider } = Layout;
 
 let endPoint = window.location.host;
-endPoint = "172.17.236.86:7331"
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
@@ -316,7 +316,7 @@ class App extends React.Component {
           if (newServersMap[serverHash].clients[clientHash].progress == 100) {
             newServersMap[serverHash].clients[clientHash].alert = "Upgrade successfully!"
           } else {
-            newServersMap[serverHash].clients[clientHash].alert = "Uploading..."
+            newServersMap[serverHash].clients[clientHash].alert = filesize(bytesSent) + " / " + filesize(bytesTotal)
           }
           _this.setState({
             serversMap: newServersMap,
