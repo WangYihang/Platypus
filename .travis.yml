@@ -15,7 +15,7 @@ script:
   - go test ./lib/...
   - if [[ -n $TRAVIS_TAG ]]; then make release; fi
   - if [[ -n $TRAVIS_TAG ]]; then for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done; fi
-  - if [[ -z ${TRAVIS_TAG} ]] && make build
+  - if [[ -z ${TRAVIS_TAG} ]]; then make build; fi
 deploy:
   provider: releases
   api_key: $GITHUB_TOKEN
