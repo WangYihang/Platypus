@@ -9,6 +9,7 @@
     "@testing-library/user-event": "^12.1.10",
     "antd": "^4.15.2",
     "axios": "^0.21.1",
+    "filesize": "^6.3.0",
     "moment": "^2.29.1",
     "qs": "^6.10.1",
     "randomstring": "^1.1.5",
