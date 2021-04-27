@@ -10,7 +10,7 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-const version = "1.3.8"
+const version = "1.4.0"
 
 func ConfirmAndSelfUpdate() {
 	log.Info("Detecting the latest version...")
