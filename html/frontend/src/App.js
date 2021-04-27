@@ -16,16 +16,11 @@ import {
   Tabs,
   List,
   Select,
-  Steps,
   Descriptions,
   Collapse,
 } from "antd";
 
-
-
-import { ControlOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
-
-
+import { LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import "./App.css";
 import qs from "qs";
 import { CopyToClipboard } from "react-copy-to-clipboard";
@@ -39,7 +34,6 @@ const moment = require("moment");
 var W3CWebSocket = require("websocket").w3cwebsocket;
 var randomstring = require("randomstring");
 var filesize = require("filesize");
-const { Step } = Steps;
 
 message.config({
   duration: 3,
@@ -157,10 +151,10 @@ const columns = [
     align: "center",
     render: (data, line, index) => {
     return <>
-    <Alert message={line.alert == undefined ? "Press Upgrade to Proceed" : line.alert } type="success" />
-    <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress == 100 ? "" : "active"} />
-    <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress == 100 ? "" : "active"} />
-    <Progress percent={Math.round(line.progress)} size="small" status="active" status={line.progress == 100 ? "" : "active"} />
+    <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert } type="success" />
+    <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress === 100 ? "" : "active"} />
+    <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress === 100 ? "" : "active"} />
+    <Progress percent={Math.round(line.progress)} size="small" status={line.progress === 100 ? "" : "active"} />
     </>
     },
   }
@@ -274,7 +268,7 @@ class App extends React.Component {
           
           newServersMap = this.state.serversMap;
           newServersMap[serverHash].clients[clientHash].compiling_progress = cp
-          if (newServersMap[serverHash].clients[clientHash].compiling_progress == 100) {
+          if (newServersMap[serverHash].clients[clientHash].compiling_progress === 100) {
             newServersMap[serverHash].clients[clientHash].alert = "Compile sucessfully!"
           } else {
             newServersMap[serverHash].clients[clientHash].alert = "Compiling..."
@@ -293,7 +287,7 @@ class App extends React.Component {
           newServersMap = this.state.serversMap;
           newServersMap[serverHash].clients[clientHash].compressing_progress = p
 
-          if (newServersMap[serverHash].clients[clientHash].compressing_progress == 100) {
+          if (newServersMap[serverHash].clients[clientHash].compressing_progress === 100) {
             newServersMap[serverHash].clients[clientHash].alert = "Compress successfully!"
           } else {
             newServersMap[serverHash].clients[clientHash].alert = "Compressing..."
@@ -313,7 +307,7 @@ class App extends React.Component {
           newServersMap = this.state.serversMap;
           newServersMap[serverHash].clients[clientHash].progress = (bytesSent / bytesTotal) * 100;
 
-          if (newServersMap[serverHash].clients[clientHash].progress == 100) {
+          if (newServersMap[serverHash].clients[clientHash].progress === 100) {
             newServersMap[serverHash].clients[clientHash].alert = "Upgrade successfully!"
           } else {
             newServersMap[serverHash].clients[clientHash].alert = filesize(bytesSent) + " / " + filesize(bytesTotal)
@@ -333,7 +327,7 @@ class App extends React.Component {
 
   render() {
     let interfaceMenu;
-    if (this.state.currentServer == null) {
+    if (this.state.currentServer === null) {
       interfaceMenu = (
         <Select
           showSearch
@@ -375,7 +369,7 @@ class App extends React.Component {
     }
 
     let hint;
-    if (this.state.currentServer == null) {
+    if (this.state.currentServer === null) {
       hint = (
         <Alert
           message="Warning"
@@ -398,7 +392,7 @@ class App extends React.Component {
             path = this.state.distributor.route[value]
             command = "curl -fsSL " + url + "/" + path + "/termite -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &' && rm -rf " + filename
             data.push({target: value + ":" + this.state.currentServer.port, command: command})
-            console.log(command)
+            return command
           })
 
           let commands =     <List

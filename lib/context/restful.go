@@ -297,7 +297,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		if exists {
 			currentTermite := termiteValue.(*TermiteClient)
 			if key, exists := s.Get("key"); exists {
-				log.Error("disconnected...")
 				currentTermite.RequestTerminate(key.(string))
 			} else {
 				log.Error("No such key: %d", key)
