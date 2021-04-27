@@ -861,7 +861,11 @@ func (c *TCPClient) UpgradeToTermite() {
 	}
 
 	// Compiler termite binary
-	target := fmt.Sprintf("/tmp/%s-%s-termite", time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+	dir, err := ioutil.TempDir("/tmp", "termites")
+	if err != nil {
+		log.Error(fmt.Sprint(err))
+	}
+	target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
 	// // Step 1: Build Termite Binary from Source Code
 	// c.NotifyWebSocketCompilingTermite(0)
 	// err := BuildTermiteFromSourceCode(target, "127.0.0.1:13337")
@@ -878,7 +882,7 @@ func (c *TCPClient) UpgradeToTermite() {
 	// TODO: change target address
 	bytes.Replace(content, []byte("__ADDRESS__"), []byte("127.0.0.1:13337"), 1)
 	c.NotifyWebSocketCompilingTermite(50)
-	err := ioutil.WriteFile(target, content, 0755)
+	err = ioutil.WriteFile(target, content, 0755)
 	c.NotifyWebSocketCompilingTermite(75)
 	if err != nil {
 		c.NotifyWebSocketCompilingTermite(-1)

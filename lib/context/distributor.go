@@ -37,7 +37,11 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 		addr := Ctx.FindServerListeningAddressByDispatchKey(routeKey)
 
 		// Step 0: Compile termite.go from template file
-		target := fmt.Sprintf("/tmp/%s-%s-termite", time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+		dir, err := ioutil.TempDir("/tmp", "termites")
+		if err != nil {
+			log.Error(fmt.Sprint(err))
+		}
+		target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
 		// err := BuildTermiteFromSourceCode(target, addr)
 		// if err != nil {
 		// 	panicRESTfully(c, err.Error())
