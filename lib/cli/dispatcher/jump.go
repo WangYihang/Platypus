@@ -17,6 +17,7 @@ func (dispatcher Dispatcher) Jump(args []string) {
 
 	clue := args[0]
 
+	// TCPClient
 	// Search via Hash
 	var target *context.TCPClient = context.Ctx.FindTCPClientByHash(clue)
 
@@ -36,9 +37,24 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		// So the prompt will be:
 		// (Unknown) 127.0.0.1:43802 [unknown] »
 		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
-	} else {
-		log.Error("No such node")
+		return
 	}
+
+	// TermiteClient
+	var targetTermite *context.TermiteClient = context.Ctx.FindTermiteClientByHash(clue)
+
+	if targetTermite == nil {
+		targetTermite = context.Ctx.FindTermiteClientByAlias(clue)
+	}
+
+	if targetTermite != nil {
+		context.Ctx.CurrentTermite = targetTermite
+		log.Success("The current interactive shell is set to: %s", context.Ctx.CurrentTermite.FullDesc())
+		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		return
+	}
+
+	log.Error("No such node")
 }
 
 func (dispatcher Dispatcher) JumpHelp(args []string) {

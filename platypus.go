@@ -7,6 +7,7 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
 	"github.com/WangYihang/Platypus/lib/context"
+	"github.com/WangYihang/Platypus/lib/util/config"
 	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/resource"
@@ -14,21 +15,6 @@ import (
 	"github.com/pkg/browser"
 	"gopkg.in/yaml.v2"
 )
-
-type Config struct {
-	Servers []struct {
-		Host       string `yaml:"host"`
-		Port       uint16 `yaml:"port"`
-		HashFormat string `yaml:"hashFormat"`
-	}
-	RESTful struct {
-		Host   string `yaml:"host"`
-		Port   uint16 `yaml:"port"`
-		Enable bool   `yaml:"enable"`
-	}
-	Update      bool `yaml:"update"`
-	OpenBrowser bool `yaml:"openBrowser"`
-}
 
 func main() {
 	// Detect and create config file
@@ -39,7 +25,7 @@ func main() {
 	}
 
 	// Read config file
-	var config Config
+	var config config.Config
 	var ConfigFilename string = "config.yml"
 	content, _ := ioutil.ReadFile(ConfigFilename)
 	err := yaml.Unmarshal(content, &config)
@@ -50,11 +36,19 @@ func main() {
 
 	// Create context
 	context.CreateContext()
+	context.Ctx.Config = &config
 
 	// Detect new version
 	if config.Update {
 		update.ConfirmAndSelfUpdate()
 	}
+
+	// Init distributor server from config file
+	rh := config.Distributor.Host
+	rp := config.Distributor.Port
+	distributor := context.CreateDistributorServer(rh, rp)
+
+	go distributor.Run(fmt.Sprintf("%s:%d", rh, rp))
 
 	// Init RESTful Server from config file
 	if config.RESTful.Enable {
@@ -66,11 +60,12 @@ func main() {
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")
+		context.Ctx.RESTful = rest
 	}
 
 	// Init servers from config file
 	for _, s := range config.Servers {
-		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat)
+		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted)
 		if server != nil {
 			// avoid terminal being disrupted
 			time.Sleep(0x100 * time.Millisecond)

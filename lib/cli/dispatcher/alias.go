@@ -17,29 +17,27 @@ func (dispatcher Dispatcher) Alias(args []string) {
 	}
 
 	// Ensure the interactive session is set
-	if context.Ctx.Current == nil {
+	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
 
-	// Alias session
-	log.Info("Renaming session: %s", context.Ctx.Current.FullDesc())
-	context.Ctx.Current.Alias = strings.TrimSpace(args[0])
-
-	// Update prompt
-	var user string
-	if context.Ctx.Current.User == "" {
-		user = "unknown"
-	} else {
-		user = context.Ctx.Current.User
+	if context.Ctx.Current != nil {
+		// Alias session
+		log.Info("Renaming session: %s", context.Ctx.Current.FullDesc())
+		context.Ctx.Current.Alias = strings.TrimSpace(args[0])
+		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
+		return
 	}
-	ReadLineInstance.SetPrompt(color.CyanString(
-		"[%s] (%s) %s [%s] » ",
-		context.Ctx.Current.Alias,
-		context.Ctx.Current.OS.String(),
-		context.Ctx.Current.GetConnString(),
-		user,
-	))
+
+	if context.Ctx.CurrentTermite != nil {
+		// Alias session
+		log.Info("Renaming session: %s", context.Ctx.CurrentTermite.FullDesc())
+		context.Ctx.CurrentTermite.Alias = strings.TrimSpace(args[0])
+		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		return
+	}
+
 }
 
 func (dispatcher Dispatcher) AliasHelp(args []string) {

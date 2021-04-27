@@ -31,8 +31,20 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 ### Run Platypus from source code
 
 ```bash
+cd ~
 git clone https://github.com/WangYihang/Platypus
-cd Platypus
+cd ~/Platypus
+# Build frontend
+sudo npm install -g yarn
+cd ~/Platypus/html/frontend
+yarn install && yarn build
+cd ~/Platypus/ttyd
+yarn install && yarn build
+# Build go-bindata
+sudo apt install go-bindata 
+cd ~/Platypus
+go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/... ./html/ttyd/dist/... ./html/frontend/build/...
+# Run Platypus
 go run platypus.go
 ```
 
