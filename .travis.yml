@@ -13,9 +13,9 @@ addons:
     update: true
 script:
   - go test ./lib/...
-  - test ${TRAVIS_TAG} && make release
-  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ;
-  - test !${TRAVIS_TAG} && make build
+  - if [[ -n $TRAVIS_TAG ]]; then make release; fi
+  - if [[ -n $TRAVIS_TAG ]]; then for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done; fi
+  - if [[ -z ${TRAVIS_TAG} ]] && make build
 deploy:
   provider: releases
   api_key: $GITHUB_TOKEN
