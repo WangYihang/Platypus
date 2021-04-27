@@ -1,25 +1,21 @@
 language: go
 go:
-  - 1.15.x
+  - 1.16.x
 before_install:
   - sudo apt-get install -y upx
   - nvm install --lts
   - npm install -g yarn
-  - cd html/ttyd && yarn install && yarn build && cd ../../
-  - cd html/frontend && yarn install && yarn build && cd ../../
-  - go get -u github.com/mitchellh/gox
   - go get -u github.com/go-bindata/go-bindata/...
-  - go-bindata -pkg resource -o ./lib/util/resource/resource.go ./termites/... ./lib/runtime/... ./html/ttyd/dist/... ./html/frontend/build/...
 addons:
   apt:
     update: true
 script:
   - go test ./lib/...
-  - test ${TRAVIS_TAG} && gox -os="linux" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
-  - test ${TRAVIS_TAG} && gox -os="windows" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
-  - test ${TRAVIS_TAG} && gox -os="darwin" -arch="amd64" -ldflags="-s -w" -output="./build/{{.Dir}}_{{.OS}}_{{.Arch}}"; echo "Skiping build with gox..."
-  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ; echo "Skipping compress with upx..."
-  - test !${TRAVIS_TAG} && go build
+  # Release
+  - test ${TRAVIS_TAG} && make release
+  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ;"
+  # Non-Release
+  - test !${TRAVIS_TAG} && make build
 deploy:
   provider: releases
   api_key: $GITHUB_TOKEN
