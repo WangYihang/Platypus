@@ -1,6 +1,7 @@
 package context
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/WangYihang/Platypus/lib/util/fs"
 	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/message"
+	"github.com/WangYihang/Platypus/lib/util/str"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -87,85 +90,220 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			return
 		}
 		client := Ctx.FindTCPClientByHash(c.Param("hash"))
-		if client == nil {
-			panicRESTfully(c, fmt.Sprintf("client is not found"))
+		termiteClient := Ctx.FindTermiteClientByHash(c.Param("hash"))
+		if client == nil && termiteClient == nil {
+			panicRESTfully(c, "client is not found")
 			return
 		}
-		log.Success("Poping up websocket shell for: %s", client.OnelineDesc())
+		if client != nil {
+			log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
+		}
+		if termiteClient != nil {
+			log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
+		}
 		ttyWebSocket.HandleRequest(c.Writer, c.Request)
 	})
 
 	ttyWebSocket.HandleConnect(func(s *melody.Session) {
 		// Get client hash
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
+
+		// Handle TCPClient
 		current := Ctx.FindTCPClientByHash(hash)
-		s.Set("client", current)
-		// Lock
-		current.GetInteractingLock().Lock()
-		current.SetInteractive(true)
+		if current != nil {
+			s.Set("client", current)
+			// Lock
+			current.GetInteractingLock().Lock()
+			current.SetInteractive(true)
 
-		// Incase somebody is interacting via cli
-		current.EstablishPTY()
-		// SET_WINDOW_TITLE '1'
-		s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
-		// SET_PREFERENCES '2'
-		s.WriteBinary([]byte("2" + "{ }"))
+			// Incase somebody is interacting via cli
+			current.EstablishPTY()
+			// SET_WINDOW_TITLE '1'
+			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
+			// SET_PREFERENCES '2'
+			s.WriteBinary([]byte("2" + "{ }"))
 
-		// OUTPUT '0'
-		current.Write([]byte("\n"))
-		go func(s *melody.Session) {
-			for current != nil && !s.IsClosed() {
-				current.GetConn().SetReadDeadline(time.Time{})
-				msg := make([]byte, 0x100)
-				n, err := current.ReadConnLock(msg)
-				if err != nil {
-					log.Error("Read from socket failed: %s", err)
-					return
+			// OUTPUT '0'
+			current.Write([]byte("\n"))
+			go func(s *melody.Session) {
+				for current != nil && !s.IsClosed() {
+					current.GetConn().SetReadDeadline(time.Time{})
+					msg := make([]byte, 0x100)
+					n, err := current.ReadConnLock(msg)
+					if err != nil {
+						log.Error("Read from socket failed: %s", err)
+						return
+					}
+					s.WriteBinary([]byte("0" + string(msg[0:n])))
 				}
-				s.WriteBinary([]byte("0" + string(msg[0:n])))
+			}(s)
+			return
+		}
+
+		// Handle TermiteClient
+		currentTermite := Ctx.FindTermiteClientByHash(hash)
+		if currentTermite != nil {
+			log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
+			// Start process /bin/bash
+			s.Set("termiteClient", currentTermite)
+
+			// SET_WINDOW_TITLE '1'
+			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
+			// SET_PREFERENCES '2'
+			s.WriteBinary([]byte("2" + "{ }"))
+			// OUTPUT '0'
+			key := str.RandomString(0x10)
+			s.Set("key", key)
+
+			currentTermite.RequestStartProcess("/bin/bash", 0, 0, key)
+
+			// Create Process Object
+			process := Process{
+				Pid:           -2,
+				WindowColumns: 0,
+				WindowRows:    0,
+				State:         StartRequested,
+				WebSocket:     s,
 			}
-		}(s)
+			currentTermite.Processes[key] = &process
+			return
+		}
 	})
 
+	// User input from websocket -> process
 	ttyWebSocket.HandleMessageBinary(func(s *melody.Session, msg []byte) {
-		// Get client hash
-		value, _ := s.Get("client")
-		current := value.(*TCPClient)
-		if current.GetInteractive() {
-			opcode := msg[0]
-			body := msg[1:]
-			switch opcode {
-			case '0': // INPUT '0'
-				current.Write(body)
-			case '1': // RESIZE_TERMINAL '1'
-				// Raw reverse shell does not support resize terminal size when
-				// in interactive foreground program, eg: vim
-				// var ws WindowSize
-				// json.Unmarshal(body, &ws)
-				// current.SetWindowSize(&ws)
-			case '2': // PAUSE '2'
-				// TODO: Pause, support for zmodem
-			case '3': // RESUME '3'
-				// TODO: Pause, support for zmodem
-			case '{': // JSON_DATA '{'
-				// Raw reverse shell does not support resize terminal size when
-				// in interactive foreground program, eg: vim
-				// var ws WindowSize
-				// json.Unmarshal([]byte("{"+string(body)), &ws)
-				// current.SetWindowSize(&ws)
-			default:
-				fmt.Println("Invalid message: ", string(msg))
+		// Handle TCPClient
+		value, exists := s.Get("client")
+		if exists {
+			current := value.(*TCPClient)
+			if current.GetInteractive() {
+				opcode := msg[0]
+				body := msg[1:]
+				switch opcode {
+				case '0': // INPUT '0'
+					current.Write(body)
+				case '1': // RESIZE_TERMINAL '1'
+					// Raw reverse shell does not support resize terminal size when
+					// in interactive foreground program, eg: vim
+					// var ws WindowSize
+					// json.Unmarshal(body, &ws)
+					// current.SetWindowSize(&ws)
+				case '2': // PAUSE '2'
+					// TODO: Pause, support for zmodem
+				case '3': // RESUME '3'
+					// TODO: Pause, support for zmodem
+				case '{': // JSON_DATA '{'
+					// Raw reverse shell does not support resize terminal size when
+					// in interactive foreground program, eg: vim
+					// var ws WindowSize
+					// json.Unmarshal([]byte("{"+string(body)), &ws)
+					// current.SetWindowSize(&ws)
+				default:
+					fmt.Println("Invalid message: ", string(msg))
+				}
+			}
+			return
+		}
+
+		// Handle TermiteClient
+		if termiteValue, exists := s.Get("termiteClient"); exists {
+			currentTermite := termiteValue.(*TermiteClient)
+			if key, exists := s.Get("key"); exists {
+				opcode := msg[0]
+				body := msg[1:]
+				switch opcode {
+				case '0': // INPUT '0'
+					currentTermite.EncoderLock.Lock()
+					err := currentTermite.Encoder.Encode(message.Message{
+						Type: message.STDIO,
+						Body: message.BodyStdio{
+							Key:  key.(string),
+							Data: body,
+						},
+					})
+					currentTermite.EncoderLock.Unlock()
+
+					if err != nil {
+						// Network
+						log.Error("Network error: %s", err)
+						return
+					}
+				case '1': // RESIZE_TERMINAL '1'
+					var ws WindowSize
+					json.Unmarshal(body, &ws)
+
+					currentTermite.EncoderLock.Lock()
+					err := currentTermite.Encoder.Encode(message.Message{
+						Type: message.WINDOW_SIZE,
+						Body: message.BodyWindowSize{
+							Key:     key.(string),
+							Columns: ws.Columns,
+							Rows:    ws.Rows,
+						},
+					})
+					currentTermite.EncoderLock.Unlock()
+
+					if err != nil {
+						// Network
+						log.Error("Network error: %s", err)
+						return
+					}
+				case '2': // PAUSE '2'
+					// TODO: Pause, support for zmodem
+				case '3': // RESUME '3'
+					// TODO: Pause, support for zmodem
+				case '{': // JSON_DATA '{'
+					var ws WindowSize
+					json.Unmarshal([]byte(msg), &ws)
+
+					currentTermite.EncoderLock.Lock()
+					err := currentTermite.Encoder.Encode(message.Message{
+						Type: message.WINDOW_SIZE,
+						Body: message.BodyWindowSize{
+							Key:     key.(string),
+							Columns: ws.Columns,
+							Rows:    ws.Rows,
+						},
+					})
+					currentTermite.EncoderLock.Unlock()
+
+					if err != nil {
+						// Network
+						log.Error("Network error: %s", err)
+						return
+					}
+				default:
+					fmt.Println("Invalid message: ", string(msg))
+				}
+			} else {
+				log.Error("Process has not been started")
 			}
 		}
 	})
 
 	ttyWebSocket.HandleDisconnect(func(s *melody.Session) {
-		// Get client hash
-		value, _ := s.Get("client")
-		current := value.(*TCPClient)
-		log.Success("Closing websocket shell for: %s", current.OnelineDesc())
-		current.SetInteractive(false)
-		current.GetInteractingLock().Unlock()
+		// Handle TCPClient
+		value, exists := s.Get("client")
+		if exists {
+			current := value.(*TCPClient)
+			log.Success("Closing websocket shell for: %s", current.OnelineDesc())
+			current.SetInteractive(false)
+			current.GetInteractingLock().Unlock()
+			return
+		}
+
+		// Handle TermiteClient
+		termiteValue, exists := s.Get("termiteClient")
+		if exists {
+			currentTermite := termiteValue.(*TermiteClient)
+			if key, exists := s.Get("key"); exists {
+				log.Error("disconnected...")
+				currentTermite.RequestTerminate(key.(string))
+			} else {
+				log.Error("No such key: %d", key)
+				return
+			}
+		}
 	})
 
 	// Static files
@@ -178,20 +316,27 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		c.String(200, "")
 	})
 
-	// Server related
+	type ServersWithDistributorAddress struct {
+		Servers     map[string](*TCPServer) `json:"servers"`
+		Distributor Distributor             `json:"distributor"`
+	}
 
+	// Server related
 	// Simple group: v1
 	RESTfulAPIGroup := endpoint.Group("/api")
 	{
 		serverAPIGroup := RESTfulAPIGroup.Group("/server")
 		{
 			serverAPIGroup.GET("", func(c *gin.Context) {
+				response := ServersWithDistributorAddress{
+					Servers:     Ctx.Servers,
+					Distributor: *Ctx.Distributor,
+				}
 				c.JSON(200, gin.H{
 					"status": true,
-					"msg":    Ctx.Servers,
+					"msg":    response,
 				})
 				c.Abort()
-				return
 			})
 			serverAPIGroup.GET("/:hash", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -209,7 +354,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such server")
-				return
 			})
 			serverAPIGroup.GET("/:hash/client", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -227,7 +371,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such server")
-				return
 			})
 			serverAPIGroup.POST("", func(c *gin.Context) {
 				if !formExistOrAbort(c, []string{"host", "port"}) {
@@ -238,7 +381,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					panicRESTfully(c, "Invalid port number")
 					return
 				}
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "")
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", false)
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
@@ -253,7 +396,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					})
 					c.Abort()
 				}
-				return
 			})
 			serverAPIGroup.DELETE("/:hash", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -271,7 +413,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such server")
-				return
 			})
 		}
 		clientAPIGroup := RESTfulAPIGroup.Group("/client")
@@ -290,7 +431,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					"msg":    clients,
 				})
 				c.Abort()
-				return
 			})
 			clientAPIGroup.GET("/:hash", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -308,7 +448,26 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such client")
-				return
+			})
+			// Upgrade reverse shell client to termite client
+			clientAPIGroup.GET("/:hash/upgrade", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash"}) {
+					return
+				}
+				hash := c.Param("hash")
+				for _, server := range Ctx.Servers {
+					if client, exist := server.Clients[hash]; exist {
+						// Upgrade
+						go client.UpgradeToTermite()
+						c.JSON(200, gin.H{
+							"status": true,
+							"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
+						})
+						c.Abort()
+						return
+					}
+				}
+				panicRESTfully(c, "No such client")
 			})
 			clientAPIGroup.DELETE("/:hash", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -326,7 +485,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such client")
-				return
 			})
 			clientAPIGroup.POST("/:hash", func(c *gin.Context) {
 				if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -355,7 +513,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					}
 				}
 				panicRESTfully(c, "No such client")
-				return
 			})
 		}
 	}

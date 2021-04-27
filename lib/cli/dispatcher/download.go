@@ -27,7 +27,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 		return
 	}
 
-	if context.Ctx.Current == nil {
+	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
 		log.Error("The current client is not set, please use `Jump` command to select the current client")
 		return
 	}
@@ -48,55 +48,42 @@ func (dispatcher Dispatcher) Download(args []string) {
 	}
 	defer dstfd.Close()
 
-	log.Info("Downloading %s to %s from client: %s", src, dst, context.Ctx.Current.OnelineDesc())
-	totalBytes, err := context.Ctx.Current.FileSize(src)
-	if err != nil {
-		log.Error("Failed to get file size: %s", err)
-		return
-	}
-	if totalBytes > 1 {
-		log.Info("Filesize: %d bytes", totalBytes)
-	} else {
-		log.Info("Filesize: %d byte", totalBytes)
-	}
+	if context.Ctx.Current != nil {
+		log.Info("Downloading %s to %s from client: %s", src, dst, context.Ctx.Current.OnelineDesc())
+		totalBytes, err := context.Ctx.Current.FileSize(src)
+		if err != nil {
+			log.Error("Failed to get file size: %s", err)
+			return
+		}
+		if totalBytes > 1 {
+			log.Info("Filesize: %d bytes", totalBytes)
+		} else {
+			log.Info("Filesize: %d byte", totalBytes)
+		}
 
-	// Progress bar
-	p := mpb.New(
-		mpb.WithWidth(64),
-	)
+		// Progress bar
+		p := mpb.New(
+			mpb.WithWidth(64),
+		)
 
-	bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
-		mpb.PrependDecorators(
-			decor.CountersKibiByte("% .2f / % .2f"),
-		),
-		mpb.AppendDecorators(
-			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
-			decor.Name(" ] "),
-			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
-		),
-	)
+		bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
+			mpb.PrependDecorators(
+				decor.CountersKibiByte("% .2f / % .2f"),
+			),
+			mpb.AppendDecorators(
+				decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
+				decor.Name(" ] "),
+				decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
+			),
+		)
 
-	blockSize := 1024 * 16
-	firstBlockSize := totalBytes % blockSize
-	n := 0
+		blockSize := 1024 * 16
+		firstBlockSize := totalBytes % blockSize
+		n := 0
 
-	// Read from remote client
-	start := time.Now()
-	content, err := context.Ctx.Current.ReadfileEx(src, 0, firstBlockSize)
-	if err != nil {
-		log.Error("%s", err)
-		return
-	}
-	if n, err = dstfd.Write([]byte(content)); err != nil {
-		log.Error("Failed to write data to target file: %s", err)
-		return
-	}
-	bar.IncrBy(n)
-	bar.DecoratorEwmaUpdate(time.Since(start))
-
-	for i := 0; i < totalBytes/blockSize; i++ {
-		start = time.Now()
-		content, err := context.Ctx.Current.ReadfileEx(src, firstBlockSize+i*blockSize, blockSize)
+		// Read from remote client
+		start := time.Now()
+		content, err := context.Ctx.Current.ReadfileEx(src, 0, firstBlockSize)
 		if err != nil {
 			log.Error("%s", err)
 			return
@@ -107,8 +94,30 @@ func (dispatcher Dispatcher) Download(args []string) {
 		}
 		bar.IncrBy(n)
 		bar.DecoratorEwmaUpdate(time.Since(start))
+
+		for i := 0; i < totalBytes/blockSize; i++ {
+			start = time.Now()
+			content, err := context.Ctx.Current.ReadfileEx(src, firstBlockSize+i*blockSize, blockSize)
+			if err != nil {
+				log.Error("%s", err)
+				return
+			}
+			if n, err = dstfd.Write([]byte(content)); err != nil {
+				log.Error("Failed to write data to target file: %s", err)
+				return
+			}
+			bar.IncrBy(n)
+			bar.DecoratorEwmaUpdate(time.Since(start))
+		}
+		p.Wait()
+		return
 	}
-	p.Wait()
+
+	if context.Ctx.CurrentTermite != nil {
+		log.Error("Download function is to be implemented")
+		return
+	}
+
 }
 
 func (dispatcher Dispatcher) DownloadHelp(args []string) {
