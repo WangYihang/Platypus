@@ -18,6 +18,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	oss "github.com/WangYihang/Platypus/lib/util/os"
+	"github.com/WangYihang/Platypus/lib/util/resource"
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
@@ -860,21 +861,37 @@ func (c *TCPClient) UpgradeToTermite() {
 	}
 
 	// Compiler termite binary
-	target := fmt.Sprintf("build/%s-%s-termite", time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
-	// Step 1: Build Termite Binary
+	target := fmt.Sprintf("/tmp/%s-%s-termite", time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+	// // Step 1: Build Termite Binary from Source Code
+	// c.NotifyWebSocketCompilingTermite(0)
+	// err := BuildTermiteFromSourceCode(target, "127.0.0.1:13337")
+	// if err != nil {
+	// 	c.NotifyWebSocketCompilingTermite(-1)
+	// 	return
+	// }
+	// c.NotifyWebSocketCompilingTermite(100)
+
+	// Step 1: Generate Termite from Assets
 	c.NotifyWebSocketCompilingTermite(0)
-	if compiler.Compile(target) {
-		c.NotifyWebSocketCompilingTermite(100)
-	} else {
+	content, _ := resource.Asset("termites/termite_linux_amd64")
+	c.NotifyWebSocketCompilingTermite(25)
+	// TODO: change target address
+	bytes.Replace(content, []byte("__ADDRESS__"), []byte("127.0.0.1:13337"), 1)
+	c.NotifyWebSocketCompilingTermite(50)
+	err := ioutil.WriteFile(target, content, 0755)
+	c.NotifyWebSocketCompilingTermite(75)
+	if err != nil {
 		c.NotifyWebSocketCompilingTermite(-1)
+		return
 	}
+	c.NotifyWebSocketCompilingTermite(100)
 
 	// Step 2: Upx compression
 	c.NotifyWebSocketCompressingTermite(0)
-	if compiler.Compress(target) {
-		c.NotifyWebSocketCompressingTermite(100)
-	} else {
+	if !compiler.Compress(target) {
 		c.NotifyWebSocketCompressingTermite(-1)
+	} else {
+		c.NotifyWebSocketCompressingTermite(100)
 	}
 
 	// Upload Termite Binary

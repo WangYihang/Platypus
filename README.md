@@ -7,7 +7,6 @@
 
 A modern multiple reverse shell sessions/clients manager via terminal written in go
 
-
 ## Features
 
 - [x] Multiple service listening port
@@ -28,7 +27,7 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 > There are multiple ways to run this tool, feel free to choose one of the following method.
 
-### Run Platypus from source code
+### Run Platypus from source code (Recommend)
 
 ```bash
 cd ~
@@ -49,6 +48,9 @@ go run platypus.go
 ```
 
 ### Run Platypus from release binaries
+
+> This method only works before v1.3.9
+
 1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
 2. Run the downloaded executable file
 
