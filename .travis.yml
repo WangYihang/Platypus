@@ -6,6 +6,8 @@ before_install:
   - nvm install --lts
   - npm install -g yarn
   - go get -u github.com/go-bindata/go-bindata/...
+  - mkdir termites
+  - go-bindata -pkg resource -o ./lib/util/resource/resource.go ./termites/... ./lib/runtime/... ./html/ttyd/dist/... ./html/frontend/build/...
 addons:
   apt:
     update: true
