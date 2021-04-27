@@ -13,10 +13,8 @@ addons:
     update: true
 script:
   - go test ./lib/...
-  # Release
   - test ${TRAVIS_TAG} && make release
-  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ;"
-  # Non-Release
+  - test ${TRAVIS_TAG} && for i in `ls $TRAVIS_BUILD_DIR/build/`; do upx --best "$TRAVIS_BUILD_DIR/build/$i"; done ;
   - test !${TRAVIS_TAG} && make build
 deploy:
   provider: releases
