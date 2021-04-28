@@ -186,8 +186,6 @@ func (c *TCPClient) makeHash(hashFormat string) string {
 }
 
 func (c *TCPClient) OnelineDesc() string {
-	log.Error("%v", c)
-	log.Error("%v", c.conn)
 	addr := c.conn.RemoteAddr()
 	if c.mature {
 		return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
