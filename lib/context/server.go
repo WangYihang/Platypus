@@ -76,7 +76,8 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 	// Support for distributor for termite
 	if encrypted {
 		for _, ifaddr := range tcpServer.Interfaces {
-			Ctx.Distributor.Route[ifaddr] = str.RandomString(0x08)
+			routeKey := str.RandomString(0x08)
+			Ctx.Distributor.Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
 		}
 	}
 
