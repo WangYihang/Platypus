@@ -24,9 +24,9 @@ prepare: dependency
 	cd $(mkfile_dir) && go-bindata -pkg resource -o ./lib/util/resource/resource.go ./termites/... ./lib/runtime/... ./html/ttyd/dist/... ./html/frontend/build/...
 
 dependency:
-	sudo apt-get install -y software-properties-common gpg
-	sudo add-apt-repository -y ppa:longsleep/golang-backports
 	sudo apt-get update
+	sudo apt-get install -y software-properties-common gnupg
+	sudo add-apt-repository -y ppa:longsleep/golang-backports
 	sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 52B59B1571A79DBC054901C0F6BC817356A3D45E
 	sudo apt install -y golang-go nodejs npm go-bindata upx
 	sudo npm install -g yarn
