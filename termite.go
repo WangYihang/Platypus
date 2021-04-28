@@ -278,8 +278,8 @@ func StartClient() {
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	service := "__ADDRESS__"
-	if hash.MD5(service) == "da94c1a73b99bc3b7d7e1d7c555c669a" {
+	service := "xxx.xxx.xxx.xxx:xxxxx"
+	if hash.MD5(service) == "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		service = "127.0.0.1:13337"
 	}
 	conn, err := tls.Dial("tcp", service, &config)
