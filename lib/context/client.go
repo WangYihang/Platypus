@@ -853,7 +853,7 @@ func (client *TCPClient) NotifyWebSocketUploadingTermite(bytesSent int, bytesTot
 	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
-func (c *TCPClient) UpgradeToTermite() {
+func (c *TCPClient) UpgradeToTermite(server *TCPServer) {
 	if c.OS == oss.Windows {
 		// TODO: Windows Upgrade
 		log.Error("Upgrade to Termite on Windows client is not supported")
@@ -866,21 +866,28 @@ func (c *TCPClient) UpgradeToTermite() {
 		log.Error(fmt.Sprint(err))
 	}
 	target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
-	// // Step 1: Build Termite Binary from Source Code
-	// c.NotifyWebSocketCompilingTermite(0)
-	// err := BuildTermiteFromSourceCode(target, "127.0.0.1:13337")
-	// if err != nil {
-	// 	c.NotifyWebSocketCompilingTermite(-1)
-	// 	return
-	// }
-	// c.NotifyWebSocketCompilingTermite(100)
 
 	// Step 1: Generate Termite from Assets
 	c.NotifyWebSocketCompilingTermite(0)
 	content, _ := resource.Asset("termites/termite_linux_amd64")
 	c.NotifyWebSocketCompilingTermite(25)
-	// TODO: change target address
-	bytes.Replace(content, []byte("__ADDRESS__"), []byte("127.0.0.1:13337"), 1)
+
+	// BUG: Something, the public ip address is not one of the interface addresses
+	// eg: Alibaba Cloud, the public ip is not in machine interface ip addresses
+	targetAddr := ""
+	for _, sh := range server.Interfaces {
+		if sh != "127.0.0.1" {
+			targetAddr = fmt.Sprintf("%s:%d", sh, server.Port)
+			break
+		}
+	}
+	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
+	replacement := make([]byte, len(placeHolder))
+	for i := 0; i < len(targetAddr); i++ {
+		replacement[i] = targetAddr[i]
+	}
+	log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
+	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
 	c.NotifyWebSocketCompilingTermite(50)
 	err = ioutil.WriteFile(target, content, 0755)
 	c.NotifyWebSocketCompilingTermite(75)
