@@ -16,6 +16,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Distributor struct {
+	Host       string            `json:"host"`
+	Port       uint16            `json:"port"`
+	Interfaces []string          `json:"interfaces"`
+	Route      map[string]string `json:"route"`
+}
+
 func CreateDistributorServer(host string, port uint16) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
@@ -34,27 +41,33 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 			return
 		}
 		routeKey := c.Param("route_key")
-		addr := Ctx.FindServerListeningAddressByDispatchKey(routeKey)
+		addr := Ctx.FindServerListeningAddressByRouteKey(routeKey)
 
-		// Step 0: Compile termite.go from template file
+		if addr == "" {
+			panicRESTfully(c, "Invalid route key")
+			return
+		}
+
 		dir, err := ioutil.TempDir("/tmp", "termites")
 		if err != nil {
 			log.Error(fmt.Sprint(err))
 		}
-		target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
-		// err := BuildTermiteFromSourceCode(target, addr)
-		// if err != nil {
-		// 	panicRESTfully(c, err.Error())
-		// 	return
-		// }
 
 		// Step 1: Generate Termite from Assets
+		target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
 		content, err := resource.Asset("termites/termite_linux_amd64")
 		if err != nil {
 			panicRESTfully(c, err.Error())
 			return
 		}
-		bytes.Replace(content, []byte("__ADDRESS__"), []byte(addr), 1)
+
+		placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
+		replacement := make([]byte, len(placeHolder))
+		for i := 0; i < len(addr); i++ {
+			replacement[i] = addr[i]
+		}
+		log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
+		content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
 
 		err = ioutil.WriteFile(target, content, 0755)
 		if err != nil {

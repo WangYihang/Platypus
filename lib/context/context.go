@@ -1,7 +1,6 @@
 package context
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 
@@ -12,13 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
-
-type Distributor struct {
-	Host       string            `json:"host"`
-	Port       uint16            `json:"port"`
-	Interfaces []string          `json:"interfaces"`
-	Route      map[string]string `json:"route"`
-}
 
 type Context struct {
 	Servers         map[string](*TCPServer)
@@ -150,12 +142,10 @@ func (ctx Context) FindServerByHash(hash string) *TCPServer {
 	return nil
 }
 
-func (ctx Context) FindServerListeningAddressByDispatchKey(routeKey string) string {
-	for _, server := range Ctx.Servers {
-		for _, host := range server.Interfaces {
-			if host == routeKey {
-				return fmt.Sprintf("%s:%d", host, server.Port)
-			}
+func (ctx Context) FindServerListeningAddressByRouteKey(routeKey string) string {
+	for k, v := range ctx.Distributor.Route {
+		if v == routeKey {
+			return k
 		}
 	}
 	return ""
