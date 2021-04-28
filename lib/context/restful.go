@@ -449,15 +449,25 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				panicRESTfully(c, "No such client")
 			})
 			// Upgrade reverse shell client to termite client
-			clientAPIGroup.GET("/:hash/upgrade", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
+			clientAPIGroup.GET("/:hash/upgrade/:serverHash", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash", "serverHash"}) {
 					return
 				}
 				hash := c.Param("hash")
+				serverHash := c.Param("serverHash")
+				targetAddr := Ctx.FindServerByHash(serverHash)
+				if targetAddr == nil {
+					panicRESTfully(c, "Invalid server hash")
+					return
+				}
+				if !targetAddr.Encrypted {
+					panicRESTfully(c, "Target server is not secured")
+					return
+				}
 				for _, server := range Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
 						// Upgrade
-						go client.UpgradeToTermite()
+						go client.UpgradeToTermite(targetAddr)
 						c.JSON(200, gin.H{
 							"status": true,
 							"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
