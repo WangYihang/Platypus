@@ -124,6 +124,10 @@ Now, suppose that the victim is attacked by the attacker and a reverse shell com
 
 ![](./figure/webui/shell.gif)
 
+### Upgrade a reverse shell to an encrypted channel (Termite)
+
+![](./figure/webui/upgrade.gif)
+
 ## Get start with cli
 
 ### List all victims
