@@ -185,21 +185,25 @@ You can just simply type `exit` to exit pty mode.
 
 ## TODOs
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
-- [ ] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
-- [ ] Upgrade to Metepreter session
-- [ ] Design Private Protocol
-- [ ] Notify window resize
-- [ ] Upgrade to private protocol
-- [ ] Check whether dst is a folder in file uploading 
 - [ ] Router through clients
-- [ ] RESTful API should auth
+- [ ] Visualize network topology
+- [ ] Host discovery via multiple method (eg: `arp -a`)
+- [ ] Redesign frontend (eg: Listener list, Machine list, Network topology graph, File management...)
+- [ ] Port forwarding
+- [ ] Add authencation in RESTful API
 - [ ] Use crontab
-- [ ] Use HR package to detect the status of client (maybe `echo $random_string`)
 - [ ] Provide full kernel API
-- [ ] List file
-- [ ] Check exit state in WebSocket
+- [ ] Support file operations
+- [ ] Check whether dst is a folder in file uploading 
 - [ ] Benchmark
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
+- [ ] Upgrade to Metepreter session
+- [x] Design Private Protocol
+- [x] Check exit state in WebSocket
+- [x] ~~Use HR package to detect the status of client (maybe `echo $random_string`)~~
+- [x] Notify window resize (Only works in all cases when private protocol established)
+- [x] Upgrade to private protocol
+- [x] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
 - [x] Web UI
 - [x] More interfaces in RESTful API
 - [x] Websocket for Web UI 

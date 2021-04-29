@@ -6,7 +6,7 @@ require (
 	github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/creack/pty v1.1.11 // indirect
+	github.com/creack/pty v1.1.11
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/fatih/color v1.9.0
