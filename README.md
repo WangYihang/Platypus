@@ -202,6 +202,7 @@ You can just simply type `exit` to exit pty mode.
 - [ ] Benchmark
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
+- [ ] Electron frontend
 - [x] Design Private Protocol
 - [x] Check exit state in WebSocket
 - [x] ~~Use HR package to detect the status of client (maybe `echo $random_string`)~~
