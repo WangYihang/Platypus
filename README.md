@@ -184,8 +184,9 @@ You can just simply type `exit` to exit pty mode.
 
 ## Other Materials
 
-* [Presentation on KCon 2019 ](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20of%20Platypus%20(KCon)/Introduction%20of%20Platypus.pdf)
-* [Demo Video](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
+* [Presentation on KCon 2019](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20to%20Platypus%20(KCon)/Introduction%20to%20Platypus%20on%20KCon%202019.pdf)
+* [Presentation on GCSIS 2021](https://github.com/WangYihang/Presentations/blob/master/2021-04-24%20Introduction%20to%20Platypus%20(GCSIS)/Introduction%20to%20Platypus%20on%20GCSIS%202021.pptx)
+* [Demostration Video](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
 
 ## TODOs
 - [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
