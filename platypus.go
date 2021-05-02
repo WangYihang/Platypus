@@ -34,6 +34,9 @@ func main() {
 		return
 	}
 
+	// Display platypus information
+	log.Success("Platypus %s started with config file: %s", update.Version, configFilename)
+
 	// Create context
 	context.CreateContext()
 	context.Ctx.Config = &config
