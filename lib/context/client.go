@@ -905,7 +905,7 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 
 	// Execute Termite Binary
 	c.SystemToken(fmt.Sprintf("/usr/bin/chmod +x %s", dst))
-	c.System(fmt.Sprintf("/usr/bin/nohup /bin/bash -c '%s; /usr/bin/rm %s' >/dev/null &", dst, dst))
+	c.SystemToken(dst)
 }
 
 func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
