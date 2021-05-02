@@ -45,7 +45,6 @@ message.config({
 const { Header, Content, Sider } = Layout;
 
 let endPoint = window.location.host;
-endPoint = "172.20.16.130:7331"
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
@@ -70,10 +69,10 @@ class App extends React.Component {
   upgradeToTermite(clientHash, target) {
     if (target !== "") {
       axios
-      .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
-      .then((response) => {
-        console.log(response)
-      })
+        .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
+        .then((response) => {
+          console.log(response)
+        })
     } else {
       message.error("Invalid connect back termite listener address: " + target, 5);
     }
@@ -380,17 +379,17 @@ class App extends React.Component {
                   defaultValue={this.state.connectBack}
                 >
                   {this.state.serversList.map((entry) => {
-                      if (entry.encrypted) {
-                        return entry.interfaces.map((ifaddr)=>{
-                          let v = ifaddr + ":" + entry.port
-                          return <Option value={v}>{v}</Option>
-                        })
-                      }
-                      return ""
+                    if (entry.encrypted) {
+                      return entry.interfaces.map((ifaddr) => {
+                        let v = ifaddr + ":" + entry.port
+                        return <Option value={v}>{v}</Option>
+                      })
+                    }
+                    return ""
                   })}
                 </Select>
                 Input Termite Listeners Manually:
-                <Input placeholder="1.3.3.7:13337" value={this.state.connectBack} onChange={(e)=>{this.setState({connectBack: e.target.value})}}/>
+                <Input placeholder="1.3.3.7:13337" value={this.state.connectBack} onChange={(e) => { this.setState({ connectBack: e.target.value }) }} />
               </Modal>
             </>
           );
