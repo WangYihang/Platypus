@@ -6,6 +6,7 @@ require (
 	github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/containerd/console v1.0.2 // indirect
 	github.com/creack/pty v1.1.11
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
@@ -22,6 +23,7 @@ require (
 	github.com/hashicorp/go-version v1.3.0 // indirect
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/json-iterator/go v1.1.9 // indirect
+	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
@@ -31,6 +33,7 @@ require (
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
 	github.com/rhysd/go-github-selfupdate v1.2.3
+	github.com/sevlyar/go-daemon v0.1.5 // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/tidwall/pretty v1.0.1 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
