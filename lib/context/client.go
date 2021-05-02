@@ -851,7 +851,7 @@ func (client *TCPClient) NotifyWebSocketUploadingTermite(bytesSent int, bytesTot
 	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
-func (c *TCPClient) UpgradeToTermite(server *TCPServer) {
+func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 	if c.OS == oss.Windows {
 		// TODO: Windows Upgrade
 		log.Error("Upgrade to Termite on Windows client is not supported")
@@ -872,17 +872,10 @@ func (c *TCPClient) UpgradeToTermite(server *TCPServer) {
 
 	// BUG: Something, the public ip address is not one of the interface addresses
 	// eg: Alibaba Cloud, the public ip is not in machine interface ip addresses
-	targetAddr := ""
-	for _, sh := range server.Interfaces {
-		if sh != "127.0.0.1" {
-			targetAddr = fmt.Sprintf("%s:%d", sh, server.Port)
-			break
-		}
-	}
 	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
 	replacement := make([]byte, len(placeHolder))
-	for i := 0; i < len(targetAddr); i++ {
-		replacement[i] = targetAddr[i]
+	for i := 0; i < len(connectBackHostPort); i++ {
+		replacement[i] = connectBackHostPort[i]
 	}
 	log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
 	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
