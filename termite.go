@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -40,9 +41,9 @@ func (b *Backoff) increase() {
 	}
 }
 
-func (b *Backoff) Sleep() {
+func (b *Backoff) Sleep(random bool) {
 	var i int64 = 0
-	for i < b.Current {
+	for i < b.Current+(int64(rand.Uint64())%b.Current) {
 		time.Sleep(b.Unit)
 		i++
 	}
@@ -320,6 +321,6 @@ func main() {
 	for {
 		StartClient()
 		log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current)
-		backoff.Sleep()
+		backoff.Sleep(true)
 	}
 }
