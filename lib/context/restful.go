@@ -449,33 +449,30 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				panicRESTfully(c, "No such client")
 			})
 			// Upgrade reverse shell client to termite client
-			clientAPIGroup.GET("/:hash/upgrade/:serverHash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash", "serverHash"}) {
+			clientAPIGroup.GET("/:hash/upgrade/:target", func(c *gin.Context) {
+				if !paramsExistOrAbort(c, []string{"hash", "target"}) {
 					return
 				}
 				hash := c.Param("hash")
-				serverHash := c.Param("serverHash")
-				targetAddr := Ctx.FindServerByHash(serverHash)
-				if targetAddr == nil {
+				target := c.Param("target")
+				// TODO: Check target format
+				if target == "" {
 					panicRESTfully(c, "Invalid server hash")
 					return
 				}
-				if !targetAddr.Encrypted {
-					panicRESTfully(c, "Target server is not secured")
+
+				client := Ctx.FindTCPClientByHash(hash)
+				if client != nil {
+					// Upgrade
+					go client.UpgradeToTermite(target)
+					c.JSON(200, gin.H{
+						"status": true,
+						"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
+					})
+					c.Abort()
 					return
 				}
-				for _, server := range Ctx.Servers {
-					if client, exist := server.Clients[hash]; exist {
-						// Upgrade
-						go client.UpgradeToTermite(targetAddr)
-						c.JSON(200, gin.H{
-							"status": true,
-							"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
-						})
-						c.Abort()
-						return
-					}
-				}
+
 				panicRESTfully(c, "No such client")
 			})
 			clientAPIGroup.DELETE("/:hash", func(c *gin.Context) {

