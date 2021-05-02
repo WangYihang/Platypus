@@ -21,8 +21,6 @@ func GatherInterfacesList(host string) []string {
 						interfaces = append(interfaces, v.IP.String())
 						break
 					}
-					// ipv6 is not used currently
-					// log.Warn("\t`curl http://[%s:%d]/|sh`", v.IP, tcpServer.Port)
 				}
 			}
 		}
