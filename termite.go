@@ -22,6 +22,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
 	"github.com/creack/pty"
+	"github.com/sevlyar/go-daemon"
 )
 
 type Backoff struct {
@@ -41,9 +42,9 @@ func (b *Backoff) increase() {
 	}
 }
 
-func (b *Backoff) Sleep(random bool) {
+func (b *Backoff) Sleep(add int64) {
 	var i int64 = 0
-	for i < b.Current+(int64(rand.Uint64())%b.Current) {
+	for i < b.Current+add {
 		time.Sleep(b.Unit)
 		i++
 	}
@@ -314,13 +315,32 @@ func RemoveSelf() {
 }
 
 func main() {
+
+	cntxt := &daemon.Context{
+		WorkDir: "/",
+		Umask:   027,
+		Args:    []string{},
+	}
+
+	d, err := cntxt.Reborn()
+	if err != nil {
+		log.Error("Unable to run: ", err)
+	}
+	if d != nil {
+		return
+	}
+	defer cntxt.Release()
+
+	log.Success("daemon started")
+
 	RemoveSelf()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
 	for {
 		StartClient()
-		log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current)
-		backoff.Sleep(true)
+		add := (int64(rand.Uint64()) % backoff.Current)
+		log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
+		backoff.Sleep(add)
 	}
 }
