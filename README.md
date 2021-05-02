@@ -169,9 +169,11 @@ Use `Upload` command to upload file to the current interacting client.
 
 > This feature only works on *nix clients
 
+> For your user experience, we highly RECOMMEND you use `Upgrade` command to upgrade the plain reverse shell to a encrypted interactive shell.
+
 Try to Spawn `/bin/bash` via Python, then the shell is fully interactive (You can use vim / htop and other stuffs).
 First use `Jump` to select a client, then type `PTY`, then type `Interact` to drop into a fully interactive shell.
-You can just simply type `exit` to exit pty mode.
+~~You can just simply type `exit` to exit pty mode~~, to avoid the situation in [issue #39](https://github.com/WangYihang/Platypus/issues/39), you can use `platyquit` to quit the fully interactive shell mode.
 
 ![](./figure/cli/interactive.gif)
 
