@@ -1,11 +1,13 @@
 package context
 
 import (
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/WangYihang/Platypus/lib/util/config"
 	"github.com/WangYihang/Platypus/lib/util/message"
+	"github.com/WangYihang/Platypus/lib/util/ui"
 	"github.com/WangYihang/readline"
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
@@ -149,4 +151,15 @@ func (ctx Context) FindServerListeningAddressByRouteKey(routeKey string) string 
 		}
 	}
 	return ""
+}
+
+func Shutdown() {
+	if len(Ctx.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
+		return
+	}
+	for _, server := range Ctx.Servers {
+		(*server).Stop()
+		delete(Ctx.Servers, (*server).Hash)
+	}
+	os.Exit(0)
 }
