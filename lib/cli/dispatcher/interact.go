@@ -55,7 +55,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 					}
 				}
 			}()
-			magic := "exit"
+			magic := "platyquit"
 			firstLine := true
 			inputQueueIndex := 0
 			inputQueueLength := len(magic) + 1 // + 1 for clrf
