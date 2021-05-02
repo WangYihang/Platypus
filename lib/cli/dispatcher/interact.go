@@ -60,6 +60,7 @@ func (dispatcher Dispatcher) Interact(args []string) {
 			inputQueueIndex := 0
 			inputQueueLength := len(magic) + 1 // + 1 for clrf
 			inputQueue := make([]byte, inputQueueLength)
+			firstHint := true
 			// Client input <- Platypus stdin
 			for current.GetInteractive() && current.GetPtyEstablished() && cont {
 				// Magic exit mantra: 'exit' is typed
@@ -75,8 +76,9 @@ func (dispatcher Dispatcher) Interact(args []string) {
 				}
 				matched := false
 
-				if strings.Contains(string(inputQueue)+string(inputQueue), "exit") {
+				if firstHint && strings.Contains(string(inputQueue)+string(inputQueue), "exit") {
 					log.Info("You can type `%s` to return to Platypus", magic)
+					firstHint = false
 				}
 
 				if strings.Contains(string(inputQueue)+string(inputQueue), pattern) {
