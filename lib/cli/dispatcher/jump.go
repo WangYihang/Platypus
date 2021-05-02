@@ -28,6 +28,7 @@ func (dispatcher Dispatcher) Jump(args []string) {
 
 	if target != nil {
 		// TODO: lock, websocket race condition when jumping
+		context.Ctx.CurrentTermite = nil
 		context.Ctx.Current = target
 		log.Success("The current interactive shell is set to: %s", context.Ctx.Current.FullDesc())
 		// Update prompt
@@ -48,8 +49,9 @@ func (dispatcher Dispatcher) Jump(args []string) {
 	}
 
 	if targetTermite != nil {
+		context.Ctx.Current = nil
 		context.Ctx.CurrentTermite = targetTermite
-		log.Success("The current interactive shell is set to: %s", context.Ctx.CurrentTermite.FullDesc())
+		log.Success("The current termite interactive shell is set to: %s", context.Ctx.CurrentTermite.FullDesc())
 		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
 		return
 	}
