@@ -24,11 +24,17 @@ func Signal() {
 		for {
 			switch sig := <-c; sig {
 			case syscall.SIGTSTP:
-				log.Info("syscall.SIGTERM, Exit?")
+				if ui.PromptYesNo("syscall.SIGTERM, Exit?") {
+					Shutdown()
+				}
 			case syscall.SIGTERM:
-				log.Info("syscall.SIGTERM, Exit?")
+				if ui.PromptYesNo("syscall.SIGTERM, Exit?") {
+					Shutdown()
+				}
 			case os.Interrupt:
-				log.Info("os.Interrupt, Exit?")
+				if ui.PromptYesNo("os.Interrupt, Exit?") {
+					Shutdown()
+				}
 			case syscall.SIGWINCH:
 				if Ctx.CurrentTermite != nil {
 					columns, rows, _ := term.GetSize(0)
