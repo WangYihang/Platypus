@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -306,7 +307,13 @@ func StartClient() {
 	handleConnection(c)
 }
 
+func RemoveSelf() {
+	filename, _ := filepath.Abs(os.Args[0])
+	os.Remove(filename)
+}
+
 func main() {
+	RemoveSelf()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
