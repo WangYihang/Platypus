@@ -10,7 +10,7 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-const version = "1.4.2"
+const Version = "1.4.2"
 
 func ConfirmAndSelfUpdate() {
 	log.Info("Detecting the latest version...")
@@ -20,7 +20,7 @@ func ConfirmAndSelfUpdate() {
 		return
 	}
 
-	v := semver.MustParse(version)
+	v := semver.MustParse(Version)
 	if !found || latest.Version.LTE(v) {
 		log.Success("Current version is the latest")
 		return
