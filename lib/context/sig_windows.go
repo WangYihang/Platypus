@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/WangYihang/Platypus/lib/util/log"
+	"github.com/WangYihang/Platypus/lib/util/ui"
 )
 
 func Signal() {
@@ -21,9 +21,13 @@ func Signal() {
 		for {
 			switch sig := <-c; sig {
 			case syscall.SIGTERM:
-				log.Info("syscall.SIGTERM, Exit?")
+				if ui.PromptYesNo("os.Interrupt, Exit?") {
+					Shutdown()
+				}
 			case os.Interrupt:
-				log.Info("os.Interrupt, Exit?")
+				if ui.PromptYesNo("os.Interrupt, Exit?") {
+					Shutdown()
+				}
 			}
 		}
 	}()
