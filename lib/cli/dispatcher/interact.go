@@ -74,6 +74,11 @@ func (dispatcher Dispatcher) Interact(args []string) {
 					pattern = "\r" + magic
 				}
 				matched := false
+
+				if strings.Contains(string(inputQueue)+string(inputQueue), "exit") {
+					log.Info("You can type `%s` to return to Platypus", magic)
+				}
+
 				if strings.Contains(string(inputQueue)+string(inputQueue), pattern) {
 					// Exit Pty
 					matched = true
