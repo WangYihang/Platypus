@@ -4,7 +4,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus/stargazers)
 [![GitHub license](https://img.shields.io/github/license/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/wangyihang/platypus/total)](https://github.com/WangYihang/Platypus/releases)
-[![Sponsors](https://opencollective.com/platypus/tiers/badge.svg)
+[![Sponsors](https://opencollective.com/platypus/tiers/badge.svg)](https://opencollective.com/platypus)
 
 A modern multiple reverse shell sessions/clients manager via terminal written in go
 
