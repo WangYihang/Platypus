@@ -6,13 +6,14 @@ const (
 	Unknown OperatingSystem = iota
 	Linux
 	Windows
+	WindowsPowerShell
 	SunOS
 	MacOS
 	FreeBSD
 )
 
 func (os OperatingSystem) String() string {
-	return [...]string{"Unknown", "🐧", "❖", "SunOS", "🍎", "FreeBSD"}[os]
+	return [...]string{"Unknown", "🐧", "❖", "❖ [PowerShell]", "SunOS", "🍎", "FreeBSD"}[os]
 }
 
 func Parse(osstr string) OperatingSystem {

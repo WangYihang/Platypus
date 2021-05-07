@@ -715,7 +715,7 @@ func (c *TCPClient) detectPython() {
 			log.Debug("[%s] Python3 found: %s", c.conn.RemoteAddr().String(), result)
 		}
 	} else {
-		log.Error("[%s] Unknown OS: %s", c.conn.RemoteAddr().String(), c.OS.String())
+		log.Error("[%s] Unsupported OS: %s", c.conn.RemoteAddr().String(), c.OS.String())
 	}
 }
 
@@ -771,9 +771,18 @@ func (c *TCPClient) detectOS() {
 		c.ReadUntil(tokenA)
 	}
 	output, _ = c.ReadUntil(tokenB)
+	log.Info(output)
 	if strings.Contains(strings.ToLower(output), "windows") {
+		// CMD
 		c.OS = oss.Windows
 		log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
+		return
+	}
+
+	if output == "\r\n"+tokenA+"\r\n"+tokenB {
+		// Powershell
+		c.OS = oss.WindowsPowerShell
+		log.Debug("[%s] OS detected: %s with PowerShell", c.conn.RemoteAddr().String(), c.OS.String())
 		return
 	}
 
