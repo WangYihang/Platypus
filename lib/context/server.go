@@ -104,7 +104,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 
 func (s *TCPServer) Handle(conn net.Conn) {
 	if s.Encrypted {
-		client := CreateTermiteClient(conn)
+		client := CreateTermiteClient(conn, s)
 		// Send gather info request
 		log.Info("Gathering information from client...")
 		if client.GatherClientInfo(s.hashFormat) {

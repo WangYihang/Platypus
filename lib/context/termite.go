@@ -51,6 +51,7 @@ type TermiteClient struct {
 	Python2           string              `json:"python2"`
 	Python3           string              `json:"python3"`
 	TimeStamp         time.Time           `json:"timestamp"`
+	server            *TCPServer
 	EncoderLock       *sync.Mutex
 	DecoderLock       *sync.Mutex
 	AtomLock          *sync.Mutex
@@ -60,7 +61,7 @@ type TermiteClient struct {
 	CurrentProcessKey string
 }
 
-func CreateTermiteClient(conn net.Conn) *TermiteClient {
+func CreateTermiteClient(conn net.Conn, server *TCPServer) *TermiteClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	return &TermiteClient{
@@ -75,6 +76,7 @@ func CreateTermiteClient(conn net.Conn) *TermiteClient {
 		Python2:           "",
 		Python3:           "",
 		TimeStamp:         time.Now(),
+		server:            server,
 		EncoderLock:       new(sync.Mutex),
 		DecoderLock:       new(sync.Mutex),
 		AtomLock:          new(sync.Mutex),
@@ -85,7 +87,13 @@ func CreateTermiteClient(conn net.Conn) *TermiteClient {
 	}
 }
 
+func (c *TermiteClient) GetHashFormat() string {
+	return c.server.hashFormat
+}
+
 func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
+	log.Info("Gathering information from termite client...")
+
 	c.AtomLock.Lock()
 	defer func() { c.AtomLock.Unlock() }()
 

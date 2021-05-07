@@ -85,6 +85,10 @@ func (c *TCPClient) GetConnString() string {
 	return c.conn.RemoteAddr().String()
 }
 
+func (c *TCPClient) GetHashFormat() string {
+	return c.server.hashFormat
+}
+
 func (c *TCPClient) GetConn() net.Conn {
 	return c.conn
 }
@@ -779,7 +783,7 @@ func (c *TCPClient) detectOS() {
 }
 
 func (c *TCPClient) GatherClientInfo(hashFormat string) {
-	log.Debug("Gathering information from client...")
+	log.Info("Gathering information from client...")
 	echoEnabled, _ := c.tryReadEcho(str.RandomString(0x10))
 	c.echoEnabled = echoEnabled
 	c.detectOS()
