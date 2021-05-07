@@ -8,35 +8,53 @@ import (
 )
 
 func (dispatcher Dispatcher) Info(args []string) {
-	if len(args) != 1 {
+	if len(args) > 1 {
 		log.Error("Arguments error, use `Help Info` to get more information")
 		dispatcher.InfoHelp([]string{})
 		return
 	}
 
-	clue := args[0]
-	// Client Information
-	targetClient := context.Ctx.FindTCPClientByHash(clue)
-	if targetClient != nil {
-		targetClient.AsTable()
-		return
-	}
+	if len(args) == 0 {
+		if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+			log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
+			return
+		}
 
-	// Client Information
-	targetTermiteClient := context.Ctx.FindTermiteClientByHash(clue)
-	if targetTermiteClient != nil {
-		targetTermiteClient.AsTable()
-		return
-	}
+		if context.Ctx.Current != nil {
+			current := context.Ctx.Current
+			current.AsTable()
+			return
+		}
 
-	// Server Information
-	targetServer := context.Ctx.FindServerByHash(clue)
-	if targetServer != nil {
-		targetServer.AsTable()
-		return
-	}
+		if context.Ctx.CurrentTermite != nil {
+			current := context.Ctx.CurrentTermite
+			current.AsTable()
+			return
+		}
+	} else {
+		clue := args[0]
+		// Client Information
+		targetClient := context.Ctx.FindTCPClientByHash(clue)
+		if targetClient != nil {
+			targetClient.AsTable()
+			return
+		}
 
-	log.Error("No such node")
+		// Client Information
+		targetTermiteClient := context.Ctx.FindTermiteClientByHash(clue)
+		if targetTermiteClient != nil {
+			targetTermiteClient.AsTable()
+			return
+		}
+
+		// Server Information
+		targetServer := context.Ctx.FindServerByHash(clue)
+		if targetServer != nil {
+			targetServer.AsTable()
+			return
+		}
+		log.Error("No such node")
+	}
 }
 
 func (dispatcher Dispatcher) InfoHelp(args []string) {
