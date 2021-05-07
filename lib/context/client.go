@@ -575,7 +575,7 @@ func (c *TCPClient) SetWindowSize(ws *WindowSize) {
 }
 
 func (c *TCPClient) EstablishPTY() error {
-	if c.ptyEstablished {
+	if c.GetPtyEstablished() {
 		return errors.New("PTY is already established in the current client")
 	}
 
@@ -610,6 +610,7 @@ func (c *TCPClient) EstablishPTY() error {
 	log.Info("reseting client window size...")
 	c.System(fmt.Sprintf("stty rows %d columns %d", height, width))
 
+	c.SetPtyEstablished(true)
 	// TODO: Check pty establish status
 	return nil
 }
