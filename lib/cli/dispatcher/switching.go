@@ -16,10 +16,8 @@ func (dispatcher Dispatcher) Switching(args []string) {
 	}
 
 	// handle the hash represent a server
-	isServer := false
 	for _, server := range context.Ctx.Servers {
 		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
-			isServer = true
 			// flip server `GroupDispatch` state
 			server.GroupDispatch = !server.GroupDispatch
 			// flush all clients related to this server
@@ -27,10 +25,8 @@ func (dispatcher Dispatcher) Switching(args []string) {
 				client.GroupDispatch = server.GroupDispatch
 				log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 			}
+			return
 		}
-	}
-	if isServer {
-		return
 	}
 
 	// handle the hash represent a client
