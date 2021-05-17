@@ -70,6 +70,8 @@ type TermiteProcess struct {
 
 var processes map[string]*TermiteProcess
 
+var tunnels map[string]*net.Conn
+
 type Client struct {
 	Conn    *tls.Conn
 	Encoder *gob.Encoder
@@ -262,7 +264,29 @@ func handleConnection(c *Client) {
 				termiteProcess.ptmx.Close()
 			}
 		}
+		case message.START_TUNNEL:
+
+		case message.TUNNEL_IO:
+		case message.STOP_TUNNEL:
 	}
+}
+
+// 自定义 Writer 实现 Write 接口，这样下面的代码不用变了
+func Tunnel(host, port) {
+	proxy, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		log.Error(err)
+	}
+
+	fmt.Println("proxy connected")
+	go copyIO(conn, proxy)
+	go copyIO(proxy, conn)
+}
+
+func copyIO(src, dst net.Conn) {
+	defer src.Close()
+	defer dst.Close()
+	io.Copy(src, dst)
 }
 
 func StartClient() {
@@ -309,7 +333,7 @@ func StartClient() {
 	handleConnection(c)
 }
 
-func RemoveSelf() {
+func RemoveSelfExecutable() {
 	filename, _ := filepath.Abs(os.Args[0])
 	os.Remove(filename)
 }
@@ -333,10 +357,11 @@ func main() {
 
 	log.Success("daemon started")
 
-	RemoveSelf()
+	RemoveSelfExecutable()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
+	tunnels = map[string]*net.Conn{}
 	for {
 		StartClient()
 		add := (int64(rand.Uint64()) % backoff.Current)
