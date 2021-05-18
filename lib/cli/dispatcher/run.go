@@ -23,7 +23,7 @@ func (dispatcher Dispatcher) Run(args []string) {
 		return
 	}
 
-	server := context.CreateTCPServer(host, uint16(port), "", false)
+	server := context.CreateTCPServer(host, uint16(port), "", false, true)
 	if server != nil {
 		go (*server).Run()
 	}

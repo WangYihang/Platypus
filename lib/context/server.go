@@ -37,11 +37,12 @@ type TCPServer struct {
 	Interfaces     []string                    `json:"interfaces"`
 	Hash           string                      `json:"hash"`
 	Encrypted      bool                        `json:"encrypted"`
+	DisableHistory bool                        `json:"disable_history"`
 	hashFormat     string
 	stopped        chan struct{}
 }
 
-func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool) *TCPServer {
+func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)
 
 	if Ctx.Servers[hash.MD5(service)] != nil {
@@ -66,6 +67,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 		Hash:           hash.MD5(fmt.Sprintf("%s:%d", host, port)),
 		stopped:        make(chan struct{}, 1),
 		Encrypted:      encrypted,
+		DisableHistory: disableHistory,
 	}
 
 	Ctx.Servers[hash.MD5(service)] = tcpServer
@@ -104,7 +106,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 
 func (s *TCPServer) Handle(conn net.Conn) {
 	if s.Encrypted {
-		client := CreateTermiteClient(conn, s)
+		client := CreateTermiteClient(conn, s, s.DisableHistory)
 		// Send gather info request
 		log.Info("Gathering information from client...")
 		if client.GatherClientInfo(s.hashFormat) {
