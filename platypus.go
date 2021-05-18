@@ -67,7 +67,7 @@ func main() {
 
 	// Init servers from config file
 	for _, s := range config.Servers {
-		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted)
+		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory)
 		if server != nil {
 			// avoid terminal being disrupted
 			time.Sleep(0x100 * time.Millisecond)

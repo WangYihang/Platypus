@@ -380,7 +380,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					panicRESTfully(c, "Invalid port number")
 					return
 				}
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", false)
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", false, true)
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
