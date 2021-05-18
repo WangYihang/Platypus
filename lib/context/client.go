@@ -774,7 +774,9 @@ func (c *TCPClient) detectOS() {
 		if strings.Contains(strings.ToLower(output), keyword) {
 			c.OS = os
 			log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
-			c.disableHistory()
+			if c.server.DisableHistory {
+				c.disableHistory()
+			}
 			return
 		}
 	}
