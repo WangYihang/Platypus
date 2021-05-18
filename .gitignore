@@ -20,6 +20,7 @@ termites/
 
 # config file
 config.yml
+config-v*.yml
 
 # resource file
 lib/util/resource/resource.go
