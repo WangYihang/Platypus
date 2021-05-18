@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// Detect and create config file
-	configFilename := "config.yml"
+	configFilename := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilename) {
 		content, _ := resource.Asset("lib/runtime/config.example.yml")
 		ioutil.WriteFile(configFilename, content, 0644)
@@ -26,11 +26,10 @@ func main() {
 
 	// Read config file
 	var config config.Config
-	var ConfigFilename string = "config.yml"
-	content, _ := ioutil.ReadFile(ConfigFilename)
+	content, _ := ioutil.ReadFile(configFilename)
 	err := yaml.Unmarshal(content, &config)
 	if err != nil {
-		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", ConfigFilename, ConfigFilename)
+		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
 		return
 	}
 
