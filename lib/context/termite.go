@@ -51,6 +51,7 @@ type TermiteClient struct {
 	Python2           string              `json:"python2"`
 	Python3           string              `json:"python3"`
 	TimeStamp         time.Time           `json:"timestamp"`
+	DisableHistory    bool                `json:"disable_hisory"`
 	server            *TCPServer
 	EncoderLock       *sync.Mutex
 	DecoderLock       *sync.Mutex
@@ -61,7 +62,7 @@ type TermiteClient struct {
 	CurrentProcessKey string
 }
 
-func CreateTermiteClient(conn net.Conn, server *TCPServer) *TermiteClient {
+func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) *TermiteClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	return &TermiteClient{
@@ -84,6 +85,7 @@ func CreateTermiteClient(conn net.Conn, server *TCPServer) *TermiteClient {
 		Decoder:           gob.NewDecoder(conn),
 		Processes:         map[string]*Process{},
 		CurrentProcessKey: "",
+		DisableHistory:    disableHistory,
 	}
 }
 
