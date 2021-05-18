@@ -610,6 +610,9 @@ func (c *TCPClient) EstablishPTY() error {
 	log.Info("reseting client window size...")
 	c.System(fmt.Sprintf("stty rows %d columns %d", height, width))
 
+	// Step 4: Disable history
+	c.disableHistory()
+
 	c.SetPtyEstablished(true)
 	// TODO: Check pty establish status
 	return nil
@@ -735,6 +738,18 @@ func (c *TCPClient) detectNetworkInterfaces() {
 	}
 }
 
+func (c *TCPClient) disableHistory() {
+	if c.OS != oss.Windows {
+		c.System("export HISTORY=")
+		c.System("export HISTSIZE=0")
+		c.System("export HISTSAVE=")
+		c.System("export HISTZONE=")
+		c.System("export HISTLOG=")
+		c.System("export HISTFILE=/dev/null")
+		c.System("export HISTFILESIZE=0")
+	}
+}
+
 func (c *TCPClient) detectOS() {
 	tokenA := str.RandomString(0x08)
 	tokenB := str.RandomString(0x08)
@@ -759,6 +774,7 @@ func (c *TCPClient) detectOS() {
 		if strings.Contains(strings.ToLower(output), keyword) {
 			c.OS = os
 			log.Debug("[%s] OS detected: %s", c.conn.RemoteAddr().String(), c.OS.String())
+			c.disableHistory()
 			return
 		}
 	}
