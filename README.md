@@ -47,7 +47,7 @@ make
 ```bash
 docker-compose up -d
 # Method 1: enter the cli of platypus
-docker-compose exec app tmux a -s platypus
+docker-compose exec app tmux a -t platypus
 # Method 2: enter the web ui of platypus
 firefox http://127.0.0.1:7331/
 ```
