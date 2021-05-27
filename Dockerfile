@@ -7,6 +7,8 @@ RUN git checkout .
 # Stage 2: Build frontend
 FROM node:14 as frontend
 COPY --from=source /app/html /app/html
+# Change yarn registry to fit in the networking situation in China
+RUN yarn config set registry https://registry.npm.taobao.org
 RUN cd /app/html/frontend && rm -rf node_modules && yarn install && yarn build
 RUN cd /app/html/ttyd && rm -rf node_modules && yarn install && yarn build
 
