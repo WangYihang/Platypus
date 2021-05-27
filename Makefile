@@ -111,8 +111,8 @@ dependency:
 	# Golang
 	sudo apt install -y golang-go
 	sudo apt install -y go-bindata
-    go env -w GO111MODULE=on
-    go env -w GOPROXY=https://goproxy.cn,direct
+	go env -w GO111MODULE=on
+	go env -w GOPROXY=https://goproxy.cn,direct
 	# upx
 	sudo apt install -y upx
 
