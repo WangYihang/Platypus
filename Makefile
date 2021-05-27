@@ -104,8 +104,17 @@ dependency:
 	sudo apt-get install -y software-properties-common gnupg
 	sudo add-apt-repository -y ppa:longsleep/golang-backports
 	sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 52B59B1571A79DBC054901C0F6BC817356A3D45E
-	sudo apt install -y golang-go nodejs npm go-bindata upx
+	# Nodejs
+	sudo apt install -y nodejs 
+	sudo apt install -y npm
 	sudo npm install -g yarn
+	# Golang
+	sudo apt install -y golang-go
+	sudo apt install -y go-bindata
+    go env -w GO111MODULE=on
+    go env -w GOPROXY=https://goproxy.cn,direct
+	# upx
+	sudo apt install -y upx
 
 clean:
 	rm -rf build
