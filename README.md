@@ -42,6 +42,13 @@ cd Platypus
 make
 ```
 
+### Run Platypus from docker-compose
+
+```bash
+docker-compose up -d
+docker-compose exec app tmux a -s platypus
+```
+
 ### Run Platypus from release binaries
 
 1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
