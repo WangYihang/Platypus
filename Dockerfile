@@ -27,9 +27,9 @@ RUN go build -o ./build/platypus platypus.go
 # Stage 4: running environment from scratch
 FROM ubuntu
 LABEL maintainer="Wang Yihang <wangyihanger@gmail.com>"
-COPY --from=platypus /app/build/platypus /root/platypus
+COPY --from=platypus /app/build/platypus /app/platypus
 RUN apt update
 RUN apt install -y tmux upx
-WORKDIR /root
+WORKDIR /app
 RUN echo "setw -g aggressive-resize on" > .tmux.conf
 ENTRYPOINT tmux new -s platypus ./platypus
