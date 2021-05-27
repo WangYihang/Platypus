@@ -4,6 +4,4 @@ services:
   app:
     build: .
     tty: true
-    working_dir: /root
-    entrypoint: tmux new-session -s platypus /root/platypus
     network_mode: host
