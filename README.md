@@ -214,6 +214,7 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
 - [ ] Electron frontend
+- [ ] [#53 Reload config file](https://github.com/WangYihang/Platypus/issues/53)
 - [x] Design Private Protocol
 - [x] Check exit state in WebSocket
 - [x] ~~Use HR package to detect the status of client (maybe `echo $random_string`)~~
