@@ -281,4 +281,4 @@ Support this project by becoming a sponsor. Your logo will show up here with a l
 # 404StarLink 2.0 - Galaxy
 
 ![](https://github.com/knownsec/404StarLink-Project/raw/master/logo.png)
-As-Exploits has joined 404Team [404StarLink 2.0 - Galaxy](https://github.com/knownsec/404StarLink2.0-Galaxy)
+Platypus has joined 404Team [404StarLink 2.0 - Galaxy](https://github.com/knownsec/404StarLink2.0-Galaxy)
