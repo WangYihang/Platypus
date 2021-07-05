@@ -5,5 +5,4 @@ services:
     build: .
     tty: true
     network_mode: host
-    volumes: 
-      - ./build:/app
+    entrypoint: tmux new -s platypus ./platypus
