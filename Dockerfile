@@ -13,7 +13,7 @@ RUN cd /app/html/frontend && rm -rf node_modules && yarn install && yarn build
 RUN cd /app/html/ttyd && rm -rf node_modules && yarn install && yarn build
 
 # Stage 3: Build platypus
-FROM golang as platypus
+FROM golang as builder
 COPY --from=source /app /app
 WORKDIR /app
 COPY --from=frontend /app/html/frontend/build /app/html/frontend/build
@@ -29,9 +29,8 @@ RUN go build -o ./build/platypus platypus.go
 # Stage 4: running environment from scratch
 FROM ubuntu
 LABEL maintainer="Wang Yihang <wangyihanger@gmail.com>"
-COPY --from=platypus /app/build/platypus /app/platypus
+COPY --from=builder /app/build/platypus /app/platypus
 RUN apt update
 RUN apt install -y tmux upx
 WORKDIR /app
-RUN echo "setw -g aggressive-resize on" > .tmux.conf
-ENTRYPOINT tmux new -s platypus ./platypus
+RUN echo "setw -g aggressive-resize on" > /root/.tmux.conf
