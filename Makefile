@@ -10,7 +10,7 @@ release: prepare
 	env GOOS=darwin GOARCH=amd64 go build -o ./build/Platypus_darwin_amd64 platypus.go
 	env GOOS=windows GOARCH=amd64 go build -o ./build/Platypus_windows_amd64.exe platypus.go
 
-prepare: dependency
+prepare:
 	bash -c "[[ -d termites ]] || mkdir termites"
 	bash -c "[[ -d build ]] || mkdir build"
 	echo "Building frontend"
