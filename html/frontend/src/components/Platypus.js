@@ -176,8 +176,8 @@ export default class Platypus extends React.Component {
           <SideBar
             apiUrl={apiUrl}
             currentServer={this.props.currentServer}
-            selectServer={this.selectServer}
-            serverCreated={this.serverCreated}
+            selectServer={this.props.selectServer}
+            serverCreated={this.props.serverCreated}
             serverCreateHost={this.props.serverCreateHost}
             serverCreatePort={this.props.serverCreatePort}
             serversList={this.props.serversList}
@@ -189,13 +189,13 @@ export default class Platypus extends React.Component {
             distributor={this.props.distributor}
             bottom={this.props.bottom}
             connectBack={this.props.connectBack}
-            currentServer={this.props.currentServer}
-            handleCancel={this.handleCancel}
-            handleOk={this.handleOk}
+            handleCancel={this.props.handleCancel}
+            handleOk={this.props.handleOk}
             isModalVisible={this.props.isModalVisible}
             serversList={this.props.serversList}
-            setConnectBack={this.setConnectBack}
-            showModal={this.showModal}
+            setConnectBack={this.props.setConnectBack}
+            showModal={this.props.showModal}
+            upgradeToTermite={this.upgradeToTermite}
           />
         </Layout>
       </Layout>;

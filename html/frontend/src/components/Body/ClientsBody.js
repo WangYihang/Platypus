@@ -26,6 +26,7 @@ export default class ClientsBody extends React.Component {
                         serversList={this.props.serversList}
                         setConnectBack={this.props.setConnectBack}
                         showModal={this.props.showModal}
+                        upgradeToTermite={this.props.upgradeToTermite}
                     />
                 </Content>
             </Layout>
