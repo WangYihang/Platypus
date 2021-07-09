@@ -5,6 +5,19 @@ import UpgradeToTermite from "../../Modal/UpgradeToTermite/UpgradeToTermite";
 
 const moment = require("moment");
 export default class ClientTable extends React.Component {
+    generateProgressStatus(prog) {
+      if (prog < 0) {
+        return "exception"
+      } else if (prog === 0) {
+        return "normal"
+      } else if (prog > 0) {
+        if (prog >= 100) {
+          return "success"
+        } else {
+          return "active"
+        }
+      }
+    }
     render() {
       const columns = [
         {
@@ -89,9 +102,9 @@ export default class ClientTable extends React.Component {
           render: (data, line, index) => {
             return <>
               <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert} type="success" />
-              <Progress percent={line.compiling_progress} size="small" status={this.props.generateProgressStatus(line.compiling_progress)} />
-              <Progress percent={line.compressing_progress} size="small" status={this.props.generateProgressStatus(line.compressing_progress)} />
-              <Progress percent={Math.round(line.upload_progress)} size="small" status={this.props.generateProgressStatus(line.upload_progress)} />
+              <Progress percent={line.compiling_progress} size="small" status={this.generateProgressStatus(line.compiling_progress)} />
+              <Progress percent={line.compressing_progress} size="small" status={this.generateProgressStatus(line.compressing_progress)} />
+              <Progress percent={Math.round(line.upload_progress)} size="small" status={this.generateProgressStatus(line.upload_progress)} />
             </>
           },
         }
