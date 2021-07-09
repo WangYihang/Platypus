@@ -1,30 +1,26 @@
 import React from "react";
 import {
-  message,
-  Table,
-  Tag,
-  Divider,
-  Button,
-  Tooltip,
-  Progress,
-  Input,
-  Badge,
-  Layout,
-  Menu,
   Alert,
-  Tabs,
-  List,
-  Select,
-  Descriptions,
+  Button,
   Collapse,
+  Descriptions,
+  Divider,
+  Input,
+  Layout,
+  List,
+  message,
   Modal,
+  Progress,
+  Select,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
 } from "antd";
 
-import PlatypusHeader from "./components/header/component";
+import Banner from "./components/Banner/Banner";
+import SideBar from "./components/SideBar/SideBar";
 
-import ServerCreator from "./components/sidebar/ServerCreator/SeverCreator";
-
-import { LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import "./App.css";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 
@@ -45,7 +41,7 @@ message.config({
   rtl: true,
 });
 
-const { Header, Content, Sider } = Layout;
+const { Content } = Layout;
 
 let endPoint = process.env.NODE_ENV === "development" ? "192.168.88.129:7331" : window.location.host;
 let baseUrl = ["http://", endPoint].join("");
@@ -66,6 +62,7 @@ class App extends React.Component {
       serverCreatePort: Math.floor(Math.random() * 65536),
     };
     this.serverCreated = this.serverCreated.bind(this);
+    this.selectServer = this.selectServer.bind(this);
   }
 
   upgradeToTermite(clientHash, target) {
@@ -276,6 +273,12 @@ class App extends React.Component {
     this.setState({
       serversMap: newServersMap,
       serverCreatePort: Math.floor(Math.random() * 65536),
+    });
+  }
+
+  selectServer(hash) {
+    this.setState({
+      currentServer: this.state.serversMap[hash],
     });
   }
 
@@ -532,59 +535,18 @@ class App extends React.Component {
 
     return (
       <Layout>
-        <PlatypusHeader></PlatypusHeader>
+        <Banner></Banner>
         <Layout style={{ height: "100%" }}>
-          <Sider width={200} className="site-layout-background">
-            <Menu
-              mode="inline"
-              defaultSelectedKeys={["1"]}
-              defaultOpenKeys={["sub1"]}
-              style={{ height: "100%" }}
-            >
-
-              <ServerCreator
-                serverCreatePort={this.state.serverCreatePort}
-                currentServer={this.state.currentServer}
-                serverCreateHost={this.state.serverCreateHost}
-                serverCreateHost={this.state.serverCreateHost}
-                serverCreatePort={this.state.serverCreatePort}
-                serversList={this.state.serversList}
-                serversMap={this.state.serversMap}
-                serverCreated={this.serverCreated}
-                apiUrl={apiUrl}
-              />
-
-              {this.state.serversList.map((value, index) => {
-                let lockIcon;
-                if (value.encrypted) {
-                  lockIcon = <Tooltip title={"Secure Protocol"}>
-                    <LockOutlined style={{ color: "green" }} />
-                  </Tooltip>
-                } else {
-                  lockIcon = <Tooltip title={"Reverse Shell Protocol"}>
-                    <UnlockOutlined style={{ color: "red" }} />
-                  </Tooltip>
-
-                }
-                return <Menu.Item
-                  key={value.hash}
-                  onClick={(item, key, keyPath, domEvent) => {
-                    this.setState({
-                      currentServer: this.state.serversMap[item.key],
-                    });
-                  }}
-                >
-                  {lockIcon}
-                  {value.host + ":" + value.port}
-                  <Badge
-                    count={Object.keys(value.clients).length + Object.keys(value.termite_clients).length}
-                    overflowCount={99}
-                    offset={[10, 0]}
-                  ></Badge>
-                </Menu.Item>
-              })}
-            </Menu>
-          </Sider>
+          <SideBar
+            apiUrl={apiUrl}
+            currentServer={this.state.currentServer}
+            selectServer={this.selectServer}
+            serverCreated={this.serverCreated}
+            serverCreateHost={this.state.serverCreateHost}
+            serverCreatePort={this.state.serverCreatePort}
+            serversList={this.state.serversList}
+            serversMap={this.state.serversMap}
+          />
           <Layout style={{ padding: "0 24px 24px" }}>
             <Content style={{ margin: "0 0" }}>
               {hint}

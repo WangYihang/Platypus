@@ -21,8 +21,8 @@ export default class InterfaceSelector extends React.Component {
           }
           defaultValue={this.props.serverCreateHost}
         >
-          <Option value="0.0.0.0">0.0.0.0</Option>
-          <Option value="127.0.0.1">127.0.0.1</Option>
+          <Option value="0.0.0.0" key="0.0.0.0">0.0.0.0</Option>
+          <Option value="127.0.0.1" key="127.0.0.1">127.0.0.1</Option>
         </Select>
       );
     } else {
@@ -39,9 +39,9 @@ export default class InterfaceSelector extends React.Component {
             option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
           }
         >
-          <Option value="0.0.0.0">0.0.0.0</Option>
+          <Option value="0.0.0.0" key={"0.0.0.0"}>0.0.0.0</Option>
           {Object.values(this.props.currentServer.interfaces).map((value, index) => {
-            return <Option value={value}>{value}</Option>;
+            return <Option value={value} key={value}>{value}</Option>;
           })}
         </Select>
       );
