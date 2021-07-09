@@ -51,7 +51,7 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 		return errors.New("can not read termite.go")
 	}
 	contentString := string(content)
-	contentString = strings.Replace(contentString, "127.0.0.1:1337", targetAddress, -1)
+	contentString = strings.Replace(contentString, "xxx.xxx.xxx.xxx:xxxxx", targetAddress, -1)
 	err = ioutil.WriteFile("termite.go", []byte(contentString), 0644)
 	if err != nil {
 		log.Error("Can not write termite.go: %s", err)

