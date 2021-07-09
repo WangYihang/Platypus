@@ -26,7 +26,6 @@ export default class ClientsBody extends React.Component {
                         serversList={this.props.serversList}
                         setConnectBack={this.props.setConnectBack}
                         showModal={this.props.showModal}
-                        generateProgressStatus={this.props.generateProgressStatus}
                     />
                 </Content>
             </Layout>
