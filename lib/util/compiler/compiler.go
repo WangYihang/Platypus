@@ -78,6 +78,11 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 	// Step 2: Generating the placeholder
 	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
 	replacement := make([]byte, len(placeHolder))
+
+	for i := 0; i < len(placeHolder); i++ {
+		replacement[i] = 0x20
+	}
+
 	for i := 0; i < len(targetAddress); i++ {
 		replacement[i] = targetAddress[i]
 	}
