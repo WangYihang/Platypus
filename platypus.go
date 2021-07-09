@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
@@ -19,14 +20,16 @@ import (
 func main() {
 	// Detect and create config file
 	configFilename := fmt.Sprintf("config-v%s.yml", update.Version)
+	symlinkConfigFilename := "config.yml"
 	if !fs.FileExists(configFilename) {
 		content, _ := resource.Asset("lib/runtime/config.example.yml")
 		ioutil.WriteFile(configFilename, content, 0644)
 	}
+	os.Symlink(configFilename, symlinkConfigFilename)
 
 	// Read config file
 	var config config.Config
-	content, _ := ioutil.ReadFile(configFilename)
+	content, _ := ioutil.ReadFile(symlinkConfigFilename)
 	err := yaml.Unmarshal(content, &config)
 	if err != nil {
 		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
@@ -34,7 +37,7 @@ func main() {
 	}
 
 	// Display platypus information
-	log.Success("Platypus %s started with config file: %s", update.Version, configFilename)
+	log.Success("Platypus %s is starting...", update.Version)
 
 	// Create context
 	context.CreateContext()
