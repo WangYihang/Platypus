@@ -1,7 +1,6 @@
 import React from "react";
 import {
   message,
-  InputNumber,
   Table,
   Tag,
   Divider,
@@ -21,10 +20,14 @@ import {
   Modal,
 } from "antd";
 
+import PlatypusHeader from "./components/header/component";
+
+import ServerCreator from "./components/sidebar/ServerCreator/SeverCreator";
+
 import { LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import "./App.css";
-import qs from "qs";
 import { CopyToClipboard } from "react-copy-to-clipboard";
+
 const { Panel } = Collapse;
 const axios = require("axios");
 axios.defaults.headers.post["Content-Type"] =
@@ -44,12 +47,10 @@ message.config({
 
 const { Header, Content, Sider } = Layout;
 
-let endPoint = window.location.host;
+let endPoint = process.env.NODE_ENV === "development" ? "192.168.88.129:7331" : window.location.host;
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
-
-
 
 class App extends React.Component {
   constructor(props) {
@@ -64,6 +65,7 @@ class App extends React.Component {
       serverCreateHost: "0.0.0.0",
       serverCreatePort: Math.floor(Math.random() * 65536),
     };
+    this.serverCreated = this.serverCreated.bind(this);
   }
 
   upgradeToTermite(clientHash, target) {
@@ -265,10 +267,19 @@ class App extends React.Component {
     };
   }
 
-
+  serverCreated(newServer) {
+    this.setState({
+      serversList: [...this.state.serversList, newServer],
+    });
+    const newServersMap = this.state.serversMap;
+    newServersMap[newServer.hash] = newServer;
+    this.setState({
+      serversMap: newServersMap,
+      serverCreatePort: Math.floor(Math.random() * 65536),
+    });
+  }
 
   render() {
-
     const columns = [
       {
         title: "Address",
@@ -333,20 +344,7 @@ class App extends React.Component {
         render: (data, line, index) => {
           let upgradeButton;
           if (line.CurrentProcessKey === undefined) {
-            // let target = null
-            // this.state.serversList.forEach(function (entry) {
-            //   if (entry.encrypted) {
-            //     target = entry.host + ":" + entry.port
-            //   }
-            // })
-            // if (target == null) {
             upgradeButton = <Button disabled={false} onClick={() => { this.showModal() }}>Upgrade</Button>
-
-            // // } else {
-            // //   upgradeButton = <Button onClick={() => {this.showModal()}}>
-            // //     Upgrade
-            // // </Button>
-            // }
           } else {
             upgradeButton = ""
           }
@@ -360,7 +358,7 @@ class App extends React.Component {
                   rel={"noreferrer noopener"}
                 >
                   Shell
-              </a>
+                </a>
               </Button>
               {upgradeButton}
               <Modal title="Basic Modal" visible={this.state.isModalVisible} onOk={() => this.handleOk(line.hash)} onCancel={() => this.handleCancel()}>
@@ -410,49 +408,6 @@ class App extends React.Component {
         },
       }
     ];
-
-
-    let interfaceMenu;
-    if (this.state.currentServer === null) {
-      interfaceMenu = (
-        <Select
-          showSearch
-          style={{ width: 200 }}
-          placeholder="Select an interface"
-          optionFilterProp="children"
-          onChange={(value) => {
-            this.setState({ serverCreateHost: value });
-          }}
-          filterOption={(input, option) =>
-            option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-          }
-          defaultValue={this.state.serverCreateHost}
-        >
-          <Option value="0.0.0.0">0.0.0.0</Option>
-          <Option value="127.0.0.1">127.0.0.1</Option>
-        </Select>
-      );
-    } else {
-      interfaceMenu = (
-        <Select
-          showSearch
-          style={{ width: 200 }}
-          placeholder="Select an interface"
-          optionFilterProp="children"
-          onChange={(value) => {
-            this.setState({ serverCreateHost: value });
-          }}
-          filterOption={(input, option) =>
-            option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-          }
-        >
-          <Option value="0.0.0.0">0.0.0.0</Option>
-          {Object.values(this.state.currentServer.interfaces).map((value, index) => {
-            return <Option value={value}>{value}</Option>;
-          })}
-        </Select>
-      );
-    }
 
     let hint;
     if (this.state.currentServer === null) {
@@ -575,16 +530,9 @@ class App extends React.Component {
       dataSource = []
     }
 
-
-
     return (
       <Layout>
-        <Header className="header">
-          <div className="logo" />
-          <h1>
-            <a href="https://github.com/WangYihang/Platypus" rel="noreferrer noopener">Platypus</a>
-          </h1>
-        </Header>
+        <PlatypusHeader></PlatypusHeader>
         <Layout style={{ height: "100%" }}>
           <Sider width={200} className="site-layout-background">
             <Menu
@@ -593,68 +541,18 @@ class App extends React.Component {
               defaultOpenKeys={["sub1"]}
               style={{ height: "100%" }}
             >
-              <InputNumber
-                min={1}
-                max={65565}
-                defaultValue={this.state.serverCreatePort}
-                value={this.state.serverCreatePort}
-                onChange={(data) => {
-                  this.setState({
-                    serverCreatePort: parseInt(data),
-                  });
-                }}
+
+              <ServerCreator
+                serverCreatePort={this.state.serverCreatePort}
+                currentServer={this.state.currentServer}
+                serverCreateHost={this.state.serverCreateHost}
+                serverCreateHost={this.state.serverCreateHost}
+                serverCreatePort={this.state.serverCreatePort}
+                serversList={this.state.serversList}
+                serversMap={this.state.serversMap}
+                serverCreated={this.serverCreated}
+                apiUrl={apiUrl}
               />
-
-              {interfaceMenu}
-
-              <Button
-                type="primary"
-                onClick={() => {
-                  axios
-                    .post(
-                      [apiUrl, "/server"].join(""),
-                      qs.stringify({
-                        host: this.state.serverCreateHost,
-                        port: this.state.serverCreatePort,
-                      })
-                    )
-                    .then((response) => {
-                      console.log(response);
-                      if (response.data.status) {
-                        message.success(
-                          "Server created at: " +
-                          response.data.msg.host +
-                          ":" +
-                          response.data.msg.port,
-                          5
-                        );
-                        let newServer = response.data.msg;
-                        this.setState({
-                          serversList: [...this.state.serversList, newServer],
-                        });
-                        const newServersMap = this.state.serversMap;
-                        newServersMap[newServer.hash] = newServer;
-                        this.setState({
-                          serversMap: newServersMap,
-                          serverCreatePort: Math.floor(Math.random() * 65536),
-                        });
-                      } else {
-                        message.error(
-                          "Server create failed: " + response.data.msg,
-                          5
-                        );
-                      }
-                    })
-                    .catch((error) => {
-                      message.error(
-                        "Cannot connect to API EndPoint!" + error,
-                        5
-                      );
-                    });
-                }}
-              >
-                Add server
-              </Button>
 
               {this.state.serversList.map((value, index) => {
                 let lockIcon;
