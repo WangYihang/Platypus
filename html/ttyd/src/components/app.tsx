@@ -10,7 +10,14 @@ if ((module as any).hot) {
 
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const path = window.location.pathname.replace(/[\/]+$/, '');
-const wsUrl = [protocol, '//', window.location.host, '/ws', '/', window.location.search.substr(1, window.location.search.length)].join('');
+const wsUrl = [
+    protocol,
+    '//',
+    window.location.host,
+    '/ws',
+    '/',
+    window.location.search.substr(1, window.location.search.length),
+].join('');
 const tokenUrl = [window.location.protocol, '//', window.location.host, path, '/token'].join('');
 const clientOptions = {
     rendererType: 'webgl',
