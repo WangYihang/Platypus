@@ -5,4 +5,6 @@ services:
     build: .
     tty: true
     network_mode: host
+    volumes: 
+      - ./config.yml:/app/config.yml
     entrypoint: tmux new -s platypus ./platypus
