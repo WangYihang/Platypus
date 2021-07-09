@@ -38,11 +38,12 @@ type TCPServer struct {
 	Hash           string                      `json:"hash"`
 	Encrypted      bool                        `json:"encrypted"`
 	DisableHistory bool                        `json:"disable_history"`
+	PublicIP       string                      `json:"public_ip"`
 	hashFormat     string
 	stopped        chan struct{}
 }
 
-func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool) *TCPServer {
+func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)
 
 	if Ctx.Servers[hash.MD5(service)] != nil {
@@ -68,6 +69,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 		stopped:        make(chan struct{}, 1),
 		Encrypted:      encrypted,
 		DisableHistory: disableHistory,
+		PublicIP:       PublicIP,
 	}
 
 	Ctx.Servers[hash.MD5(service)] = tcpServer
@@ -81,6 +83,19 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 			routeKey := str.RandomString(0x08)
 			Ctx.Distributor.Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
 		}
+	}
+
+	// Fetch real public IP address if not specified
+	if tcpServer.PublicIP == "" {
+		log.Info("Detecting Public IP address of the interface...")
+		ip, err := network.GetPublicIP()
+		if err != nil {
+			log.Error("Public IP Detection failed: %s", err.Error())
+		}
+		tcpServer.PublicIP = ip
+		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
+	} else {
+		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)
 	}
 
 	// Try to check

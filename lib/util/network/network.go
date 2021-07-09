@@ -1,6 +1,11 @@
 package network
 
-import "net"
+import (
+	"encoding/json"
+	"io/ioutil"
+	"net"
+	"net/http"
+)
 
 func GatherInterfacesList(host string) []string {
 	// Gather interface info
@@ -28,4 +33,26 @@ func GatherInterfacesList(host string) []string {
 		interfaces = append(interfaces, host)
 	}
 	return interfaces
+}
+
+type IP struct {
+	Query string
+}
+
+func GetPublicIP() (string, error) {
+	req, err := http.Get("http://ip-api.com/json/")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close()
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var ip IP
+	json.Unmarshal(body, &ip)
+
+	return ip.Query, nil
 }
