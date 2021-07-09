@@ -34,7 +34,6 @@ class App extends React.Component {
   };
 
   handleOk(hash) {
-    this.upgradeToTermite(hash, this.state.connectBack)
     this.setState({
       isModalVisible: false,
       connectBack: "",
@@ -97,11 +96,17 @@ class App extends React.Component {
           currentServer={this.state.currentServer}
           distributor={this.state.distributor}
           isModalVisible={this.state.isModalVisible}
+          selectServer={this.selectServer}
           serverCreatePort={this.state.serverCreatePort}
+          serverCreated={this.serverCreated}
           serversList={this.state.serversList}
           serversMap={this.state.serversMap}
           setData={this.setData}
           setServersMap={this.setServersMap}
+          showModal={this.showModal}
+          handleCancel={this.handleCancel}
+          handleOk={this.handleOk}
+          setConnectBack={this.setConnectBack}
         />
     );
   }

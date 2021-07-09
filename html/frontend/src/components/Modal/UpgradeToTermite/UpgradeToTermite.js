@@ -24,7 +24,10 @@ export default class UpgradeToTermite extends React.Component {
                     </a>
                 </Button>
                 {upgradeButton}
-                <Modal title="Basic Modal" visible={this.props.isModalVisible} onOk={() => this.props.handleOk(this.props.line.hash)} onCancel={() => this.props.handleCancel()}>
+                <Modal title="Basic Modal" visible={this.props.isModalVisible} onOk={() => {
+                    this.props.upgradeToTermite(this.props.line.hash, this.props.connectBack)
+                    this.props.handleOk(this.props.line.hash)
+                }} onCancel={() => this.props.handleCancel()}>
                     Select Termite Listeners:
                     <Select
                         showSearch

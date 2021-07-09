@@ -91,6 +91,7 @@ export default class ClientTable extends React.Component {
               showModal={this.props.showModal}
               handleCancel={this.props.handleCancel}
               handleOk={this.props.handleOk}
+              upgradeToTermite={this.props.upgradeToTermite}
             />
           },
         },
