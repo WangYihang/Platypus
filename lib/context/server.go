@@ -20,6 +20,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
+	"github.com/phayes/freeport"
 )
 
 type WebSocketMessage struct {
@@ -542,6 +543,44 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			} else {
 				log.Error("No such key")
 			}
+		case message.TUNNEL_CONNECTED:
+			target := msg.Body.(*message.BodyTunnelConnected).Target
+			port, _ := freeport.GetFreePort()
+			localAddress := fmt.Sprintf("0.0.0.0:%d", port)
+			tunnel, err := net.Listen("tcp", localAddress)
+			if err != nil {
+				log.Error(err.Error())
+				break
+			}
+			log.Info("%s -> %s", localAddress, target)
+			go func(target string, port int) {
+				conn, _ := tunnel.Accept()
+				Ctx.CurrentTermite.Tunnels[target] = &conn
+				log.Info("Server client tunnel connected: %v", conn)
+				for {
+					buf := make([]byte, 1024)
+					n, err := conn.Read(buf)
+					if err != nil {
+						log.Error(err.Error())
+						break
+					}
+					if n > 0 {
+						log.Info(">> %v", buf[0:n])
+						Ctx.CurrentTermite.WriteTunnel(target, buf[0:n])
+					}
+				}
+			}(target, port)
+		case message.TUNNEL_DATA:
+			target := msg.Body.(*message.BodyTunnelData).Target
+			data := msg.Body.(*message.BodyTunnelData).Data
+			log.Info("%s, %v, connected", target, data)
+
+			if conn, exists := Ctx.CurrentTermite.Tunnels[target]; exists {
+				(*conn).Write(data)
+			} else {
+				log.Error("No such tunnel")
+			}
+
 		}
 	}
 }

@@ -21,6 +21,12 @@ const (
 	PROCESS_STARTED
 	PROCESS_STOPED
 	CLIENT_INFO
+
+	// Tunnel
+	TUNNEL_CONNECT
+	TUNNEL_CONNECTED
+	TUNNEL_DATA
+	TUNNEL_DISCONNECT
 )
 
 type Message struct {
@@ -72,6 +78,21 @@ type BodyTerminateProcess struct {
 	Key string
 }
 
+type BodyTunnelConnect struct {
+	Target string
+}
+type BodyTunnelConnected struct {
+	Target string
+}
+type BodyTunnelData struct {
+	Target string
+	Data   []byte
+}
+
+type BodyTunnelDisconnect struct {
+	Target string
+}
+
 func RegisterGob() {
 	gob.Register(&BodyStdio{})
 	gob.Register(&BodyWindowSize{})
@@ -82,4 +103,8 @@ func RegisterGob() {
 	gob.Register(&BodyDuplicateClient{})
 	gob.Register(&BodyClientInfo{})
 	gob.Register(&BodyTerminateProcess{})
+	gob.Register(&BodyTunnelConnect{})
+	gob.Register(&BodyTunnelConnected{})
+	gob.Register(&BodyTunnelData{})
+	gob.Register(&BodyTunnelDisconnect{})
 }
