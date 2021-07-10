@@ -107,6 +107,7 @@ class App extends React.Component {
           handleCancel={this.handleCancel}
           handleOk={this.handleOk}
           setConnectBack={this.setConnectBack}
+          setCopied={this.setCopied}
         />
     );
   }
