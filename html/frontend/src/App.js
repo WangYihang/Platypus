@@ -25,6 +25,16 @@ class App extends React.Component {
     this.setData = this.setData.bind(this);
     this.setServersMap = this.setServersMap.bind(this);
     this.showModal = this.showModal.bind(this);
+    this.setServerCreateHost = this.setServerCreateHost.bind(this);
+    this.setServerCreatePort = this.setServerCreatePort.bind(this);
+  }
+
+  setServerCreateHost(host) {
+    this.setState({ serverCreateHost: host });
+  }
+
+  setServerCreatePort(port) {
+    this.setState({ serverCreatePort: port });
   }
 
   showModal() {
@@ -95,19 +105,22 @@ class App extends React.Component {
           connectBack={this.state.connectBack}
           currentServer={this.state.currentServer}
           distributor={this.state.distributor}
-          isModalVisible={this.state.isModalVisible}
-          selectServer={this.selectServer}
-          serverCreatePort={this.state.serverCreatePort}
-          serverCreated={this.serverCreated}
-          serversList={this.state.serversList}
-          serversMap={this.state.serversMap}
-          setData={this.setData}
-          setServersMap={this.setServersMap}
-          showModal={this.showModal}
           handleCancel={this.handleCancel}
           handleOk={this.handleOk}
+          isModalVisible={this.state.isModalVisible}
+          selectServer={this.selectServer}
+          serverCreated={this.serverCreated}
+          serverCreateHost={this.state.serverCreateHost}
+          serverCreatePort={this.state.serverCreatePort}
+          serversList={this.state.serversList}
+          serversMap={this.state.serversMap}
           setConnectBack={this.setConnectBack}
           setCopied={this.setCopied}
+          setData={this.setData}
+          setServerCreateHost={this.setServerCreateHost}
+          setServerCreatePort={this.setServerCreatePort}
+          setServersMap={this.setServersMap}
+          showModal={this.showModal}
         />
     );
   }

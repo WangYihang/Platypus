@@ -21,8 +21,6 @@ let wsUrl = ["ws://", endPoint, "/notify"].join("");
 const axios = require("axios");
 axios.defaults.headers.post["Content-Type"] = "application/x-www-form-urlencoded";
 
-const { Sider } = Layout;
-
 export default class Platypus extends React.Component {
   upgradeToTermite(clientHash, target) {
     if (target !== "") {
@@ -171,7 +169,17 @@ export default class Platypus extends React.Component {
 
   render() {
     return <Layout>
-      <Banner></Banner>
+      <Banner
+        apiUrl={apiUrl}
+        currentServer={this.props.currentServer}
+        serverCreated={this.props.serverCreated}
+        serverCreateHost={this.props.serverCreateHost}
+        serverCreatePort={this.props.serverCreatePort}
+        serversList={this.props.serversList}
+        serversMap={this.props.serversMap}
+        setServerCreateHost={this.props.setServerCreateHost}
+        setServerCreatePort={this.props.setServerCreatePort}
+      />
       <Layout style={{ height: "100%" }}>
         <SideBar
           apiUrl={apiUrl}
