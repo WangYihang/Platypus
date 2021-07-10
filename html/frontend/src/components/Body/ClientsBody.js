@@ -13,6 +13,7 @@ export default class ClientsBody extends React.Component {
                     <Hint
                         currentServer={this.props.currentServer}
                         distributor={this.props.distributor}
+                        setCopied={this.props.setCopied}
                     />
                     <Divider orientation="left"></Divider>
                     <ClientTable

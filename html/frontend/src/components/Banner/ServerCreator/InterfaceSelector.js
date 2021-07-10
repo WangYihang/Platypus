@@ -14,7 +14,7 @@ export default class InterfaceSelector extends React.Component {
           placeholder="Select an interface"
           optionFilterProp="children"
           onChange={(value) => {
-            this.setState({ serverCreateHost: value });
+            this.props.setServerCreateHost(value);
           }}
           filterOption={(input, option) =>
             option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
@@ -33,7 +33,7 @@ export default class InterfaceSelector extends React.Component {
           placeholder="Select an interface"
           optionFilterProp="children"
           onChange={(value) => {
-            this.setState({ serverCreateHost: value });
+            this.props.setServerCreateHost(value);
           }}
           filterOption={(input, option) =>
             option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0

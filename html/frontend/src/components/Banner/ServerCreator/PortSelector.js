@@ -9,9 +9,7 @@ export default class PortSelector extends React.Component {
       defaultValue={this.props.serverCreatePort}
       value={this.props.serverCreatePort}
       onChange={(data) => {
-        this.setState({
-          serverCreatePort: parseInt(data),
-        });
+        this.props.setServerCreatePort(data)
       }}
     />;
   }

@@ -9,6 +9,7 @@ export default class CreateServerButton extends React.Component {
         return <Button
             type="primary"
             onClick={() => {
+                console.log(this.props);
                 axios
                     .post(
                         [this.props.apiUrl, "/server"].join(""),
