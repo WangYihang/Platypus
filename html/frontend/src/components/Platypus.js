@@ -204,6 +204,7 @@ export default class Platypus extends React.Component {
           setConnectBack={this.props.setConnectBack}
           showModal={this.props.showModal}
           upgradeToTermite={this.upgradeToTermite}
+          setCopied={this.props.setCopied}
         />
       </Layout>
     </Layout>;
