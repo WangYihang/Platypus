@@ -5,10 +5,6 @@ import CreateServerButton from "./CreateServerButton";
 import { Switch } from 'antd';
 
 export default class ServerCreator extends React.Component {
-    constructor(props) {
-        super(props);
-    }
-
     render() {
         return <>
             <PortSelector
