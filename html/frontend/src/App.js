@@ -15,6 +15,7 @@ class App extends React.Component {
       connectBack: "",
       serverCreateHost: "0.0.0.0",
       serverCreatePort: Math.floor(Math.random() * 65536),
+      serverCreateEncrypted: true,
     };
     this.handleCancel = this.handleCancel.bind(this);
     this.handleOk = this.handleOk.bind(this);
@@ -27,6 +28,7 @@ class App extends React.Component {
     this.showModal = this.showModal.bind(this);
     this.setServerCreateHost = this.setServerCreateHost.bind(this);
     this.setServerCreatePort = this.setServerCreatePort.bind(this);
+    this.setServerCreateEncrypted = this.setServerCreateEncrypted.bind(this);
   }
 
   setServerCreateHost(host) {
@@ -35,6 +37,10 @@ class App extends React.Component {
 
   setServerCreatePort(port) {
     this.setState({ serverCreatePort: port });
+  }
+
+  setServerCreateEncrypted(encrypted, event) {
+    this.setState({ serverCreateEncrypted: encrypted });
   }
 
   showModal() {
@@ -112,6 +118,7 @@ class App extends React.Component {
           serverCreated={this.serverCreated}
           serverCreateHost={this.state.serverCreateHost}
           serverCreatePort={this.state.serverCreatePort}
+          serverCreateEncrypted={this.state.serverCreateEncrypted}
           serversList={this.state.serversList}
           serversMap={this.state.serversMap}
           setConnectBack={this.setConnectBack}
@@ -119,6 +126,7 @@ class App extends React.Component {
           setData={this.setData}
           setServerCreateHost={this.setServerCreateHost}
           setServerCreatePort={this.setServerCreatePort}
+          setServerCreateEncrypted={this.setServerCreateEncrypted}
           setServersMap={this.setServersMap}
           showModal={this.showModal}
         />

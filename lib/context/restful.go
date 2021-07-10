@@ -372,7 +372,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				panicRESTfully(c, "No such server")
 			})
 			serverAPIGroup.POST("", func(c *gin.Context) {
-				if !formExistOrAbort(c, []string{"host", "port"}) {
+				if !formExistOrAbort(c, []string{"host", "port", "encrypted"}) {
 					return
 				}
 				port, err := strconv.Atoi(c.PostForm("port"))
@@ -380,7 +380,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					panicRESTfully(c, "Invalid port number")
 					return
 				}
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", false, true, "")
+				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
