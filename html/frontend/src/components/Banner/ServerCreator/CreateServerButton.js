@@ -16,6 +16,7 @@ export default class CreateServerButton extends React.Component {
                         qs.stringify({
                             host: this.props.serverCreateHost,
                             port: this.props.serverCreatePort,
+                            encrypted: this.props.serverCreateEncryption,
                         })
                     )
                     .then((response) => {
