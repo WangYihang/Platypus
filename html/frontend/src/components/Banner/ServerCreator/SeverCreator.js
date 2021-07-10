@@ -8,19 +8,23 @@ export default class ServerCreator extends React.Component {
         return <>
             <PortSelector
                 serverCreatePort={this.props.serverCreatePort}
+                setServerCreatePort={this.props.setServerCreatePort}
             />
-
             <InterfaceSelector
                 currentServer={this.props.currentServer}
                 serverCreateHost={this.props.serverCreateHost}
+                serverCreatePort={this.props.serverCreatePort}
+                setServerCreateHost={this.props.setServerCreateHost}
             />
             <CreateServerButton
+                apiUrl={this.props.apiUrl}
+                serverCreated={this.props.serverCreated}
                 serverCreateHost={this.props.serverCreateHost}
                 serverCreatePort={this.props.serverCreatePort}
                 serversList={this.props.serversList}
                 serversMap={this.props.serversMap}
-                serverCreated={this.props.serverCreated}
-                apiUrl={this.props.apiUrl}
+                setServerCreateHost={this.props.setServerCreateHost}
+                setServerCreatePort={this.props.setServerCreatePort}
             />
         </>;
     }
