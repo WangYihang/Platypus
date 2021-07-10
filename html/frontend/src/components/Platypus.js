@@ -27,7 +27,6 @@ export default class Platypus extends React.Component {
       axios
         .get(apiUrl + "/client/" + clientHash + "/upgrade/" + target)
         .then((response) => {
-          console.log(response)
         })
     } else {
       message.error("Invalid connect back termite listener address: " + target, 5);
@@ -66,7 +65,6 @@ export default class Platypus extends React.Component {
 
       switch (data.Type) {
         case CLIENT_CONNECTED:
-          console.log(data);
           let onlinedClient = data.Data.Client;
           serverHash = data.Data.ServerHash;
           message.success(
