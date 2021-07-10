@@ -175,10 +175,12 @@ export default class Platypus extends React.Component {
         serverCreated={this.props.serverCreated}
         serverCreateHost={this.props.serverCreateHost}
         serverCreatePort={this.props.serverCreatePort}
+        serverCreateEncrypted={this.props.serverCreateEncrypted}
         serversList={this.props.serversList}
         serversMap={this.props.serversMap}
         setServerCreateHost={this.props.setServerCreateHost}
         setServerCreatePort={this.props.setServerCreatePort}
+        setServerCreateEncrypted={this.props.setServerCreateEncrypted}
       />
       <Layout style={{ height: "100%" }}>
         <SideBar
