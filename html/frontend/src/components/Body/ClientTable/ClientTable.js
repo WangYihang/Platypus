@@ -79,7 +79,7 @@ export default class ClientTable extends React.Component {
       },
       {
         title: "Action",
-        key: "x",
+        key: "upgrade_to_termite",
         render: (data, line, index) => {
           return <UpgradeToTermite
             baseUrl={this.props.baseUrl}
