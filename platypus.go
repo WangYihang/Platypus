@@ -20,10 +20,14 @@ import (
 func main() {
 	// Detect and create config file
 	configFilename := fmt.Sprintf("config-v%s.yml", update.Version)
-	symlinkConfigFilename := "config.yml"
 	if !fs.FileExists(configFilename) {
 		content, _ := resource.Asset("lib/runtime/config.example.yml")
 		ioutil.WriteFile(configFilename, content, 0644)
+	}
+
+	symlinkConfigFilename := "config.yml"
+	if fs.FileExists(symlinkConfigFilename) {
+		os.Remove(symlinkConfigFilename)
 	}
 	os.Symlink(configFilename, symlinkConfigFilename)
 

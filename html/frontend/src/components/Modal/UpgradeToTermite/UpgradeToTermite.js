@@ -44,7 +44,11 @@ export default class UpgradeToTermite extends React.Component {
                     >
                         {this.props.serversList.map((entry) => {
                             if (entry.encrypted) {
-                                return entry.interfaces.map((ifaddr) => {
+                                let interfaces = [...entry.interfaces];
+                                if (entry.public_ip) {
+                                    interfaces.unshift(entry.public_ip)
+                                }
+                                return interfaces.map((ifaddr) => {
                                     let v = ifaddr + ":" + entry.port
                                     return <Option value={v}>{v}</Option>
                                 })
