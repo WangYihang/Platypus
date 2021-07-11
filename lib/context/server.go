@@ -686,7 +686,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			address := msg.Body.(*message.BodyPushTunnelCreateFailed).Address
 			reason := msg.Body.(*message.BodyPushTunnelCreateFailed).Reason
 			if tc, exists := Ctx.PushTunnelConfig[address]; exists {
-				log.Success("Tunnel create failed: %s", tc.Address, reason)
+				log.Success("Tunnel (%s) create failed: %s", tc.Address, reason)
 				delete(Ctx.PushTunnelConfig, address)
 			} else {
 				log.Debug("No such tunnel: %s", address)
