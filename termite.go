@@ -156,7 +156,7 @@ func handleConnection(c *Client) {
 
 			go func() {
 				for {
-					buffer := make([]byte, 0x10)
+					buffer := make([]byte, 0x400)
 					n, err := ptmx.Read(buffer)
 					if err != nil {
 						if err == io.EOF {
@@ -302,8 +302,8 @@ func handleConnection(c *Client) {
 					pullTunnels[token] = &conn
 					go func() {
 						for {
-							data := make([]byte, 0x100)
-							n, err := conn.Read(data)
+							buffer := make([]byte, 0x100)
+							n, err := conn.Read(buffer)
 							if err != nil {
 								log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
 								c.Encoder.Encode(message.Message{
@@ -320,7 +320,7 @@ func handleConnection(c *Client) {
 										Type: message.PULL_TUNNEL_DATA,
 										Body: message.BodyPullTunnelData{
 											Token: token,
-											Data:  data[0:n],
+											Data:  buffer[0:n],
 										},
 									})
 								}
@@ -395,7 +395,7 @@ func handleConnection(c *Client) {
 			if conn, exists := pushTunnels[token]; exists {
 				go func() {
 					for {
-						buffer := make([]byte, 0x100)
+						buffer := make([]byte, 0x400)
 						n, err := (*conn).Read(buffer)
 						if err != nil {
 							c.Encoder.Encode(message.Message{
