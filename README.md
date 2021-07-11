@@ -208,7 +208,6 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [ ] Visualize network topology
 - [ ] Host discovery via multiple method (eg: `arp -a`)
 - [ ] Redesign frontend (eg: Listener list, Machine list, Network topology graph, File management...)
-- [ ] Port forwarding
 - [ ] Add authencation in RESTful API
 - [ ] Use crontab
 - [ ] Provide full kernel API
