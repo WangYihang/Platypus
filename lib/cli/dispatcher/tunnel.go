@@ -49,10 +49,12 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 				local_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
 				remote_address := fmt.Sprintf("%s:%d", src_host, src_port)
 				log.Info("Mapping remote (%s) to local (%s)", remote_address, local_address)
-				context.AddTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+				context.AddPullTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			case "push":
-				// context.Ctx.CurrentTermite.CreatePushTunnel(src_host, uint16(src_port), dst_host, uint16(dst_port))
-				log.Error("TBD")
+				local_address := fmt.Sprintf("%s:%d", src_host, src_port)
+				remote_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
+				log.Info("Mapping local (%s) to remote (%s)", local_address, remote_address)
+				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			case "dynamic":
 				log.Error("TBD")
 			default:
