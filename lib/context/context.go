@@ -197,8 +197,6 @@ func Shutdown() {
 }
 
 func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
-	token := str.RandomString(0x10)
-
 	termite.AtomLock.Lock()
 	defer func() { termite.AtomLock.Unlock() }()
 
@@ -206,7 +204,6 @@ func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 	err := termite.Encoder.Encode(message.Message{
 		Type: message.PUSH_TUNNEL_CREATE,
 		Body: message.BodyPushTunnelCreate{
-			Token:   token,
 			Address: remote_address,
 		},
 	})
@@ -215,7 +212,7 @@ func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 	if err != nil {
 		log.Error(err.Error())
 	} else {
-		Ctx.PushTunnelConfig[token] = PushTunnelConfig{
+		Ctx.PushTunnelConfig[remote_address] = PushTunnelConfig{
 			Termite: termite,
 			Address: local_address,
 		}
