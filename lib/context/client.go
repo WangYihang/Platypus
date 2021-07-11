@@ -77,7 +77,6 @@ func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 }
 
 func (c *TCPClient) Close() {
-	log.Debug("Closing client: %s", c.FullDesc())
 	c.conn.Close()
 }
 
