@@ -1,8 +1,8 @@
 name: Make release
 on:
-  push:
-    branches:
-      - master
+  create:
+    tags:
+      - v*
 jobs:
   build:
     runs-on: ubuntu-latest
