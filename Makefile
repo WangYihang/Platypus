@@ -44,7 +44,7 @@ build_platypus: collect_resource
 	env PATH=${PATH}:${HOME}/go/bin go build -o build/platypus platypus.go
 	find build -type f -executable | xargs upx
 
-release: install_dependency build_platypus 
+release: install_dependency collect_resource
 	env GOOS=linux GOARCH=amd64 PATH=${PATH}:${HOME}/go/bin go build -o ./build/Platypus_linux_amd64 platypus.go
 	env GOOS=darwin GOARCH=amd64 PATH=${PATH}:${HOME}/go/bin go build -o ./build/Platypus_darwin_amd64 platypus.go
 	env GOOS=windows GOARCH=amd64 PATH=${PATH}:${HOME}/go/bin go build -o ./build/Platypus_windows_amd64.exe platypus.go
