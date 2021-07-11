@@ -10,6 +10,7 @@ const (
 	// Platypus <-> Termite
 	STDIO MessageType = iota
 	PULL_TUNNEL_DATA
+	PUSH_TUNNEL_DATA
 
 	// Platypus -> Termite
 	WINDOW_SIZE
@@ -17,9 +18,14 @@ const (
 	DUPLICATED_CLIENT
 	PROCESS_START
 	PROCESS_TERMINATE
-	Pull_TUNNEL_CREATE
 	PULL_TUNNEL_CONNECT
 	PULL_TUNNEL_DISCONNECT
+	PUSH_TUNNEL_CREATE
+	PUSH_TUNNEL_DELETE
+	PUSH_TUNNEL_CONNECTED
+	PUSH_TUNNEL_CONNECT_FAILED
+	PUSH_TUNNEL_DISCONNECTED
+	PUSH_TUNNEL_DISCONNECT_FAILED
 
 	// Termite -> Platypus
 	PROCESS_STARTED
@@ -28,6 +34,12 @@ const (
 	PULL_TUNNEL_CONNECTED
 	PULL_TUNNEL_CONNECT_FAILED
 	PULL_TUNNEL_DISCONNECTED
+	PUSH_TUNNEL_CONNECT
+	PUSH_TUNNEL_DISCONNECT
+	PUSH_TUNNEL_CREATED
+	PUSH_TUNNEL_CREATE_FAILED
+	PUSH_TUNNEL_DELETED
+	PUSH_TUNNEL_DELETE_FAILED
 )
 
 type Message struct {
@@ -106,20 +118,94 @@ type BodyPullTunnelData struct {
 	Data  []byte
 }
 
+type BodyPushTunnelData struct {
+	Token string
+	Data  []byte
+}
+
+type BodyPushTunnelCreate struct {
+	Token   string
+	Address string
+}
+
+type BodyPushTunnelCreated struct {
+	Token string
+}
+
+type BodyPushTunnelCreateFailed struct {
+	Token  string
+	Reason string
+}
+
+type BodyPushTunnelDelete struct {
+	Token string
+}
+
+type BodyPushTunnelDeleted struct {
+	Token string
+}
+
+type BodyPushTunnelDeleteFailed struct {
+	Token  string
+	Reason string
+}
+
+type BodyPushTunnelConnect struct {
+	Token string
+}
+
+type BodyPushTunnelConnected struct {
+	Token string
+}
+type BodyPushTunnelConnectFailed struct {
+	Token  string
+	Reason string
+}
+
+type BodyPushTunnelDisonnect struct {
+	Token string
+}
+
+type BodyPushTunnelDisonnected struct {
+	Token  string
+	Reason string
+}
+
+type BodyPushTunnelDisonnectFailed struct {
+	Token string
+}
+
 func RegisterGob() {
+	// Client Management
+	gob.Register(&BodyClientInfo{})
+	gob.Register(&BodyGetClientInfo{})
+	gob.Register(&BodyDuplicateClient{})
+	// Process management
 	gob.Register(&BodyStdio{})
-	gob.Register(&BodyWindowSize{})
 	gob.Register(&BodyStartProcess{})
 	gob.Register(&BodyProcessStarted{})
 	gob.Register(&BodyProcessStoped{})
-	gob.Register(&BodyGetClientInfo{})
-	gob.Register(&BodyDuplicateClient{})
-	gob.Register(&BodyClientInfo{})
 	gob.Register(&BodyTerminateProcess{})
+	gob.Register(&BodyWindowSize{})
+	// Local port forwarding
 	gob.Register(&BodyPullTunnelConnect{})
 	gob.Register(&BodyPullTunnelConnected{})
 	gob.Register(&BodyPullTunnelConnectFailed{})
 	gob.Register(&BodyPullTunnelDisconnect{})
 	gob.Register(&BodyPullTunnelDisconnected{})
 	gob.Register(&BodyPullTunnelData{})
+	// Remote port forwarding
+	gob.Register(&BodyPushTunnelData{})
+	gob.Register(&BodyPushTunnelCreate{})
+	gob.Register(&BodyPushTunnelCreated{})
+	gob.Register(&BodyPushTunnelCreateFailed{})
+	gob.Register(&BodyPushTunnelDelete{})
+	gob.Register(&BodyPushTunnelDeleted{})
+	gob.Register(&BodyPushTunnelDeleteFailed{})
+	gob.Register(&BodyPushTunnelConnect{})
+	gob.Register(&BodyPushTunnelConnected{})
+	gob.Register(&BodyPushTunnelConnectFailed{})
+	gob.Register(&BodyPushTunnelDisonnect{})
+	gob.Register(&BodyPushTunnelDisonnected{})
+	gob.Register(&BodyPushTunnelDisonnectFailed{})
 }

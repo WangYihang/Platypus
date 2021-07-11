@@ -70,6 +70,8 @@ func CreateContext() {
 			Interacting:        new(sync.Mutex),
 			PullTunnelConfig:   make(map[string]PullTunnelConfig),
 			PullTunnelInstance: make(map[string]PullTunnelInstance),
+			PushTunnelConfig:   make(map[string]PushTunnelConfig),
+			PushTunnelInstance: make(map[string]PushTunnelInstance),
 		}
 	}
 	// Signal Handler
@@ -195,18 +197,29 @@ func Shutdown() {
 }
 
 func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
-	// termite.AtomLock.Lock()
-	// defer func() { termite.AtomLock.Unlock() }()
+	token := str.RandomString(0x10)
 
-	// termite.EncoderLock.Lock()
-	// err := termite.Encoder.Encode(message.Message{
-	// 	Type: message.PUSH_PULL_TUNNEL_CREATE,
-	// 	Body: message.BodyPushTunnelCreate{
-	// 		Token: token,
-	// 		Data:  data,
-	// 	},
-	// })
-	// termite.EncoderLock.Unlock()
+	termite.AtomLock.Lock()
+	defer func() { termite.AtomLock.Unlock() }()
+
+	termite.EncoderLock.Lock()
+	err := termite.Encoder.Encode(message.Message{
+		Type: message.PUSH_TUNNEL_CREATE,
+		Body: message.BodyPushTunnelCreate{
+			Token:   token,
+			Address: remote_address,
+		},
+	})
+	termite.EncoderLock.Unlock()
+
+	if err != nil {
+		log.Error(err.Error())
+	} else {
+		Ctx.PushTunnelConfig[token] = PushTunnelConfig{
+			Termite: termite,
+			Address: local_address,
+		}
+	}
 }
 
 func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
