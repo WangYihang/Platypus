@@ -9,7 +9,7 @@ type MessageType int
 const (
 	// Platypus <-> Termite
 	STDIO MessageType = iota
-	TUNNEL_DATA
+	PULL_TUNNEL_DATA
 
 	// Platypus -> Termite
 	WINDOW_SIZE
@@ -17,18 +17,17 @@ const (
 	DUPLICATED_CLIENT
 	PROCESS_START
 	PROCESS_TERMINATE
-	TUNNEL_CREATE
-	TUNNEL_DELETE
-	TUNNEL_CONNECT
-	TUNNEL_DISCONNECT
+	Pull_TUNNEL_CREATE
+	PULL_TUNNEL_CONNECT
+	PULL_TUNNEL_DISCONNECT
 
 	// Termite -> Platypus
 	PROCESS_STARTED
 	PROCESS_STOPED
 	CLIENT_INFO
-	TUNNEL_CONNECTED
-	TUNNEL_CONNECT_FAILED
-	TUNNEL_DISCONNECTED
+	PULL_TUNNEL_CONNECTED
+	PULL_TUNNEL_CONNECT_FAILED
+	PULL_TUNNEL_DISCONNECTED
 )
 
 type Message struct {
@@ -80,29 +79,29 @@ type BodyTerminateProcess struct {
 	Key string
 }
 
-type BodyTunnelConnect struct {
+type BodyPullTunnelConnect struct {
 	Token   string
 	Address string
 }
 
-type BodyTunnelConnected struct {
+type BodyPullTunnelConnected struct {
 	Token string
 }
 
-type BodyTunnelConnectFailed struct {
+type BodyPullTunnelConnectFailed struct {
 	Token  string
 	Reason string
 }
 
-type BodyTunnelDisconnect struct {
+type BodyPullTunnelDisconnect struct {
 	Token string
 }
 
-type BodyTunnelDisconnected struct {
+type BodyPullTunnelDisconnected struct {
 	Token string
 }
 
-type BodyTunnelData struct {
+type BodyPullTunnelData struct {
 	Token string
 	Data  []byte
 }
@@ -117,10 +116,10 @@ func RegisterGob() {
 	gob.Register(&BodyDuplicateClient{})
 	gob.Register(&BodyClientInfo{})
 	gob.Register(&BodyTerminateProcess{})
-	gob.Register(&BodyTunnelConnect{})
-	gob.Register(&BodyTunnelConnected{})
-	gob.Register(&BodyTunnelConnectFailed{})
-	gob.Register(&BodyTunnelDisconnect{})
-	gob.Register(&BodyTunnelDisconnected{})
-	gob.Register(&BodyTunnelData{})
+	gob.Register(&BodyPullTunnelConnect{})
+	gob.Register(&BodyPullTunnelConnected{})
+	gob.Register(&BodyPullTunnelConnectFailed{})
+	gob.Register(&BodyPullTunnelDisconnect{})
+	gob.Register(&BodyPullTunnelDisconnected{})
+	gob.Register(&BodyPullTunnelData{})
 }
