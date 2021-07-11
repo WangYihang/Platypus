@@ -77,7 +77,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 			),
 		)
 
-		blockSize := 1024 * 16
+		blockSize := 0x400 * 16
 		firstBlockSize := totalBytes % blockSize
 		n := 0
 
