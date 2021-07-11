@@ -161,8 +161,6 @@ func (c *TermiteClient) NotifyPlatypusWindowSize(columns int, rows int) {
 			Ctx.DeleteTermiteClient(c)
 			return
 		}
-	} else {
-		log.Error("No such process")
 	}
 }
 

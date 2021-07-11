@@ -552,8 +552,8 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			if ti, exists := Ctx.PullTunnelInstance[token]; exists {
 				go func() {
 					for {
-						buf := make([]byte, 1024)
-						n, err := (*ti.Conn).Read(buf)
+						buffer := make([]byte, 0x400)
+						n, err := (*ti.Conn).Read(buffer)
 						if err != nil {
 							log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
 							ti.Termite.EncoderLock.Lock()
@@ -568,8 +568,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							break
 						} else {
 							if n > 0 {
-								data := buf[0:n]
-								WriteTunnel(ti.Termite, token, data)
+								WriteTunnel(ti.Termite, token, buffer[0:n])
 							}
 						}
 					}
@@ -633,8 +632,8 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 					})
 					go func() {
 						for {
-							buf := make([]byte, 1024)
-							n, err := conn.Read(buf)
+							buffer := make([]byte, 0x400)
+							n, err := conn.Read(buffer)
 							if err != nil {
 								tc.Termite.Encoder.Encode(message.Message{
 									Type: message.PUSH_TUNNEL_CONNECT_FAILED,
@@ -651,7 +650,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 									Type: message.PUSH_TUNNEL_DATA,
 									Body: message.BodyPushTunnelData{
 										Token: token,
-										Data:  buf[0:n],
+										Data:  buffer[0:n],
 									},
 								})
 							}
