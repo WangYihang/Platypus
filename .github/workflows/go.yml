@@ -23,7 +23,3 @@ jobs:
 
     - name: Build
       run: make release
-      
-    - name: GitHub Tag
-      uses: mathieudutour/github-tag-action@v5.5
-
