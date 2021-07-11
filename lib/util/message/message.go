@@ -124,17 +124,16 @@ type BodyPushTunnelData struct {
 }
 
 type BodyPushTunnelCreate struct {
-	Token   string
 	Address string
 }
 
 type BodyPushTunnelCreated struct {
-	Token string
+	Address string
 }
 
 type BodyPushTunnelCreateFailed struct {
-	Token  string
-	Reason string
+	Address string
+	Reason  string
 }
 
 type BodyPushTunnelDelete struct {
@@ -151,7 +150,8 @@ type BodyPushTunnelDeleteFailed struct {
 }
 
 type BodyPushTunnelConnect struct {
-	Token string
+	Token   string
+	Address string
 }
 
 type BodyPushTunnelConnected struct {
