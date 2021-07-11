@@ -4,11 +4,13 @@ mkfile_dir := $(dir $(mkfile_path))
 build: prepare
 	echo "Building platypus"
 	go build -o build/platypus platypus.go
+	upx ./build/*
 
-release: prepare
+release: dependency prepare
 	env GOOS=linux GOARCH=amd64 go build -o ./build/Platypus_linux_amd64 platypus.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./build/Platypus_darwin_amd64 platypus.go
 	env GOOS=windows GOARCH=amd64 go build -o ./build/Platypus_windows_amd64.exe platypus.go
+	upx ./build/*
 
 prepare:
 	bash -c "[[ -d termites ]] || mkdir termites"
