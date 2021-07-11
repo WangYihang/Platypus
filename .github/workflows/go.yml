@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Set up Go
+    - name: Setup Go
       uses: actions/setup-go@v2
       with:
         go-version: 1.16
@@ -23,3 +23,7 @@ jobs:
 
     - name: Build
       run: make release
+      
+    - name: GitHub Tag
+      uses: mathieudutour/github-tag-action@v5.5
+
