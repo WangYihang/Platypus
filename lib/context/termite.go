@@ -41,18 +41,17 @@ type Process struct {
 
 type TermiteClient struct {
 	conn              net.Conn
-	Hash              string               `json:"hash"`
-	Host              string               `json:"host"`
-	Port              uint16               `json:"port"`
-	Alias             string               `json:"alias"`
-	User              string               `json:"user"`
-	OS                oss.OperatingSystem  `json:"os"`
-	NetworkInterfaces map[string]string    `json:"network_interfaces"`
-	Python2           string               `json:"python2"`
-	Python3           string               `json:"python3"`
-	TimeStamp         time.Time            `json:"timestamp"`
-	DisableHistory    bool                 `json:"disable_hisory"`
-	Tunnels           map[string]*net.Conn `json:"tunnels"`
+	Hash              string              `json:"hash"`
+	Host              string              `json:"host"`
+	Port              uint16              `json:"port"`
+	Alias             string              `json:"alias"`
+	User              string              `json:"user"`
+	OS                oss.OperatingSystem `json:"os"`
+	NetworkInterfaces map[string]string   `json:"network_interfaces"`
+	Python2           string              `json:"python2"`
+	Python3           string              `json:"python3"`
+	TimeStamp         time.Time           `json:"timestamp"`
+	DisableHistory    bool                `json:"disable_hisory"`
 	server            *TCPServer
 	EncoderLock       *sync.Mutex
 	DecoderLock       *sync.Mutex
@@ -87,7 +86,6 @@ func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) 
 		Processes:         map[string]*Process{},
 		CurrentProcessKey: "",
 		DisableHistory:    disableHistory,
-		Tunnels:           map[string]*net.Conn{},
 	}
 }
 
@@ -176,7 +174,7 @@ func (c *TermiteClient) RequestTerminate(key string) {
 	if process, exists := c.Processes[key]; exists {
 		c.EncoderLock.Lock()
 		err := c.Encoder.Encode(message.Message{
-			Type: message.TERMINATE_PROCESS,
+			Type: message.PROCESS_TERMINATE,
 			Body: message.BodyTerminateProcess{
 				Key: key,
 			},
@@ -200,7 +198,7 @@ func (c *TermiteClient) RequestStartProcess(path string, columns int, rows int, 
 
 	c.EncoderLock.Lock()
 	err := c.Encoder.Encode(message.Message{
-		Type: message.START_PROCESS,
+		Type: message.PROCESS_START,
 		Body: message.BodyStartProcess{
 			Path:          path,
 			WindowColumns: columns,
@@ -278,7 +276,19 @@ func (c *TermiteClient) System(command string) string {
 }
 
 func (c *TermiteClient) Close() {
-	log.Debug("Closing client: %s", c.FullDesc())
+	log.Info("Closing client: %s", c.FullDesc())
+	for k, ti := range Ctx.TunnelInstance {
+		if ti.Termite == c && ti.Conn != nil {
+			delete(Ctx.TunnelInstance, k)
+		}
+	}
+	for k, tc := range Ctx.TunnelConfig {
+		if tc.Termite == c {
+			log.Info("Removing tunnel config from %s to %s", (*tc.Server).Addr().String(), tc.Address)
+			(*tc.Server).Close()
+			delete(Ctx.TunnelConfig, k)
+		}
+	}
 	c.conn.Close()
 }
 
@@ -332,65 +342,6 @@ func (c *TermiteClient) GetUsername() string {
 		username = c.User
 	}
 	return username
-}
-
-func (c *TermiteClient) CreateTunnel(host string, port uint16) {
-	log.Info("Connecting to %s:%d", host, port)
-
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
-
-	c.EncoderLock.Lock()
-	err := c.Encoder.Encode(message.Message{
-		Type: message.TUNNEL_CONNECT,
-		Body: message.BodyTunnelConnect{
-			Target: fmt.Sprintf("%s:%d", host, port),
-		},
-	})
-	c.EncoderLock.Unlock()
-
-	if err != nil {
-		log.Error("Network error: %s", err)
-	}
-}
-
-func (c *TermiteClient) DeleteTunnel(host string, port uint16) {
-	log.Info("Disconnecting to %s:%d", host, port)
-
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
-
-	c.EncoderLock.Lock()
-	err := c.Encoder.Encode(message.Message{
-		Type: message.TUNNEL_DISCONNECT,
-		Body: message.BodyTunnelDisconnect{
-			Target: fmt.Sprintf("%s:%d", host, port),
-		},
-	})
-	c.EncoderLock.Unlock()
-
-	if err != nil {
-		log.Error("Network error: %s", err)
-	}
-}
-
-func (c *TermiteClient) WriteTunnel(target string, data []byte) {
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
-
-	c.EncoderLock.Lock()
-	err := c.Encoder.Encode(message.Message{
-		Type: message.TUNNEL_DATA,
-		Body: message.BodyTunnelData{
-			Target: target,
-			Data:   data,
-		},
-	})
-	c.EncoderLock.Unlock()
-
-	if err != nil {
-		log.Error("Network error: %s", err)
-	}
 }
 
 func (c *TermiteClient) makeHash(hashFormat string) string {
