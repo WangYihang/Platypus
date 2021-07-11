@@ -277,6 +277,17 @@ func (c *TermiteClient) System(command string) string {
 
 func (c *TermiteClient) Close() {
 	log.Info("Closing client: %s", c.FullDesc())
+	for k, ti := range Ctx.PushTunnelInstance {
+		if ti.Termite == c && ti.Conn != nil {
+			delete(Ctx.PushTunnelInstance, k)
+		}
+	}
+	for k, tc := range Ctx.PushTunnelConfig {
+		if tc.Termite == c {
+			delete(Ctx.PushTunnelConfig, k)
+		}
+	}
+
 	for k, ti := range Ctx.PullTunnelInstance {
 		if ti.Termite == c && ti.Conn != nil {
 			delete(Ctx.PullTunnelInstance, k)
@@ -284,7 +295,7 @@ func (c *TermiteClient) Close() {
 	}
 	for k, tc := range Ctx.PullTunnelConfig {
 		if tc.Termite == c {
-			log.Info("Removing tunnel config from %s to %s", (*tc.Server).Addr().String(), tc.Address)
+			log.Info("Removing pull tunnel config from %s to %s", (*tc.Server).Addr().String(), tc.Address)
 			(*tc.Server).Close()
 			delete(Ctx.PullTunnelConfig, k)
 		}
