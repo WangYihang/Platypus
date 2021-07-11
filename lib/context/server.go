@@ -507,6 +507,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 		var key string
 		switch msg.Type {
 		case message.STDIO:
+			log.Debug("case message.STDIO")
 			key = msg.Body.(*message.BodyStdio).Key
 			if process, exists := client.Processes[key]; exists {
 				if process.WebSocket != nil {
@@ -518,6 +519,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such key")
 			}
 		case message.PROCESS_STARTED:
+			log.Debug("case message.PROCESS_STARTED")
 			key = msg.Body.(*message.BodyProcessStarted).Key
 			if process, exists := client.Processes[key]; exists {
 				process.Pid = msg.Body.(*message.BodyProcessStarted).Pid
@@ -530,6 +532,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such key")
 			}
 		case message.PROCESS_STOPED:
+			log.Debug("case message.PROCESS_STOPED")
 			key = msg.Body.(*message.BodyProcessStoped).Key
 			if process, exists := client.Processes[key]; exists {
 				code := msg.Body.(*message.BodyProcessStoped).Code
@@ -543,6 +546,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such key")
 			}
 		case message.PULL_TUNNEL_CONNECTED:
+			log.Debug("case message.PULL_TUNNEL_CONNECTED")
 			token := msg.Body.(*message.BodyPullTunnelConnected).Token
 			log.Success("Tunnel (%s) connected", token)
 			if ti, exists := Ctx.PullTunnelInstance[token]; exists {
@@ -574,6 +578,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such connection")
 			}
 		case message.PULL_TUNNEL_CONNECT_FAILED:
+			log.Debug("case message.PULL_TUNNEL_CONNECT_FAILED")
 			token := msg.Body.(*message.BodyPullTunnelConnectFailed).Token
 			reason := msg.Body.(*message.BodyPullTunnelConnectFailed).Reason
 			if ti, exists := Ctx.PullTunnelInstance[token]; exists {
@@ -584,6 +589,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such connection")
 			}
 		case message.PULL_TUNNEL_DISCONNECTED:
+			log.Debug("case message.PULL_TUNNEL_DISCONNECTED")
 			token := msg.Body.(*message.BodyPullTunnelDisconnected).Token
 			if ti, exists := Ctx.PullTunnelInstance[token]; exists {
 				log.Error("%s disconnected", token)
@@ -593,12 +599,130 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				log.Error("No such connection")
 			}
 		case message.PULL_TUNNEL_DATA:
+			log.Debug("case message.PULL_TUNNEL_DATA")
 			token := msg.Body.(*message.BodyPullTunnelData).Token
 			data := msg.Body.(*message.BodyPullTunnelData).Data
 			if ti, exists := Ctx.PullTunnelInstance[token]; exists {
 				(*ti.Conn).Write(data)
 			} else {
 				log.Error("No such connection")
+			}
+		case message.PUSH_TUNNEL_CONNECT:
+			log.Debug("case message.PUSH_TUNNEL_CONNECT")
+			token := msg.Body.(*message.BodyPushTunnelConnect).Token
+			if tc, exists := Ctx.PushTunnelConfig[token]; exists {
+				conn, err := net.Dial("tcp", tc.Address)
+				if err != nil {
+					tc.Termite.Encoder.Encode(message.Message{
+						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
+						Body: message.BodyPushTunnelConnectFailed{
+							Token:  token,
+							Reason: err.Error(),
+						},
+					})
+				} else {
+					Ctx.PushTunnelInstance[token] = PushTunnelInstance{
+						Termite: tc.Termite,
+						Conn:    &conn,
+					}
+					tc.Termite.Encoder.Encode(message.Message{
+						Type: message.PUSH_TUNNEL_CONNECTED,
+						Body: message.BodyPushTunnelConnected{
+							Token: token,
+						},
+					})
+					go func() {
+						for {
+							buf := make([]byte, 1024)
+							n, err := conn.Read(buf)
+							if err != nil {
+								tc.Termite.Encoder.Encode(message.Message{
+									Type: message.PUSH_TUNNEL_CONNECT_FAILED,
+									Body: message.BodyPushTunnelConnectFailed{
+										Token:  token,
+										Reason: err.Error(),
+									},
+								})
+								conn.Close()
+								delete(Ctx.PushTunnelInstance, token)
+								break
+							} else {
+								tc.Termite.Encoder.Encode(message.Message{
+									Type: message.PUSH_TUNNEL_DATA,
+									Body: message.BodyPushTunnelData{
+										Token: token,
+										Data:  buf[0:n],
+									},
+								})
+							}
+						}
+					}()
+				}
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_DISCONNECT:
+			log.Debug("case message.PUSH_TUNNEL_DISCONNECT")
+			token := msg.Body.(*message.BodyPushTunnelDisonnect).Token
+			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
+				log.Success("Tunnel %v closed", (*ti.Conn).RemoteAddr().String())
+				(*ti.Conn).Close()
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_DISCONNECTED:
+			log.Debug("case message.PUSH_TUNNEL_DISCONNECTED")
+			token := msg.Body.(*message.BodyPushTunnelDisonnected).Token
+			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
+				(*ti.Conn).Close()
+				delete(Ctx.PushTunnelInstance, token)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_CREATED:
+			log.Debug("case message.PUSH_TUNNEL_CREATED")
+			token := msg.Body.(*message.BodyPushTunnelCreated).Token
+			if tc, exists := Ctx.PushTunnelConfig[token]; exists {
+				log.Success("Tunnel created: %s", tc.Address)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_CREATE_FAILED:
+			log.Debug("case message.PUSH_TUNNEL_CREATE_FAILED")
+			token := msg.Body.(*message.BodyPushTunnelCreateFailed).Token
+			reason := msg.Body.(*message.BodyPushTunnelCreateFailed).Reason
+			if tc, exists := Ctx.PushTunnelConfig[token]; exists {
+				log.Success("Tunnel create failed: %s", tc.Address, reason)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_DELETED:
+			log.Debug("case message.PUSH_TUNNEL_DELETED")
+			// TODO
+			log.Info("PUSH_TUNNEL_DELETED")
+		case message.PUSH_TUNNEL_DELETE_FAILED:
+			log.Debug("case message.PUSH_TUNNEL_DELETE_FAILED")
+			// TODO
+			log.Info("PUSH_TUNNEL_DELETE_FAILED")
+		case message.PUSH_TUNNEL_DATA:
+			log.Debug("case message.PUSH_TUNNEL_DATA")
+			token := msg.Body.(*message.BodyPushTunnelData).Token
+			data := msg.Body.(*message.BodyPushTunnelData).Data
+			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
+				_, err := (*ti.Conn).Write(data)
+				if err != nil {
+					ti.Termite.Encoder.Encode(message.Message{
+						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
+						Body: message.BodyPushTunnelConnectFailed{
+							Token:  token,
+							Reason: err.Error(),
+						},
+					})
+					(*ti.Conn).Close()
+					delete(Ctx.PushTunnelInstance, token)
+				}
+			} else {
+				log.Error("No such tunnel")
 			}
 		}
 	}

