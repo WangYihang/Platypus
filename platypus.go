@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
@@ -19,21 +20,25 @@ import (
 
 func main() {
 	// Detect and create config file
-	configFilename := fmt.Sprintf("config-v%s.yml", update.Version)
-	if !fs.FileExists(configFilename) {
+	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
+	if !fs.FileExists(configFilenameWithVersion) {
 		content, _ := resource.Asset("lib/runtime/config.example.yml")
-		ioutil.WriteFile(configFilename, content, 0644)
+		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 
-	symlinkConfigFilename := "config.yml"
-	if fs.FileExists(symlinkConfigFilename) {
-		os.Remove(symlinkConfigFilename)
+	var configFilename string
+	if runtime.GOOS == "windows" {
+		configFilename = configFilenameWithVersion
+	} else {
+		configFilename = "config.yml"
+		if fs.FileExists(configFilename) {
+			os.Remove(configFilename)
+		}
+		os.Symlink(configFilenameWithVersion, configFilename)
 	}
-	os.Symlink(configFilename, symlinkConfigFilename)
-
 	// Read config file
 	var config config.Config
-	content, _ := ioutil.ReadFile(symlinkConfigFilename)
+	content, _ := ioutil.ReadFile(configFilename)
 	err := yaml.Unmarshal(content, &config)
 	if err != nil {
 		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
