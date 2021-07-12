@@ -57,21 +57,25 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			case "dynamic":
 				log.Error("TBD")
+				// context.AddDynamicTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+			case "internet":
+				log.Error("TBD")
+				// context.AddInternetTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			default:
-				log.Error("Invalid mode: %s, should be in {'Pull', 'Push', 'Dynamic'}", mode)
+				log.Error("Invalid mode: %s, should be in {'Pull', 'Push', 'Dynamic', 'Internet'}", mode)
 			}
 		case "delete":
 			switch strings.ToLower(mode) {
 			case "pull":
-				// context.Ctx.CurrentTermite.DeletePullTunnel(dst_host, uint16(dst_port), src_host, uint16(src_port))
 				log.Error("TBD")
 			case "push":
-				// context.Ctx.CurrentTermite.DeleteTunnel(src_host, uint16(src_port), dst_host, uint16(dst_port))
 				log.Error("TBD")
 			case "dynamic":
 				log.Error("TBD")
+			case "internet":
+				log.Error("TBD")
 			default:
-				log.Error("Invalid mode: %s, should be in {'Pull', 'Push', 'Dynamic'}", mode)
+				log.Error("Invalid mode: %s, should be in {'Pull', 'Push', 'Dynamic', 'Internet'}", mode)
 			}
 		default:
 			log.Error("Invalid action: %s, should be in {'Create', 'Delete'}", action)
@@ -85,7 +89,7 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 
 func (dispatcher Dispatcher) TunnelHelp(args []string) {
 	fmt.Println("Usage of Tunnel")
-	fmt.Println("\tTunnel [Create|Delete] [Mode] [Src Host] [Src Port] [Dst Host] [Dst Port]")
+	fmt.Println("\tTunnel [Create|Delete] [Pull|Push|Dynamic|Internet] [Src Host] [Src Port] [Dst Host] [Dst Port]")
 }
 
 func (dispatcher Dispatcher) TunnelDesc(args []string) {
