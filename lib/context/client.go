@@ -920,8 +920,10 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 	}
 
 	// Execute Termite Binary
-	c.SystemToken(fmt.Sprintf("/usr/bin/chmod +x %s", dst))
-	c.SystemToken(dst)
+	// On Ubuntu Server 20.04.2 TencentCloud, the chmod binary is stored at
+	// /bin/chmod. This would cause the execution of termite failed. So we
+	// use the relative command `chmod` instead of `/usr/bin/chmod`
+	c.SystemToken(fmt.Sprintf("chmod +x %s && %s", dst, dst))
 }
 
 func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
