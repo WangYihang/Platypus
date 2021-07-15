@@ -26,6 +26,8 @@ const (
 	PUSH_TUNNEL_CONNECT_FAILED
 	PUSH_TUNNEL_DISCONNECTED
 	PUSH_TUNNEL_DISCONNECT_FAILED
+	DYNAMIC_TUNNEL_CREATE
+	DYNAMIC_TUNNEL_DESTROY
 
 	// Termite -> Platypus
 	PROCESS_STARTED
@@ -40,6 +42,10 @@ const (
 	PUSH_TUNNEL_CREATE_FAILED
 	PUSH_TUNNEL_DELETED
 	PUSH_TUNNEL_DELETE_FAILED
+	DYNAMIC_TUNNEL_CREATED
+	DYNAMIC_TUNNEL_CREATE_FAILED
+	DYNAMIC_TUNNEL_DESTROIED
+	DYNAMIC_TUNNEL_DESTROY_FAILED
 )
 
 type Message struct {
@@ -175,6 +181,19 @@ type BodyPushTunnelDisonnectFailed struct {
 	Token string
 }
 
+type BodyDynamicTunnelCreate struct{}
+type BodyDynamicTunnelCreated struct {
+	Port int
+}
+type BodyDynamicTunnelCreateFailed struct {
+	Reason string
+}
+type BodyDynamicTunnelDestroy struct{}
+type BodyDynamicTunnelDestroied struct{}
+type BodyDynamicTunnelDestroyFailed struct {
+	Reason string
+}
+
 func RegisterGob() {
 	// Client Management
 	gob.Register(&BodyClientInfo{})
@@ -208,4 +227,11 @@ func RegisterGob() {
 	gob.Register(&BodyPushTunnelDisonnect{})
 	gob.Register(&BodyPushTunnelDisonnected{})
 	gob.Register(&BodyPushTunnelDisonnectFailed{})
+	// Dynamic port forwarding
+	gob.Register(&BodyDynamicTunnelCreate{})
+	gob.Register(&BodyDynamicTunnelCreated{})
+	gob.Register(&BodyDynamicTunnelCreateFailed{})
+	gob.Register(&BodyDynamicTunnelDestroy{})
+	gob.Register(&BodyDynamicTunnelDestroied{})
+	gob.Register(&BodyDynamicTunnelDestroyFailed{})
 }

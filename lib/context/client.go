@@ -78,6 +78,9 @@ func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 
 func (c *TCPClient) Close() {
 	c.conn.Close()
+	if Ctx.Current == c {
+		Ctx.Current = nil
+	}
 }
 
 func (c *TCPClient) GetConnString() string {
@@ -1001,7 +1004,7 @@ func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
 		bar.IncrBy(segmentSize)
 		bar.DecoratorEwmaUpdate(time.Since(start))
 
-		if broadcast && i%64 == 0 {
+		if broadcast && i%0x10 == 0 {
 			c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
 		}
 	}
