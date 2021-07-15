@@ -218,8 +218,8 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [ ] Upgrade to Metepreter session
 - [ ] Electron frontend
 - [ ] [#53 Reload config file](https://github.com/WangYihang/Platypus/issues/53)
-- [ ] [#28 Suport enable internet on the internal machine](https://github.com/WangYihang/Platypus/issues/28))
 - [ ] Add version checking in Termite
+- [x] [#28 Suport enable internet on the internal machine](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport dynamic port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport remote port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport local port forwarding](https://github.com/WangYihang/Platypus/issues/28))
