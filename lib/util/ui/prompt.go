@@ -9,7 +9,7 @@ import (
 
 func PromptYesNo(message string) bool {
 	for {
-		fmt.Print(fmt.Sprintf("%s [Y/N] ", message))
+		fmt.Printf("%s [Y/N] ", message)
 		inputReader := bufio.NewReader(os.Stdin)
 		input, err := inputReader.ReadString('\n')
 		if err != nil {

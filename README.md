@@ -218,9 +218,10 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [ ] Upgrade to Metepreter session
 - [ ] Electron frontend
 - [ ] [#53 Reload config file](https://github.com/WangYihang/Platypus/issues/53)
-- [ ] [#28 Suport remote port forwarding](https://github.com/WangYihang/Platypus/issues/28))
-- [ ] [#28 Suport dynamic port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [ ] [#28 Suport enable internet on the internal machine](https://github.com/WangYihang/Platypus/issues/28))
+- [ ] Add version checking in Termite
+- [x] [#28 Suport dynamic port forwarding](https://github.com/WangYihang/Platypus/issues/28))
+- [x] [#28 Suport remote port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport local port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [x] Design Private Protocol
 - [x] Check exit state in WebSocket
@@ -253,7 +254,6 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [x] OS Detection (Linux|Windows) by [@EddieIvan01](https://github.com/EddieIvan01)
 - [x] Upgrade common reverse shell session into full interactive session
 - [x] Docker support (Added by [@yeya24](https://github.com/yeya24))
-
 
 ## Contributors
 

@@ -20,6 +20,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
+	"github.com/phayes/freeport"
 )
 
 type WebSocketMessage struct {
@@ -471,10 +472,12 @@ func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
 		log.Error("Duplicated income connection detected!")
 
 		// Respond to termite client that the client is duplicated
+		client.EncoderLock.Lock()
 		err := client.Encoder.Encode(message.Message{
 			Type: message.DUPLICATED_CLIENT,
 			Body: message.BodyDuplicateClient{},
 		})
+		client.EncoderLock.Unlock()
 		if err != nil {
 			// TODO: handle network error
 			log.Error("Network error: %s", err)
@@ -607,6 +610,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				conn, err := net.Dial("tcp", tc.Address)
 				if err != nil {
 					log.Error("Connecting to %s failed: %s", tc.Address, err.Error())
+					tc.Termite.EncoderLock.Lock()
 					tc.Termite.Encoder.Encode(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
@@ -614,24 +618,28 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							Reason: err.Error(),
 						},
 					})
+					tc.Termite.EncoderLock.Unlock()
 				} else {
 					log.Success("Connecting to %s succeed", tc.Address)
 					Ctx.PushTunnelInstance[token] = PushTunnelInstance{
 						Termite: tc.Termite,
 						Conn:    &conn,
 					}
+					tc.Termite.EncoderLock.Lock()
 					tc.Termite.Encoder.Encode(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECTED,
 						Body: message.BodyPushTunnelConnected{
 							Token: token,
 						},
 					})
+					tc.Termite.EncoderLock.Unlock()
 					go func() {
 						for {
 							buffer := make([]byte, 0x400)
 							n, err := conn.Read(buffer)
 							if err != nil {
 								log.Debug("Reading from %s failed: %s", tc.Address, err.Error())
+								tc.Termite.EncoderLock.Lock()
 								tc.Termite.Encoder.Encode(message.Message{
 									Type: message.PUSH_TUNNEL_DISCONNECTED,
 									Body: message.BodyPushTunnelDisonnected{
@@ -639,11 +647,13 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 										Reason: err.Error(),
 									},
 								})
+								tc.Termite.EncoderLock.Unlock()
 								conn.Close()
 								delete(Ctx.PushTunnelInstance, token)
 								break
 							} else {
 								log.Debug("%d bytes read from %s", n, tc.Address)
+								tc.Termite.EncoderLock.Lock()
 								tc.Termite.Encoder.Encode(message.Message{
 									Type: message.PUSH_TUNNEL_DATA,
 									Body: message.BodyPushTunnelData{
@@ -651,6 +661,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 										Data:  buffer[0:n],
 									},
 								})
+								tc.Termite.EncoderLock.Unlock()
 							}
 						}
 					}()
@@ -703,6 +714,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
 				_, err := (*ti.Conn).Write(data)
 				if err != nil {
+					ti.Termite.EncoderLock.Lock()
 					ti.Termite.Encoder.Encode(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
@@ -710,12 +722,25 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							Reason: err.Error(),
 						},
 					})
+					ti.Termite.EncoderLock.Unlock()
 					(*ti.Conn).Close()
 					delete(Ctx.PushTunnelInstance, token)
 				}
 			} else {
 				log.Debug("No such tunnel: %s", token)
 			}
+		case message.DYNAMIC_TUNNEL_CREATED:
+			port := msg.Body.(*message.BodyDynamicTunnelCreated).Port
+			local_address := fmt.Sprintf("127.0.0.1:%d", freeport.GetPort())
+			remote_address := fmt.Sprintf("127.0.0.1:%d", port)
+			log.Success("Mapping remote socks server (%s) into local address (%s)", remote_address, local_address)
+			AddPullTunnelConfig(
+				Ctx.CurrentTermite,
+				local_address,
+				remote_address,
+			)
+		case message.DYNAMIC_TUNNEL_CREATE_FAILED:
+			log.Error(msg.Body.(*message.BodyDynamicTunnelCreateFailed).Reason)
 		}
 	}
 }

