@@ -93,6 +93,15 @@ func (c *TermiteClient) GetHashFormat() string {
 	return c.server.hashFormat
 }
 
+func (c *TermiteClient) StartSocks5Server() {
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.DYNAMIC_TUNNEL_CREATE,
+		Body: message.BodyDynamicTunnelCreate{},
+	})
+	c.EncoderLock.Unlock()
+}
+
 func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	log.Info("Gathering information from termite client...")
 
@@ -299,6 +308,9 @@ func (c *TermiteClient) Close() {
 		}
 	}
 	c.conn.Close()
+	if Ctx.CurrentTermite == c {
+		Ctx.CurrentTermite = nil
+	}
 }
 
 func (c *TermiteClient) AsTable() {

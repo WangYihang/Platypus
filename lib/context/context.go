@@ -12,6 +12,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/str"
 	"github.com/WangYihang/Platypus/lib/util/ui"
 	"github.com/WangYihang/readline"
+	"github.com/armon/go-socks5"
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
@@ -50,6 +51,7 @@ type Context struct {
 	PullTunnelInstance map[string]PullTunnelInstance
 	PushTunnelConfig   map[string]PushTunnelConfig
 	PushTunnelInstance map[string]PushTunnelInstance
+	Socks5Servers      map[string](*socks5.Server)
 	// Set later in platypus.go
 	Distributor *Distributor
 	RESTful     *gin.Engine
@@ -72,6 +74,7 @@ func CreateContext() {
 			PullTunnelInstance: make(map[string]PullTunnelInstance),
 			PushTunnelConfig:   make(map[string]PushTunnelConfig),
 			PushTunnelInstance: make(map[string]PushTunnelInstance),
+			Socks5Servers:      make(map[string]*socks5.Server),
 		}
 	}
 	// Signal Handler
@@ -197,6 +200,7 @@ func Shutdown() {
 }
 
 func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
+	log.Info("Mapping local (%s) to remote (%s)", local_address, remote_address)
 	termite.AtomLock.Lock()
 	defer func() { termite.AtomLock.Unlock() }()
 
@@ -220,6 +224,7 @@ func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 }
 
 func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
+	log.Info("Mapping remote (%s) to local (%s)", remote_address, local_address)
 	tunnel, err := net.Listen("tcp", local_address)
 	if err != nil {
 		log.Error(err.Error())
@@ -275,6 +280,24 @@ func WriteTunnel(termite *TermiteClient, token string, data []byte) {
 	if err != nil {
 		log.Error("Network error: %s", err)
 	}
+}
+
+func StartSocks5Server(local_address string) error {
+	// Create tcp listener
+	socks5ServerListener, err := net.Listen("tcp", local_address)
+	if err != nil {
+		return err
+	}
+	// Create socks5 server
+	server, err := socks5.New(&socks5.Config{})
+	if err != nil {
+		return err
+	}
+	Ctx.Socks5Servers[local_address] = server
+	// Start socks5 server
+	go server.Serve(socks5ServerListener)
+	log.Success("Socks server started at: %s", local_address)
+	return nil
 }
 
 // func DeletePullTunnelConfig(local_host string, local_port uint16, remote_host string, remote_port uint16) {

@@ -48,19 +48,26 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 			case "pull":
 				local_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
 				remote_address := fmt.Sprintf("%s:%d", src_host, src_port)
-				log.Info("Mapping remote (%s) to local (%s)", remote_address, local_address)
 				context.AddPullTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			case "push":
 				local_address := fmt.Sprintf("%s:%d", src_host, src_port)
 				remote_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
-				log.Info("Mapping local (%s) to remote (%s)", local_address, remote_address)
 				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
 			case "dynamic":
-				log.Error("TBD")
-				// context.AddDynamicTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+				context.Ctx.CurrentTermite.StartSocks5Server()
 			case "internet":
-				log.Error("TBD")
-				// context.AddInternetTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+				local_address := fmt.Sprintf("%s:%d", src_host, src_port)
+				remote_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
+				if _, exists := context.Ctx.Socks5Servers[local_address]; exists {
+					log.Warn("Socks5 server (%s) already exists", local_address)
+				} else {
+					err := context.StartSocks5Server(local_address)
+					if err != nil {
+						log.Error("Starting local socks5 server failed: %s", err.Error())
+					} else {
+						context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+					}
+				}
 			default:
 				log.Error("Invalid mode: %s, should be in {'Pull', 'Push', 'Dynamic', 'Internet'}", mode)
 			}
