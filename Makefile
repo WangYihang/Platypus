@@ -17,6 +17,9 @@ install_dependency:
 	# upx
 	sudo apt install -y upx
 
+install_dependency_github_action:
+	sudo apt install go-bindata
+
 prepare: 
 	bash -c "[[ -d termites ]] || mkdir termites"
 	bash -c "[[ -d build ]] || mkdir build"
@@ -41,7 +44,7 @@ build_platypus: collect_resource
 	env go build -o build/platypus platypus.go
 	find build -type f -executable | xargs upx
 
-release: collect_resource
+release: install_dependency_github_action collect_resource
 	env GOOS=linux GOARCH=amd64 go build -o ./build/Platypus_linux_amd64 platypus.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./build/Platypus_darwin_amd64 platypus.go
 	env GOOS=windows GOARCH=amd64 go build -o ./build/Platypus_windows_amd64.exe platypus.go
