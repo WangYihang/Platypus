@@ -7,14 +7,11 @@ import (
 type MessageType int
 
 const (
-	// Platypus <-> Termite
-	STDIO MessageType = iota
-	PULL_TUNNEL_DATA
-	PUSH_TUNNEL_DATA
-
 	// Platypus -> Termite
+	GET_CLIENT_INFO MessageType = iota // DO NOT CHANGE OR PREPEND OPCODE BRFORE THIS OPCODE
+	UPDATE
+
 	WINDOW_SIZE
-	GET_CLIENT_INFO
 	DUPLICATED_CLIENT
 	PROCESS_START
 	PROCESS_TERMINATE
@@ -33,9 +30,9 @@ const (
 	WRITE_FILE
 
 	// Termite -> Platypus
+	CLIENT_INFO
 	PROCESS_STARTED
 	PROCESS_STOPED
-	CLIENT_INFO
 	PULL_TUNNEL_CONNECTED
 	PULL_TUNNEL_CONNECT_FAILED
 	PULL_TUNNEL_DISCONNECTED
@@ -52,11 +49,20 @@ const (
 	CALL_SYSTEM_RESULT
 	READ_FILE_RESULT
 	WRITE_FILE_RESULT
+
+	// Platypus <-> Termite
+	STDIO
+	PULL_TUNNEL_DATA
+	PUSH_TUNNEL_DATA
 )
 
 type Message struct {
 	Type MessageType
 	Body interface{}
+}
+
+type BodyUpdate struct {
+	DistributorUrl string
 }
 
 type BodyStdio struct {
@@ -92,6 +98,7 @@ type BodyGetClientInfo struct{}
 type BodyDuplicateClient struct{}
 
 type BodyClientInfo struct {
+	Version           string
 	OS                string
 	User              string
 	Python2           string
@@ -233,6 +240,7 @@ type BodyWriteFileResult struct {
 
 func RegisterGob() {
 	// Client Management
+	gob.Register(&BodyUpdate{})
 	gob.Register(&BodyClientInfo{})
 	gob.Register(&BodyGetClientInfo{})
 	gob.Register(&BodyDuplicateClient{})

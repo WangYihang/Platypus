@@ -24,9 +24,11 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/message"
 	"github.com/WangYihang/Platypus/lib/util/str"
+	"github.com/WangYihang/Platypus/lib/util/update"
 	"github.com/armon/go-socks5"
 	"github.com/creack/pty"
 	"github.com/phayes/freeport"
+	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	"github.com/sevlyar/go-daemon"
 )
 
@@ -84,6 +86,7 @@ type Client struct {
 	Decoder     *gob.Decoder
 	EncoderLock *sync.Mutex
 	DecoderLock *sync.Mutex
+	Service     string
 }
 
 func handleConnection(c *Client) {
@@ -269,6 +272,7 @@ func handleConnection(c *Client) {
 			err = c.Encoder.Encode(message.Message{
 				Type: message.CLIENT_INFO,
 				Body: message.BodyClientInfo{
+					Version:           update.Version,
 					User:              username,
 					OS:                runtime.GOOS,
 					Python2:           python2,
@@ -590,6 +594,14 @@ func handleConnection(c *Client) {
 				},
 			})
 			c.EncoderLock.Unlock()
+		case message.UPDATE:
+			exe, _ := os.Executable()
+			distributorUrl := msg.Body.(*message.BodyUpdate).DistributorUrl
+			url := fmt.Sprintf("%s/termite/%s", distributorUrl, c.Service)
+			if err := selfupdate.UpdateTo(url, exe); err != nil {
+				log.Error("Error occurred while updating binary: %s", err)
+				return
+			}
 		}
 	}
 }
@@ -662,6 +674,7 @@ func StartClient(service string) bool {
 			Decoder:     gob.NewDecoder(conn),
 			EncoderLock: &sync.Mutex{},
 			DecoderLock: &sync.Mutex{},
+			Service:     service,
 		}
 		handleConnection(c)
 		return needRetry

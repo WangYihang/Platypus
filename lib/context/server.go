@@ -126,7 +126,7 @@ func (s *TCPServer) Handle(conn net.Conn) {
 		// Send gather info request
 		log.Info("Gathering information from client...")
 		if client.GatherClientInfo(s.hashFormat) {
-			log.Info("A new encrypted income connection from %s", client.conn.RemoteAddr())
+			log.Info("A new encrypted termite (%s) income connection from %s", client.Version, client.conn.RemoteAddr())
 			s.AddTermiteClient(client)
 		} else {
 			log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())

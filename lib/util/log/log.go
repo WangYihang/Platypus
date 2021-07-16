@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/fatih/color"
 )
@@ -25,14 +24,9 @@ var enabled = []string{
 	info,
 	err,
 	warn,
-	debug,
+	// debug,
 	success,
-	data,
-}
-
-func printMessagePrefix(colorNumber color.Attribute, message string) {
-	color.New(colorNumber).Printf(message + " ")
-	color.New(color.FgHiBlack).Printf(formatTime() + " ")
+	// data,
 }
 
 func Data(format string, a ...interface{}) {
@@ -98,8 +92,4 @@ func Success(format string, a ...interface{}) {
 			return
 		}
 	}
-}
-
-func formatTime() string {
-	return time.Now().Format("2006/01/02 15:04:05")
 }
