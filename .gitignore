@@ -18,9 +18,12 @@ vendor/
 build/
 termites/
 
-# config file
+# Config file
 config.yml
 config-v*.yml
 
-# resource file
+# Resource file
 lib/util/resource/resource.go
+
+# Termite build file
+termite
