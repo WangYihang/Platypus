@@ -63,6 +63,7 @@ type Message struct {
 
 type BodyUpdate struct {
 	DistributorUrl string
+	Version        string
 }
 
 type BodyStdio struct {

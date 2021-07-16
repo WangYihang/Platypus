@@ -152,6 +152,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				Type: message.UPDATE,
 				Body: message.BodyUpdate{
 					DistributorUrl: Ctx.Distributor.Url,
+					Version:        update.Version,
 				},
 			})
 			c.EncoderLock.Unlock()
