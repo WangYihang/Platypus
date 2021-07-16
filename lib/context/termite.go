@@ -139,6 +139,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	if msg.Type == message.CLIENT_INFO {
 		clientInfo := msg.Body.(*message.BodyClientInfo)
 		c.Version = clientInfo.Version
+		log.Info("Client version: v%s", c.Version)
 		c.OS = oss.Parse(clientInfo.OS)
 		c.User = clientInfo.User
 		c.Python2 = clientInfo.Python2
@@ -156,6 +157,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				},
 			})
 			c.EncoderLock.Unlock()
+			return false
 		}
 		return true
 	} else {
