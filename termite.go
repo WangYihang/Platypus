@@ -597,11 +597,16 @@ func handleConnection(c *Client) {
 		case message.UPDATE:
 			exe, _ := os.Executable()
 			distributorUrl := msg.Body.(*message.BodyUpdate).DistributorUrl
+			version := msg.Body.(*message.BodyUpdate).Version
+			log.Info("New version v%s is available, upgrading...", version)
 			url := fmt.Sprintf("%s/termite/%s", distributorUrl, c.Service)
 			if err := selfupdate.UpdateTo(url, exe); err != nil {
 				log.Error("Error occurred while updating binary: %s", err)
 				return
 			}
+			log.Info("Update to v%s finished", version)
+			log.Info("Restarting...")
+			syscall.Exec(exe, []string{exe}, nil)
 		}
 	}
 }
@@ -726,6 +731,7 @@ func main() {
 	}
 
 	for {
+		log.Info("Termite (v%s) starting...", update.Version)
 		if !StartClient(service) {
 			break
 		}
