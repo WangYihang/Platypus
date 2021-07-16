@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/mod/semver"
 	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/message"
 	oss "github.com/WangYihang/Platypus/lib/util/os"
 	"github.com/WangYihang/Platypus/lib/util/str"
+	"github.com/WangYihang/Platypus/lib/util/update"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
@@ -47,6 +49,7 @@ type TermiteClient struct {
 	Alias             string              `json:"alias"`
 	User              string              `json:"user"`
 	OS                oss.OperatingSystem `json:"os"`
+	Version           string              `json:"version"`
 	NetworkInterfaces map[string]string   `json:"network_interfaces"`
 	Python2           string              `json:"python2"`
 	Python3           string              `json:"python3"`
@@ -135,12 +138,24 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 
 	if msg.Type == message.CLIENT_INFO {
 		clientInfo := msg.Body.(*message.BodyClientInfo)
+		c.Version = clientInfo.Version
 		c.OS = oss.Parse(clientInfo.OS)
 		c.User = clientInfo.User
 		c.Python2 = clientInfo.Python2
 		c.Python3 = clientInfo.Python3
 		c.NetworkInterfaces = clientInfo.NetworkInterfaces
 		c.Hash = c.makeHash(hashFormat)
+		if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
+			// Termite needs up to date
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.UPDATE,
+				Body: message.BodyUpdate{
+					DistributorUrl: Ctx.Distributor.Url,
+				},
+			})
+			c.EncoderLock.Unlock()
+		}
 		return true
 	} else {
 		log.Error("Client sent unexpected message type: %v", msg)

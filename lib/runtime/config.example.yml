@@ -29,6 +29,7 @@ restful:
 distributor:
   host: "0.0.0.0"
   port: 13339
+  url: "http://127.0.0.1:13339"
 # Check new releases from GitHub when starting Platypus
 update: true
 # Open web browser to view the Web-UI on starting

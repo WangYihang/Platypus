@@ -16,9 +16,10 @@ type Distributor struct {
 	Port       uint16            `json:"port"`
 	Interfaces []string          `json:"interfaces"`
 	Route      map[string]string `json:"route"`
+	Url        string            `json:"url"`
 }
 
-func CreateDistributorServer(host string, port uint16) *gin.Engine {
+func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
 	endpoint := gin.Default()
@@ -29,6 +30,7 @@ func CreateDistributorServer(host string, port uint16) *gin.Engine {
 		Port:       port,
 		Interfaces: network.GatherInterfacesList(host),
 		Route:      map[string]string{},
+		Url:        url,
 	}
 
 	endpoint.GET("/termite/:target", func(c *gin.Context) {

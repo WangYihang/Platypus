@@ -60,7 +60,7 @@ func main() {
 	// Init distributor server from config file
 	rh := config.Distributor.Host
 	rp := config.Distributor.Port
-	distributor := context.CreateDistributorServer(rh, rp)
+	distributor := context.CreateDistributorServer(rh, rp, config.Distributor.Url)
 
 	go distributor.Run(fmt.Sprintf("%s:%d", rh, rp))
 
