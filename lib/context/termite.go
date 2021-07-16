@@ -279,7 +279,66 @@ func (c *TermiteClient) StartShell() {
 }
 
 func (c *TermiteClient) System(command string) string {
-	return "to be done"
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.CALL_SYSTEM,
+		Body: message.BodyCallSystem{
+			Command: command,
+			Token:   token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.CALL_SYSTEM_RESULT {
+		result := msg.Body.(*message.BodyCallSystemResult).Result
+		return string(result)
+	} else {
+		return ""
+	}
+}
+
+func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.READ_FILE,
+		Body: message.BodyReadFile{
+			Path:  path,
+			Token: token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.READ_FILE_RESULT {
+		result := msg.Body.(*message.BodyReadFileResult).Result
+		return result, nil
+	} else {
+		return nil, fmt.Errorf("invalid message type: %v", msg.Type)
+	}
+}
+
+func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.WRITE_FILE,
+		Body: message.BodyWriteFile{
+			Path:  path,
+			Token: token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.WRITE_FILE_RESULT {
+		n := msg.Body.(*message.BodyWriteFileResult).N
+		return n, nil
+	} else {
+		return -1, fmt.Errorf("invalid message type: %v", msg.Type)
+	}
 }
 
 func (c *TermiteClient) Close() {

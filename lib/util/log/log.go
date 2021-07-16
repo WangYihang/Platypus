@@ -25,9 +25,9 @@ var enabled = []string{
 	info,
 	err,
 	warn,
-	// debug,
+	debug,
 	success,
-	// data,
+	data,
 }
 
 func printMessagePrefix(colorNumber color.Attribute, message string) {
