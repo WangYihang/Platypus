@@ -741,6 +741,13 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			)
 		case message.DYNAMIC_TUNNEL_CREATE_FAILED:
 			log.Error(msg.Body.(*message.BodyDynamicTunnelCreateFailed).Reason)
+		case message.CALL_SYSTEM_RESULT:
+			token := msg.Body.(*message.BodyCallSystemResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
 		}
 	}
 }

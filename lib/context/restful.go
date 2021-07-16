@@ -361,9 +361,16 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				hash := c.Param("hash")
 				for _, server := range Ctx.Servers {
 					if server.Hash == hash {
+						clients := make(map[string]interface{})
+						for k, v := range server.Clients {
+							clients[k] = v
+						}
+						for k, v := range server.TermiteClients {
+							clients[k] = v
+						}
 						c.JSON(200, gin.H{
 							"status": true,
-							"msg":    server.Clients,
+							"msg":    clients,
 						})
 						c.Abort()
 						return
@@ -420,10 +427,13 @@ func CreateRESTfulAPIServer() *gin.Engine {
 
 			// Client related
 			clientAPIGroup.GET("", func(c *gin.Context) {
-				clients := []TCPClient{}
+				clients := make(map[string]interface{})
 				for _, server := range Ctx.Servers {
-					for _, client := range (*server).GetAllTCPClients() {
-						clients = append(clients, *client)
+					for k, v := range server.Clients {
+						clients[k] = v
+					}
+					for k, v := range server.TermiteClients {
+						clients[k] = v
 					}
 				}
 				c.JSON(200, gin.H{
@@ -515,6 +525,14 @@ func CreateRESTfulAPIServer() *gin.Engine {
 								"msg":    client.SystemToken(cmd),
 							})
 						}
+						c.Abort()
+						return
+					}
+					if client, exist := server.TermiteClients[hash]; exist {
+						c.JSON(200, gin.H{
+							"status": true,
+							"msg":    client.System(cmd),
+						})
 						c.Abort()
 						return
 					}

