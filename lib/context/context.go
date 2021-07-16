@@ -52,6 +52,7 @@ type Context struct {
 	PushTunnelConfig   map[string]PushTunnelConfig
 	PushTunnelInstance map[string]PushTunnelInstance
 	Socks5Servers      map[string](*socks5.Server)
+	MessageQueue       map[string](chan *message.Message)
 	// Set later in platypus.go
 	Distributor *Distributor
 	RESTful     *gin.Engine
@@ -75,6 +76,7 @@ func CreateContext() {
 			PushTunnelConfig:   make(map[string]PushTunnelConfig),
 			PushTunnelInstance: make(map[string]PushTunnelInstance),
 			Socks5Servers:      make(map[string]*socks5.Server),
+			MessageQueue:       make(map[string](chan *message.Message)),
 		}
 	}
 	// Signal Handler

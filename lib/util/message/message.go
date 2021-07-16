@@ -28,6 +28,9 @@ const (
 	PUSH_TUNNEL_DISCONNECT_FAILED
 	DYNAMIC_TUNNEL_CREATE
 	DYNAMIC_TUNNEL_DESTROY
+	CALL_SYSTEM
+	READ_FILE
+	WRITE_FILE
 
 	// Termite -> Platypus
 	PROCESS_STARTED
@@ -46,6 +49,9 @@ const (
 	DYNAMIC_TUNNEL_CREATE_FAILED
 	DYNAMIC_TUNNEL_DESTROIED
 	DYNAMIC_TUNNEL_DESTROY_FAILED
+	CALL_SYSTEM_RESULT
+	READ_FILE_RESULT
+	WRITE_FILE_RESULT
 )
 
 type Message struct {
@@ -194,6 +200,37 @@ type BodyDynamicTunnelDestroyFailed struct {
 	Reason string
 }
 
+type BodyCallSystem struct {
+	Token   string
+	Command string
+}
+
+type BodyCallSystemResult struct {
+	Token  string
+	Result []byte
+}
+
+type BodyReadFile struct {
+	Token string
+	Path  string
+}
+
+type BodyReadFileResult struct {
+	Token  string
+	Result []byte
+}
+
+type BodyWriteFile struct {
+	Token   string
+	Path    string
+	Content []byte
+}
+
+type BodyWriteFileResult struct {
+	Token string
+	N     int
+}
+
 func RegisterGob() {
 	// Client Management
 	gob.Register(&BodyClientInfo{})
@@ -234,4 +271,13 @@ func RegisterGob() {
 	gob.Register(&BodyDynamicTunnelDestroy{})
 	gob.Register(&BodyDynamicTunnelDestroied{})
 	gob.Register(&BodyDynamicTunnelDestroyFailed{})
+	// System
+	gob.Register(&BodyCallSystem{})
+	gob.Register(&BodyCallSystemResult{})
+	// Read file
+	gob.Register(&BodyReadFile{})
+	gob.Register(&BodyReadFileResult{})
+	// Write file
+	gob.Register(&BodyWriteFile{})
+	gob.Register(&BodyWriteFileResult{})
 }
