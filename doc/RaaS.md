@@ -1,5 +1,8 @@
 # Reverse shell as a Service
 
+
+> Inspired by https://github.com/lukechilds/reverse-shell
+
 > NOTICE: ONLY WORKS on *NIX
 
 Platypus is able to multiplex the reverse shell listening port. Port `13337 / 1338` can handle reverse shell client connections.  
@@ -56,3 +59,4 @@ Then you should use `go-bindata` to add the template file as an asset of Platypu
 go get -u github.com/go-bindata/go-bindata/...
 go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/... ./html/dist
 ```
+

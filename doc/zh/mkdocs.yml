@@ -1,0 +1,17 @@
+site_name: Platypus
+theme:
+  name: material
+
+plugins:
+  - mermaid2
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.superfences
+  - footnotes
+  - attr_list
+  - def_list
+  - meta
+  - admonition
