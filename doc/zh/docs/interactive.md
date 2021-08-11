@@ -8,7 +8,7 @@
 ## 方案一：`pty.spawn("/bin/bash")`
 
 ```
-jump
+Jump 
 ```
 
 ## 方案二：Termite
