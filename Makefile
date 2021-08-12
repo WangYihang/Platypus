@@ -25,9 +25,9 @@ prepare:
 
 build_frontend: prepare
 	echo "Building frontend"
-	cd html/frontend && yarn install && yarn build
+	cd html/frontend && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 	echo "Building ttyd"
-	cd html/ttyd && yarn install && yarn build
+	cd html/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 
 build_termite: prepare
 	echo "Building termite"
