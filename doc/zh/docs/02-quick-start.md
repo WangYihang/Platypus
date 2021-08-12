@@ -20,8 +20,10 @@
 .\platypus_windows_amd64.exe
 ```
 
-如果您对 Platypus 的具体启动流程感兴趣，可以参考[本文](./run.md)。
+启动时 Platypus 将会进行一些初始化工作，并开始监听反向 Shell 端口，一切准备就绪之后，Platypus 将会以命令提示符 `» ` 来提示用户可以开始输入命令与之交互。
 
+!!! Tips
+    如果您对 Platypus 的具体启动流程感兴趣，可以参考[本文](./run.md)。
 
 ## 反弹一个反向 Shell
 
