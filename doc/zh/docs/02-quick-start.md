@@ -23,7 +23,7 @@
 启动时 Platypus 将会进行一些初始化工作，并开始监听反向 Shell 端口，一切准备就绪之后，Platypus 将会以命令提示符 `» ` 来提示用户可以开始输入命令与之交互。
 
 !!! Tips
-    如果您对 Platypus 的具体启动流程感兴趣，可以参考[本文](./run.md)。
+    如果您对 Platypus 的具体启动流程感兴趣，可以参考[本文](./03-startup.md)。
 
 ## 反弹一个反向 Shell
 
@@ -119,7 +119,7 @@ Platypus 的命令行模式支持 `Help`、`List`、`Jump`、`Download`、`Uploa
 !!! Warning
     * 如果您直接执行 Interact 命令得到的 Shell 将会与 netcat 类似，并非纯交互式 Shell。
     * 如果您想要退出当前正在交互的 Shell，可以直接输入 `exit` 即可返回。
-    * 如果您希望得到一个**像 SSH 一样好用丝滑的 Shell** 请参考[本文](./interactive.md)。
+    * 如果您希望得到一个**像 SSH 一样好用丝滑的 Shell** 请参考[本文](./04-interact.md)。
 
 ### Upload / Download
 
@@ -139,21 +139,3 @@ Platypus 的命令行模式支持 `Help`、`List`、`Jump`、`Download`、`Uploa
 ```bash
 » Download /tmp/www.tar.gz ./www.tar.gz
 ```
-
-
-## 升级至 Termite（推荐）
-
-当您已经获得了一个反向 Shell 之后，强烈建议您使用 `Upgrade` 命令将其升级为更稳定可靠并且提供加密机制等其他非常有用的功能的 Termite Shell。
-
-!!! Termite
-    Termite 是 Platypus 的二进制木马，提供流量加密、交互式 Shell 等功能。
-
-当您已经使用 `Jump` 命令跳转到目标 Shell 之后，您可以使用 `Upgrade 1.3.3.7:13337` 来将当前的明文 Shell 提升为更加可靠的 Termite，稍等片刻，您将会看到一个带有 `[Encrypted]` 标记的 Shell 上线。
-
-Termite 提供了多种有用功能，如：
-
-* 完全交互式 Shell（使用就像 SSH 一样丝滑），并且可以多人同时启动多个 Shell 而互不影响。
-* 4 种不同的[隧道](./tunnel.md)功能
-* 更加稳定可靠的文件操作
-
-与 Termite 交互的逻辑与通常的反向 Shell 一致，即：`Jump` 然后 `Interact`。

@@ -13,3 +13,6 @@
 * `0.0.0.0:13337` 端口用来接收回连的 Termite 客户端；
 * `0.0.0.0:13338` 端口用来接收回连的 Shell（该端口可视作 netcat 的升级版）；
 * `127.0.0.1:7331` 端口用来提供 Web 界面的访问以及 RESTful API 服务。
+
+!!! Warning
+    由于目前 [Platypus v1.5.0](https://github.com/WangYihang/Platypus/releases/tag/v1.5.0) 的 Web 界面还**没有提供任何认证**功能，因此其 Web 端口（7331）默认监听本地回环。如果您想要将其部署在公网上，这意味着任何知道您的 Web 界面端口的人都可以直接访问您 当前获取的所有 Shell，因此请等待后续版本添加了认证功能之后再将 Platypus 部署在公网上。
