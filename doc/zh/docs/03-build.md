@@ -9,7 +9,7 @@
 
 ```bash
 sudo apt update
-sudo apt install curl make
+sudo apt install -y curl make
 git clone https://github.com/WangYihang/Platypus.git
 cd Platypus
 make install_dependency
@@ -17,6 +17,9 @@ make release
 ```
 
 编译成功后，发行版将会位于 `./build` 文件夹中。
+
+!!! Warning
+    使用 [Makefile](https://github.com/WangYihang/Platypus/blob/master/Makefile) 安装依赖的时候会通过 `raw.githubusercontent.com` 下载 `nvm` 的安装文件，因此需要确保您可以正常访问 `raw.githubusercontent.com`。如果您不能正常访问该域名，则需要您根据 Makefile 中的依赖安装部分手动安装所需依赖。
 
 ## 单独编译
 
@@ -54,6 +57,9 @@ env GOOS=linux GOARCH=amd64 go build -o termites/termite_linux_amd64 termite.go
 ```
 
 可以通过 `go tool dist list` 列出所有 Golang 支持的操作系统与平台组合。
+
+!!! Warning
+    由于 Termite 依赖于 Linux 的伪终端特性，因此暂时不支持编译能在 Windows 上运行的 Termite 客户端。
 
 ### 整合资源文件
 
