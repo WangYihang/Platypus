@@ -40,7 +40,7 @@ sudo apt install upx
 ```bash
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
-sudo apt install make curl
+sudo apt install -y make curl
 make install_dependency
 make release
 ```
