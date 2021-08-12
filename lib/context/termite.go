@@ -317,6 +317,54 @@ func (c *TermiteClient) System(command string) string {
 	}
 }
 
+func (c *TermiteClient) FileSize(path string) (int64, error) {
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.FILE_SIZE,
+		Body: message.BodyFileSize{
+			Path:  path,
+			Token: token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.FILE_SIZE_RESULT {
+		n := msg.Body.(*message.BodyFileSizeResult).N
+		if n < 0 {
+			return n, fmt.Errorf("get file size failed")
+		} else {
+			return n, nil
+		}
+	} else {
+		return -1, fmt.Errorf("invalid message type: %v", msg.Type)
+	}
+}
+
+func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte, error) {
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.READ_FILE_EX,
+		Body: message.BodyReadFileEx{
+			Path:  path,
+			Start: start,
+			Size:  size,
+			Token: token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.READ_FILE_EX_RESULT {
+		result := msg.Body.(*message.BodyReadFileExResult).Result
+		return result, nil
+	} else {
+		return nil, fmt.Errorf("invalid message type: %v", msg.Type)
+	}
+}
+
 func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 	token := str.RandomString(0x10)
 	Ctx.MessageQueue[token] = make(chan *message.Message)
@@ -345,14 +393,37 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 	c.Encoder.Encode(message.Message{
 		Type: message.WRITE_FILE,
 		Body: message.BodyWriteFile{
-			Path:  path,
-			Token: token,
+			Path:    path,
+			Content: content,
+			Token:   token,
 		},
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
 	if msg.Type == message.WRITE_FILE_RESULT {
 		n := msg.Body.(*message.BodyWriteFileResult).N
+		return n, nil
+	} else {
+		return -1, fmt.Errorf("invalid message type: %v", msg.Type)
+	}
+}
+
+func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
+	token := str.RandomString(0x10)
+	Ctx.MessageQueue[token] = make(chan *message.Message)
+	c.EncoderLock.Lock()
+	c.Encoder.Encode(message.Message{
+		Type: message.WRITE_FILE_EX,
+		Body: message.BodyWriteFileEx{
+			Path:    path,
+			Content: content,
+			Token:   token,
+		},
+	})
+	c.EncoderLock.Unlock()
+	msg := <-Ctx.MessageQueue[token]
+	if msg.Type == message.WRITE_FILE_EX_RESULT {
+		n := msg.Body.(*message.BodyWriteFileExResult).N
 		return n, nil
 	} else {
 		return -1, fmt.Errorf("invalid message type: %v", msg.Type)

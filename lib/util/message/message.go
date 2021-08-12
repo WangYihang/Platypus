@@ -27,7 +27,10 @@ const (
 	DYNAMIC_TUNNEL_DESTROY
 	CALL_SYSTEM
 	READ_FILE
+	READ_FILE_EX
+	FILE_SIZE
 	WRITE_FILE
+	WRITE_FILE_EX
 
 	// Termite -> Platypus
 	CLIENT_INFO
@@ -48,7 +51,10 @@ const (
 	DYNAMIC_TUNNEL_DESTROY_FAILED
 	CALL_SYSTEM_RESULT
 	READ_FILE_RESULT
+	READ_FILE_EX_RESULT
+	FILE_SIZE_RESULT
 	WRITE_FILE_RESULT
+	WRITE_FILE_EX_RESULT
 
 	// Platypus <-> Termite
 	STDIO
@@ -228,6 +234,29 @@ type BodyReadFileResult struct {
 	Result []byte
 }
 
+type BodyReadFileEx struct {
+	Token string
+	Path  string
+	Start int64
+	Size  int64
+}
+
+type BodyReadFileExResult struct {
+	Token  string
+	Result []byte
+	N      int
+}
+
+type BodyFileSize struct {
+	Token string
+	Path  string
+}
+
+type BodyFileSizeResult struct {
+	Token string
+	N     int64
+}
+
 type BodyWriteFile struct {
 	Token   string
 	Path    string
@@ -235,6 +264,17 @@ type BodyWriteFile struct {
 }
 
 type BodyWriteFileResult struct {
+	Token string
+	N     int
+}
+
+type BodyWriteFileEx struct {
+	Token   string
+	Path    string
+	Content []byte
+}
+
+type BodyWriteFileExResult struct {
 	Token string
 	N     int
 }
@@ -286,7 +326,15 @@ func RegisterGob() {
 	// Read file
 	gob.Register(&BodyReadFile{})
 	gob.Register(&BodyReadFileResult{})
+	gob.Register(&BodyReadFileEx{})
+	gob.Register(&BodyReadFileExResult{})
+	// Get file size
+	gob.Register(&BodyFileSize{})
+	gob.Register(&BodyFileSizeResult{})
 	// Write file
 	gob.Register(&BodyWriteFile{})
 	gob.Register(&BodyWriteFileResult{})
+	// Append file
+	gob.Register(&BodyWriteFileEx{})
+	gob.Register(&BodyWriteFileExResult{})
 }
