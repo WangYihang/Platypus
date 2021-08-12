@@ -748,6 +748,41 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			} else {
 				log.Error("No such channel: %s", token)
 			}
+		case message.READ_FILE_RESULT:
+			token := msg.Body.(*message.BodyReadFileResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
+		case message.READ_FILE_EX_RESULT:
+			token := msg.Body.(*message.BodyReadFileExResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
+		case message.FILE_SIZE_RESULT:
+			token := msg.Body.(*message.BodyFileSizeResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
+		case message.WRITE_FILE_RESULT:
+			token := msg.Body.(*message.BodyWriteFileResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
+		case message.WRITE_FILE_EX_RESULT:
+			token := msg.Body.(*message.BodyWriteFileExResult).Token
+			if channel, exists := Ctx.MessageQueue[token]; exists {
+				channel <- msg
+			} else {
+				log.Error("No such channel: %s", token)
+			}
 		}
 	}
 }

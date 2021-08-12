@@ -456,7 +456,7 @@ func (c *TCPClient) FileSize(filename string) (int, error) {
 	}
 }
 
-func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, error) {
+func (c *TCPClient) ReadFileEx(filename string, start int, length int) (string, error) {
 	exists, err := c.FileExists(filename)
 	if err != nil {
 		return "", err
@@ -485,7 +485,7 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 				return string(decoded), nil
 			} else {
 				log.Error("No python on target machine, trying to read file using premitive method.")
-				return c.Readfile(filename)
+				return c.ReadFile(filename)
 			}
 		} else if c.OS == oss.Windows {
 			if c.Python3 != "" {
@@ -510,7 +510,7 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 				return string(decoded), nil
 			} else {
 				log.Error("No python on target machine, trying to read file using premitive method.")
-				return c.Readfile(filename)
+				return c.ReadFile(filename)
 			}
 		} else {
 			return "", fmt.Errorf("unsupported OS: %s", c.OS)
@@ -521,7 +521,7 @@ func (c *TCPClient) ReadfileEx(filename string, start int, length int) (string, 
 	}
 }
 
-func (c *TCPClient) Readfile(filename string) (string, error) {
+func (c *TCPClient) ReadFile(filename string) (string, error) {
 	exists, err := c.FileExists(filename)
 	if err != nil {
 		return "", err
@@ -729,7 +729,7 @@ func (c *TCPClient) detectNetworkInterfaces() {
 	if c.OS == oss.Linux {
 		ifnames := strings.Split(strings.TrimSpace(c.SystemToken("ls /sys/class/net")), "\n")
 		for _, ifname := range ifnames {
-			mac, err := c.Readfile(fmt.Sprintf("/sys/class/net/%s/address", ifname))
+			mac, err := c.ReadFile(fmt.Sprintf("/sys/class/net/%s/address", ifname))
 			if err != nil {
 				log.Error("[%s] Detect network interfaces failed: %s", c.conn.RemoteAddr().String(), err)
 				return
