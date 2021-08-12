@@ -40,7 +40,9 @@ sudo apt install upx
 ```bash
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
-make
+sudo apt install make curl
+make install_dependency
+make release
 ```
 
 ### Run Platypus from docker-compose
