@@ -5,7 +5,7 @@
 Termite 是 Platypus 提供的一个二进制客户端，提供了多种有用功能，如：
 
 * 完全交互式 Shell（使用就像 SSH 一样丝滑），并且可以同时启动多个 Shell 而互不影响。
-* 4 种不同的[隧道](./08-tunnel.md)功能
+* 4 种不同的[隧道](./tunnel.md)功能
 * 更加稳定可靠的文件操作
 
 ## 直接获取 Termite Shell

@@ -23,7 +23,7 @@ Platypus 是一款支持**多会话**的**交互式**反向 Shell 管理器。
 * 您是否还在苦苦铭记那些冗长繁琐的反向 Shell 的命令？
 * 您是否还在为您的每一个 Shell 开启一个新的 netcat 端口进行监听？
 
-如果您曾经遇到并且苦于上述的情景，那么 [Platypus](https://github.com/WangYihang/Platypus) 将会是您的好伙伴！快来[上手](./start.md)尝试一下吧！
+如果您曾经遇到并且苦于上述的情景，那么 [Platypus](https://github.com/WangYihang/Platypus) 将会是您的好伙伴！快来[上手](./quick-start.md)尝试一下吧！
 
 ## Platypus 未来计划是什么？
 

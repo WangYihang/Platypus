@@ -8,7 +8,7 @@ Platypus 提供 2 种方式实现交互式 Shell。
 ## 方案一：Termite（推荐）
 
 !!! Tips
-    Termite 客户端是 Platypus 特有的客户端，支持交互式 Shell、文件传输以及网络隧道等功能，您可以参考本文来了解关于如何获取 Termite Shell 以及 [Termite](./07-termite.md) 的更多信息。
+    Termite 客户端是 Platypus 特有的客户端，支持交互式 Shell、文件传输以及网络隧道等功能，您可以参考本文来了解关于如何获取 Termite Shell 以及 [Termite](./termite.md) 的更多信息。
 
 与哈希为 `134dd4cad7b110a021d46bd9dfe68d62` 的 Termite 客户端交互。
 
