@@ -18,7 +18,7 @@ type Dispatcher struct{}
 
 var ReadLineInstance *readline.Instance
 
-func System(command string) (error, string, string) {
+func System(command string) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	os := runtime.GOOS
@@ -28,21 +28,21 @@ func System(command string) (error, string, string) {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
-		return err, stdout.String(), stderr.String()
+		return stdout.String(), stderr.String(), err
 	case "darwin":
 		cmd := exec.Command("/bin/sh", "-c", command)
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
-		return err, stdout.String(), stderr.String()
+		return stdout.String(), stderr.String(), err
 	case "linux":
 		cmd := exec.Command("/bin/sh", "-c", command)
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
-		return err, stdout.String(), stderr.String()
+		return stdout.String(), stderr.String(), err
 	default:
-		return fmt.Errorf("Unsupported OS type: %s", os), "", ""
+		return "", "", fmt.Errorf("unsupported OS type: %s", os)
 	}
 }
 
@@ -55,7 +55,7 @@ func parseInput(input string) (string, []string) {
 
 	target := ""
 	for _, method := range methods {
-		if strings.ToLower(method) == strings.ToLower(args[0]) {
+		if strings.EqualFold(method, args[0]) {
 			target = method
 
 			break
@@ -68,7 +68,7 @@ func parseInput(input string) (string, []string) {
 		log.Error("No such command, use `Help` to get more information")
 		_, stdout, _ := System(input)
 		log.Info("Executing locally: %s", input)
-		fmt.Printf(stdout)
+		fmt.Printf("%s", stdout)
 		return "", []string{}
 	}
 }

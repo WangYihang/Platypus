@@ -9,10 +9,10 @@ import (
 
 func (dispatcher Dispatcher) List(args []string) {
 	if len(context.Ctx.Servers) == 0 {
-		log.Warn(fmt.Sprintf("No listening servers"))
+		log.Warn("No listening servers")
 		return
 	}
-	log.Info(fmt.Sprintf("Listing %d listening servers", len(context.Ctx.Servers)))
+	log.Info("Listing %d listening servers", len(context.Ctx.Servers))
 
 	for _, server := range context.Ctx.Servers {
 		server.AsTable()
