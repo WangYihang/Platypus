@@ -77,7 +77,7 @@ func (dispatcher Dispatcher) Download(args []string) {
 			),
 		)
 
-		blockSize := 0x400 * 128 // 128KB
+		blockSize := 0x1000 // 4KB
 		firstBlockSize := totalBytes % blockSize
 		n := 0
 
@@ -146,32 +146,16 @@ func (dispatcher Dispatcher) Download(args []string) {
 			),
 		)
 
-		blockSize := int64(0x400 * 16)
-		firstBlockSize := totalBytes % int64(blockSize)
-		n := 0
-
-		// Read from remote client
-		start := time.Now()
-		content, err := context.Ctx.CurrentTermite.ReadFileEx(src, 0, firstBlockSize)
-		if err != nil {
-			log.Error("%s", err)
-			return
-		}
-		if n, err = dstfd.Write([]byte(content)); err != nil {
-			log.Error("Failed to write data to target file: %s", err)
-			return
-		}
-		bar.IncrBy(n)
-		bar.DecoratorEwmaUpdate(time.Since(start))
-
-		for i := int64(0); i < totalBytes/blockSize; i++ {
-			start = time.Now()
-			content, err := context.Ctx.CurrentTermite.ReadFileEx(src, firstBlockSize+i*blockSize, blockSize)
+		blockSize := int64(0x400 * 512) // 128KB
+		for i := int64(0); i < totalBytes; i += blockSize {
+			start := time.Now()
+			content, err := context.Ctx.CurrentTermite.ReadFileEx(src, i, blockSize)
 			if err != nil {
-				log.Error("%s", err)
+				log.Error(err.Error())
 				return
 			}
-			if n, err = dstfd.Write([]byte(content)); err != nil {
+			n, err := dstfd.Write([]byte(content))
+			if err != nil {
 				log.Error("Failed to write data to target file: %s", err)
 				return
 			}
