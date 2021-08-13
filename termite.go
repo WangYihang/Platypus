@@ -582,10 +582,16 @@ func handleConnection(c *Client) {
 			start := msg.Body.(*message.BodyReadFileEx).Start
 			size := msg.Body.(*message.BodyReadFileEx).Size
 
-			f, _ := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
-			f.Seek(start, 0)
+			f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
+			if err != nil {
+				log.Info(err.Error())
+			}
 			buffer := make([]byte, size)
-			n, _ := f.Read(buffer)
+			n, err := f.ReadAt(buffer, start)
+			if err != nil {
+				log.Info(err.Error())
+			}
+			log.Info("Reading %d/%d bytes from file %s offset %d", n, size, path, start)
 			f.Close()
 
 			c.EncoderLock.Lock()
@@ -594,7 +600,6 @@ func handleConnection(c *Client) {
 				Body: message.BodyReadFileExResult{
 					Token:  token,
 					Result: buffer[0:n],
-					N:      n,
 				},
 			})
 			c.EncoderLock.Unlock()
@@ -784,7 +789,7 @@ func AsVirus() {
 }
 
 func main() {
-	release := true
+	release := false
 	service := "127.0.0.1:13337"
 
 	if release {

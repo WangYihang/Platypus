@@ -15,7 +15,7 @@ import (
 func (dispatcher Dispatcher) Upload(args []string) {
 	if len(args) != 2 {
 		log.Error("Arguments error, use `Help Upload` to get more information")
-		dispatcher.DownloadHelp([]string{})
+		dispatcher.UploadHelp([]string{})
 		return
 	}
 
@@ -68,7 +68,7 @@ func (dispatcher Dispatcher) Upload(args []string) {
 			),
 		)
 
-		blockSize := int64(0x400 * 128) // 128KB
+		blockSize := int64(0x400 * 512) // 128KB
 		buffer := make([]byte, blockSize)
 
 		for i := int64(0); i < totalBytes; i += blockSize {
@@ -90,7 +90,6 @@ func (dispatcher Dispatcher) Upload(args []string) {
 		p.Wait()
 		return
 	}
-
 }
 
 func (dispatcher Dispatcher) UploadHelp(args []string) {

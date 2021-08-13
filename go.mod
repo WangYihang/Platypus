@@ -20,6 +20,7 @@ require (
 	github.com/go-openapi/errors v0.19.3 // indirect
 	github.com/go-openapi/strfmt v0.19.4 // indirect
 	github.com/golang/protobuf v1.5.1 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect

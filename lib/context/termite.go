@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/mod/semver"
 	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
@@ -297,7 +298,7 @@ func (c *TermiteClient) StartShell() {
 }
 
 func (c *TermiteClient) System(command string) string {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
@@ -309,6 +310,7 @@ func (c *TermiteClient) System(command string) string {
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
+
 	if msg.Type == message.CALL_SYSTEM_RESULT {
 		result := msg.Body.(*message.BodyCallSystemResult).Result
 		return string(result)
@@ -318,7 +320,7 @@ func (c *TermiteClient) System(command string) string {
 }
 
 func (c *TermiteClient) FileSize(path string) (int64, error) {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
@@ -330,6 +332,7 @@ func (c *TermiteClient) FileSize(path string) (int64, error) {
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
+
 	if msg.Type == message.FILE_SIZE_RESULT {
 		n := msg.Body.(*message.BodyFileSizeResult).N
 		if n < 0 {
@@ -343,8 +346,9 @@ func (c *TermiteClient) FileSize(path string) (int64, error) {
 }
 
 func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte, error) {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
+
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
 		Type: message.READ_FILE_EX,
@@ -356,6 +360,7 @@ func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte
 		},
 	})
 	c.EncoderLock.Unlock()
+
 	msg := <-Ctx.MessageQueue[token]
 	if msg.Type == message.READ_FILE_EX_RESULT {
 		result := msg.Body.(*message.BodyReadFileExResult).Result
@@ -366,7 +371,7 @@ func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte
 }
 
 func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
@@ -378,6 +383,7 @@ func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
+
 	if msg.Type == message.READ_FILE_RESULT {
 		result := msg.Body.(*message.BodyReadFileResult).Result
 		return result, nil
@@ -387,7 +393,7 @@ func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 }
 
 func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
@@ -400,6 +406,7 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
+
 	if msg.Type == message.WRITE_FILE_RESULT {
 		n := msg.Body.(*message.BodyWriteFileResult).N
 		return n, nil
@@ -409,7 +416,7 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 }
 
 func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
-	token := str.RandomString(0x10)
+	token := uuid.New().String()
 	Ctx.MessageQueue[token] = make(chan *message.Message)
 	c.EncoderLock.Lock()
 	c.Encoder.Encode(message.Message{
@@ -422,6 +429,7 @@ func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
 	})
 	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
+
 	if msg.Type == message.WRITE_FILE_EX_RESULT {
 		n := msg.Body.(*message.BodyWriteFileExResult).N
 		return n, nil

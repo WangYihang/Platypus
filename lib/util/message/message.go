@@ -244,7 +244,6 @@ type BodyReadFileEx struct {
 type BodyReadFileExResult struct {
 	Token  string
 	Result []byte
-	N      int
 }
 
 type BodyFileSize struct {
