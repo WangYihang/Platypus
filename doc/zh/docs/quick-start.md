@@ -125,6 +125,9 @@ Platypus 的命令行模式支持 `Help`、`List`、`Jump`、`Download`、`Uploa
 
 当跳转到某一个 Shell 之后，上传或下载文件。
 
+!!! Hints
+    目前 Platypus 只支持在 Cli 模式下进行文件上传下载操作
+
 #### 上传文件
 
 将 Platypus 当前文件夹下的 `dirtyc0w.c` 上传至当前交互主机的 `/tmp/dirtyc0w.c`。
