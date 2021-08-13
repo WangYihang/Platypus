@@ -3,6 +3,8 @@
 !!! Warning
     本功能仅针对 `*NIX` 客户端，暂不支持 Windows。
 
+![](/images/webui/raas.gif)
+
 Platypus is able to multiplex the reverse shell listening port. Port `13337 / 1338` can handle reverse shell client connections.  
 Also, There is another interesting feature that platypus provides, which is called `Reverse Shell as a Service (RaaS)`.
 

