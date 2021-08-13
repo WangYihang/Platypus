@@ -16,3 +16,8 @@ markdown_extensions:
   - meta
   - admonition
   - pymdownx.tasklist
+
+extra:
+  analytics:
+    provider: google
+    property: G-KP1YVKRC1Y
