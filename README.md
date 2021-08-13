@@ -24,6 +24,9 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 - [x] Initialize from configuration file
 - [x] Web UI
 
+## Documents
+
+* [Chinese](https://platypus-reverse-shell.vercel.app/)
 
 ## Get Start
 
