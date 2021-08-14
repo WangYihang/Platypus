@@ -27,6 +27,10 @@
 
 ## 反弹一个反向 Shell
 
+!!! Tips
+    Platypus 支持普通反向 Shell 与 Platypus 本身的二进制 Shell（名为：[Termite](/使用/基本功能/termite/)），
+    **强烈建议**您在拿到普通反向 Shell 之后使用 Upgrade 命令将其[升级](/使用/基本功能/termite/#termite_2)成 Termite Shell，或者[直接使用 Termite](/使用/基本功能/termite/#termite-shell) 来反弹。
+
 受到 [lukechilds](https://github.com/lukechilds) 的 [reverse-shell](https://github.com/lukechilds/reverse-shell) 项目的启发，Platypus 支持 Reverse Shell as a Serivce (RaaS)，基本语法与其相同。在 RicterZ 的[推荐](https://github.com/WangYihang/Platypus/issues/30)下，增加了一些不同语言的反向 Shell 的 Payload。
 
 您可以直接在目标机器上执行如下命令得到一个反向 Shell，从此不用再记忆各种繁琐的反向 Shell 命令。
