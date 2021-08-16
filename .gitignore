@@ -20,9 +20,3 @@ build/
 # Config file
 config.yml
 config-v*.yml
-
-# Resource file
-lib/util/resource/resource.go
-
-# Termite build file
-/termite

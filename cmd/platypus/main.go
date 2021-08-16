@@ -7,13 +7,13 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/WangYihang/Platypus/lib/cli/dispatcher"
-	"github.com/WangYihang/Platypus/lib/context"
-	"github.com/WangYihang/Platypus/lib/util/config"
-	"github.com/WangYihang/Platypus/lib/util/fs"
-	"github.com/WangYihang/Platypus/lib/util/log"
-	"github.com/WangYihang/Platypus/lib/util/resource"
-	"github.com/WangYihang/Platypus/lib/util/update"
+	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
+	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/util/config"
+	"github.com/WangYihang/Platypus/internal/util/fs"
+	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/WangYihang/Platypus/internal/util/resource"
+	"github.com/WangYihang/Platypus/internal/util/update"
 	"github.com/pkg/browser"
 	"gopkg.in/yaml.v2"
 )
@@ -22,7 +22,7 @@ func main() {
 	// Detect and create config file
 	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilenameWithVersion) {
-		content, _ := resource.Asset("lib/runtime/config.example.yml")
+		content, _ := resource.Asset("internal/runtime/config.example.yml")
 		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 

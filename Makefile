@@ -36,7 +36,7 @@ build_termite: prepare
 
 collect_resource: build_frontend build_termite
 	echo "Collecting resource files"
-	go-bindata -pkg resource -o ./lib/util/resource/resource.go ./build/termite/... ./lib/runtime/... ./web/ttyd/dist/... ./web/frontend/build/...
+	go-bindata -pkg resource -o ./internal/util/resource/resource.go ./build/termite/... ./internal/runtime/... ./web/ttyd/dist/... ./web/frontend/build/...
 
 build_platypus: collect_resource
 	echo "Building platypus"

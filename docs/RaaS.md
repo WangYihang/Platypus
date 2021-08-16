@@ -57,6 +57,6 @@ Then you should use `go-bindata` to add the template file as an asset of Platypu
 
 ```
 go get -u github.com/go-bindata/go-bindata/...
-go-bindata -pkg resource -o ./lib/util/resource/resource.go ./lib/runtime/... ./html/dist
+go-bindata -pkg resource -o ./internal/util/resource/resource.go ./internal/runtime/... ./html/dist
 ```
 
