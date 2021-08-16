@@ -23,7 +23,7 @@ RUN apt install -y go-bindata
 RUN go env -w GO111MODULE=on
 RUN go env -w GOPROXY=https://goproxy.cn,direct
 RUN go build -o ./build/termite/termite_linux_amd64 ./cmd/termite/main.go
-RUN go-bindata -pkg resource -o ./internal/util/resource/resource.go ./build/termite/... ./internal/runtime/... ./web/ttyd/dist/... ./web/frontend/build/...
+RUN go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 RUN go build -o ./build/platypus/platypus ./cmd/platypus/main.go
 
 # Stage 4: running environment from scratch

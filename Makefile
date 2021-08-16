@@ -34,16 +34,16 @@ build_termite: prepare
 	# echo -e "Building termite_linux_amd64"
 	env GOOS=linux GOARCH=amd64 go build -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
 
-collect_resource: build_frontend build_termite
-	echo "Collecting resource files"
-	go-bindata -pkg resource -o ./internal/util/resource/resource.go ./build/termite/... ./internal/runtime/... ./web/ttyd/dist/... ./web/frontend/build/...
+collect_assets: build_frontend build_termite
+	echo "Collecting assets files"
+	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 
-build_platypus: collect_resource
+build_platypus: collect_assets
 	echo "Building platypus"
 	env go build -o ./build/platypus/platypus cmd/platypus/main.go
 	find build -type f -executable | xargs upx
 
-release: install_dependency_github_action collect_resource
+release: install_dependency_github_action collect_assets
 	env GOOS=linux GOARCH=amd64 go build -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
 	env GOOS=windows GOARCH=amd64 go build -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
@@ -51,6 +51,6 @@ release: install_dependency_github_action collect_resource
 
 clean:
 	rm -rf build
-	rm -rf termites
+	rm -rf internal/util/assets/assets.go
 	rm -rf web/frontend/build
 	rm -rf web/ttyd/build

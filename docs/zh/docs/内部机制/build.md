@@ -66,7 +66,7 @@ env GOOS=linux GOARCH=amd64 go build -o termites/termite_linux_amd64 termite.go
 本步骤会将之前编译好的 Web 前端文件、Termite 可执行文件等统一打包用以编译 Platypus。 
 
 ```bash
-make collect_resource
+make collect_assets
 ```
 
 ### 编译发布版本

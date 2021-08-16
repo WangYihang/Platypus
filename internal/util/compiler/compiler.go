@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/util/assets"
 	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/resource"
 	"github.com/WangYihang/Platypus/internal/util/str"
 )
 
@@ -69,7 +69,7 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string) error {
 	// Step 1: Generating Termite from Assets
 	assetFilepath := "build/termite/termite_linux_amd64"
-	content, err := resource.Asset(assetFilepath)
+	content, err := assets.Asset(assetFilepath)
 	if err != nil {
 		log.Error("Failed to read asset file: %s", assetFilepath)
 		return err

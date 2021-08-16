@@ -9,10 +9,10 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
 	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/util/assets"
 	"github.com/WangYihang/Platypus/internal/util/config"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/resource"
 	"github.com/WangYihang/Platypus/internal/util/update"
 	"github.com/pkg/browser"
 	"gopkg.in/yaml.v2"
@@ -22,7 +22,7 @@ func main() {
 	// Detect and create config file
 	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilenameWithVersion) {
-		content, _ := resource.Asset("internal/runtime/config.example.yml")
+		content, _ := assets.Asset("assets/config.example.yml")
 		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 

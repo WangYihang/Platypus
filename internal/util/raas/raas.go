@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/WangYihang/Platypus/internal/util/assets"
 	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/resource"
 )
 
 func ParsePort(host string, defaultPort uint16) uint16 {
@@ -59,12 +59,12 @@ func URI2Command(requestURI string, httpHost string) string {
 	// here we will trying to use string replace temporarily.
 	// read reverse shell template file from assets
 	// preread to check the language is valid or not
-	templateFilename := fmt.Sprintf("internal/runtime/template/rsh/%s.tpl", language)
-	_, err := resource.Asset(templateFilename)
+	templateFilename := fmt.Sprintf("assets/template/rsh/%s.tpl", language)
+	_, err := assets.Asset(templateFilename)
 	if err != nil {
-		templateFilename = "internal/runtime/template/rsh/bash.tpl"
+		templateFilename = "assets/template/rsh/bash.tpl"
 	}
-	templateContent, _ := resource.Asset(templateFilename)
+	templateContent, _ := assets.Asset(templateFilename)
 
 	// step 4: render target host and port into template
 	renderedContent := string(templateContent)
