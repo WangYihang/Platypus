@@ -12,7 +12,7 @@ import (
 	"github.com/vbauerster/mpb/v6/decor"
 )
 
-func (dispatcher Dispatcher) Upload(args []string) {
+func (dispatcher commandDispatcher) Upload(args []string) {
 	if len(args) != 2 {
 		log.Error("Arguments error, use `Help Upload` to get more information")
 		dispatcher.UploadHelp([]string{})
@@ -92,12 +92,12 @@ func (dispatcher Dispatcher) Upload(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) UploadHelp(args []string) {
+func (dispatcher commandDispatcher) UploadHelp(args []string) {
 	fmt.Println("Usage of Upload")
 	fmt.Println("\tUpload [SRC] [DST]")
 }
 
-func (dispatcher Dispatcher) UploadDesc(args []string) {
+func (dispatcher commandDispatcher) UploadDesc(args []string) {
 	fmt.Println("Upload")
 	fmt.Println("\tUpload file from local machine to remote server")
 }

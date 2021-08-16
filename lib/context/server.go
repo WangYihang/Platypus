@@ -524,7 +524,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			key = msg.Body.(*message.BodyProcessStarted).Key
 			if process, exists := client.Processes[key]; exists {
 				process.Pid = msg.Body.(*message.BodyProcessStarted).Pid
-				process.State = Started
+				process.State = started
 				log.Success("Process (%d) started", process.Pid)
 				if process.WebSocket == nil {
 					client.CurrentProcessKey = key
@@ -536,7 +536,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			key = msg.Body.(*message.BodyProcessStoped).Key
 			if process, exists := client.Processes[key]; exists {
 				code := msg.Body.(*message.BodyProcessStoped).Code
-				process.State = Terminated
+				process.State = terminated
 				delete(client.Processes, key)
 				log.Error("Process (%d) stop: %d", process.Pid, code)
 				if process.WebSocket == nil {

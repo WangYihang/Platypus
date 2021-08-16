@@ -12,7 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-func (dispatcher Dispatcher) Interact(args []string) {
+func (dispatcher commandDispatcher) Interact(args []string) {
 	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
@@ -148,12 +148,12 @@ func (dispatcher Dispatcher) Interact(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) InteractHelp(args []string) {
+func (dispatcher commandDispatcher) InteractHelp(args []string) {
 	fmt.Println("Usage of Interact")
 	fmt.Println("\tInteract")
 }
 
-func (dispatcher Dispatcher) InteractDesc(args []string) {
+func (dispatcher commandDispatcher) InteractDesc(args []string) {
 	fmt.Println("Interact")
 	fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
 }

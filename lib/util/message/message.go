@@ -68,7 +68,7 @@ type Message struct {
 }
 
 type BodyUpdate struct {
-	DistributorUrl string
+	DistributorURL string
 	Version        string
 }
 

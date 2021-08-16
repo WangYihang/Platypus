@@ -162,7 +162,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				Pid:           -2,
 				WindowColumns: 0,
 				WindowRows:    0,
-				State:         StartRequested,
+				State:         startRequested,
 				WebSocket:     s,
 			}
 			currentTermite.Processes[key] = &process

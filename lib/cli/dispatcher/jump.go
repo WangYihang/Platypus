@@ -8,7 +8,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher Dispatcher) Jump(args []string) {
+func (dispatcher commandDispatcher) Jump(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Jump` to get more information")
 		dispatcher.JumpHelp([]string{})
@@ -37,7 +37,7 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		// If we jump to a client before the os & user is detected
 		// So the prompt will be:
 		// (Unknown) 127.0.0.1:43802 [unknown] »
-		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
+		readLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
 		return
 	}
 
@@ -52,21 +52,21 @@ func (dispatcher Dispatcher) Jump(args []string) {
 		context.Ctx.Current = nil
 		context.Ctx.CurrentTermite = targetTermite
 		log.Success("The current termite interactive shell is set to: %s", context.Ctx.CurrentTermite.FullDesc())
-		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		readLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
 		return
 	}
 
-	log.Error("No such node")
+	log.Error("No such node: %s", clue)
 }
 
-func (dispatcher Dispatcher) JumpHelp(args []string) {
+func (dispatcher commandDispatcher) JumpHelp(args []string) {
 	fmt.Println("Usage of Jump")
 	fmt.Println("\tJump [HASH | NAME]")
 	fmt.Println("\tHASH\tThe hash of a node which you want to interact with.")
 	fmt.Println("\tNAME\tThe name of a node which you want to interact with. The name can be set via `Rename` command.")
 }
 
-func (dispatcher Dispatcher) JumpDesc(args []string) {
+func (dispatcher commandDispatcher) JumpDesc(args []string) {
 	fmt.Println("Jump")
 	fmt.Println("\tJump to a node, waiting for interactiving with it.")
 }

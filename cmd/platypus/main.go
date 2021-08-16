@@ -92,5 +92,5 @@ func main() {
 	}
 
 	// Run main loop
-	dispatcher.Run()
+	dispatcher.REPL()
 }

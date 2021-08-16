@@ -9,7 +9,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher Dispatcher) Alias(args []string) {
+func (dispatcher commandDispatcher) Alias(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Alias` to get more information")
 		dispatcher.AliasHelp([]string{})
@@ -26,7 +26,7 @@ func (dispatcher Dispatcher) Alias(args []string) {
 		// Alias session
 		log.Info("Renaming session: %s", context.Ctx.Current.FullDesc())
 		context.Ctx.Current.Alias = strings.TrimSpace(args[0])
-		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
+		readLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
 		return
 	}
 
@@ -34,18 +34,18 @@ func (dispatcher Dispatcher) Alias(args []string) {
 		// Alias session
 		log.Info("Renaming session: %s", context.Ctx.CurrentTermite.FullDesc())
 		context.Ctx.CurrentTermite.Alias = strings.TrimSpace(args[0])
-		ReadLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		readLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
 		return
 	}
 
 }
 
-func (dispatcher Dispatcher) AliasHelp(args []string) {
+func (dispatcher commandDispatcher) AliasHelp(args []string) {
 	fmt.Println("Usage of Alias")
 	fmt.Println("\tAlias")
 }
 
-func (dispatcher Dispatcher) AliasDesc(args []string) {
+func (dispatcher commandDispatcher) AliasDesc(args []string) {
 	fmt.Println("Alias")
 	fmt.Println("\tAlias the current session with a human-readable name.")
 }

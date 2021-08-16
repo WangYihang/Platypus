@@ -25,20 +25,20 @@ import (
 	"github.com/jedib0t/go-pretty/table"
 )
 
-type ProcessState int
+type processState int
 
 const (
-	StartRequested ProcessState = iota
-	Started
-	TerminatRequested
-	Terminated
+	startRequested processState = iota
+	started
+	terminatRequested
+	terminated
 )
 
 type Process struct {
 	Pid           int
 	WindowColumns int
 	WindowRows    int
-	State         ProcessState
+	State         processState
 	WebSocket     *melody.Session
 }
 
@@ -153,7 +153,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 			c.Encoder.Encode(message.Message{
 				Type: message.UPDATE,
 				Body: message.BodyUpdate{
-					DistributorUrl: Ctx.Distributor.Url,
+					DistributorURL: Ctx.Distributor.Url,
 					Version:        update.Version,
 				},
 			})
@@ -207,7 +207,7 @@ func (c *TermiteClient) RequestTerminate(key string) {
 		})
 		c.EncoderLock.Unlock()
 
-		process.State = TerminatRequested
+		process.State = terminatRequested
 
 		if err != nil {
 			// Network
@@ -251,7 +251,7 @@ func (c *TermiteClient) InteractWith(key string) {
 
 	for {
 		process, exists := c.Processes[key]
-		if exists && process.State != Terminated {
+		if exists && process.State != terminated {
 			buffer := make([]byte, 0x10)
 			n, _ := os.Stdin.Read(buffer)
 			if n > 0 {
@@ -289,7 +289,7 @@ func (c *TermiteClient) StartShell() {
 		Pid:           -2,
 		WindowColumns: 0,
 		WindowRows:    0,
-		State:         StartRequested,
+		State:         startRequested,
 		WebSocket:     nil,
 	}
 	c.Processes[key] = &process

@@ -68,7 +68,7 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 
 func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string) error {
 	// Step 1: Generating Termite from Assets
-	assetFilepath := "termites/termite_linux_amd64"
+	assetFilepath := "build/termite/termite_linux_amd64"
 	content, err := resource.Asset(assetFilepath)
 	if err != nil {
 		log.Error("Failed to read asset file: %s", assetFilepath)

@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (dispatcher Dispatcher) Turn(args []string) {
+func (dispatcher commandDispatcher) Turn(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Turn` to get more Turnrmation")
 		dispatcher.TurnHelp([]string{})
@@ -38,7 +38,7 @@ func (dispatcher Dispatcher) Turn(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) TurnHelp(args []string) {
+func (dispatcher commandDispatcher) TurnHelp(args []string) {
 	fmt.Println("Usage of Turn")
 	fmt.Println("\tTurn [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
@@ -47,7 +47,7 @@ func (dispatcher Dispatcher) TurnHelp(args []string) {
 	fmt.Println("\t\tWhen the client: Swiching ON/OFF state of the client")
 }
 
-func (dispatcher Dispatcher) TurnDesc(args []string) {
+func (dispatcher commandDispatcher) TurnDesc(args []string) {
 	fmt.Println("Turn")
 	fmt.Println("\tSwitch the interactive field of a node(s), allows you to interactive with it(them)")
 	fmt.Println("\tIf the current status is ON, it will turns to OFF. If OFF, turns ON")

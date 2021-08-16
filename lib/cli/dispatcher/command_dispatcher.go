@@ -12,11 +12,13 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 	"github.com/WangYihang/Platypus/lib/util/reflection"
 	"github.com/WangYihang/readline"
+	"github.com/google/shlex"
 )
 
-type Dispatcher struct{}
+type commandDispatcher struct{}
 
-var ReadLineInstance *readline.Instance
+// Provide tab autocompletion features
+var readLineInstance *readline.Instance
 
 func System(command string) (string, string, error) {
 	var stdout bytes.Buffer
@@ -47,30 +49,35 @@ func System(command string) (string, string, error) {
 }
 
 func parseInput(input string) (string, []string) {
-	methods := reflection.GetAllMethods(Dispatcher{})
-	args := strings.Split(strings.TrimSpace(input), " ")
-	if len(args[0]) == 0 {
+	args, err := shlex.Split(input)
+
+	if err != nil {
+		log.Error(err.Error())
+		return "", []string{}
+	}
+
+	if len(args) == 0 {
 		return "", []string{}
 	}
 
 	target := ""
+	methods := reflection.GetAllMethods(commandDispatcher{})
 	for _, method := range methods {
 		if strings.EqualFold(method, args[0]) {
 			target = method
-
 			break
 		}
 	}
 
-	if target != "" {
-		return target, args[1:]
-	} else {
+	if target == "" {
 		log.Error("No such command, use `Help` to get more information")
-		_, stdout, _ := System(input)
+		stdout, stderr, _ := System(input)
 		log.Info("Executing locally: %s", input)
 		fmt.Printf("%s", stdout)
+		fmt.Printf("%s", stderr)
 		return "", []string{}
 	}
+	return target, args[1:]
 }
 
 func filterInput(r rune) (rune, bool) {
@@ -81,11 +88,12 @@ func filterInput(r rune) (rune, bool) {
 	return r, true
 }
 
-func Run() {
+// REPL performs read / evaluate / print repeat
+func REPL() {
 	// Register all commands
 	completer := readline.NewPrefixCompleter()
 	children := []readline.PrefixCompleterInterface{}
-	methods := reflection.GetAllMethods(Dispatcher{})
+	methods := reflection.GetAllMethods(commandDispatcher{})
 	for _, method := range methods {
 		if (strings.HasSuffix(method, "Help") && !strings.HasPrefix(method, "Help")) || strings.HasSuffix(method, "Desc") {
 			continue
@@ -96,7 +104,7 @@ func Run() {
 
 	// Construct the IO
 	var err error
-	ReadLineInstance, err = readline.NewEx(&readline.Config{
+	readLineInstance, err = readline.NewEx(&readline.Config{
 		Prompt:              context.Ctx.CommandPrompt,
 		HistoryFile:         "/tmp/platypus.history",
 		AutoComplete:        completer,
@@ -111,13 +119,13 @@ func Run() {
 		return
 	}
 
-	context.Ctx.RLInstance = ReadLineInstance
+	context.Ctx.RLInstance = readLineInstance
 
-	log.Logger.SetOutput(ReadLineInstance.Stderr())
+	log.Logger.SetOutput(readLineInstance.Stderr())
 
 	// Command loop
 	for {
-		line, err := ReadLineInstance.Readline()
+		line, err := readLineInstance.Readline()
 		if err == readline.ErrInterrupt {
 			if len(line) == 0 {
 				break
@@ -132,6 +140,6 @@ func Run() {
 		if method == "" {
 			continue
 		}
-		reflection.Invoke(Dispatcher{}, method, args)
+		reflection.Invoke(commandDispatcher{}, method, args)
 	}
 }

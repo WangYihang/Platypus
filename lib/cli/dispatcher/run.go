@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (dispatcher Dispatcher) Run(args []string) {
+func (dispatcher commandDispatcher) Run(args []string) {
 	if len(args) != 2 {
 		log.Error("Arguments error, use `Help Run` to get more information")
 		dispatcher.RunHelp([]string{})
@@ -29,14 +29,14 @@ func (dispatcher Dispatcher) Run(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) RunHelp(args []string) {
+func (dispatcher commandDispatcher) RunHelp(args []string) {
 	fmt.Println("Usage of Run")
 	fmt.Println("\tRun [HOST] [PORT]")
 	fmt.Println("\tHOST\tTHe host you want to listen on")
 	fmt.Println("\tPORT\tTHe port you want to listen on")
 }
 
-func (dispatcher Dispatcher) RunDesc(args []string) {
+func (dispatcher commandDispatcher) RunDesc(args []string) {
 	fmt.Println("Run")
 	fmt.Println("\tTry to run a server, listening on a port, waiting for client to connect")
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (dispatcher Dispatcher) Tunnel(args []string) {
+func (dispatcher commandDispatcher) Tunnel(args []string) {
 	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
@@ -24,8 +24,8 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 
 		action := args[0]
 		mode := args[1]
-		src_host := args[2]
-		src_port, err := strconv.ParseUint(args[3], 10, 16)
+		srcHost := args[2]
+		srcPort, err := strconv.ParseUint(args[3], 10, 16)
 
 		if err != nil {
 			log.Error("Invalid port: %s, use `Help Tunnel` to get more information", args[1])
@@ -33,8 +33,8 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 			return
 		}
 
-		dst_host := args[4]
-		dst_port, err := strconv.ParseUint(args[5], 10, 16)
+		dstHost := args[4]
+		dstPort, err := strconv.ParseUint(args[5], 10, 16)
 
 		if err != nil {
 			log.Error("Invalid port: %s, use `Help Tunnel` to get more information", args[1])
@@ -46,26 +46,26 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 		case "create":
 			switch strings.ToLower(mode) {
 			case "pull":
-				local_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
-				remote_address := fmt.Sprintf("%s:%d", src_host, src_port)
-				context.AddPullTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+				localAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
+				remoteAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
+				context.AddPullTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
 			case "push":
-				local_address := fmt.Sprintf("%s:%d", src_host, src_port)
-				remote_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
-				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+				localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
+				remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
+				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
 			case "dynamic":
 				context.Ctx.CurrentTermite.StartSocks5Server()
 			case "internet":
-				local_address := fmt.Sprintf("%s:%d", src_host, src_port)
-				remote_address := fmt.Sprintf("%s:%d", dst_host, dst_port)
-				if _, exists := context.Ctx.Socks5Servers[local_address]; exists {
-					log.Warn("Socks5 server (%s) already exists", local_address)
+				localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
+				remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
+				if _, exists := context.Ctx.Socks5Servers[localAddress]; exists {
+					log.Warn("Socks5 server (%s) already exists", localAddress)
 				} else {
-					err := context.StartSocks5Server(local_address)
+					err := context.StartSocks5Server(localAddress)
 					if err != nil {
 						log.Error("Starting local socks5 server failed: %s", err.Error())
 					} else {
-						context.AddPushTunnelConfig(context.Ctx.CurrentTermite, local_address, remote_address)
+						context.AddPushTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
 					}
 				}
 			default:
@@ -94,12 +94,12 @@ func (dispatcher Dispatcher) Tunnel(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) TunnelHelp(args []string) {
+func (dispatcher commandDispatcher) TunnelHelp(args []string) {
 	fmt.Println("Usage of Tunnel")
 	fmt.Println("\tTunnel [Create|Delete] [Pull|Push|Dynamic|Internet] [Src Host] [Src Port] [Dst Host] [Dst Port]")
 }
 
-func (dispatcher Dispatcher) TunnelDesc(args []string) {
+func (dispatcher commandDispatcher) TunnelDesc(args []string) {
 	fmt.Println("Tunnel")
 	fmt.Println("\tStart a tunnel on local machine which connect to a port in internal network")
 }

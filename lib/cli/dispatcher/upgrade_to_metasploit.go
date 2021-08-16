@@ -4,16 +4,16 @@ import (
 	"fmt"
 )
 
-func (dispatcher Dispatcher) UpgradeToMetasploit(args []string) {
+func (dispatcher commandDispatcher) UpgradeToMetasploit(args []string) {
 	fmt.Println("TO BE IMPLEMENTED.")
 }
 
-func (dispatcher Dispatcher) UpgradeToMetasploitHelp(args []string) {
+func (dispatcher commandDispatcher) UpgradeToMetasploitHelp(args []string) {
 	fmt.Println("Usage of UpgradeToMetasploit")
 	fmt.Println("\tUpgradeToMetasploit [SRC] [DST]")
 }
 
-func (dispatcher Dispatcher) UpgradeToMetasploitDesc(args []string) {
+func (dispatcher commandDispatcher) UpgradeToMetasploitDesc(args []string) {
 	fmt.Println("UpgradeToMetasploit")
 	fmt.Println("\tUpgrade Platypus session to Metasploit session")
 }

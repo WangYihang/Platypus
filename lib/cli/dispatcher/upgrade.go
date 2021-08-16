@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/os"
 )
 
-func (dispatcher Dispatcher) Upgrade(args []string) {
+func (dispatcher commandDispatcher) Upgrade(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Upgrade` to get more information")
 		dispatcher.UpgradeHelp([]string{})
@@ -31,14 +31,14 @@ func (dispatcher Dispatcher) Upgrade(args []string) {
 	context.Ctx.Current.UpgradeToTermite(connectBackAddr)
 }
 
-func (dispatcher Dispatcher) UpgradeHelp(args []string) {
+func (dispatcher commandDispatcher) UpgradeHelp(args []string) {
 	fmt.Println("Usage of Upgrade")
 	fmt.Println("\tUpgrade [Connect Back Addr]")
 	fmt.Println("Example")
 	fmt.Println("\tUpgrade 1.3.3.7:13337")
 }
 
-func (dispatcher Dispatcher) UpgradeDesc(args []string) {
+func (dispatcher commandDispatcher) UpgradeDesc(args []string) {
 	fmt.Println("Upgrade")
 	fmt.Println("\tUpgrade Platypus session to encrypted Termite session")
 }

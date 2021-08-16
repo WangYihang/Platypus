@@ -7,7 +7,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (dispatcher Dispatcher) List(args []string) {
+func (dispatcher commandDispatcher) List(args []string) {
 	if len(context.Ctx.Servers) == 0 {
 		log.Warn("No listening servers")
 		return
@@ -19,12 +19,12 @@ func (dispatcher Dispatcher) List(args []string) {
 	}
 }
 
-func (dispatcher Dispatcher) ListHelp(args []string) {
+func (dispatcher commandDispatcher) ListHelp(args []string) {
 	fmt.Println("Usage of List")
 	fmt.Println("\tList")
 }
 
-func (dispatcher Dispatcher) ListDesc(args []string) {
+func (dispatcher commandDispatcher) ListDesc(args []string) {
 	fmt.Println("List")
 	fmt.Println("\tTry list all listening servers and connected clients")
 }

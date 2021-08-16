@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/lib/util/log"
 )
 
-func (dispatcher Dispatcher) Switching(args []string) {
+func (dispatcher commandDispatcher) Switching(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Switching` to get more Switchingrmation")
 		dispatcher.SwitchingHelp([]string{})
@@ -44,7 +44,7 @@ func (dispatcher Dispatcher) Switching(args []string) {
 	log.Error("No such node")
 }
 
-func (dispatcher Dispatcher) SwitchingHelp(args []string) {
+func (dispatcher commandDispatcher) SwitchingHelp(args []string) {
 	fmt.Println("Usage of Switching")
 	fmt.Println("\tSwitching [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
@@ -53,7 +53,7 @@ func (dispatcher Dispatcher) SwitchingHelp(args []string) {
 	fmt.Println("\t\tWhen the client: Swiching ON/OFF state of the client")
 }
 
-func (dispatcher Dispatcher) SwitchingDesc(args []string) {
+func (dispatcher commandDispatcher) SwitchingDesc(args []string) {
 	fmt.Println("Switching")
 	fmt.Println("\tSwitch the interactive field of a node(s), allows you to interactive with it(them)")
 	fmt.Println("\tIf the current status is ON, it will turns to OFF. If OFF, turns ON")
