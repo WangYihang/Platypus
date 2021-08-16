@@ -20,3 +20,4 @@ build/
 # Config file
 config.yml
 config-v*.yml
+.pre-commit-config.yaml
