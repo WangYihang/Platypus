@@ -16,7 +16,6 @@ vendor/
 
 # Binary files
 build/
-termites/
 
 # Config file
 config.yml

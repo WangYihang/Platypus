@@ -21,5 +21,5 @@ Describe your problem here
 #### Screenshots/Terminal log
 
 #### Environments
- - OS: Ubuntu 18.04.1 LTS
- - Version: 1.1.0
+ - OS: Ubuntu 20.04
+ - Version: 1.5.0

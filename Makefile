@@ -25,32 +25,32 @@ prepare:
 
 build_frontend: prepare
 	echo "Building frontend"
-	cd html/frontend && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
+	cd web/frontend && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 	echo "Building ttyd"
-	cd html/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
+	cd web/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 
 build_termite: prepare
 	echo "Building termite"
-	# echo -e "Building \e[32mtermite_linux_amd64\e[0m"
-	env GOOS=linux GOARCH=amd64 go build -o termites/termite_linux_amd64 termite.go
+	# echo -e "Building termite_linux_amd64"
+	env GOOS=linux GOARCH=amd64 go build -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
 
-collect_resource: build_frontend build_termite
-	echo "Collecting resource files"
-	go-bindata -pkg resource -o ./lib/util/resource/resource.go ./termites/... ./lib/runtime/... ./html/ttyd/dist/... ./html/frontend/build/...
+collect_assets: build_frontend build_termite
+	echo "Collecting assets files"
+	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 
-build_platypus: collect_resource
+build_platypus: collect_assets
 	echo "Building platypus"
-	env go build -o build/platypus platypus.go
+	env go build -o ./build/platypus/platypus cmd/platypus/main.go
 	find build -type f -executable | xargs upx
 
-release: install_dependency_github_action collect_resource
-	env GOOS=linux GOARCH=amd64 go build -o ./build/Platypus_linux_amd64 platypus.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/Platypus_darwin_amd64 platypus.go
-	env GOOS=windows GOARCH=amd64 go build -o ./build/Platypus_windows_amd64.exe platypus.go
+release: install_dependency_github_action collect_assets
+	env GOOS=linux GOARCH=amd64 go build -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
+	env GOOS=darwin GOARCH=amd64 go build -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
+	env GOOS=windows GOARCH=amd64 go build -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
 	find build -type f -executable | xargs upx
 
 clean:
 	rm -rf build
-	rm -rf termites
-	rm -rf html/frontend/build
-	rm -rf html/ttyd/build
+	rm -rf internal/util/assets/assets.go
+	rm -rf web/frontend/build
+	rm -rf web/ttyd/build
