@@ -3673,6 +3673,13 @@ glob-parent@^5.1.1, glob-parent@^5.1.2, glob-parent@~5.1.2:
   dependencies:
     is-glob "^4.0.1"
 
+glob-parent@^6.0.1:
+  version "6.0.1"
+  resolved "https://registry.nlark.com/glob-parent/download/glob-parent-6.0.1.tgz?cache=0&sync_timestamp=1626760200164&other_urls=https%3A%2F%2Fregistry.nlark.com%2Fglob-parent%2Fdownload%2Fglob-parent-6.0.1.tgz#42054f685eb6a44e7a7d189a96efa40a54971aa7"
+  integrity sha1-QgVPaF62pE56fRialu+kClSXGqc=
+  dependencies:
+    is-glob "^4.0.1"
+
 glob-stream@^6.1.0:
   version "6.1.0"
   resolved "https://registry.yarnpkg.com/glob-stream/-/glob-stream-6.1.0.tgz#7045c99413b3eb94888d83ab46d0b404cc7bdde4"
@@ -9108,6 +9115,11 @@ trim-newlines@^2.0.0:
   resolved "https://registry.yarnpkg.com/trim-newlines/-/trim-newlines-2.0.0.tgz#b403d0b91be50c331dfc4b82eeceb22c3de16d20"
   integrity sha1-tAPQuRvlDDMd/EuC7s6yLD3hbSA=
 
+trim-newlines@^4.0.2:
+  version "4.0.2"
+  resolved "https://registry.nlark.com/trim-newlines/download/trim-newlines-4.0.2.tgz?cache=0&sync_timestamp=1623341510447&other_urls=https%3A%2F%2Fregistry.nlark.com%2Ftrim-newlines%2Fdownload%2Ftrim-newlines-4.0.2.tgz#d6aaaf6a0df1b4b536d183879a6b939489808c7c"
+  integrity sha1-1qqvag3xtLU20YOHmmuTlImAjHw=
+
 "true-case-path@^1.0.2":
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/true-case-path/-/true-case-path-1.0.3.tgz#f813b5a8c86b40da59606722b144e3225799f47d"
@@ -9965,6 +9977,11 @@ yargs-parser@^13.1.2:
   dependencies:
     camelcase "^5.0.0"
     decamelize "^1.2.0"
+
+yargs-parser@^20.2.9:
+  version "20.2.9"
+  resolved "https://registry.nlark.com/yargs-parser/download/yargs-parser-20.2.9.tgz#2eb7dc3b0289718fc295f362753845c41a0c94ee"
+  integrity sha1-LrfcOwKJcY/ClfNidThFxBoMlO4=
 
 yargs-parser@^5.0.1:
   version "5.0.1"

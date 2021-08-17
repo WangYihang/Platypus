@@ -68,12 +68,15 @@
         "backoff": "^2.5.0",
         "decko": "^1.2.0",
         "file-saver": "^2.0.5",
+        "glob-parent": "^6.0.1",
         "preact": "^10.5.13",
+        "trim-newlines": "^4.0.2",
         "whatwg-fetch": "^3.6.2",
         "xterm": "^4.11.0",
         "xterm-addon-fit": "^0.5.0",
         "xterm-addon-web-links": "^0.4.0",
         "xterm-addon-webgl": "^0.10.0",
+        "yargs-parser": "^20.2.9",
         "zmodem.js": "^0.1.10"
     }
 }
