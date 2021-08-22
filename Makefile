@@ -38,14 +38,19 @@ collect_assets: build_frontend build_termite
 	echo "Collecting assets files"
 	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 
+dev:
+	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
+	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
+	env go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
+
 build_platypus: collect_assets
 	echo "Building platypus"
 	env go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
-	find build -type f -executable | xargs upx --ultra-brute
 
 release: install_dependency_github_action collect_assets
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
 	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
+	env GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_arm64 cmd/platypus/main.go
 	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
 	find build -type f -executable | xargs upx --ultra-brute
 

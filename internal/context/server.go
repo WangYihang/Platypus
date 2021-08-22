@@ -352,13 +352,6 @@ func (s *TCPServer) Stop() {
 	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
 	s.stopped <- struct{}{}
 
-	// Connect to the listener, in order to call listener.Close() immediately
-	// See: https://github.com/golang/go/issues/32610
-	conn, _ := net.Dial("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
-	if conn != nil {
-		conn.Close()
-	}
-
 	for _, client := range s.Clients {
 		s.DeleteTCPClient(client)
 	}

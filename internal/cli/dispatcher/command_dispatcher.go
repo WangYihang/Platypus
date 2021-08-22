@@ -20,7 +20,7 @@ type commandDispatcher struct{}
 // Provide tab autocompletion features
 var readLineInstance *readline.Instance
 
-func System(command string) (string, string, error) {
+func system(command string) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	os := runtime.GOOS
@@ -71,7 +71,7 @@ func parseInput(input string) (string, []string) {
 
 	if target == "" {
 		log.Error("No such command, use `Help` to get more information")
-		stdout, stderr, _ := System(input)
+		stdout, stderr, _ := system(input)
 		log.Info("Executing locally: %s", input)
 		fmt.Printf("%s", stdout)
 		fmt.Printf("%s", stderr)
