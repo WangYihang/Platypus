@@ -6,8 +6,8 @@ install_dependency:
 	sudo add-apt-repository -y ppa:longsleep/golang-backports
 	sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 52B59B1571A79DBC054901C0F6BC817356A3D45E
 	# Nodejs
-	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | sudo bash
-	sudo bash -c "source ${HOME}/.nvm/nvm.sh && nvm install --lts && npm install -g yarn"
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+	bash -c "source ${HOME}/.nvm/nvm.sh && nvm install --lts && npm install -g yarn"
 	# Golang
 	sudo apt install -y golang-go
 	sudo apt install -y go-bindata
