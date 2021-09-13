@@ -14,7 +14,7 @@ import (
 	"gopkg.in/olahol/melody.v1"
 )
 
-func CreateTermiteWebSocketServer() *melody.Melody {
+func CreateTTYWebSocketServer() *melody.Melody {
 
 	// Websocket
 	ttyWebSocket := melody.New()

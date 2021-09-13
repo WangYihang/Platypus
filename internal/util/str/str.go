@@ -23,6 +23,5 @@ func RandomString(n int) string {
 		}
 		ret[i] = letters[num.Int64()]
 	}
-
 	return string(ret)
 }

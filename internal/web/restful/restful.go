@@ -5,11 +5,12 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	client_model "github.com/WangYihang/Platypus/internal/model/client"
-	server_model "github.com/WangYihang/Platypus/internal/model/server"
+	model_client "github.com/WangYihang/Platypus/internal/model/client"
+	model_server "github.com/WangYihang/Platypus/internal/model/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/validator"
+	web_jwt "github.com/WangYihang/Platypus/internal/web/jwt"
 	"github.com/WangYihang/Platypus/internal/web/websocket"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
@@ -29,64 +30,61 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
-	context.Ctx.NotifyWebSocket = websocket.CreateWebSocketServer()
-	endpoint.GET("/notify", func(c *gin.Context) {
-		context.Ctx.NotifyWebSocket.HandleRequest(c.Writer, c.Request)
-	})
-
-	ttyWebSocket := websocket.CreateTermiteWebSocketServer()
-	endpoint.GET("/ws/:hash", func(c *gin.Context) {
-		if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-			return
-		}
-		client := context.Ctx.FindTCPClientByHash(c.Param("hash"))
-		termiteClient := context.Ctx.FindTermiteClientByHash(c.Param("hash"))
-		if client == nil && termiteClient == nil {
-			validator.PanicRESTfully(c, "client is not found")
-			return
-		}
-		if client != nil {
-			log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
-		}
-		if termiteClient != nil {
-			log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
-		}
-		ttyWebSocket.HandleRequest(c.Writer, c.Request)
-	})
-
+	endpoint.Use(gin.Recovery())
 	// Static files
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
-	// WebSocket TTYd
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
-
-	// TODO: Websocket UI Auth (to be implemented)
-	endpoint.GET("/token", func(c *gin.Context) {
-		c.String(200, "")
-	})
-
-	// Server related
-	// Simple group: v1
-	RESTfulAPIGroup := endpoint.Group("/api/v1")
+	// Authentication
+	authMiddleware := web_jwt.Create()
+	endpoint.POST("/login", authMiddleware.LoginHandler)
+	needAuth := endpoint.Group("/api/v1")
+	needAuth.Use(authMiddleware.MiddlewareFunc())
 	{
-		serverAPIGroup := RESTfulAPIGroup.Group("/server")
+		// Refresh time can be longer than token timeout
+		needAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
+		serverAPIGroup := needAuth.Group("/server")
 		{
-			serverAPIGroup.GET("", server_model.ListServers)
-			serverAPIGroup.GET("/:hash", server_model.GetServerInfo)
-			serverAPIGroup.GET("/:hash/client", server_model.GetServerClients)
-			serverAPIGroup.POST("", server_model.CreateServer)
-			serverAPIGroup.DELETE("/:hash", server_model.DeleteServer)
+			serverAPIGroup.GET("", model_server.ListServers)
+			serverAPIGroup.GET("/:hash", model_server.GetServerInfo)
+			serverAPIGroup.GET("/:hash/client", model_server.GetServerClients)
+			serverAPIGroup.POST("", model_server.CreateServer)
+			serverAPIGroup.DELETE("/:hash", model_server.DeleteServer)
 		}
-		clientAPIGroup := RESTfulAPIGroup.Group("/client")
+		clientAPIGroup := needAuth.Group("/client")
 		{
 			// Client related
-			clientAPIGroup.GET("", client_model.ListAllClients)
-			clientAPIGroup.GET("/:hash", client_model.GetClientInfo)
+			clientAPIGroup.GET("", model_client.ListAllClients)
+			clientAPIGroup.GET("/:hash", model_client.GetClientInfo)
 			// Upgrade reverse shell client to termite client
-			clientAPIGroup.GET("/:hash/upgrade/:target", client_model.UpgradeClient)
-			clientAPIGroup.DELETE("/:hash", client_model.DeleteClient)
-			clientAPIGroup.POST("/:hash", client_model.ExecuteCommand)
+			clientAPIGroup.GET("/:hash/upgrade/:target", model_client.UpgradeClient)
+			clientAPIGroup.DELETE("/:hash", model_client.DeleteClient)
+			clientAPIGroup.POST("/:hash", model_client.ExecuteCommand)
 		}
+		// Notification
+		context.Ctx.NotifyWebSocket = websocket.CreateWebSocketServer()
+		endpoint.GET("/notify", func(c *gin.Context) {
+			context.Ctx.NotifyWebSocket.HandleRequest(c.Writer, c.Request)
+		})
+
+		ttyWebSocket := websocket.CreateTTYWebSocketServer()
+		endpoint.GET("/ws/:hash", func(c *gin.Context) {
+			if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
+				return
+			}
+			client := context.Ctx.FindTCPClientByHash(c.Param("hash"))
+			termiteClient := context.Ctx.FindTermiteClientByHash(c.Param("hash"))
+			if client == nil && termiteClient == nil {
+				validator.PanicRESTfully(c, "client is not found")
+				return
+			}
+			if client != nil {
+				log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
+			}
+			if termiteClient != nil {
+				log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
+			}
+			ttyWebSocket.HandleRequest(c.Writer, c.Request)
+		})
 	}
 	return endpoint
 }
