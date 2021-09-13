@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/model/server"
+	client_model "github.com/WangYihang/Platypus/internal/model/client"
+	server_model "github.com/WangYihang/Platypus/internal/model/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/message"
@@ -294,170 +294,22 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	{
 		serverAPIGroup := RESTfulAPIGroup.Group("/server")
 		{
-			serverAPIGroup.GET("", server.ListServers)
-			serverAPIGroup.GET("/:hash", server.GetServerInfo)
-			serverAPIGroup.GET("/:hash/client")
-			serverAPIGroup.POST("", func(c *gin.Context) {
-				if !validator.FormExistOrAbort(c, []string{"host", "port", "encrypted"}) {
-					return
-				}
-				port, err := strconv.Atoi(c.PostForm("port"))
-				if err != nil || port <= 0 || port > 65535 {
-					validator.PanicRESTfully(c, "Invalid port number")
-					return
-				}
-				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				server := context.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
-				if server != nil {
-					go (*server).Run()
-					c.JSON(200, gin.H{
-						"status": true,
-						"msg":    server,
-					})
-					c.Abort()
-				} else {
-					c.JSON(200, gin.H{
-						"status": false,
-						"msg":    fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port),
-					})
-					c.Abort()
-				}
-			})
-			serverAPIGroup.DELETE("/:hash", func(c *gin.Context) {
-				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				hash := c.Param("hash")
-				for _, server := range context.Ctx.Servers {
-					if server.Hash == hash {
-						context.Ctx.DeleteServer(server)
-						c.JSON(200, gin.H{
-							"status": true,
-						})
-						c.Abort()
-						return
-					}
-				}
-				validator.PanicRESTfully(c, "No such server")
-			})
+			serverAPIGroup.GET("", server_model.ListServers)
+			serverAPIGroup.GET("/:hash", server_model.GetServerInfo)
+			serverAPIGroup.GET("/:hash/client", server_model.GetServerClients)
+			serverAPIGroup.POST("", server_model.CreateServer)
+			serverAPIGroup.DELETE("/:hash", server_model.DeleteServer)
 		}
 		clientAPIGroup := RESTfulAPIGroup.Group("/client")
 		{
 
 			// Client related
-			clientAPIGroup.GET("", func(c *gin.Context) {
-				clients := make(map[string]interface{})
-				for _, server := range context.Ctx.Servers {
-					for k, v := range server.Clients {
-						clients[k] = v
-					}
-					for k, v := range server.TermiteClients {
-						clients[k] = v
-					}
-				}
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    clients,
-				})
-				c.Abort()
-			})
-			clientAPIGroup.GET("/:hash", func(c *gin.Context) {
-				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				hash := c.Param("hash")
-				for _, server := range context.Ctx.Servers {
-					if client, exist := server.Clients[hash]; exist {
-						c.JSON(200, gin.H{
-							"status": true,
-							"msg":    client,
-						})
-						c.Abort()
-						return
-					}
-				}
-				validator.PanicRESTfully(c, "No such client")
-			})
+			clientAPIGroup.GET("", client_model.ListAllClients)
+			clientAPIGroup.GET("/:hash", client_model.GetClientInfo)
 			// Upgrade reverse shell client to termite client
-			clientAPIGroup.GET("/:hash/upgrade/:target", func(c *gin.Context) {
-				if !validator.ParamsExistOrAbort(c, []string{"hash", "target"}) {
-					return
-				}
-				hash := c.Param("hash")
-				target := c.Param("target")
-				// TODO: Check target format
-				if target == "" {
-					validator.PanicRESTfully(c, "Invalid server hash")
-					return
-				}
-
-				client := context.Ctx.FindTCPClientByHash(hash)
-				if client != nil {
-					// Upgrade
-					go client.UpgradeToTermite(target)
-					c.JSON(200, gin.H{
-						"status": true,
-						"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
-					})
-					c.Abort()
-					return
-				}
-
-				validator.PanicRESTfully(c, "No such client")
-			})
-			clientAPIGroup.DELETE("/:hash", func(c *gin.Context) {
-				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				hash := c.Param("hash")
-				for _, server := range context.Ctx.Servers {
-					if client, exist := server.Clients[hash]; exist {
-						context.Ctx.DeleteTCPClient(client)
-						c.JSON(200, gin.H{
-							"status": true,
-						})
-						c.Abort()
-						return
-					}
-				}
-				validator.PanicRESTfully(c, "No such client")
-			})
-			clientAPIGroup.POST("/:hash", func(c *gin.Context) {
-				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				if !validator.FormExistOrAbort(c, []string{"cmd"}) {
-					return
-				}
-				hash := c.Param("hash")
-				cmd := c.PostForm("cmd")
-				for _, server := range context.Ctx.Servers {
-					if client, exist := server.Clients[hash]; exist {
-						if client.GetPtyEstablished() {
-							c.JSON(200, gin.H{
-								"status": false,
-								"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",
-							})
-						} else {
-							c.JSON(200, gin.H{
-								"status": true,
-								"msg":    client.SystemToken(cmd),
-							})
-						}
-						c.Abort()
-						return
-					}
-					if client, exist := server.TermiteClients[hash]; exist {
-						c.JSON(200, gin.H{
-							"status": true,
-							"msg":    client.System(cmd),
-						})
-						c.Abort()
-						return
-					}
-				}
-				validator.PanicRESTfully(c, "No such client")
-			})
+			clientAPIGroup.GET("/:hash/upgrade/:target", client_model.UpgradeClient)
+			clientAPIGroup.DELETE("/:hash", client_model.DeleteClient)
+			clientAPIGroup.POST("/:hash", client_model.ExecuteCommand)
 		}
 	}
 	return endpoint

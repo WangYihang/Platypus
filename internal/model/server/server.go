@@ -1,6 +1,9 @@
-package server
+package server_model
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
@@ -58,6 +61,51 @@ func GetServerClients(c *gin.Context) {
 			c.JSON(200, gin.H{
 				"status": true,
 				"msg":    clients,
+			})
+			c.Abort()
+			return
+		}
+	}
+	validator.PanicRESTfully(c, "No such server")
+}
+
+func CreateServer(c *gin.Context) {
+	if !validator.FormExistOrAbort(c, []string{"host", "port", "encrypted"}) {
+		return
+	}
+	port, err := strconv.Atoi(c.PostForm("port"))
+	if err != nil || port <= 0 || port > 65535 {
+		validator.PanicRESTfully(c, "Invalid port number")
+		return
+	}
+	encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
+	server := context.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
+	if server != nil {
+		go (*server).Run()
+		c.JSON(200, gin.H{
+			"status": true,
+			"msg":    server,
+		})
+		c.Abort()
+	} else {
+		c.JSON(200, gin.H{
+			"status": false,
+			"msg":    fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port),
+		})
+		c.Abort()
+	}
+}
+
+func DeleteServer(c *gin.Context) {
+	if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
+		return
+	}
+	hash := c.Param("hash")
+	for _, server := range context.Ctx.Servers {
+		if server.Hash == hash {
+			context.Ctx.DeleteServer(server)
+			c.JSON(200, gin.H{
+				"status": true,
 			})
 			c.Abort()
 			return
