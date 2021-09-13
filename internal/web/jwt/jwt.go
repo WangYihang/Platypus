@@ -63,7 +63,6 @@ func Create() *jwt.GinJWTMiddleware {
 			if v, ok := data.(*User); ok && v.Username == "admin" {
 				return true
 			}
-
 			return false
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {

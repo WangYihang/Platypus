@@ -21,8 +21,6 @@ func GetAllServers(c *gin.Context) {
 		Distributor: *context.Ctx.Distributor,
 	}
 
-	log.Info(">>> %v", response)
-
 	c.JSON(200, gin.H{
 		"status": true,
 		"msg":    response,

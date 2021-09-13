@@ -15,6 +15,7 @@ func CreateWebSocketServer() *melody.Melody {
 
 	notifyWebSocket.HandleMessage(func(s *melody.Session, msg []byte) {
 		// Nothing to do
+		log.Info("message: %s", msg)
 	})
 
 	notifyWebSocket.HandleDisconnect(func(s *melody.Session) {

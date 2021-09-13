@@ -481,7 +481,7 @@ func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
 	} else {
 		log.Success("Encrypted fire in the hole: %s", client.OnelineDesc())
 		s.TermiteClients[client.Hash] = client
-		s.NotifyWebSocketOnlineTermiteClient(client)
+		// s.NotifyWebSocketOnlineTermiteClient(client)
 		// Message Dispatcher
 		go func(client *TermiteClient) { TermiteMessageDispatcher(client) }(client)
 	}

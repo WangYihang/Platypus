@@ -38,12 +38,12 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// Authentication
 	authMiddleware := web_jwt.Create()
 	endpoint.POST("/login", authMiddleware.LoginHandler)
-	needAuth := endpoint.Group("/api/v1")
-	needAuth.Use(authMiddleware.MiddlewareFunc())
+	apiNeedAuth := endpoint.Group("/api/v1")
+	apiNeedAuth.Use(authMiddleware.MiddlewareFunc())
 	{
 		// Refresh time can be longer than token timeout
-		needAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
-		serverAPIGroup := needAuth.Group("/servers")
+		apiNeedAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
+		serverAPIGroup := apiNeedAuth.Group("/servers")
 		{
 			serverAPIGroup.GET("", model_server.GetAllServers)
 			serverAPIGroup.POST("", model_server.CreateServer)
@@ -53,7 +53,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			serverAPIGroup.GET("/:hash/clients", model_server.GetAllClientsOfServer)
 			serverAPIGroup.DELETE("/:hash", model_server.DeleteServer)
 		}
-		clientAPIGroup := needAuth.Group("/clients")
+		clientAPIGroup := apiNeedAuth.Group("/clients")
 		{
 			clientAPIGroup.GET("", model_client.GetAllClients)
 			// Basic operations
@@ -84,13 +84,20 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			clientAPIGroup.DELETE("/:hash", model_client.DeleteClient)
 		}
 		// Notification
+
+	}
+
+	wsNeedAuth := endpoint.Group("/ws")
+	wsNeedAuth.Use(authMiddleware.MiddlewareFunc())
+	{
 		context.Ctx.NotifyWebSocket = websocket.CreateWebSocketServer()
-		endpoint.GET("/notify", func(c *gin.Context) {
+		wsNeedAuth.GET("/notify", func(c *gin.Context) {
 			context.Ctx.NotifyWebSocket.HandleRequest(c.Writer, c.Request)
 		})
 
+		// TTY
 		ttyWebSocket := websocket.CreateTTYWebSocketServer()
-		endpoint.GET("/ws/:hash", func(c *gin.Context) {
+		wsNeedAuth.GET("/tty/:hash", func(c *gin.Context) {
 			if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 				return
 			}
