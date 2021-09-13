@@ -8,6 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/compiler"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/network"
+	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,7 +35,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 	}
 
 	endpoint.GET("/termite/:target", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"target"}) {
+		if !validator.ParamsExistOrAbort(c, []string{"target"}) {
 			return
 		}
 		target := c.Param("target")
@@ -42,7 +43,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 
 		if target == "" {
 			log.Error("Invalid connect back addr: %v", target)
-			panicRESTfully(c, "Invalid connect back addr")
+			validator.PanicRESTfully(c, "Invalid connect back addr")
 			return
 		}
 
@@ -50,7 +51,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		dir, filename, err := compiler.GenerateDirFilename()
 		if err != nil {
 			log.Error(fmt.Sprint(err))
-			panicRESTfully(c, err.Error())
+			validator.PanicRESTfully(c, err.Error())
 			return
 		}
 		defer os.RemoveAll(dir)
@@ -59,7 +60,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
 		if err != nil {
 			log.Error(fmt.Sprint(err))
-			panicRESTfully(c, err.Error())
+			validator.PanicRESTfully(c, err.Error())
 			return
 		}
 

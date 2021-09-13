@@ -16,6 +16,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/util/compiler"
 	"github.com/WangYihang/Platypus/internal/util/hash"
+	"github.com/WangYihang/Platypus/internal/util/ui"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	oss "github.com/WangYihang/Platypus/internal/util/os"
 	"github.com/WangYihang/Platypus/internal/util/str"
@@ -565,7 +566,7 @@ func (c *TCPClient) System(command string) {
 	c.Write([]byte(" " + command + "\n"))
 }
 
-func (c *TCPClient) SetWindowSize(ws *WindowSize) {
+func (c *TCPClient) SetWindowSize(ws *ui.WindowSize) {
 	// BUG: Require in shell mode, (if in interactive mode, this call will fail)
 	commands := []string{
 		fmt.Sprintf("stty rows %d columns %d", ws.Rows, ws.Columns),

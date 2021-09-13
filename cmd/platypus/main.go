@@ -14,6 +14,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/update"
+	"github.com/WangYihang/Platypus/internal/web/restful"
 	"github.com/pkg/browser"
 	"gopkg.in/yaml.v2"
 )
@@ -68,7 +69,7 @@ func main() {
 	if config.RESTful.Enable {
 		rh := config.RESTful.Host
 		rp := config.RESTful.Port
-		rest := context.CreateRESTfulAPIServer()
+		rest := restful.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")

@@ -1,4 +1,4 @@
-package context
+package restful
 
 import (
 	"encoding/json"
@@ -8,47 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/model/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/message"
 	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/WangYihang/Platypus/internal/util/ui"
+	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
-
-type WindowSize struct {
-	Columns int
-	Rows    int
-}
-
-func formExistOrAbort(c *gin.Context, params []string) bool {
-	for _, param := range params {
-		if c.PostForm(param) == "" {
-			return panicRESTfully(c, fmt.Sprintf("%s is required", param))
-		}
-	}
-	return true
-}
-
-func paramsExistOrAbort(c *gin.Context, params []string) bool {
-	for _, param := range params {
-		if c.Param(param) == "" {
-			return panicRESTfully(c, fmt.Sprintf("%s is required", param))
-		}
-	}
-	return true
-}
-
-func panicRESTfully(c *gin.Context, msg string) bool {
-	c.JSON(200, gin.H{
-		"status": false,
-		"msg":    msg,
-	})
-	c.Abort()
-	return false
-}
 
 func CreateRESTfulAPIServer() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -69,6 +41,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	endpoint.GET("/notify", func(c *gin.Context) {
 		notifyWebSocket.HandleRequest(c.Writer, c.Request)
 	})
+
 	notifyWebSocket.HandleConnect(func(s *melody.Session) {
 		log.Info("Notify client conencted from: %s", s.Request.RemoteAddr)
 	})
@@ -80,19 +53,19 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	notifyWebSocket.HandleDisconnect(func(s *melody.Session) {
 		log.Info("Notify client disconencted from: %s", s.Request.RemoteAddr)
 	})
-	Ctx.NotifyWebSocket = notifyWebSocket
+	context.Ctx.NotifyWebSocket = notifyWebSocket
 
 	// Websocket
 	ttyWebSocket := melody.New()
 	ttyWebSocket.Upgrader.Subprotocols = []string{"tty"}
 	endpoint.GET("/ws/:hash", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"hash"}) {
+		if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
-		client := Ctx.FindTCPClientByHash(c.Param("hash"))
-		termiteClient := Ctx.FindTermiteClientByHash(c.Param("hash"))
+		client := context.Ctx.FindTCPClientByHash(c.Param("hash"))
+		termiteClient := context.Ctx.FindTermiteClientByHash(c.Param("hash"))
 		if client == nil && termiteClient == nil {
-			panicRESTfully(c, "client is not found")
+			validator.PanicRESTfully(c, "client is not found")
 			return
 		}
 		if client != nil {
@@ -109,7 +82,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
 
 		// Handle TCPClient
-		current := Ctx.FindTCPClientByHash(hash)
+		current := context.Ctx.FindTCPClientByHash(hash)
 		if current != nil {
 			s.Set("client", current)
 			// Lock
@@ -141,7 +114,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 
 		// Handle TermiteClient
-		currentTermite := Ctx.FindTermiteClientByHash(hash)
+		currentTermite := context.Ctx.FindTermiteClientByHash(hash)
 		if currentTermite != nil {
 			log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
 			// Start process /bin/bash
@@ -158,11 +131,11 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			currentTermite.RequestStartProcess("/bin/bash", 0, 0, key)
 
 			// Create Process Object
-			process := Process{
+			process := context.Process{
 				Pid:           -2,
 				WindowColumns: 0,
 				WindowRows:    0,
-				State:         startRequested,
+				State:         context.StartRequested,
 				WebSocket:     s,
 			}
 			currentTermite.Processes[key] = &process
@@ -175,7 +148,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TCPClient
 		value, exists := s.Get("client")
 		if exists {
-			current := value.(*TCPClient)
+			current := value.(*context.TCPClient)
 			if current.GetInteractive() {
 				opcode := msg[0]
 				body := msg[1:]
@@ -185,7 +158,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '1': // RESIZE_TERMINAL '1'
 					// Raw reverse shell does not support resize terminal size when
 					// in interactive foreground program, eg: vim
-					// var ws WindowSize
+					// var ws ui.WindowSize
 					// json.Unmarshal(body, &ws)
 					// current.SetWindowSize(&ws)
 				case '2': // PAUSE '2'
@@ -195,7 +168,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '{': // JSON_DATA '{'
 					// Raw reverse shell does not support resize terminal size when
 					// in interactive foreground program, eg: vim
-					// var ws WindowSize
+					// var ws ui.WindowSize
 					// json.Unmarshal([]byte("{"+string(body)), &ws)
 					// current.SetWindowSize(&ws)
 				default:
@@ -207,7 +180,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 
 		// Handle TermiteClient
 		if termiteValue, exists := s.Get("termiteClient"); exists {
-			currentTermite := termiteValue.(*TermiteClient)
+			currentTermite := termiteValue.(*context.TermiteClient)
 			if key, exists := s.Get("key"); exists {
 				opcode := msg[0]
 				body := msg[1:]
@@ -229,7 +202,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				case '1': // RESIZE_TERMINAL '1'
-					var ws WindowSize
+					var ws ui.WindowSize
 					json.Unmarshal(body, &ws)
 
 					currentTermite.EncoderLock.Lock()
@@ -253,7 +226,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '3': // RESUME '3'
 					// TODO: Pause, support for zmodem
 				case '{': // JSON_DATA '{'
-					var ws WindowSize
+					var ws ui.WindowSize
 					json.Unmarshal([]byte(msg), &ws)
 
 					currentTermite.EncoderLock.Lock()
@@ -285,7 +258,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TCPClient
 		value, exists := s.Get("client")
 		if exists {
-			current := value.(*TCPClient)
+			current := value.(*context.TCPClient)
 			log.Success("Closing websocket shell for: %s", current.OnelineDesc())
 			current.SetInteractive(false)
 			current.GetInteractingLock().Unlock()
@@ -295,7 +268,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TermiteClient
 		termiteValue, exists := s.Get("termiteClient")
 		if exists {
-			currentTermite := termiteValue.(*TermiteClient)
+			currentTermite := termiteValue.(*context.TermiteClient)
 			if key, exists := s.Get("key"); exists {
 				currentTermite.RequestTerminate(key.(string))
 			} else {
@@ -315,80 +288,26 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		c.String(200, "")
 	})
 
-	type ServersWithDistributorAddress struct {
-		Servers     map[string](*TCPServer) `json:"servers"`
-		Distributor Distributor             `json:"distributor"`
-	}
-
 	// Server related
 	// Simple group: v1
 	RESTfulAPIGroup := endpoint.Group("/api")
 	{
 		serverAPIGroup := RESTfulAPIGroup.Group("/server")
 		{
-			serverAPIGroup.GET("", func(c *gin.Context) {
-				response := ServersWithDistributorAddress{
-					Servers:     Ctx.Servers,
-					Distributor: *Ctx.Distributor,
-				}
-				c.JSON(200, gin.H{
-					"status": true,
-					"msg":    response,
-				})
-				c.Abort()
-			})
-			serverAPIGroup.GET("/:hash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
-					if server.Hash == hash {
-						c.JSON(200, gin.H{
-							"status": true,
-							"msg":    server,
-						})
-						c.Abort()
-						return
-					}
-				}
-				panicRESTfully(c, "No such server")
-			})
-			serverAPIGroup.GET("/:hash/client", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
-					return
-				}
-				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
-					if server.Hash == hash {
-						clients := make(map[string]interface{})
-						for k, v := range server.Clients {
-							clients[k] = v
-						}
-						for k, v := range server.TermiteClients {
-							clients[k] = v
-						}
-						c.JSON(200, gin.H{
-							"status": true,
-							"msg":    clients,
-						})
-						c.Abort()
-						return
-					}
-				}
-				panicRESTfully(c, "No such server")
-			})
+			serverAPIGroup.GET("", server.ListServers)
+			serverAPIGroup.GET("/:hash", server.GetServerInfo)
+			serverAPIGroup.GET("/:hash/client")
 			serverAPIGroup.POST("", func(c *gin.Context) {
-				if !formExistOrAbort(c, []string{"host", "port", "encrypted"}) {
+				if !validator.FormExistOrAbort(c, []string{"host", "port", "encrypted"}) {
 					return
 				}
 				port, err := strconv.Atoi(c.PostForm("port"))
 				if err != nil || port <= 0 || port > 65535 {
-					panicRESTfully(c, "Invalid port number")
+					validator.PanicRESTfully(c, "Invalid port number")
 					return
 				}
 				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
+				server := context.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
@@ -405,13 +324,13 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 			})
 			serverAPIGroup.DELETE("/:hash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
+				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range context.Ctx.Servers {
 					if server.Hash == hash {
-						Ctx.DeleteServer(server)
+						context.Ctx.DeleteServer(server)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -419,7 +338,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				}
-				panicRESTfully(c, "No such server")
+				validator.PanicRESTfully(c, "No such server")
 			})
 		}
 		clientAPIGroup := RESTfulAPIGroup.Group("/client")
@@ -428,7 +347,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Client related
 			clientAPIGroup.GET("", func(c *gin.Context) {
 				clients := make(map[string]interface{})
-				for _, server := range Ctx.Servers {
+				for _, server := range context.Ctx.Servers {
 					for k, v := range server.Clients {
 						clients[k] = v
 					}
@@ -443,11 +362,11 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				c.Abort()
 			})
 			clientAPIGroup.GET("/:hash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
+				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range context.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
 						c.JSON(200, gin.H{
 							"status": true,
@@ -457,22 +376,22 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				}
-				panicRESTfully(c, "No such client")
+				validator.PanicRESTfully(c, "No such client")
 			})
 			// Upgrade reverse shell client to termite client
 			clientAPIGroup.GET("/:hash/upgrade/:target", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash", "target"}) {
+				if !validator.ParamsExistOrAbort(c, []string{"hash", "target"}) {
 					return
 				}
 				hash := c.Param("hash")
 				target := c.Param("target")
 				// TODO: Check target format
 				if target == "" {
-					panicRESTfully(c, "Invalid server hash")
+					validator.PanicRESTfully(c, "Invalid server hash")
 					return
 				}
 
-				client := Ctx.FindTCPClientByHash(hash)
+				client := context.Ctx.FindTCPClientByHash(hash)
 				if client != nil {
 					// Upgrade
 					go client.UpgradeToTermite(target)
@@ -484,16 +403,16 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 
-				panicRESTfully(c, "No such client")
+				validator.PanicRESTfully(c, "No such client")
 			})
 			clientAPIGroup.DELETE("/:hash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
+				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range context.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
-						Ctx.DeleteTCPClient(client)
+						context.Ctx.DeleteTCPClient(client)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -501,18 +420,18 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				}
-				panicRESTfully(c, "No such client")
+				validator.PanicRESTfully(c, "No such client")
 			})
 			clientAPIGroup.POST("/:hash", func(c *gin.Context) {
-				if !paramsExistOrAbort(c, []string{"hash"}) {
+				if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 					return
 				}
-				if !formExistOrAbort(c, []string{"cmd"}) {
+				if !validator.FormExistOrAbort(c, []string{"cmd"}) {
 					return
 				}
 				hash := c.Param("hash")
 				cmd := c.PostForm("cmd")
-				for _, server := range Ctx.Servers {
+				for _, server := range context.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
 						if client.GetPtyEstablished() {
 							c.JSON(200, gin.H{
@@ -537,7 +456,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				}
-				panicRESTfully(c, "No such client")
+				validator.PanicRESTfully(c, "No such client")
 			})
 		}
 	}
