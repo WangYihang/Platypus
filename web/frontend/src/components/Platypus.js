@@ -15,7 +15,7 @@ var filesize = require("filesize");
 
 let endPoint = process.env.NODE_ENV === "development" ? "127.0.0.1:7331" : window.location.host;
 let baseUrl = ["http://", endPoint].join("");
-let apiUrl = [baseUrl, "/api"].join("");
+let apiUrl = [baseUrl, "api", "v1"].join("/");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 const axios = require("axios");
