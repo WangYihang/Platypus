@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
 )
 
-func ListAllClients(c *gin.Context) {
+func GetAllClients(c *gin.Context) {
 	clients := make(map[string]interface{})
 	for _, server := range context.Ctx.Servers {
 		for k, v := range server.Clients {
@@ -25,7 +26,7 @@ func ListAllClients(c *gin.Context) {
 	c.Abort()
 }
 
-func GetClientInfo(c *gin.Context) {
+func GetClient(c *gin.Context) {
 	if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 		return
 	}
@@ -43,7 +44,7 @@ func GetClientInfo(c *gin.Context) {
 	validator.PanicRESTfully(c, "No such client")
 }
 
-func UpgradeClient(c *gin.Context) {
+func UpgradeToTermite(c *gin.Context) {
 	if !validator.ParamsExistOrAbort(c, []string{"hash", "target"}) {
 		return
 	}
@@ -123,4 +124,72 @@ func ExecuteCommand(c *gin.Context) {
 		}
 	}
 	validator.PanicRESTfully(c, "No such client")
+}
+
+func CollectClientInfo(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func GetAllProxies(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func CreateProxy(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func DeleteProxy(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func StartProxy(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func StopProxy(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibReadDir(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibStat(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibReadFile(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibWriteFile(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibFopen(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibFseek(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibFread(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibFwrite(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func LibFclose(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func InstallCrontab(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func InstallSshKey(c *gin.Context) {
+	log.Error("TBD")
 }

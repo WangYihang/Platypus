@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
 )
@@ -14,11 +15,14 @@ type ServersWithDistributorAddress struct {
 	Distributor context.Distributor             `json:"distributor"`
 }
 
-func ListServers(c *gin.Context) {
+func GetAllServers(c *gin.Context) {
 	response := ServersWithDistributorAddress{
 		Servers:     context.Ctx.Servers,
 		Distributor: *context.Ctx.Distributor,
 	}
+
+	log.Info(">>> %v", response)
+
 	c.JSON(200, gin.H{
 		"status": true,
 		"msg":    response,
@@ -26,7 +30,7 @@ func ListServers(c *gin.Context) {
 	c.Abort()
 }
 
-func GetServerInfo(c *gin.Context) {
+func GetServer(c *gin.Context) {
 	if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 		return
 	}
@@ -44,7 +48,7 @@ func GetServerInfo(c *gin.Context) {
 	validator.PanicRESTfully(c, "No such server")
 }
 
-func GetServerClients(c *gin.Context) {
+func GetAllClientsOfServer(c *gin.Context) {
 	if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
 		return
 	}
@@ -112,4 +116,12 @@ func DeleteServer(c *gin.Context) {
 		}
 	}
 	validator.PanicRESTfully(c, "No such server")
+}
+
+func StartServer(c *gin.Context) {
+	log.Error("TBD")
+}
+
+func StopServer(c *gin.Context) {
+	log.Error("TBD")
 }
