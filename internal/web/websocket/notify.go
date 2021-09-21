@@ -1,25 +1,27 @@
 package websocket
 
 import (
+	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
 
 func CreateWebSocketServer() *melody.Melody {
-	// Notify client online event
 	notifyWebSocket := melody.New()
-
 	notifyWebSocket.HandleConnect(func(s *melody.Session) {
-		log.Info("Notify client conencted from: %s", s.Request.RemoteAddr)
+		log.Info("User (%s) connected", s.Request.RemoteAddr)
 	})
-
 	notifyWebSocket.HandleMessage(func(s *melody.Session, msg []byte) {
-		// Nothing to do
-		log.Info("message: %s", msg)
+		log.Info("User (%s): %s", s.Request.RemoteAddr, msg)
 	})
-
 	notifyWebSocket.HandleDisconnect(func(s *melody.Session) {
-		log.Info("Notify client disconencted from: %s", s.Request.RemoteAddr)
+		log.Info("User (%s) disconnected", s.Request.RemoteAddr)
 	})
 	return notifyWebSocket
+}
+
+func Notify(c *gin.Context) {
+	context.Ctx.NotifyWebSocket = CreateWebSocketServer()
+	context.Ctx.NotifyWebSocket.HandleRequest(c.Writer, c.Request)
 }

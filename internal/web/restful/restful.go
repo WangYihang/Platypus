@@ -4,12 +4,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/context"
 	model_client "github.com/WangYihang/Platypus/internal/model/client"
 	model_server "github.com/WangYihang/Platypus/internal/model/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/validator"
 	web_jwt "github.com/WangYihang/Platypus/internal/web/jwt"
 	"github.com/WangYihang/Platypus/internal/web/websocket"
 	"github.com/gin-contrib/cors"
@@ -21,7 +18,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
 	endpoint := gin.Default()
-
 	endpoint.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "DELETE", "PUT", "PATCH"},
@@ -30,12 +26,13 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
 	endpoint.Use(gin.Recovery())
+
 	// Static files
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
-	// Authentication
+
+	// HTTP API
 	authMiddleware := web_jwt.Create()
 	endpoint.POST("/login", authMiddleware.LoginHandler)
 	apiNeedAuth := endpoint.Group("/api/v1")
@@ -83,38 +80,14 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Delete
 			clientAPIGroup.DELETE("/:hash", model_client.DeleteClient)
 		}
-		// Notification
-
 	}
 
+	// WebSocket
 	wsNeedAuth := endpoint.Group("/ws")
 	wsNeedAuth.Use(authMiddleware.MiddlewareFunc())
 	{
-		context.Ctx.NotifyWebSocket = websocket.CreateWebSocketServer()
-		wsNeedAuth.GET("/notify", func(c *gin.Context) {
-			context.Ctx.NotifyWebSocket.HandleRequest(c.Writer, c.Request)
-		})
-
-		// TTY
-		ttyWebSocket := websocket.CreateTTYWebSocketServer()
-		wsNeedAuth.GET("/tty/:hash", func(c *gin.Context) {
-			if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
-				return
-			}
-			client := context.Ctx.FindTCPClientByHash(c.Param("hash"))
-			termiteClient := context.Ctx.FindTermiteClientByHash(c.Param("hash"))
-			if client == nil && termiteClient == nil {
-				validator.PanicRESTfully(c, "client is not found")
-				return
-			}
-			if client != nil {
-				log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
-			}
-			if termiteClient != nil {
-				log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
-			}
-			ttyWebSocket.HandleRequest(c.Writer, c.Request)
-		})
+		wsNeedAuth.GET("/notify", websocket.Notify)
+		wsNeedAuth.GET("/tty/:hash", websocket.EstablishTTY)
 	}
 	return endpoint
 }

@@ -11,11 +11,12 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/message"
 	"github.com/WangYihang/Platypus/internal/util/str"
 	"github.com/WangYihang/Platypus/internal/util/ui"
+	"github.com/WangYihang/Platypus/internal/util/validator"
+	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
 
 func CreateTTYWebSocketServer() *melody.Melody {
-
 	// Websocket
 	ttyWebSocket := melody.New()
 	ttyWebSocket.Upgrader.Subprotocols = []string{"tty"}
@@ -221,4 +222,24 @@ func CreateTTYWebSocketServer() *melody.Melody {
 		}
 	})
 	return ttyWebSocket
+}
+
+func EstablishTTY(c *gin.Context) {
+	ttyWebSocket := CreateTTYWebSocketServer()
+	if !validator.ParamsExistOrAbort(c, []string{"hash"}) {
+		return
+	}
+	client := context.Ctx.FindTCPClientByHash(c.Param("hash"))
+	termiteClient := context.Ctx.FindTermiteClientByHash(c.Param("hash"))
+	if client == nil && termiteClient == nil {
+		validator.PanicRESTfully(c, "client is not found")
+		return
+	}
+	if client != nil {
+		log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
+	}
+	if termiteClient != nil {
+		log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
+	}
+	ttyWebSocket.HandleRequest(c.Writer, c.Request)
 }
