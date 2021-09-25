@@ -20,7 +20,6 @@ install_dependency_github_action:
 	sudo apt install go-bindata
 
 prepare: 
-	bash -c "[[ -d termites ]] || mkdir termites"
 	bash -c "[[ -d build ]] || mkdir build"
 
 build_frontend: prepare
