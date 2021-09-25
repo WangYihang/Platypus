@@ -23,7 +23,8 @@ func CreateTTYWebSocketServer() *melody.Melody {
 
 	ttyWebSocket.HandleConnect(func(s *melody.Session) {
 		// Get client hash
-		hash := strings.Split(s.Request.URL.Path, "/")[2]
+		// eg: /ws/tty/[5bd4097dd23e96b691fe7bd676975176]
+		hash := strings.Split(s.Request.URL.Path, "/")[3]
 
 		// Handle TCPClient
 		current := context.Ctx.FindTCPClientByHash(hash)
@@ -139,7 +140,6 @@ func CreateTTYWebSocketServer() *melody.Melody {
 						},
 					})
 					currentTermite.EncoderLock.Unlock()
-
 					if err != nil {
 						// Network
 						log.Error("Network error: %s", err)

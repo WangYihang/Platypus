@@ -532,6 +532,8 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				process.State = terminated
 				delete(client.Processes, key)
 				log.Error("Process (%d) stop: %d", process.Pid, code)
+				// Close websocket when the process stoped
+				process.WebSocket.Close()
 				if process.WebSocket == nil {
 					client.CurrentProcessKey = ""
 				}

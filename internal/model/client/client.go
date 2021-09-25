@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
 )
@@ -127,69 +126,120 @@ func ExecuteCommand(c *gin.Context) {
 }
 
 func CollectClientInfo(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func GetAllProxies(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func CreateProxy(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func DeleteProxy(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func StartProxy(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func StopProxy(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibReadDir(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibStat(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibReadFile(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibWriteFile(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibFopen(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibFseek(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibFread(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibFwrite(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func LibFclose(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func InstallCrontab(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func InstallSshKey(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }

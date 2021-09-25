@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/validator"
 	"github.com/gin-gonic/gin"
 )
@@ -117,9 +116,15 @@ func DeleteServer(c *gin.Context) {
 }
 
 func StartServer(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }
 
 func StopServer(c *gin.Context) {
-	log.Error("TBD")
+	c.JSON(200, gin.H{
+		"status": false,
+		"msg":    "To be implemented",
+	})
 }

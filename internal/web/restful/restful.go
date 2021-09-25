@@ -5,6 +5,7 @@ import (
 	"time"
 
 	model_client "github.com/WangYihang/Platypus/internal/model/client"
+	model_misc "github.com/WangYihang/Platypus/internal/model/misc"
 	model_server "github.com/WangYihang/Platypus/internal/model/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	web_jwt "github.com/WangYihang/Platypus/internal/web/jwt"
@@ -32,14 +33,22 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
 
-	// HTTP API
+	// HTTP
 	authMiddleware := web_jwt.Create()
 	endpoint.POST("/login", authMiddleware.LoginHandler)
+	// HTTP API
 	apiNeedAuth := endpoint.Group("/api/v1")
 	apiNeedAuth.Use(authMiddleware.MiddlewareFunc())
 	{
 		// Refresh time can be longer than token timeout
 		apiNeedAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
+		platypusAPIGroup := apiNeedAuth.Group("/platypus")
+		{
+			platypusAPIGroup.GET("/cpu", model_misc.GetCpuUsage)
+			platypusAPIGroup.GET("/memory", model_misc.GetMemoryUsage)
+			platypusAPIGroup.GET("/goroutine", model_misc.GetGoRoutineUsage)
+			platypusAPIGroup.GET("/version", model_misc.GetVersion)
+		}
 		serverAPIGroup := apiNeedAuth.Group("/servers")
 		{
 			serverAPIGroup.GET("", model_server.GetAllServers)
