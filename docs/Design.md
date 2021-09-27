@@ -18,3 +18,33 @@
 	* 隧道操作
 		* 增删查
 	* 交互式 Shell
+
+### 命令
+
+```
+./admin
+```
+
+```
+>> help
+>> connect
+>> auth
+>> info
+>> list
+>> select
+	common
+		>> info
+		>> gather
+		>> download
+		>> upload
+		>> interact
+		>> delete
+		>> back
+		>> alias
+	rsh
+		>> upgrade
+		>> pty
+	termite
+		>> proxy
+>> exit
+```
