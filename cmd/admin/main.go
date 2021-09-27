@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	model_server "github.com/WangYihang/Platypus/internal/model/server"
+	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	prompt "github.com/c-bata/go-prompt"
 	"github.com/c-bata/go-prompt/completer"
@@ -136,7 +136,7 @@ type Response struct {
 
 type ServersResponse struct {
 	Response
-	model_server.ServersWithDistributorAddress `json:"msg"`
+	server_controller.ServersWithDistributorAddress `json:"msg"`
 }
 type Runtime struct {
 	Token string

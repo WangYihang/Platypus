@@ -4,9 +4,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	model_client "github.com/WangYihang/Platypus/internal/model/client"
-	model_misc "github.com/WangYihang/Platypus/internal/model/misc"
-	model_server "github.com/WangYihang/Platypus/internal/model/server"
+	client_controller "github.com/WangYihang/Platypus/internal/controller/client"
+	runtime_controller "github.com/WangYihang/Platypus/internal/controller/runtime"
+	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	web_jwt "github.com/WangYihang/Platypus/internal/web/jwt"
 	"github.com/WangYihang/Platypus/internal/web/websocket"
@@ -33,6 +33,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
 
+	// Compile Termite
+	endpoint.GET("/compile")
+
 	// HTTP
 	authMiddleware := web_jwt.Create()
 	endpoint.POST("/login", authMiddleware.LoginHandler)
@@ -44,50 +47,50 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		apiNeedAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
 		runtimeAPIGroup := apiNeedAuth.Group("/runtime")
 		{
-			runtimeAPIGroup.GET("/cpu", model_misc.GetCpuUsage)
-			runtimeAPIGroup.GET("/memory", model_misc.GetMemoryUsage)
-			runtimeAPIGroup.GET("/gc", model_misc.GetGcUsage)
-			runtimeAPIGroup.GET("/version", model_misc.GetVersion)
+			runtimeAPIGroup.GET("/cpu", runtime_controller.GetCpuState)
+			runtimeAPIGroup.GET("/memory", runtime_controller.GetMemoryState)
+			runtimeAPIGroup.GET("/gc", runtime_controller.GetGcState)
+			runtimeAPIGroup.GET("/version", runtime_controller.GetVersion)
 		}
 		serverAPIGroup := apiNeedAuth.Group("/servers")
 		{
-			serverAPIGroup.GET("", model_server.GetAllServers)
-			serverAPIGroup.POST("", model_server.CreateServer)
-			serverAPIGroup.GET("/:hash", model_server.GetServer)
-			serverAPIGroup.GET("/:hash/start", model_server.StartServer)
-			serverAPIGroup.GET("/:hash/stop", model_server.StopServer)
-			serverAPIGroup.GET("/:hash/clients", model_server.GetAllClientsOfServer)
-			serverAPIGroup.DELETE("/:hash", model_server.DeleteServer)
+			serverAPIGroup.GET("", server_controller.GetAllServers)
+			serverAPIGroup.POST("", server_controller.CreateServer)
+			serverAPIGroup.GET("/:hash", server_controller.GetServer)
+			serverAPIGroup.GET("/:hash/start", server_controller.StartServer)
+			serverAPIGroup.GET("/:hash/stop", server_controller.StopServer)
+			serverAPIGroup.GET("/:hash/clients", server_controller.GetAllClientsOfServer)
+			serverAPIGroup.DELETE("/:hash", server_controller.DeleteServer)
 		}
 		clientAPIGroup := apiNeedAuth.Group("/clients")
 		{
-			clientAPIGroup.GET("", model_client.GetAllClients)
+			clientAPIGroup.GET("", client_controller.GetAllClients)
 			// Basic operations
-			clientAPIGroup.GET("/:hash", model_client.GetClient)
-			clientAPIGroup.GET("/:hash/collect", model_client.CollectClientInfo)
+			clientAPIGroup.GET("/:hash", client_controller.GetClient)
+			clientAPIGroup.GET("/:hash/collect", client_controller.CollectClientInfo)
 			// Proxies
-			clientAPIGroup.GET("/:hash/proxies", model_client.GetAllProxies)
-			clientAPIGroup.POST("/:hash/proxies", model_client.CreateProxy)
-			clientAPIGroup.DELETE("/:hash/proxies", model_client.DeleteProxy)
-			clientAPIGroup.GET("/:hash/proxies/:pid/start", model_client.StartProxy)
-			clientAPIGroup.GET("/:hash/proxies/:pid/stop", model_client.StopProxy)
+			clientAPIGroup.GET("/:hash/proxies", client_controller.GetAllProxies)
+			clientAPIGroup.POST("/:hash/proxies", client_controller.CreateProxy)
+			clientAPIGroup.DELETE("/:hash/proxies", client_controller.DeleteProxy)
+			clientAPIGroup.GET("/:hash/proxies/:pid/start", client_controller.StartProxy)
+			clientAPIGroup.GET("/:hash/proxies/:pid/stop", client_controller.StopProxy)
 			// Lib functions
-			clientAPIGroup.POST("/:hash/lib/readdir", model_client.LibReadDir)
-			clientAPIGroup.POST("/:hash/lib/stat", model_client.LibStat)
-			clientAPIGroup.POST("/:hash/lib/readfile", model_client.LibReadFile)
-			clientAPIGroup.POST("/:hash/lib/writefile", model_client.LibWriteFile)
-			clientAPIGroup.POST("/:hash/lib/fopen", model_client.LibFopen)
-			clientAPIGroup.POST("/:hash/lib/fseek", model_client.LibFseek)
-			clientAPIGroup.POST("/:hash/lib/fread", model_client.LibFread)
-			clientAPIGroup.POST("/:hash/lib/fwrite", model_client.LibFwrite)
-			clientAPIGroup.POST("/:hash/lib/fclose", model_client.LibFclose)
+			clientAPIGroup.POST("/:hash/lib/readdir", client_controller.LibReadDir)
+			clientAPIGroup.POST("/:hash/lib/stat", client_controller.LibStat)
+			clientAPIGroup.POST("/:hash/lib/readfile", client_controller.LibReadFile)
+			clientAPIGroup.POST("/:hash/lib/writefile", client_controller.LibWriteFile)
+			clientAPIGroup.POST("/:hash/lib/fopen", client_controller.LibFopen)
+			clientAPIGroup.POST("/:hash/lib/fseek", client_controller.LibFseek)
+			clientAPIGroup.POST("/:hash/lib/fread", client_controller.LibFread)
+			clientAPIGroup.POST("/:hash/lib/fwrite", client_controller.LibFwrite)
+			clientAPIGroup.POST("/:hash/lib/fclose", client_controller.LibFclose)
 			// Persistence
-			clientAPIGroup.GET("/:hash/persistence/crontab/install", model_client.InstallCrontab)
-			clientAPIGroup.GET("/:hash/persistence/sshkey/install", model_client.InstallSshKey)
+			clientAPIGroup.GET("/:hash/persistence/crontab/install", client_controller.InstallCrontab)
+			clientAPIGroup.GET("/:hash/persistence/sshkey/install", client_controller.InstallSshKey)
 			// Upgrade
-			clientAPIGroup.POST("/:hash/upgrade/:target", model_client.UpgradeToTermite)
+			clientAPIGroup.POST("/:hash/upgrade/:target", client_controller.UpgradeToTermite)
 			// Delete
-			clientAPIGroup.DELETE("/:hash", model_client.DeleteClient)
+			clientAPIGroup.DELETE("/:hash", client_controller.DeleteClient)
 		}
 	}
 

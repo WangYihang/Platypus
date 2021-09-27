@@ -1,4 +1,4 @@
-package client_model
+package client_controller
 
 import (
 	"fmt"

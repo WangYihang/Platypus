@@ -1,4 +1,4 @@
-package server_model
+package server_controller
 
 import (
 	"fmt"

@@ -1,11 +1,8 @@
-package misc
+package runtime_model
 
 import (
 	"runtime"
 	"time"
-
-	"github.com/WangYihang/Platypus/internal/util/update"
-	"github.com/gin-gonic/gin"
 )
 
 type CpuState struct {
@@ -63,7 +60,7 @@ type GcState struct {
 	GCCPUFraction     float64 `json:"gc.cpu_fraction_total"`
 }
 
-func collectCPUStats(cpuState *CpuState) {
+func CollectCPUStats(cpuState *CpuState) {
 	cpuState.NumCPU = int64(runtime.NumCPU())
 	cpuState.NumGoroutine = int64(runtime.NumGoroutine())
 	cpuState.NumCgoCall = int64(runtime.NumCgoCall())
@@ -71,7 +68,7 @@ func collectCPUStats(cpuState *CpuState) {
 	cpuState.NumCgoCall = int64(runtime.NumCgoCall())
 }
 
-func collectMemoryStats(memoryState *MemoryState) {
+func CollectMemoryStats(memoryState *MemoryState) {
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
 	// General
@@ -103,7 +100,7 @@ func collectMemoryStats(memoryState *MemoryState) {
 	memoryState.OtherSys = int64(m.OtherSys)
 }
 
-func collectGcStats(gcState *GcState) {
+func CollectGcStats(gcState *GcState) {
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
 	gcState.GCSys = int64(m.GCSys)
@@ -133,38 +130,4 @@ func collectGcStats(gcState *GcState) {
 	gcState.NumGCDelta = int64(m.NumGC) - gcState.NumGC
 	gcState.NumGC = int64(m.NumGC)
 	gcState.GCCPUFraction = float64(m.GCCPUFraction)
-}
-
-func GetCpuUsage(c *gin.Context) {
-	cpuState := CpuState{}
-	collectCPUStats(&cpuState)
-	c.JSON(200, gin.H{
-		"status": true,
-		"msg":    cpuState,
-	})
-}
-
-func GetMemoryUsage(c *gin.Context) {
-	memoryState := MemoryState{}
-	collectMemoryStats(&memoryState)
-	c.JSON(200, gin.H{
-		"status": true,
-		"msg":    memoryState,
-	})
-}
-
-func GetGcUsage(c *gin.Context) {
-	gcState := GcState{}
-	collectGcStats(&gcState)
-	c.JSON(200, gin.H{
-		"status": true,
-		"msg":    gcState,
-	})
-}
-
-func GetVersion(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"status": true,
-		"msg":    update.Version,
-	})
 }
