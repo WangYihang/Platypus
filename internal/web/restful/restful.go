@@ -42,12 +42,12 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	{
 		// Refresh time can be longer than token timeout
 		apiNeedAuth.GET("/refresh_token", authMiddleware.RefreshHandler)
-		platypusAPIGroup := apiNeedAuth.Group("/platypus")
+		runtimeAPIGroup := apiNeedAuth.Group("/runtime")
 		{
-			platypusAPIGroup.GET("/cpu", model_misc.GetCpuUsage)
-			platypusAPIGroup.GET("/memory", model_misc.GetMemoryUsage)
-			platypusAPIGroup.GET("/goroutine", model_misc.GetGoRoutineUsage)
-			platypusAPIGroup.GET("/version", model_misc.GetVersion)
+			runtimeAPIGroup.GET("/cpu", model_misc.GetCpuUsage)
+			runtimeAPIGroup.GET("/memory", model_misc.GetMemoryUsage)
+			runtimeAPIGroup.GET("/gc", model_misc.GetGcUsage)
+			runtimeAPIGroup.GET("/version", model_misc.GetVersion)
 		}
 		serverAPIGroup := apiNeedAuth.Group("/servers")
 		{

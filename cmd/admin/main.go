@@ -144,22 +144,20 @@ type Runtime struct {
 
 var rt Runtime
 
-func Init() {
+func Auth() {
 	header := req.Header{
 		"Accept": "application/json",
-		// "Authorization": "Basic YWRtaW46YWRtaW4=",
 	}
 	param := req.Param{
 		"username": "admin",
 		"password": "admin",
 	}
-	// only url is required, others are optional.
 	r, err := req.Post("http://127.0.0.1:7331/login", header, param)
 	if err != nil {
 		log.Error(err.Error())
 	}
 	responseData := LoginResponse{}
-	r.ToJSON(&responseData) // response => struct/map
+	r.ToJSON(&responseData)
 	rt.Token = responseData.Token
 }
 
@@ -170,7 +168,7 @@ func GetServers() ServersResponse {
 	}
 	r, _ := req.Get("http://127.0.0.1:7331/api/v1/servers", authedHeader)
 	xr := ServersResponse{}
-	r.ToJSON(&xr) // response => struct/map
+	r.ToJSON(&xr)
 	log.Info("%+v", xr)
 	return xr
 }
@@ -193,10 +191,8 @@ func StartCli() {
 	p.Run()
 }
 
-func main() {
-	Init()
-
-	u := url.URL{Scheme: "ws", Host: "127.0.0.1:7331", Path: "/ws/tty/5bd4097dd23e96b691fe7bd676975176"}
+func Interact(hash string) {
+	u := url.URL{Scheme: "ws", Host: "127.0.0.1:7331", Path: fmt.Sprintf("/ws/tty/%s", hash)}
 	log.Info("connecting to %s", u.String())
 	authedHeader := http.Header{}
 	authedHeader.Add("Accept", "application/json")
@@ -250,4 +246,10 @@ func main() {
 			}
 		}
 	}
+}
+
+func main() {
+	Auth()
+	StartCli()
+	Interact("4a5021db99f058f87e94b5247587f9e1")
 }

@@ -8,11 +8,11 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/c-bata/go-prompt v0.2.6 // indirect
+	github.com/c-bata/go-prompt v0.2.6
 	github.com/creack/pty v1.1.14
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
-	github.com/erikdubbelboer/gspt v0.0.0-20210805194459-ce36a5128377 // indirect
+	github.com/erikdubbelboer/gspt v0.0.0-20210805194459-ce36a5128377
 	github.com/fatih/color v1.12.0
 	github.com/gin-contrib/cors v1.3.1
 	github.com/gin-contrib/static v0.0.1
@@ -22,14 +22,13 @@ require (
 	github.com/golang/protobuf v1.5.1 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.3.0
-	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/imroc/req v0.3.0 // indirect
+	github.com/gorilla/websocket v1.4.2
+	github.com/imroc/req v0.3.0
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/json-iterator/go v1.1.10 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
-	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/onsi/gomega v1.11.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
@@ -45,7 +44,7 @@ require (
 	golang.org/x/mod v0.4.2
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
 	golang.org/x/oauth2 v0.0.0-20210313182246-cd4f82c27b84 // indirect
-	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect
+	golang.org/x/sys v0.0.0-20210816074244-15123e1e1f71 // indirect
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
 	golang.org/x/text v0.3.6 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
