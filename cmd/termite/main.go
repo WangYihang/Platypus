@@ -789,7 +789,7 @@ func asVirus() {
 }
 
 func main() {
-	release := false
+	release := true
 	service := "127.0.0.1:13337"
 	/*
 		Each element of a domain name separated by [.] is called a “label.”
