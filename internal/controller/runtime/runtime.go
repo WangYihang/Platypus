@@ -1,4 +1,4 @@
-package runtime_controller
+package runtime
 
 import (
 	"github.com/gin-gonic/gin"

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	client_controller "github.com/WangYihang/Platypus/internal/controller/client"
+	misc_controller "github.com/WangYihang/Platypus/internal/controller/misc"
 	runtime_controller "github.com/WangYihang/Platypus/internal/controller/runtime"
 	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
 	"github.com/WangYihang/Platypus/internal/util/fs"
@@ -32,9 +33,10 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// Static files
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
+	endpoint.Use(static.ServeRoot("/termite/", "./compile"))
 
 	// Compile Termite
-	endpoint.GET("/compile")
+	endpoint.POST("/compile", misc_controller.CompileHandler)
 
 	// HTTP
 	authMiddleware := web_jwt.Create()

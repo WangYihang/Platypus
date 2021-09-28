@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -12,8 +13,10 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/util/assets"
+	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/google/uuid"
 )
 
 func Compile(target string) bool {
@@ -35,7 +38,7 @@ func Compress(target string) bool {
 	}
 	log.Success("Upx detected: %s", upx)
 	log.Info("Compressing %s via upx", target)
-	output, err := exec.Command("upx", "--ultra-brute", target).Output()
+	output, err := exec.Command("upx", target).Output()
 	if err != nil {
 		log.Error("Compressing %s failed: %s, %s", target, err, output)
 		return false
@@ -105,12 +108,38 @@ func GenerateDirFilename() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	var fileanme string
+	var filename string
 	if runtime.GOOS == "windows" {
-		fileanme = fmt.Sprintf("%d-%s-termite.exe", time.Now().UnixNano(), str.RandomString(0x10))
+		filename = fmt.Sprintf("%d-%s-termite.exe", time.Now().UnixNano(), str.RandomString(0x10))
 	} else {
-		fileanme = fmt.Sprintf("%d-%s-termite", time.Now().UnixNano(), str.RandomString(0x10))
+		filename = fmt.Sprintf("%d-%s-termite", time.Now().UnixNano(), str.RandomString(0x10))
 	}
-	filepath := filepath.Join(dir, fileanme)
+	filepath := filepath.Join(dir, filename)
 	return dir, filepath, nil
+}
+
+func DoCompile(os_string string, host string, port int16) (string, error) {
+	// Create assets folder if not exists
+	folder := "compile"
+	if !fs.FileExists(folder) {
+		os.Mkdir(folder, os.ModePerm)
+	}
+	switch os_string {
+	case "linux":
+		// Generate output binary filepath
+		filepath := fmt.Sprintf("%s/%s", folder, uuid.New().String())
+		err := BuildTermiteFromPrebuildAssets(filepath, fmt.Sprintf("%s:%d", host, port))
+		if err != nil {
+			return "", err
+		}
+		// Compress
+		Compress(filepath)
+		return filepath, nil
+	case "darwin":
+		return "", fmt.Errorf("unsupported os: %s", os_string)
+	case "windows":
+		return "", fmt.Errorf("unsupported os: %s", os_string)
+	default:
+		return "", fmt.Errorf("unsupported os: %s", os_string)
+	}
 }

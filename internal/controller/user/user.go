@@ -1,4 +1,4 @@
-package user_controller
+package user
 
 import (
 	"errors"
