@@ -519,7 +519,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				process.Pid = msg.Body.(*message.BodyProcessStarted).Pid
 				process.State = started
 				log.Success("Process (%d) started", process.Pid)
-				if process.WebSocket == nil {
+				if process.WebSocket != nil {
 					client.CurrentProcessKey = key
 				}
 			} else {
@@ -533,8 +533,8 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				delete(client.Processes, key)
 				log.Error("Process (%d) stop: %d", process.Pid, code)
 				// Close websocket when the process stoped
-				process.WebSocket.Close()
-				if process.WebSocket == nil {
+				if process.WebSocket != nil {
+					process.WebSocket.Close()
 					client.CurrentProcessKey = ""
 				}
 			} else {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/util/assets"
+	"github.com/WangYihang/Platypus/internal/util/config"
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/str"
@@ -54,7 +55,7 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 		return errors.New("can not read termite.go")
 	}
 	contentString := string(content)
-	contentString = strings.Replace(contentString, "xxx.xxx.xxx.xxx:xxxxx", targetAddress, -1)
+	contentString = strings.Replace(contentString, config.RemoteAddrPlaceHolder, targetAddress, -1)
 	err = ioutil.WriteFile("termite.go", []byte(contentString), 0644)
 	if err != nil {
 		log.Error("Can not write termite.go: %s", err)
@@ -71,7 +72,9 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 
 func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string) error {
 	// Step 1: Generating Termite from Assets
-	assetFilepath := "build/termite/termite_linux_amd64"
+	os_string := "linux"
+	arch := "amd64"
+	assetFilepath := fmt.Sprintf("build/termite/termite_%s_%s", os_string, arch)
 	content, err := assets.Asset(assetFilepath)
 	if err != nil {
 		log.Error("Failed to read asset file: %s", assetFilepath)
@@ -79,10 +82,9 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 	}
 
 	// Step 2: Generating the placeholder
-	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
-	replacement := make([]byte, len(placeHolder))
+	replacement := make([]byte, len(config.RemoteAddrPlaceHolder))
 
-	for i := 0; i < len(placeHolder); i++ {
+	for i := 0; i < len(config.RemoteAddrPlaceHolder); i++ {
 		replacement[i] = 0x20
 	}
 
@@ -90,9 +92,9 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 		replacement[i] = targetAddress[i]
 	}
 
-	// Step 3: Replacing the placeholder
-	log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
-	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
+	// Step 3: Replacing the RemoteAddrPlaceHolder
+	log.Success("Replacing `%s` to: `%s`", config.RemoteAddrPlaceHolder, replacement)
+	content = bytes.Replace(content, []byte(config.RemoteAddrPlaceHolder), replacement, 1)
 
 	// Step 4: Create binary file
 	err = ioutil.WriteFile(targetFilename, content, 0755)
@@ -124,17 +126,18 @@ func DoCompile(os_string string, host string, port int16) (string, error) {
 	if !fs.FileExists(folder) {
 		os.Mkdir(folder, os.ModePerm)
 	}
+	filename := uuid.New().String()
 	switch os_string {
 	case "linux":
 		// Generate output binary filepath
-		filepath := fmt.Sprintf("%s/%s", folder, uuid.New().String())
+		filepath := fmt.Sprintf("%s/%s", folder, filename)
 		err := BuildTermiteFromPrebuildAssets(filepath, fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
 			return "", err
 		}
 		// Compress
 		Compress(filepath)
-		return filepath, nil
+		return filename, nil
 	case "darwin":
 		return "", fmt.Errorf("unsupported os: %s", os_string)
 	case "windows":

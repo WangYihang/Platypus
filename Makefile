@@ -1,6 +1,6 @@
-build: build_platypus
+build: platypus
 
-install_dependency:
+dependency:
 	sudo apt-get update
 	sudo apt-get install -y software-properties-common gnupg
 	sudo add-apt-repository -y ppa:longsleep/golang-backports
@@ -10,51 +10,47 @@ install_dependency:
 	bash -c "source ${HOME}/.nvm/nvm.sh && nvm install --lts && npm install -g yarn"
 	# Golang
 	sudo apt install -y golang-go
-	sudo apt install -y go-bindata
 	go env -w GO111MODULE=on
 	go env -w GOPROXY=https://goproxy.cn,direct
 	# upx
 	sudo apt install -y upx
 
-install_dependency_github_action:
-	sudo apt install go-bindata
+go-bindata:
+	go install github.com/go-bindata/go-bindata/...@latest
 
-prepare: 
+mkdir: 
 	bash -c "[[ -d build ]] || mkdir build"
 
-build_frontend: prepare
+frontend: mkdir
 	echo "Building frontend"
 	cd web/frontend && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 	echo "Building ttyd"
 	cd web/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && yarn build"
 
-build_termite: prepare
+termite: mkdir
 	echo "Building termite"
 	# echo -e "Building termite_linux_amd64"
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
 
-collect_assets: build_frontend build_termite
+assets: go-bindata frontend termite
 	echo "Collecting assets files"
-	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
+	${HOME}/go/bin/go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
 
-dev:
+dev: go-bindata
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
-	go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
-	env go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
+	${HOME}/go/bin/go-bindata -pkg assets -o ./internal/util/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/... ./build/termite/...
+	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
 
-build_platypus: collect_assets
-	echo "Building platypus"
-	env go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
-
-release: install_dependency_github_action collect_assets
+release: assets
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
 	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
-	env GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_arm64 cmd/platypus/main.go
 	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
-	find build -type f -executable | xargs upx --ultra-brute
+	find build -type f -executable | xargs upx
 
 clean:
+	rm -rf *.yml
 	rm -rf build
+	rm -rf compile
 	rm -rf internal/util/assets/assets.go
 	rm -rf web/frontend/build
 	rm -rf web/ttyd/build

