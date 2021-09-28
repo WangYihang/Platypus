@@ -10,15 +10,13 @@ import (
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
-func ListFiles(path string) func(string) []string {
-	return func(line string) []string {
-		names := make([]string, 0)
-		files, _ := ioutil.ReadDir(path)
-		for _, f := range files {
-			names = append(names, f.Name())
-		}
-		return names
+func ListFiles(path string) []string {
+	names := make([]string, 0)
+	files, _ := ioutil.ReadDir(path)
+	for _, f := range files {
+		names = append(names, f.Name())
 	}
+	return names
 }
 
 // fileExists checks if a file exists and is not a directory before we

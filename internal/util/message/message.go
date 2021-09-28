@@ -68,8 +68,9 @@ type Message struct {
 }
 
 type BodyUpdate struct {
-	DistributorURL string
-	Version        string
+	Endpoint string
+	Token    string
+	Version  string
 }
 
 type BodyStdio struct {
@@ -107,6 +108,7 @@ type BodyDuplicateClient struct{}
 type BodyClientInfo struct {
 	Version           string
 	OS                string
+	Arch              string
 	User              string
 	Python2           string
 	Python3           string

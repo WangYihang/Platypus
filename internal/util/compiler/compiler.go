@@ -17,6 +17,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/WangYihang/Platypus/internal/util/update"
 	"github.com/google/uuid"
 )
 
@@ -93,7 +94,7 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 	}
 
 	// Step 3: Replacing the RemoteAddrPlaceHolder
-	log.Success("Replacing `%s` to: `%s`", config.RemoteAddrPlaceHolder, replacement)
+	log.Success("Setting target address to %s", targetAddress)
 	content = bytes.Replace(content, []byte(config.RemoteAddrPlaceHolder), replacement, 1)
 
 	// Step 4: Create binary file
@@ -120,29 +121,69 @@ func GenerateDirFilename() (string, string, error) {
 	return dir, filepath, nil
 }
 
-func DoCompile(os_string string, host string, port int16) (string, error) {
-	// Create assets folder if not exists
-	folder := "compile"
-	if !fs.FileExists(folder) {
-		os.Mkdir(folder, os.ModePerm)
+func DoCompile(os_string string, arch string, host string, port uint16) (string, error) {
+	// Generate termite binary path & create folder
+	termiteFilepath := fmt.Sprintf("compile/%s/%s/%d/%s_%s", update.Version, host, port, os_string, arch)
+	termiteFileFolderpath := filepath.Dir(termiteFilepath)
+	if !fs.FileExists(termiteFileFolderpath) {
+		os.MkdirAll(termiteFileFolderpath, os.ModePerm)
 	}
-	filename := uuid.New().String()
-	switch os_string {
-	case "linux":
-		// Generate output binary filepath
-		filepath := fmt.Sprintf("%s/%s", folder, filename)
-		err := BuildTermiteFromPrebuildAssets(filepath, fmt.Sprintf("%s:%d", host, port))
+
+	// Compile and compress
+	if !fs.FileExists(termiteFilepath) {
+		err := BuildTermiteFromPrebuildAssets(termiteFilepath, fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
 			return "", err
 		}
-		// Compress
-		Compress(filepath)
-		return filename, nil
-	case "darwin":
-		return "", fmt.Errorf("unsupported os: %s", os_string)
-	case "windows":
-		return "", fmt.Errorf("unsupported os: %s", os_string)
-	default:
-		return "", fmt.Errorf("unsupported os: %s", os_string)
+		Compress(termiteFilepath)
+	}
+
+	// Generate termite softlink path & create folder
+	// Assume all files in `static` folder are links
+	staticFolder := "static"
+	for _, linkname := range fs.ListFiles(staticFolder) {
+		linkpath := fmt.Sprintf("%s/%s", staticFolder, linkname)
+		filename, err := filepath.EvalSymlinks(linkpath)
+		if err != nil {
+			continue
+		}
+		absFilepath, err := filepath.Abs(filename)
+		if err != nil {
+			continue
+		}
+		absTermiteFilepath, err := filepath.Abs(termiteFilepath)
+		if err != nil {
+			continue
+		}
+		if absFilepath == absTermiteFilepath {
+			return linkname, nil
+		}
+	}
+
+	termiteLinkpath := fmt.Sprintf("%s/%s", staticFolder, uuid.New().String())
+	termiteLinkFolderpath := filepath.Dir(termiteLinkpath)
+	if !fs.FileExists(termiteLinkFolderpath) {
+		os.MkdirAll(termiteLinkFolderpath, os.ModePerm)
+	}
+
+	// Check if cache exists
+	if fs.FileExists(termiteFilepath) {
+		log.Info("%s already have been compiled", termiteFilepath)
+		log.Info("Creating link (%s) to the compiled file", termiteLinkpath)
+		termiteAbsFilepath, err := filepath.Abs(termiteFilepath)
+		if err != nil {
+			return "", err
+		}
+		termiteAbsLinkpath, err := filepath.Abs(termiteLinkpath)
+		if err != nil {
+			return "", err
+		}
+		err = os.Symlink(termiteAbsFilepath, termiteAbsLinkpath)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Base(termiteLinkpath), nil
+	} else {
+		return "", fmt.Errorf("compilation failed")
 	}
 }

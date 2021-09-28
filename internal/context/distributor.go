@@ -1,14 +1,10 @@
 package context
 
 import (
-	"fmt"
 	"io/ioutil"
-	"os"
 
-	"github.com/WangYihang/Platypus/internal/util/compiler"
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/network"
-	"github.com/WangYihang/Platypus/internal/util/validator"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,43 +30,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		Url:        url,
 	}
 
-	endpoint.GET("/termite/:target", func(c *gin.Context) {
-		if !validator.ParamsExistOrAbort(c, []string{"target"}) {
-			return
-		}
-		target := c.Param("target")
-		// TODO: Check format
+	endpoint.Use(static.Serve("/", static.LocalFile("./static", false)))
 
-		if target == "" {
-			log.Error("Invalid connect back addr: %v", target)
-			validator.PanicRESTfully(c, "Invalid connect back addr")
-			return
-		}
-
-		// Generate temp folder and filename
-		dir, filename, err := compiler.GenerateDirFilename()
-		if err != nil {
-			log.Error(fmt.Sprint(err))
-			validator.PanicRESTfully(c, err.Error())
-			return
-		}
-		defer os.RemoveAll(dir)
-
-		// Build Termite binary
-		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
-		if err != nil {
-			log.Error(fmt.Sprint(err))
-			validator.PanicRESTfully(c, err.Error())
-			return
-		}
-
-		// Compress binary
-		if !compiler.Compress(filename) {
-			log.Error("Can not compress termite.go")
-		}
-
-		// Response file
-		c.File(filename)
-	})
 	return endpoint
 }

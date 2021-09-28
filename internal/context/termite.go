@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 
+	"github.com/WangYihang/Platypus/internal/util/compiler"
 	"github.com/WangYihang/Platypus/internal/util/hash"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/message"
@@ -50,6 +51,7 @@ type TermiteClient struct {
 	Alias             string              `json:"alias"`
 	User              string              `json:"user"`
 	OS                oss.OperatingSystem `json:"os"`
+	Arch              string              `json:"arch"`
 	Version           string              `json:"version"`
 	NetworkInterfaces map[string]string   `json:"network_interfaces"`
 	Python2           string              `json:"python2"`
@@ -142,6 +144,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 		c.Version = clientInfo.Version
 		log.Info("Client version: v%s", c.Version)
 		c.OS = oss.Parse(clientInfo.OS)
+		c.Arch = clientInfo.Arch
 		c.User = clientInfo.User
 		c.Python2 = clientInfo.Python2
 		c.Python3 = clientInfo.Python3
@@ -149,12 +152,14 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 		c.Hash = c.makeHash(hashFormat)
 		if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
 			// Termite needs up to date
+			filename, _ := compiler.DoCompile(clientInfo.OS, c.Arch, c.Host, c.Port)
 			c.EncoderLock.Lock()
 			c.Encoder.Encode(message.Message{
 				Type: message.UPDATE,
 				Body: message.BodyUpdate{
-					DistributorURL: Ctx.Distributor.Url,
-					Version:        update.Version,
+					Endpoint: Ctx.Distributor.Url,
+					Token:    filename,
+					Version:  update.Version,
 				},
 			})
 			c.EncoderLock.Unlock()

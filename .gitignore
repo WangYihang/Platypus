@@ -17,6 +17,7 @@ vendor/
 # Binary files
 build/
 compile/
+static/
 
 # Config file
 config.yml

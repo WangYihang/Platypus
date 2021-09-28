@@ -33,10 +33,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// Static files
 	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
-	endpoint.Use(static.ServeRoot("/termite/", "./compile"))
-
-	// Compile Termite
-	endpoint.POST("/compile", misc_controller.CompileHandler)
 
 	// HTTP
 	authMiddleware := web_jwt.Create()
@@ -94,6 +90,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Delete
 			clientAPIGroup.DELETE("/:hash", client_controller.DeleteClient)
 		}
+		// Termite compiler
+		apiNeedAuth.POST("/compile", misc_controller.CompileHandler)
 	}
 
 	// WebSocket
