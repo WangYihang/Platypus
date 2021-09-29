@@ -213,17 +213,17 @@ First use `Jump` to select a client, then type `PTY`, then type `Interact` to dr
 - [ ] Visualize network topology
 - [ ] Host discovery via multiple method (eg: `arp -a`)
 - [ ] Redesign frontend (eg: Listener list, Machine list, Network topology graph, File management...)
-- [ ] Add authencation in RESTful API
+- [ ] [WIP] Add authencation in RESTful API
 - [ ] Use crontab
 - [ ] Provide full kernel API
-- [ ] Support file operations
+- [ ] [WIP] Support file operations
 - [ ] Check whether dst is a folder in file uploading 
 - [ ] Benchmark
 - [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
 - [ ] Upgrade to Metepreter session
 - [ ] Electron frontend
 - [ ] [#53 Reload config file](https://github.com/WangYihang/Platypus/issues/53)
-- [ ] Add version checking in Termite
+- [x] Add version checking in Termite
 - [x] [#28 Suport enable internet on the internal machine](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport dynamic port forwarding](https://github.com/WangYihang/Platypus/issues/28))
 - [x] [#28 Suport remote port forwarding](https://github.com/WangYihang/Platypus/issues/28))
