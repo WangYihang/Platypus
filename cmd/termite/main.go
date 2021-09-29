@@ -674,9 +674,16 @@ func handleConnection(c *client) {
 			file, _ := ioutil.TempFile(os.TempDir(), "temp")
 			exe := file.Name()
 			token := msg.Body.(*message.BodyUpdate).Token
-			endpoint := msg.Body.(*message.BodyUpdate).Endpoint
+			distributorPort := msg.Body.(*message.BodyUpdate).DistributorPort
 			version := msg.Body.(*message.BodyUpdate).Version
-			url := fmt.Sprintf("%s/%s", endpoint, token)
+			// Parse platypus endpoint host
+			parts := strings.Split(c.Service, ":")
+			if len(parts) != 2 {
+				continue
+			}
+			host := parts[0]
+			// Construct new binary download url
+			url := fmt.Sprintf("http://%s:%d/%s", host, distributorPort, token)
 			log.Info("Upgrading from v%s to v%s", update.Version, version)
 			log.Info("Downloading %s into %s", url, exe)
 			if err := selfupdate.UpdateTo(url, exe); err != nil {

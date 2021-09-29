@@ -135,7 +135,11 @@ func DoCompile(os_string string, arch string, host string, port uint16) (string,
 		if err != nil {
 			return "", err
 		}
-		Compress(termiteFilepath)
+		/*
+			Compress is disabled because the gspt package cannot work under upx compression
+			See: https://github.com/erikdubbelboer/gspt/issues/15
+		*/
+		// Compress(termiteFilepath)
 	}
 
 	// Generate termite softlink path & create folder

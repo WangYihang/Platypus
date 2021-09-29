@@ -42,10 +42,10 @@ dev: go-bindata
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
 
 release: assets
-	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
-	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
-	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
-	find build -type f -executable | xargs upx
+	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_linux_amd64 cmd/platypus/main.go
+	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_darwin_amd64 cmd/platypus/main.go
+	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_windows_amd64.exe cmd/platypus/main.go
+	find build/platypus -type f -executable | xargs upx
 
 clean:
 	rm -rf *.yml

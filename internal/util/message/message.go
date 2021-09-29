@@ -68,9 +68,9 @@ type Message struct {
 }
 
 type BodyUpdate struct {
-	Endpoint string
-	Token    string
-	Version  string
+	DistributorPort uint16
+	Token           string
+	Version         string
 }
 
 type BodyStdio struct {
