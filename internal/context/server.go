@@ -369,37 +369,41 @@ const (
 )
 
 func (s *TCPServer) NotifyWebSocketDuplicateTCPClient(client *TCPClient) {
-	// WebSocket Broadcast
-	type ClientDuplicateMessage struct {
-		Client     TCPClient
-		ServerHash string
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type ClientDuplicateMessage struct {
+			Client     TCPClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_DUPLICATED,
+			Data: ClientDuplicateMessage{
+				Client:     *client,
+				ServerHash: s.Hash,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_DUPLICATED,
-		Data: ClientDuplicateMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (s *TCPServer) NotifyWebSocketOnlineTCPClient(client *TCPClient) {
-	// WebSocket Broadcast
-	type ClientOnlineMessage struct {
-		Client     TCPClient
-		ServerHash string
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type ClientOnlineMessage struct {
+			Client     TCPClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_CONNECTED,
+			Data: ClientOnlineMessage{
+				Client:     *client,
+				ServerHash: s.Hash,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_CONNECTED,
-		Data: ClientOnlineMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
@@ -426,37 +430,41 @@ func (s *TCPServer) GetAllTCPClients() map[string](*TCPClient) {
 }
 
 func (s *TCPServer) NotifyWebSocketDuplicateTermiteClient(client *TermiteClient) {
-	// WebSocket Broadcast
-	type ClientDuplicateMessage struct {
-		Client     TermiteClient
-		ServerHash string
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type ClientDuplicateMessage struct {
+			Client     TermiteClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_DUPLICATED,
+			Data: ClientDuplicateMessage{
+				Client:     *client,
+				ServerHash: s.Hash,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_DUPLICATED,
-		Data: ClientDuplicateMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
-	// WebSocket Broadcast
-	type ClientOnlineMessage struct {
-		Client     TermiteClient
-		ServerHash string
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type ClientOnlineMessage struct {
+			Client     TermiteClient
+			ServerHash string
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: CLIENT_CONNECTED,
+			Data: ClientOnlineMessage{
+				Client:     *client,
+				ServerHash: s.Hash,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_CONNECTED,
-		Data: ClientOnlineMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 // Encrypted clients
