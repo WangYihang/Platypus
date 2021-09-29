@@ -2,9 +2,14 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
 
 func GatherInterfacesList(host string) []string {
@@ -55,4 +60,26 @@ func GetPublicIP() (string, error) {
 	json.Unmarshal(body, &ip)
 
 	return ip.Query, nil
+}
+
+func ParseHostPort(addr string) (string, uint16, error) {
+	parts := strings.Split(addr, ":")
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("invalid address")
+	}
+
+	var hp struct {
+		Host string `validate:"ip|hostname"`
+		Port uint16 `validate:"numeric,max=65535,min=0"`
+	}
+	hp.Host = parts[0]
+	port, _ := strconv.Atoi(parts[1])
+	hp.Port = uint16(port)
+
+	validate := validator.New()
+	err := validate.Struct(hp)
+	if err != nil {
+		return "", 0, err
+	}
+	return hp.Host, hp.Port, nil
 }

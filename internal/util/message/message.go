@@ -113,6 +113,7 @@ type BodyClientInfo struct {
 	Python2           string
 	Python3           string
 	NetworkInterfaces map[string]string
+	PlatypusHost      string
 }
 
 type BodyTerminateProcess struct {

