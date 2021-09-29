@@ -16,10 +16,10 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/util/compiler"
 	"github.com/WangYihang/Platypus/internal/util/hash"
-	"github.com/WangYihang/Platypus/internal/util/ui"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	oss "github.com/WangYihang/Platypus/internal/util/os"
 	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/WangYihang/Platypus/internal/util/ui"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/vbauerster/mpb/v6"
@@ -826,62 +826,68 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 }
 
 func (client *TCPClient) NotifyWebSocketCompilingTermite(progress int) {
-	// WebSocket Broadcast
-	type CompilingTermite struct {
-		Client     TCPClient
-		ServerHash string
-		Progress   int
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type CompilingTermite struct {
+			Client     TCPClient
+			ServerHash string
+			Progress   int
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: COMPILING_TERMITE,
+			Data: CompilingTermite{
+				Client:     *client,
+				ServerHash: client.server.Hash,
+				Progress:   progress,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: COMPILING_TERMITE,
-		Data: CompilingTermite{
-			Client:     *client,
-			ServerHash: client.server.Hash,
-			Progress:   progress,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (client *TCPClient) NotifyWebSocketCompressingTermite(progress int) {
-	// WebSocket Broadcast
-	type CompressingTermite struct {
-		Client     TCPClient
-		ServerHash string
-		Progress   int
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type CompressingTermite struct {
+			Client     TCPClient
+			ServerHash string
+			Progress   int
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: COMPRESSING_TERMITE,
+			Data: CompressingTermite{
+				Client:     *client,
+				ServerHash: client.server.Hash,
+				Progress:   progress,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: COMPRESSING_TERMITE,
-		Data: CompressingTermite{
-			Client:     *client,
-			ServerHash: client.server.Hash,
-			Progress:   progress,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (client *TCPClient) NotifyWebSocketUploadingTermite(bytesSent int, bytesTotal int) {
-	// WebSocket Broadcast
-	type UploadingTermite struct {
-		Client     TCPClient
-		ServerHash string
-		BytesSent  int
-		BytesTotal int
+	if Ctx.NotifyWebSocket != nil {
+		// WebSocket Broadcast
+		type UploadingTermite struct {
+			Client     TCPClient
+			ServerHash string
+			BytesSent  int
+			BytesTotal int
+		}
+		msg, _ := json.Marshal(WebSocketMessage{
+			Type: UPLOADING_TERMITE,
+			Data: UploadingTermite{
+				Client:     *client,
+				ServerHash: client.server.Hash,
+				BytesSent:  bytesSent,
+				BytesTotal: bytesTotal,
+			},
+		})
+		// Notify to all websocket clients
+		Ctx.NotifyWebSocket.Broadcast(msg)
 	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: UPLOADING_TERMITE,
-		Data: UploadingTermite{
-			Client:     *client,
-			ServerHash: client.server.Hash,
-			BytesSent:  bytesSent,
-			BytesTotal: bytesTotal,
-		},
-	})
-	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
 }
 
 func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
