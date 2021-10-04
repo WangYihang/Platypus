@@ -8,10 +8,10 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher commandDispatcher) Jump(args []string) {
+func (dispatcher CommandDispatcher) Jump(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Jump` to get more information")
-		dispatcher.JumpHelp([]string{})
+		dispatcher.JumpHelp()
 		return
 	}
 
@@ -59,14 +59,16 @@ func (dispatcher commandDispatcher) Jump(args []string) {
 	log.Error("No such node: %s", clue)
 }
 
-func (dispatcher commandDispatcher) JumpHelp(args []string) {
+func (dispatcher CommandDispatcher) JumpHelp() string {
 	fmt.Println("Usage of Jump")
 	fmt.Println("\tJump [HASH | NAME]")
 	fmt.Println("\tHASH\tThe hash of a node which you want to interact with.")
 	fmt.Println("\tNAME\tThe name of a node which you want to interact with. The name can be set via `Rename` command.")
+	return ""
 }
 
-func (dispatcher commandDispatcher) JumpDesc(args []string) {
+func (dispatcher CommandDispatcher) JumpDesc() string {
 	fmt.Println("Jump")
 	fmt.Println("\tJump to a node, waiting for interactiving with it.")
+	return ""
 }

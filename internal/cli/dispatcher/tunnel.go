@@ -9,7 +9,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
 
-func (dispatcher commandDispatcher) Tunnel(args []string) {
+func (dispatcher CommandDispatcher) Tunnel(args []string) {
 	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
@@ -18,7 +18,7 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 	if context.Ctx.CurrentTermite != nil {
 		if len(args) != 6 {
 			log.Error("Arguments error, use `Help Tunnel` to get more information")
-			dispatcher.TunnelHelp([]string{})
+			dispatcher.TunnelHelp()
 			return
 		}
 
@@ -29,7 +29,7 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 
 		if err != nil {
 			log.Error("Invalid port: %s, use `Help Tunnel` to get more information", args[1])
-			dispatcher.TunnelHelp([]string{})
+			dispatcher.TunnelHelp()
 			return
 		}
 
@@ -38,7 +38,7 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 
 		if err != nil {
 			log.Error("Invalid port: %s, use `Help Tunnel` to get more information", args[1])
-			dispatcher.TunnelHelp([]string{})
+			dispatcher.TunnelHelp()
 			return
 		}
 
@@ -94,12 +94,14 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 	}
 }
 
-func (dispatcher commandDispatcher) TunnelHelp(args []string) {
+func (dispatcher CommandDispatcher) TunnelHelp() string {
 	fmt.Println("Usage of Tunnel")
 	fmt.Println("\tTunnel [Create|Delete] [Pull|Push|Dynamic|Internet] [Src Host] [Src Port] [Dst Host] [Dst Port]")
+	return ""
 }
 
-func (dispatcher commandDispatcher) TunnelDesc(args []string) {
+func (dispatcher CommandDispatcher) TunnelDesc() string {
 	fmt.Println("Tunnel")
 	fmt.Println("\tStart a tunnel on local machine which connect to a port in internal network")
+	return ""
 }

@@ -37,6 +37,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// HTTP
 	authMiddleware := web_jwt.Create()
 	endpoint.POST("/login", authMiddleware.LoginHandler)
+
 	// HTTP API
 	apiNeedAuth := endpoint.Group("/api/v1")
 	apiNeedAuth.Use(authMiddleware.MiddlewareFunc())

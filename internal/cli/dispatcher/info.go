@@ -7,10 +7,10 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
 
-func (dispatcher commandDispatcher) Info(args []string) {
+func (dispatcher CommandDispatcher) Info(args []string) {
 	if len(args) > 1 {
 		log.Error("Arguments error, use `Help Info` to get more information")
-		dispatcher.InfoHelp([]string{})
+		dispatcher.InfoHelp()
 		return
 	}
 
@@ -57,13 +57,15 @@ func (dispatcher commandDispatcher) Info(args []string) {
 	}
 }
 
-func (dispatcher commandDispatcher) InfoHelp(args []string) {
+func (dispatcher CommandDispatcher) InfoHelp() string {
 	fmt.Println("Usage of Info")
 	fmt.Println("\tInfo [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	return ""
 }
 
-func (dispatcher commandDispatcher) InfoDesc(args []string) {
+func (dispatcher CommandDispatcher) InfoDesc() string {
 	fmt.Println("Info")
 	fmt.Println("\tDisplay the information of a node, using the hash of the node")
+	return ""
 }

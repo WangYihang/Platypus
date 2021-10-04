@@ -8,10 +8,10 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
 
-func (dispatcher commandDispatcher) Command(args []string) {
+func (dispatcher CommandDispatcher) Command(args []string) {
 	if len(args) == 0 {
 		log.Error("Arguments error, use `Help Command` to get more information")
-		dispatcher.CommandHelp([]string{})
+		dispatcher.CommandHelp()
 		return
 	}
 
@@ -39,13 +39,15 @@ func (dispatcher commandDispatcher) Command(args []string) {
 	}
 }
 
-func (dispatcher commandDispatcher) CommandHelp(args []string) {
+func (dispatcher CommandDispatcher) CommandHelp() string {
 	fmt.Println("Usage of Command [CMD]")
 	fmt.Println("\tCommand")
 	fmt.Println("\tCMD\tThe command that you want to execute on the current session")
+	return ""
 }
 
-func (dispatcher commandDispatcher) CommandDesc(args []string) {
+func (dispatcher CommandDispatcher) CommandDesc() string {
 	fmt.Println("Command")
 	fmt.Println("\texecute a command on the current session")
+	return ""
 }

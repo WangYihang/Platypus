@@ -20,10 +20,10 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-func (dispatcher commandDispatcher) Download(args []string) {
+func (dispatcher CommandDispatcher) Download(args []string) {
 	if len(args) != 2 {
 		log.Error("Arguments error, use `Help Download` to get more information")
-		dispatcher.DownloadHelp([]string{})
+		dispatcher.DownloadHelp()
 		return
 	}
 
@@ -168,12 +168,14 @@ func (dispatcher commandDispatcher) Download(args []string) {
 
 }
 
-func (dispatcher commandDispatcher) DownloadHelp(args []string) {
+func (dispatcher CommandDispatcher) DownloadHelp() string {
 	fmt.Println("Usage of Download")
 	fmt.Println("\tDownload [SRC] [DST]")
+	return ""
 }
 
-func (dispatcher commandDispatcher) DownloadDesc(args []string) {
+func (dispatcher CommandDispatcher) DownloadDesc() string {
 	fmt.Println("Download")
 	fmt.Println("\tDownload file from remote client (the current client) to local machine")
+	return ""
 }

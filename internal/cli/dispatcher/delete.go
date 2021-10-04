@@ -8,10 +8,10 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
 
-func (dispatcher commandDispatcher) Delete(args []string) {
+func (dispatcher CommandDispatcher) Delete(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Delete` to get more information")
-		dispatcher.DeleteHelp([]string{})
+		dispatcher.DeleteHelp()
 		return
 	}
 
@@ -54,13 +54,15 @@ func (dispatcher commandDispatcher) Delete(args []string) {
 	log.Error("No such node")
 }
 
-func (dispatcher commandDispatcher) DeleteHelp(args []string) {
+func (dispatcher CommandDispatcher) DeleteHelp() string {
 	fmt.Println("Usage of Delete")
 	fmt.Println("\tDelete [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	return ""
 }
 
-func (dispatcher commandDispatcher) DeleteDesc(args []string) {
+func (dispatcher CommandDispatcher) DeleteDesc() string {
 	fmt.Println("Delete")
 	fmt.Println("\tDelete a node, node can be both a server or a client")
+	return ""
 }

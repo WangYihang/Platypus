@@ -10,7 +10,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
 
-func (dispatcher commandDispatcher) DataDispatcher(args []string) {
+func (dispatcher CommandDispatcher) DataDispatcher(args []string) {
 	fmt.Print("Input command: ")
 	inputReader := bufio.NewReader(os.Stdin)
 	command, err := inputReader.ReadString('\n')
@@ -34,12 +34,14 @@ func (dispatcher commandDispatcher) DataDispatcher(args []string) {
 	log.Success("Execution finished, %d node DataDispatcherd", n)
 }
 
-func (dispatcher commandDispatcher) DataDispatcherHelp(args []string) {
+func (dispatcher CommandDispatcher) DataDispatcherHelp() string {
 	fmt.Println("Usage of DataDispatcher")
 	fmt.Println("\tDataDispatcher")
+	return ""
 }
 
-func (dispatcher commandDispatcher) DataDispatcherDesc(args []string) {
+func (dispatcher CommandDispatcher) DataDispatcherDesc() string {
 	fmt.Println("DataDispatcher")
 	fmt.Println("\tDataDispatcher command on all clients which are interactive")
+	return ""
 }

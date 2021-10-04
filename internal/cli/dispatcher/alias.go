@@ -9,10 +9,10 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher commandDispatcher) Alias(args []string) {
+func (dispatcher CommandDispatcher) Alias(args []string) {
 	if len(args) != 1 {
 		log.Error("Arguments error, use `Help Alias` to get more information")
-		dispatcher.AliasHelp([]string{})
+		dispatcher.AliasHelp()
 		return
 	}
 
@@ -40,12 +40,14 @@ func (dispatcher commandDispatcher) Alias(args []string) {
 
 }
 
-func (dispatcher commandDispatcher) AliasHelp(args []string) {
+func (dispatcher CommandDispatcher) AliasHelp() string {
 	fmt.Println("Usage of Alias")
 	fmt.Println("\tAlias")
+	return ""
 }
 
-func (dispatcher commandDispatcher) AliasDesc(args []string) {
+func (dispatcher CommandDispatcher) AliasDesc() string {
 	fmt.Println("Alias")
 	fmt.Println("\tAlias the current session with a human-readable name.")
+	return ""
 }

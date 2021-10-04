@@ -8,10 +8,10 @@ import (
 	"github.com/fatih/color"
 )
 
-func (dispatcher commandDispatcher) Gather(args []string) {
+func (dispatcher CommandDispatcher) Gather(args []string) {
 	if len(args) > 1 {
 		log.Error("Arguments error, use `Help Gather` to get more information")
-		dispatcher.GatherHelp([]string{})
+		dispatcher.GatherHelp()
 		return
 	}
 
@@ -64,13 +64,15 @@ func (dispatcher commandDispatcher) Gather(args []string) {
 	}
 }
 
-func (dispatcher commandDispatcher) GatherHelp(args []string) {
+func (dispatcher CommandDispatcher) GatherHelp() string {
 	fmt.Println("Usage of Gather")
 	fmt.Println("\tGather [HASH]")
 	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	return ""
 }
 
-func (dispatcher commandDispatcher) GatherDesc(args []string) {
+func (dispatcher CommandDispatcher) GatherDesc() string {
 	fmt.Println("Gather")
 	fmt.Println("\tGather information from the current client or the client with hash provided")
+	return ""
 }

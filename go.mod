@@ -29,6 +29,7 @@ require (
 	github.com/json-iterator/go v1.1.10 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/lithammer/fuzzysearch v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/onsi/gomega v1.11.0 // indirect
@@ -47,7 +48,6 @@ require (
 	golang.org/x/oauth2 v0.0.0-20210313182246-cd4f82c27b84 // indirect
 	golang.org/x/sys v0.0.0-20210816074244-15123e1e1f71 // indirect
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
-	golang.org/x/text v0.3.6 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376
 	gopkg.in/yaml.v2 v2.4.0
