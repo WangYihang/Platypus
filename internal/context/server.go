@@ -473,12 +473,10 @@ func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
 		log.Error("Duplicated income connection detected!")
 
 		// Respond to termite client that the client is duplicated
-		client.EncoderLock.Lock()
-		err := client.Encoder.Encode(message.Message{
+		err := client.Send(message.Message{
 			Type: message.DUPLICATED_CLIENT,
 			Body: message.BodyDuplicateClient{},
 		})
-		client.EncoderLock.Unlock()
 		if err != nil {
 			// TODO: handle network error
 			log.Error("Network error: %s", err)
@@ -497,11 +495,9 @@ func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
 
 func TermiteMessageDispatcher(client *TermiteClient) {
 	for {
-		msg := &message.Message{}
+		msg := message.Message{}
 		// Read message
-		client.DecoderLock.Lock()
-		err := client.Decoder.Decode(msg)
-		client.DecoderLock.Unlock()
+		err := client.Recv(&msg)
 		if err != nil {
 			log.Error("Read from client %s failed", client.OnelineDesc())
 			Ctx.DeleteTermiteClient(client)
@@ -512,7 +508,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 		switch msg.Type {
 		case message.STDIO:
 			key = msg.Body.(*message.BodyStdio).Key
-			if process, exists := client.Processes[key]; exists {
+			if process, exists := client.processes[key]; exists {
 				if process.WebSocket != nil {
 					process.WebSocket.WriteBinary([]byte("0" + string(msg.Body.(*message.BodyStdio).Data)))
 				} else {
@@ -523,27 +519,27 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			}
 		case message.PROCESS_STARTED:
 			key = msg.Body.(*message.BodyProcessStarted).Key
-			if process, exists := client.Processes[key]; exists {
+			if process, exists := client.processes[key]; exists {
 				process.Pid = msg.Body.(*message.BodyProcessStarted).Pid
 				process.State = started
 				log.Success("Process (%d) started", process.Pid)
 				if process.WebSocket != nil {
-					client.CurrentProcessKey = key
+					client.currentProcessKey = key
 				}
 			} else {
 				log.Debug("No such key: %s", key)
 			}
 		case message.PROCESS_STOPED:
 			key = msg.Body.(*message.BodyProcessStoped).Key
-			if process, exists := client.Processes[key]; exists {
+			if process, exists := client.processes[key]; exists {
 				code := msg.Body.(*message.BodyProcessStoped).Code
 				process.State = terminated
-				delete(client.Processes, key)
+				delete(client.processes, key)
 				log.Error("Process (%d) stop: %d", process.Pid, code)
 				// Close websocket when the process stoped
 				if process.WebSocket != nil {
 					process.WebSocket.Close()
-					client.CurrentProcessKey = ""
+					client.currentProcessKey = ""
 				}
 			} else {
 				log.Debug("No such key: %s", key)
@@ -558,14 +554,12 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 						n, err := (*ti.Conn).Read(buffer)
 						if err != nil {
 							log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
-							ti.Termite.EncoderLock.Lock()
-							ti.Termite.Encoder.Encode(message.Message{
+							ti.Termite.Send(message.Message{
 								Type: message.PULL_TUNNEL_DISCONNECT,
 								Body: message.BodyPullTunnelDisconnect{
 									Token: token,
 								},
 							})
-							ti.Termite.EncoderLock.Unlock()
 							(*ti.Conn).Close()
 							break
 						} else {
@@ -613,58 +607,50 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				conn, err := net.Dial("tcp", tc.Address)
 				if err != nil {
 					log.Error("Connecting to %s failed: %s", tc.Address, err.Error())
-					tc.Termite.EncoderLock.Lock()
-					tc.Termite.Encoder.Encode(message.Message{
+					tc.Termite.Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
 							Token:  token,
 							Reason: err.Error(),
 						},
 					})
-					tc.Termite.EncoderLock.Unlock()
 				} else {
 					log.Success("Connecting to %s succeed", tc.Address)
 					Ctx.PushTunnelInstance[token] = PushTunnelInstance{
 						Termite: tc.Termite,
 						Conn:    &conn,
 					}
-					tc.Termite.EncoderLock.Lock()
-					tc.Termite.Encoder.Encode(message.Message{
+					tc.Termite.Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECTED,
 						Body: message.BodyPushTunnelConnected{
 							Token: token,
 						},
 					})
-					tc.Termite.EncoderLock.Unlock()
 					go func() {
 						for {
 							buffer := make([]byte, 0x400)
 							n, err := conn.Read(buffer)
 							if err != nil {
 								log.Debug("Reading from %s failed: %s", tc.Address, err.Error())
-								tc.Termite.EncoderLock.Lock()
-								tc.Termite.Encoder.Encode(message.Message{
+								tc.Termite.Send(message.Message{
 									Type: message.PUSH_TUNNEL_DISCONNECTED,
 									Body: message.BodyPushTunnelDisonnected{
 										Token:  token,
 										Reason: err.Error(),
 									},
 								})
-								tc.Termite.EncoderLock.Unlock()
 								conn.Close()
 								delete(Ctx.PushTunnelInstance, token)
 								break
 							} else {
 								log.Debug("%d bytes read from %s", n, tc.Address)
-								tc.Termite.EncoderLock.Lock()
-								tc.Termite.Encoder.Encode(message.Message{
+								tc.Termite.Send(message.Message{
 									Type: message.PUSH_TUNNEL_DATA,
 									Body: message.BodyPushTunnelData{
 										Token: token,
 										Data:  buffer[0:n],
 									},
 								})
-								tc.Termite.EncoderLock.Unlock()
 							}
 						}
 					}()
@@ -717,15 +703,13 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
 				_, err := (*ti.Conn).Write(data)
 				if err != nil {
-					ti.Termite.EncoderLock.Lock()
-					ti.Termite.Encoder.Encode(message.Message{
+					ti.Termite.Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
 							Token:  token,
 							Reason: err.Error(),
 						},
 					})
-					ti.Termite.EncoderLock.Unlock()
 					(*ti.Conn).Close()
 					delete(Ctx.PushTunnelInstance, token)
 				}

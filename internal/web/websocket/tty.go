@@ -83,7 +83,7 @@ func CreateTTYWebSocketServer() *melody.Melody {
 				State:         context.StartRequested,
 				WebSocket:     s,
 			}
-			currentTermite.Processes[key] = &process
+			currentTermite.AddProcess(key, &process)
 			return
 		}
 	})
@@ -131,15 +131,13 @@ func CreateTTYWebSocketServer() *melody.Melody {
 				body := msg[1:]
 				switch opcode {
 				case '0': // INPUT '0'
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.STDIO,
 						Body: message.BodyStdio{
 							Key:  key.(string),
 							Data: body,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 					if err != nil {
 						// Network
 						log.Error("Network error: %s", err)
@@ -149,8 +147,7 @@ func CreateTTYWebSocketServer() *melody.Melody {
 					var ws ui.WindowSize
 					json.Unmarshal(body, &ws)
 
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.WINDOW_SIZE,
 						Body: message.BodyWindowSize{
 							Key:     key.(string),
@@ -158,7 +155,6 @@ func CreateTTYWebSocketServer() *melody.Melody {
 							Rows:    ws.Rows,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 
 					if err != nil {
 						// Network
@@ -173,8 +169,7 @@ func CreateTTYWebSocketServer() *melody.Melody {
 					var ws ui.WindowSize
 					json.Unmarshal([]byte(msg), &ws)
 
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.WINDOW_SIZE,
 						Body: message.BodyWindowSize{
 							Key:     key.(string),
@@ -182,7 +177,6 @@ func CreateTTYWebSocketServer() *melody.Melody {
 							Rows:    ws.Rows,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 
 					if err != nil {
 						// Network
