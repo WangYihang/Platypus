@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3
+	github.com/akamensky/argparse v1.3.1 // indirect
 	github.com/appleboy/gin-jwt/v2 v2.6.4
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect

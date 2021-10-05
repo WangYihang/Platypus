@@ -60,3 +60,16 @@ func BinaryFileSystem(root string) *binaryFileSystem {
 		fs,
 	}
 }
+
+func AppendFile(path string, content []byte) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	if _, err = f.Write(content); err != nil {
+		panic(err)
+	}
+}

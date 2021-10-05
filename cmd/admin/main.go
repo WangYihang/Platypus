@@ -1,21 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
-	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
+	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/suggest"
 	prompt "github.com/c-bata/go-prompt"
 	"github.com/c-bata/go-prompt/completer"
 	"github.com/google/shlex"
 	"github.com/gorilla/websocket"
-	"github.com/imroc/req"
 	"golang.org/x/term"
 )
 
@@ -52,63 +53,35 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 }
 
 func Executor(text string) {
+	// Save into history
+	AppendHistory(ctx.GetHistoryFilepath(), text)
+	// Execute
 	arguments, _ := shlex.Split(text)
 	if len(arguments) > 0 {
 		command := arguments[0]
 		if val, ok := suggest.GetMetaCommandsMap()[strings.ToLower(command)]; ok {
-			val.(meta.MetaCommand).Execute(arguments[1:])
+			val.(meta.MetaCommand).Execute(arguments)
 		}
 	}
 }
 
-type LoginResponse struct {
-	Code   int    `json:"code"`
-	Expire string `json:"expire"`
-	Token  string `json:"token"`
+func AppendHistory(path string, content string) {
+	fs.AppendFile(path, []byte(content+"\n"))
 }
 
-type Response struct {
-	Status bool `json:"status"`
-}
-
-type ServersResponse struct {
-	Response
-	server_controller.ServersWithDistributorAddress `json:"msg"`
-}
-type Runtime struct {
-	Token string
-}
-
-var rt Runtime
-
-func Auth() (string, error) {
-	header := req.Header{
-		"Accept": "application/json",
-	}
-	param := req.Param{
-		"username": "admin",
-		"password": "admin",
-	}
-	r, err := req.Post("http://127.0.0.1:7331/login", header, param)
+func LoadHistory(path string) []string {
+	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return []string{}
 	}
-	responseData := LoginResponse{}
-	r.ToJSON(&responseData)
-	rt.Token = responseData.Token
-	return responseData.Token, nil
-}
-
-func GetServers() ServersResponse {
-	authedHeader := req.Header{
-		"Accept":        "application/json",
-		"Authorization": fmt.Sprintf("Bearer %s", rt.Token),
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanLines)
+	var text []string
+	for scanner.Scan() {
+		text = append(text, scanner.Text())
 	}
-	r, _ := req.Get("http://127.0.0.1:7331/api/v1/servers", authedHeader)
-	xr := ServersResponse{}
-	r.ToJSON(&xr)
-	log.Info("%+v", xr)
-	return xr
+	defer file.Close()
+	return text
 }
 
 func StartCli() {
@@ -117,12 +90,12 @@ func StartCli() {
 		fmt.Println("error", err)
 		os.Exit(1)
 	}
-
 	p := prompt.New(
 		Executor,
 		c.Complete,
 		prompt.OptionTitle("platypus-admin: interactive platypus client"),
 		prompt.OptionPrefix(">> "),
+		prompt.OptionHistory(LoadHistory(ctx.GetHistoryFilepath())),
 		prompt.OptionInputTextColor(prompt.Yellow),
 		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
 	)
@@ -134,7 +107,7 @@ func Interact(hash string) {
 	log.Info("connecting to %s", u.String())
 	authedHeader := http.Header{}
 	authedHeader.Add("Accept", "application/json")
-	authedHeader.Add("Authorization", fmt.Sprintf("Bearer %s", rt.Token))
+	authedHeader.Add("Authorization", fmt.Sprintf("Bearer %s", ctx.Ctx.Token))
 
 	fmt.Println(u.String())
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), authedHeader)
@@ -189,11 +162,5 @@ func Interact(hash string) {
 }
 
 func main() {
-	token, err := Auth()
-	if err != nil {
-		log.Error(err.Error())
-		return
-	}
-	rt.Token = token
 	StartCli()
 }

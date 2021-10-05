@@ -6,6 +6,7 @@ import (
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/auth"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/connect"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/info"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/run"
 	"github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
@@ -17,6 +18,7 @@ func GetMetaCommandsMap() map[string]interface{} {
 		"auth":    auth.Command{},
 		"connect": connect.Command{},
 		"run":     run.Command{},
+		"info":    info.Command{},
 	}
 }
 

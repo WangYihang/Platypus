@@ -8,6 +8,10 @@ import (
 
 type Command struct{}
 
+func (command Command) Name() string {
+	return "Run"
+}
+
 func (command Command) Help() string {
 	return "Run"
 }
@@ -22,7 +26,6 @@ func (command Command) Arguments() []meta.Argument {
 		{Name: "port", Desc: "port to bind", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "termite", Desc: "enable encryption by termite", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
 		{Name: "debug", Desc: "enable debug", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
-		{Name: "help", Desc: "print help information", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
 	}
 }
 
