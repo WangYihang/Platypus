@@ -40,8 +40,8 @@ type TCPServer struct {
 	Encrypted      bool                        `json:"encrypted"`
 	DisableHistory bool                        `json:"disable_history"`
 	PublicIP       string                      `json:"public_ip"`
-	hashFormat     string
-	stopped        chan struct{}
+	hashFormat     string                      `json:"-"`
+	stopped        chan struct{}               `json:"-"`
 }
 
 func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string) *TCPServer {

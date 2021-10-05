@@ -44,7 +44,7 @@ type Process struct {
 }
 
 type TermiteClient struct {
-	conn              net.Conn
+	conn              net.Conn            `json:"-"`
 	Hash              string              `json:"hash"`
 	Host              string              `json:"host"`
 	Port              uint16              `json:"port"`
@@ -58,14 +58,14 @@ type TermiteClient struct {
 	Python3           string              `json:"python3"`
 	TimeStamp         time.Time           `json:"timestamp"`
 	DisableHistory    bool                `json:"disable_hisory"`
-	server            *TCPServer
-	EncoderLock       *sync.Mutex
-	DecoderLock       *sync.Mutex
-	AtomLock          *sync.Mutex
-	Encoder           *gob.Encoder
-	Decoder           *gob.Decoder
-	Processes         map[string]*Process
-	CurrentProcessKey string
+	server            *TCPServer          `json:"-"`
+	EncoderLock       *sync.Mutex         `json:"-"`
+	DecoderLock       *sync.Mutex         `json:"-"`
+	AtomLock          *sync.Mutex         `json:"-"`
+	Encoder           *gob.Encoder        `json:"-"`
+	Decoder           *gob.Decoder        `json:"-"`
+	Processes         map[string]*Process `json:"-"`
+	CurrentProcessKey string              `json:"-"`
 }
 
 func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) *TermiteClient {
