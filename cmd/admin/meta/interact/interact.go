@@ -51,6 +51,7 @@ func interact(hash string) {
 	defer c.Close()
 
 	isClosed := false
+
 	c.SetCloseHandler(func(code int, text string) error {
 		isClosed = true
 		return nil
@@ -75,8 +76,9 @@ func interact(hash string) {
 			_, message, err := c.ReadMessage()
 			// opcode := message[0]
 			if err != nil {
+				isClosed = true
 				log.Info(err.Error())
-				continue
+				break
 			}
 			body := message[1:]
 			os.Stdout.Write(body)
@@ -91,7 +93,7 @@ func interact(hash string) {
 		n, err := os.Stdin.Read(buffer)
 		if err != nil {
 			log.Error(err.Error())
-			continue
+			break
 		}
 		if n > 0 {
 			message := make([]byte, 0)
