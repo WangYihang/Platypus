@@ -44,24 +44,28 @@ func (command Command) Execute(args []string) {
 	log.Info("TODO: print info of: %s", hash)
 }
 
-func (command Command) Suggest(name string) []prompt.Suggest {
+func (command Command) Suggest(name string, typed string) []prompt.Suggest {
 	if !ctx.IsValidToken(ctx.Ctx.Token) {
 		return []prompt.Suggest{}
 	}
-	suggests := []prompt.Suggest{}
-	for _, server := range server_api.GetServers().Servers {
-		var description string
-		if server.Encrypted {
-			description = fmt.Sprintf("%s:%d, %d clients (encrypted)", server.Host, server.Port, len(server.TermiteClients))
-		} else {
-			description = fmt.Sprintf("%s:%d, %d clients (plain)", server.Host, server.Port, len(server.Clients))
+	switch name {
+	case "hash":
+		suggests := []prompt.Suggest{}
+		for _, server := range server_api.GetServers().Servers {
+			var description string
+			if server.Encrypted {
+				description = fmt.Sprintf("%s:%d, %d clients (encrypted)", server.Host, server.Port, len(server.TermiteClients))
+			} else {
+				description = fmt.Sprintf("%s:%d, %d clients (plain)", server.Host, server.Port, len(server.Clients))
+			}
+			suggest := prompt.Suggest{
+				Text:        server.Hash,
+				Description: description,
+			}
+			suggests = append(suggests, suggest)
 		}
-		suggest := prompt.Suggest{
-			Text:        server.Hash,
-			Description: description,
-		}
-		suggests = append(suggests, suggest)
+		return suggests
+	default:
+		return []prompt.Suggest{}
 	}
-	return suggests
-
 }

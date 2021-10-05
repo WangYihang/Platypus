@@ -24,3 +24,41 @@ func GetServers() ServersResponse {
 	r.ToJSON(&sr)
 	return sr
 }
+
+type CompileResponse struct {
+	api.Response
+	Message string `json:"msg"`
+}
+
+func Compile(host string, port uint16, os string, arch string) string {
+	authedHeader := req.Header{
+		"Accept":        "application/json",
+		"Authorization": fmt.Sprintf("Bearer %s", ctx.Ctx.Token),
+	}
+	param := req.Param{
+		"host": host,
+		"port": port,
+		"os":   os,
+		"arch": arch,
+	}
+	r, _ := req.Post(fmt.Sprintf("http://%s:%d/api/v1/compile", ctx.Ctx.Host, ctx.Ctx.Port), authedHeader, param)
+	sr := CompileResponse{}
+	r.ToJSON(&sr)
+	return sr.Message
+}
+
+type DistributorPortResponse struct {
+	api.Response
+	Message uint16 `json:"msg"`
+}
+
+func GetDistribuorPort() uint16 {
+	authedHeader := req.Header{
+		"Accept":        "application/json",
+		"Authorization": fmt.Sprintf("Bearer %s", ctx.Ctx.Token),
+	}
+	r, _ := req.Get(fmt.Sprintf("http://%s:%d/api/v1/distport", ctx.Ctx.Host, ctx.Ctx.Port), authedHeader)
+	sr := DistributorPortResponse{}
+	r.ToJSON(&sr)
+	return sr.Message
+}

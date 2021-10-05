@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
@@ -26,6 +27,8 @@ func (command Command) Description() string {
 
 func (command Command) Arguments() []meta.Argument {
 	return []meta.Argument{
+		{Name: "host", Desc: "platypus restful api backend host", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
+		{Name: "port", Desc: "platypus restful api backend port", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "username", Desc: "platypus username", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "password", Desc: "platypus password", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 	}
@@ -68,6 +71,17 @@ func (command Command) Execute(args []string) {
 		log.Error(err.Error())
 		return
 	}
+
+	// Set host and port
+	host := *result["host"].(*string)
+	port, err := strconv.Atoi(*result["port"].(*string))
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	ctx.Ctx.Host = host
+	ctx.Ctx.Port = uint16(port)
+
 	username := *result["username"].(*string)
 	password := *result["password"].(*string)
 
@@ -87,6 +101,13 @@ func (command Command) Execute(args []string) {
 	}
 }
 
-func (command Command) Suggest(name string) []prompt.Suggest {
-	return []prompt.Suggest{}
+func (command Command) Suggest(name string, typed string) []prompt.Suggest {
+	switch name {
+	case "username":
+		return []prompt.Suggest{}
+	case "password":
+		return []prompt.Suggest{}
+	default:
+		return []prompt.Suggest{}
+	}
 }

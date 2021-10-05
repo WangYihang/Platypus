@@ -67,8 +67,8 @@ func Create() *jwt.GinJWTMiddleware {
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.JSON(code, gin.H{
-				"code":    code,
-				"message": message,
+				"status": false,
+				"msg":    message,
 			})
 		},
 		// TokenLookup is a string in the form of "<source>:<name>" that is used

@@ -16,7 +16,7 @@ vendor/
 
 # Binary files
 build/
-compile/
+compiled/
 static/
 
 # Config file

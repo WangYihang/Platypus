@@ -123,7 +123,7 @@ func GenerateDirFilename() (string, string, error) {
 
 func DoCompile(os_string string, arch string, host string, port uint16) (string, error) {
 	// Generate termite binary path & create folder
-	termiteFilepath := fmt.Sprintf("compile/%s/%s/%d/%s_%s", update.Version, host, port, os_string, arch)
+	termiteFilepath := fmt.Sprintf("compiled/%s/%s/%d/%s_%s", update.Version, host, port, os_string, arch)
 	termiteFileFolderpath := filepath.Dir(termiteFilepath)
 	if !fs.FileExists(termiteFileFolderpath) {
 		os.MkdirAll(termiteFileFolderpath, os.ModePerm)

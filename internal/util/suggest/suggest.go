@@ -3,9 +3,11 @@ package suggest
 import (
 	"strings"
 
+	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/auth"
-	"github.com/WangYihang/Platypus/cmd/admin/meta/connect"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/compile"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/exit"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/info"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/interact"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/run"
@@ -15,12 +17,19 @@ import (
 )
 
 func GetMetaCommandsMap() map[string]interface{} {
-	return map[string]interface{}{
-		"auth":     auth.Command{},
-		"connect":  connect.Command{},
-		"run":      run.Command{},
-		"info":     info.Command{},
-		"interact": interact.Command{},
+	if !ctx.IsValidToken(ctx.Ctx.Token) {
+		return map[string]interface{}{
+			"auth": auth.Command{},
+			"exit": exit.Command{},
+		}
+	} else {
+		return map[string]interface{}{
+			"run":      run.Command{},
+			"info":     info.Command{},
+			"interact": interact.Command{},
+			"compile":  compile.Command{},
+			"exit":     exit.Command{},
+		}
 	}
 }
 
@@ -60,25 +69,32 @@ func GetPreconfiguredArguments(command string) []meta.Argument {
 	return []meta.Argument{}
 }
 
-func GetArgumentsSuggestions(text string) []prompt.Suggest {
+func GetArgumentsSuggestions(before string, after string) []prompt.Suggest {
 	var suggests []prompt.Suggest
-	args, _ := shlex.Split(text)
+	breforeArgs, _ := shlex.Split(before)
+	wholeArgs, _ := shlex.Split(before + after)
 
-	if strings.HasSuffix(text, " ") {
-		args = append(args, "")
+	if strings.HasSuffix(before, " ") {
+		breforeArgs = append(breforeArgs, "")
 	}
 
-	command := args[0]
-	previousArgument := args[len(args)-1]
+	command := breforeArgs[0]
+	previousArgument := breforeArgs[len(breforeArgs)-1]
 	preconfiguredArguments := GetPreconfiguredArguments(command)
 
 	// Mode: Value suggestion
-	if len(args) > 1 {
-		previousPreviousArgument := args[len(args)-2]
+	if len(breforeArgs) > 1 {
+		previousPreviousArgument := breforeArgs[len(breforeArgs)-2]
 		for _, a := range preconfiguredArguments {
 			if "--"+a.Name == previousPreviousArgument && !a.IsFlag && a.SuggestFunc != nil {
-				suggests = append(suggests, a.SuggestFunc(a.Name)...)
-				return suggests
+				suggests = append(suggests, a.SuggestFunc(a.Name, previousArgument)...)
+				matchedSuggests := []prompt.Suggest{}
+				for _, suggest := range suggests {
+					if fuzzy.Match(previousArgument, suggest.Text) {
+						matchedSuggests = append(matchedSuggests, suggest)
+					}
+				}
+				return matchedSuggests
 			}
 		}
 	}
@@ -87,7 +103,7 @@ func GetArgumentsSuggestions(text string) []prompt.Suggest {
 	// eg: `--host 0.0.0.0 -`
 	for _, a := range preconfiguredArguments {
 		found := false
-		for _, arg := range args[1:] {
+		for _, arg := range wholeArgs[1:] {
 			if "--"+a.Name == arg {
 				if a.AllowRepeat {
 					// Arguments which is appeared and allow repeating

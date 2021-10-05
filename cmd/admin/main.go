@@ -11,18 +11,13 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/fs"
 	"github.com/WangYihang/Platypus/internal/util/suggest"
 	prompt "github.com/c-bata/go-prompt"
-	"github.com/c-bata/go-prompt/completer"
 	"github.com/google/shlex"
 )
 
-type Completer struct {
-	namespace string
-}
+type Completer struct{}
 
 func NewCompleter() (*Completer, error) {
-	return &Completer{
-		namespace: "admin",
-	}, nil
+	return &Completer{}, nil
 }
 
 func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
@@ -43,7 +38,7 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 		if !suggest.IsValidCommand(cmd) {
 			return []prompt.Suggest{}
 		}
-		return suggest.GetArgumentsSuggestions(text)
+		return suggest.GetArgumentsSuggestions(text, d.TextAfterCursor())
 	}
 }
 
@@ -88,11 +83,11 @@ func StartCli() {
 	p := prompt.New(
 		Executor,
 		c.Complete,
-		prompt.OptionTitle("platypus-admin: interactive platypus client"),
-		prompt.OptionPrefix(">> "),
+		// prompt.OptionTitle("platypus-admin: interactive platypus client"),
+		// prompt.OptionPrefix(">> "),
 		prompt.OptionHistory(LoadHistory(ctx.GetHistoryFilepath())),
-		prompt.OptionInputTextColor(prompt.Yellow),
-		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
+		// prompt.OptionInputTextColor(prompt.Yellow),
+		// prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
 	)
 	p.Run()
 }

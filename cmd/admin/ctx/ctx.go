@@ -6,9 +6,10 @@ import (
 )
 
 type Context struct {
-	Token string
-	Host  string
-	Port  uint16
+	Token    string
+	Host     string
+	Port     uint16
+	DistPort uint16
 }
 
 var Ctx Context

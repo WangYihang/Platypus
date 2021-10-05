@@ -33,7 +33,7 @@ func (command Command) Execute(args []string) {
 	log.Info("Executing Run: %v", args)
 }
 
-func (command Command) Suggest(name string) []prompt.Suggest {
+func (command Command) Suggest(name string, typed string) []prompt.Suggest {
 	switch name {
 	case "host":
 		return []prompt.Suggest{{Text: "192.168.1.1", Description: "eth0"}}

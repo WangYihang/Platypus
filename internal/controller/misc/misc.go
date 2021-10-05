@@ -1,6 +1,7 @@
 package misc
 
 import (
+	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/compiler"
 	"github.com/gin-gonic/gin"
 )
@@ -30,5 +31,12 @@ func CompileHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"status": true,
 		"msg":    relativePath,
+	})
+}
+
+func DistributorPortHandler(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"status": true,
+		"msg":    context.Ctx.Distributor.Port,
 	})
 }

@@ -120,29 +120,34 @@ func (command Command) Execute(args []string) {
 	interact(hash)
 }
 
-func (command Command) Suggest(name string) []prompt.Suggest {
+func (command Command) Suggest(name string, typed string) []prompt.Suggest {
 	if !ctx.IsValidToken(ctx.Ctx.Token) {
 		return []prompt.Suggest{}
 	}
-	suggests := []prompt.Suggest{}
-	for _, server := range server_api.GetServers().Servers {
-		if server.Encrypted {
-			for _, termite := range server.TermiteClients {
-				suggest := prompt.Suggest{
-					Text:        termite.Hash,
-					Description: termite.OnelineDesc(),
+	switch name {
+	case "hash":
+		suggests := []prompt.Suggest{}
+		for _, server := range server_api.GetServers().Servers {
+			if server.Encrypted {
+				for _, termite := range server.TermiteClients {
+					suggest := prompt.Suggest{
+						Text:        termite.Hash,
+						Description: termite.OnelineDesc(),
+					}
+					suggests = append(suggests, suggest)
 				}
-				suggests = append(suggests, suggest)
-			}
-		} else {
-			for _, client := range server.Clients {
-				suggest := prompt.Suggest{
-					Text:        client.Hash,
-					Description: client.OnelineDesc(),
+			} else {
+				for _, client := range server.Clients {
+					suggest := prompt.Suggest{
+						Text:        client.Hash,
+						Description: client.OnelineDesc(),
+					}
+					suggests = append(suggests, suggest)
 				}
-				suggests = append(suggests, suggest)
 			}
 		}
+		return suggests
+	default:
+		return []prompt.Suggest{}
 	}
-	return suggests
 }

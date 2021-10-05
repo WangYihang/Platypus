@@ -93,6 +93,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 		// Termite compiler
 		apiNeedAuth.POST("/compile", misc_controller.CompileHandler)
+		apiNeedAuth.GET("/distport", misc_controller.DistributorPortHandler)
 	}
 
 	// WebSocket

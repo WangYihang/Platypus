@@ -13,7 +13,7 @@ type Argument struct {
 	AllowRepeat bool
 	IsRequired  bool
 	Default     interface{}
-	SuggestFunc func(name string) []prompt.Suggest
+	SuggestFunc func(name string, typed string) []prompt.Suggest
 }
 
 type MetaCommand interface {
@@ -22,7 +22,7 @@ type MetaCommand interface {
 	Description() string
 	Arguments() []Argument
 	Execute([]string)
-	Suggest(name string) []prompt.Suggest
+	Suggest(name string, typed string) []prompt.Suggest
 }
 
 func ParseArguments(command MetaCommand, args []string) (map[string]interface{}, error) {

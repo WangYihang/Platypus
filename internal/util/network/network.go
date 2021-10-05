@@ -3,9 +3,11 @@ package network
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -82,4 +84,24 @@ func ParseHostPort(addr string) (string, uint16, error) {
 		return "", 0, err
 	}
 	return hp.Host, hp.Port, nil
+}
+
+func DownloadFile(url string, filepath string, mode int) error {
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
 }

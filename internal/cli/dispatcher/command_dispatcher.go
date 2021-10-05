@@ -3,9 +3,12 @@ package dispatcher
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
+	"strings"
 
+	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/readline"
 	"github.com/c-bata/go-prompt"
@@ -97,8 +100,8 @@ func filterInput(r rune) (rune, bool) {
 
 // REPL performs read / evaluate / print repeat
 func REPL() {
-	// // Register all commands
-	// completer := readline.NewPrefixCompleter()
+	// Register all commands
+	completer := readline.NewPrefixCompleter()
 	// children := []readline.PrefixCompleterInterface{}
 	// methods := reflection.GetAllMethods(CommandDispatcher{})
 	// for _, method := range methods {
@@ -109,44 +112,44 @@ func REPL() {
 	// }
 	// completer.SetChildren(children)
 
-	// // Construct the IO
-	// var err error
-	// readLineInstance, err = readline.NewEx(&readline.Config{
-	// 	Prompt:              context.Ctx.CommandPrompt,
-	// 	HistoryFile:         "/tmp/platypus.history",
-	// 	AutoComplete:        completer,
-	// 	InterruptPrompt:     "^C",
-	// 	EOFPrompt:           "exit",
-	// 	HistorySearchFold:   true,
-	// 	FuncFilterInputRune: filterInput,
-	// })
+	// Construct the IO
+	var err error
+	readLineInstance, err = readline.NewEx(&readline.Config{
+		Prompt:              context.Ctx.CommandPrompt,
+		HistoryFile:         "/tmp/platypus.history",
+		AutoComplete:        completer,
+		InterruptPrompt:     "^C",
+		EOFPrompt:           "exit",
+		HistorySearchFold:   true,
+		FuncFilterInputRune: filterInput,
+	})
 
-	// if err != nil {
-	// 	log.Error(err.Error())
-	// 	return
-	// }
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
 
-	// context.Ctx.RLInstance = readLineInstance
+	context.Ctx.RLInstance = readLineInstance
 
-	// log.Logger.SetOutput(readLineInstance.Stderr())
+	log.Logger.SetOutput(readLineInstance.Stderr())
 
-	// // Command loop
-	// for {
-	// 	line, err := readLineInstance.Readline()
-	// 	if err == readline.ErrInterrupt {
-	// 		if len(line) == 0 {
-	// 			break
-	// 		} else {
-	// 			continue
-	// 		}
-	// 	} else if err == io.EOF {
-	// 		break
-	// 	}
-	// 	line = strings.TrimSpace(line)
-	// 	method, args := parseInput(line)
-	// 	if method == "" {
-	// 		continue
-	// 	}
-	// 	reflection.Invoke(CommandDispatcher{}, method, args)
-	// }
+	// Command loop
+	for {
+		line, err := readLineInstance.Readline()
+		if err == readline.ErrInterrupt {
+			if len(line) == 0 {
+				break
+			} else {
+				continue
+			}
+		} else if err == io.EOF {
+			break
+		}
+		line = strings.TrimSpace(line)
+		method, args := parseInput(line)
+		if method == "" {
+			continue
+		}
+		log.Info("%v %v %v", CommandDispatcher{}, method, args)
+	}
 }
