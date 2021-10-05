@@ -33,6 +33,7 @@ func (command Command) Arguments() []meta.Argument {
 		{Name: "os", Desc: "platypus termite binary os", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "arch", Desc: "platypus termite binary arch", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "save", Desc: "save binary", IsFlag: false, IsRequired: false, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
+		{Name: "upx", Desc: "compress with upx", IsFlag: false, IsRequired: false, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 	}
 }
 
@@ -55,10 +56,20 @@ func (command Command) Execute(args []string) {
 	os := *result["os"].(*string)
 	arch := *result["arch"].(*string)
 	save := *result["save"].(*string)
+	upx, err := strconv.Atoi(*result["upx"].(*string))
+	if err != nil {
+		log.Warn("Invalid upx level: %s, upx compression is disabled", *result["upx"].(*string))
+		upx = 0
+	}
 
 	// Do compile
 	log.Info("%s:%d-%s-%s compiling...", host, port, os, arch)
-	filename := server_api.Compile(host, uint16(port), os, arch)
+	filename, err := server_api.Compile(host, uint16(port), os, arch, upx)
+
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
 
 	// Get distribuotr port
 	distPort := server_api.GetDistribuorPort()
@@ -127,6 +138,19 @@ func (command Command) Suggest(name string, typed string) []prompt.Suggest {
 		}
 	case "save":
 		return []prompt.Suggest{}
+	case "upx":
+		return []prompt.Suggest{
+			{Text: "0", Description: "Disable upx compression"},
+			{Text: "9", Description: "level 9"},
+			{Text: "8", Description: "level 8 (default)"},
+			{Text: "7", Description: "level 7"},
+			{Text: "6", Description: "level 6"},
+			{Text: "5", Description: "level 5"},
+			{Text: "4", Description: "level 4"},
+			{Text: "3", Description: "level 3"},
+			{Text: "2", Description: "level 2"},
+			{Text: "1", Description: "level 1"},
+		}
 	default:
 		return []prompt.Suggest{}
 	}

@@ -914,7 +914,7 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 
 	// Step 2: Upx compression
 	c.NotifyWebSocketCompressingTermite(0)
-	if !compiler.Compress(filename) {
+	if !compiler.Compress(filename, 8) {
 		c.NotifyWebSocketCompressingTermite(-1)
 	} else {
 		c.NotifyWebSocketCompressingTermite(100)

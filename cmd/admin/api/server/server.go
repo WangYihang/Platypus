@@ -30,7 +30,7 @@ type CompileResponse struct {
 	Message string `json:"msg"`
 }
 
-func Compile(host string, port uint16, os string, arch string) string {
+func Compile(host string, port uint16, os string, arch string, upx int) (string, error) {
 	authedHeader := req.Header{
 		"Accept":        "application/json",
 		"Authorization": fmt.Sprintf("Bearer %s", ctx.Ctx.Token),
@@ -40,11 +40,16 @@ func Compile(host string, port uint16, os string, arch string) string {
 		"port": port,
 		"os":   os,
 		"arch": arch,
+		"upx":  upx,
 	}
 	r, _ := req.Post(fmt.Sprintf("http://%s:%d/api/v1/compile", ctx.Ctx.Host, ctx.Ctx.Port), authedHeader, param)
 	sr := CompileResponse{}
 	r.ToJSON(&sr)
-	return sr.Message
+	if sr.Status {
+		return sr.Message, nil
+	} else {
+		return "", fmt.Errorf(sr.Message)
+	}
 }
 
 type DistributorPortResponse struct {

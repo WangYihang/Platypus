@@ -152,7 +152,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 		c.Hash = c.makeHash(hashFormat)
 		if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
 			// Termite needs up to date
-			filename, _ := compiler.DoCompile(clientInfo.OS, c.Arch, clientInfo.PlatypusHost, c.server.Port)
+			filename, _ := compiler.DoCompile(clientInfo.OS, c.Arch, clientInfo.PlatypusHost, c.server.Port, 8)
 			c.EncoderLock.Lock()
 			c.Encoder.Encode(message.Message{
 				Type: message.UPDATE,

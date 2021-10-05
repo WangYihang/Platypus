@@ -32,7 +32,7 @@ func Compile(target string) bool {
 	return true
 }
 
-func Compress(target string) bool {
+func Compress(target string, level int) bool {
 	upx, err := exec.LookPath("upx")
 	if err != nil {
 		log.Error("No upx executable found")
@@ -40,7 +40,7 @@ func Compress(target string) bool {
 	}
 	log.Success("Upx detected: %s", upx)
 	log.Info("Compressing %s via upx", target)
-	output, err := exec.Command("upx", target).Output()
+	output, err := exec.Command("upx", fmt.Sprintf("-%d", level), target).Output()
 	if err != nil {
 		log.Error("Compressing %s failed: %s, %s", target, err, output)
 		return false
@@ -121,7 +121,7 @@ func GenerateDirFilename() (string, string, error) {
 	return dir, filepath, nil
 }
 
-func DoCompile(os_string string, arch string, host string, port uint16) (string, error) {
+func DoCompile(os_string string, arch string, host string, port uint16, upx int) (string, error) {
 	// Generate termite binary path & create folder
 	termiteFilepath := fmt.Sprintf("compiled/%s/%s/%d/%s_%s", update.Version, host, port, os_string, arch)
 	termiteFileFolderpath := filepath.Dir(termiteFilepath)
@@ -139,7 +139,11 @@ func DoCompile(os_string string, arch string, host string, port uint16) (string,
 			Compress is disabled because the gspt package cannot work under upx compression
 			See: https://github.com/erikdubbelboer/gspt/issues/15
 		*/
-		// Compress(termiteFilepath)
+		// 0 for disable upx compression
+		// 1-9 for upx compression level
+		if upx > 0 {
+			Compress(termiteFilepath, upx)
+		}
 	}
 
 	// Generate termite softlink path & create folder
