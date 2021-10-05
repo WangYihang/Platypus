@@ -19,7 +19,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/util/log"
 	oss "github.com/WangYihang/Platypus/internal/util/os"
 	"github.com/WangYihang/Platypus/internal/util/str"
-	"github.com/WangYihang/Platypus/internal/util/ui"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/vbauerster/mpb/v6"

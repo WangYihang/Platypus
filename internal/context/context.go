@@ -52,7 +52,7 @@ type Context struct {
 	PushTunnelConfig   map[string]PushTunnelConfig
 	PushTunnelInstance map[string]PushTunnelInstance
 	Socks5Servers      map[string](*socks5.Server)
-	MessageQueue       map[string](chan *message.Message)
+	MessageQueue       map[string](chan message.Message)
 	// Set later in platypus.go
 	Distributor *Distributor
 	RESTful     *gin.Engine
@@ -76,7 +76,7 @@ func CreateContext() {
 			PushTunnelConfig:   make(map[string]PushTunnelConfig),
 			PushTunnelInstance: make(map[string]PushTunnelInstance),
 			Socks5Servers:      make(map[string]*socks5.Server),
-			MessageQueue:       make(map[string](chan *message.Message)),
+			MessageQueue:       make(map[string](chan message.Message)),
 		}
 	}
 	// Signal Handler
@@ -203,17 +203,16 @@ func Shutdown() {
 
 func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
 	log.Info("Mapping local (%s) to remote (%s)", local_address, remote_address)
-	termite.AtomLock.Lock()
-	defer func() { termite.AtomLock.Unlock() }()
 
-	termite.EncoderLock.Lock()
-	err := termite.Encoder.Encode(message.Message{
+	termite.LockAtom()
+	defer termite.UnlockAtom()
+
+	err := termite.Send(message.Message{
 		Type: message.PUSH_TUNNEL_CREATE,
 		Body: message.BodyPushTunnelCreate{
 			Address: remote_address,
 		},
 	})
-	termite.EncoderLock.Unlock()
 
 	if err != nil {
 		log.Error(err.Error())
@@ -245,15 +244,13 @@ func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 
 			token := str.RandomString(0x10)
 
-			termite.EncoderLock.Lock()
-			err := termite.Encoder.Encode(message.Message{
+			err := termite.Send(message.Message{
 				Type: message.PULL_TUNNEL_CONNECT,
 				Body: message.BodyPullTunnelConnect{
 					Token:   token,
 					Address: remote_address,
 				},
 			})
-			termite.EncoderLock.Unlock()
 
 			if err == nil {
 				Ctx.PullTunnelInstance[token] = PullTunnelInstance{
@@ -266,18 +263,16 @@ func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 }
 
 func WriteTunnel(termite *TermiteClient, token string, data []byte) {
-	termite.AtomLock.Lock()
-	defer func() { termite.AtomLock.Unlock() }()
+	termite.LockAtom()
+	defer termite.UnlockAtom()
 
-	termite.EncoderLock.Lock()
-	err := termite.Encoder.Encode(message.Message{
+	err := termite.Send(message.Message{
 		Type: message.PULL_TUNNEL_DATA,
 		Body: message.BodyPullTunnelData{
 			Token: token,
 			Data:  data,
 		},
 	})
-	termite.EncoderLock.Unlock()
 
 	if err != nil {
 		log.Error("Network error: %s", err)
@@ -301,33 +296,3 @@ func StartSocks5Server(local_address string) error {
 	log.Success("Socks server started at: %s", local_address)
 	return nil
 }
-
-// func DeletePullTunnelConfig(local_host string, local_port uint16, remote_host string, remote_port uint16) {
-// 	local_address := fmt.Sprintf("%s:%d", local_host, local_port)
-// 	remote_address := fmt.Sprintf("%s:%d", remote_host, remote_port)
-
-// 	log.Info("Unmapping from remote %s to local %s", remote_address, local_address)
-
-// 	if tc, exists := Ctx.PullTunnelConfig[local_address]; exists {
-// 		c.AtomLock.Lock()
-// 		defer func() { c.AtomLock.Unlock() }()
-
-// 		c.EncoderLock.Lock()
-// 		err := c.Encoder.Encode(message.Message{
-// 			Type: message.PULL_TUNNEL_DELETE,
-// 			Body: message.BodyPullTunnelDelete{
-// 				Key:         key,
-// 				TermiteHash: c.Hash,
-// 			},
-// 		})
-// 		c.EncoderLock.Unlock()
-
-// 		if err != nil {
-// 			log.Error("Network error: %s", err)
-// 		} else {
-// 			delete(Ctx.PullTunnelConfig, local_address)
-// 		}
-// 	} else {
-// 		log.Info("No such tunnel from remote %s to local %s", remote_address, local_address)
-// 	}
-// }

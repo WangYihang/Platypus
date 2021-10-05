@@ -43,7 +43,7 @@ type Process struct {
 }
 
 type TermiteClient struct {
-	conn              net.Conn
+	conn              net.Conn            `json:"-"`
 	Hash              string              `json:"hash"`
 	Host              string              `json:"host"`
 	Port              uint16              `json:"port"`
@@ -56,14 +56,14 @@ type TermiteClient struct {
 	Python3           string              `json:"python3"`
 	TimeStamp         time.Time           `json:"timestamp"`
 	DisableHistory    bool                `json:"disable_hisory"`
-	server            *TCPServer
-	EncoderLock       *sync.Mutex
-	DecoderLock       *sync.Mutex
-	AtomLock          *sync.Mutex
-	Encoder           *gob.Encoder
-	Decoder           *gob.Decoder
-	Processes         map[string]*Process
-	CurrentProcessKey string
+	server            *TCPServer          `json:"-"`
+	encoderLock       *sync.Mutex         `json:"-"`
+	decoderLock       *sync.Mutex         `json:"-"`
+	atomLock          *sync.Mutex         `json:"-"`
+	encoder           *gob.Encoder        `json:"-"`
+	decoder           *gob.Decoder        `json:"-"`
+	processes         map[string]*Process `json:"-"`
+	currentProcessKey string              `json:"-"`
 }
 
 func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) *TermiteClient {
@@ -82,15 +82,39 @@ func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) 
 		Python3:           "",
 		TimeStamp:         time.Now(),
 		server:            server,
-		EncoderLock:       new(sync.Mutex),
-		DecoderLock:       new(sync.Mutex),
-		AtomLock:          new(sync.Mutex),
-		Encoder:           gob.NewEncoder(conn),
-		Decoder:           gob.NewDecoder(conn),
-		Processes:         map[string]*Process{},
-		CurrentProcessKey: "",
+		encoderLock:       new(sync.Mutex),
+		decoderLock:       new(sync.Mutex),
+		atomLock:          new(sync.Mutex),
+		encoder:           gob.NewEncoder(conn),
+		decoder:           gob.NewDecoder(conn),
+		processes:         map[string]*Process{},
+		currentProcessKey: "",
 		DisableHistory:    disableHistory,
 	}
+}
+
+func (c *TermiteClient) LockAtom() {
+	c.atomLock.Lock()
+}
+
+func (c *TermiteClient) UnlockAtom() {
+	c.atomLock.Unlock()
+}
+
+func (c *TermiteClient) LockEncoder() {
+	c.encoderLock.Lock()
+}
+
+func (c *TermiteClient) UnlockEncoder() {
+	c.encoderLock.Unlock()
+}
+
+func (c *TermiteClient) LockDecoder() {
+	c.decoderLock.Lock()
+}
+
+func (c *TermiteClient) UnlockDecoder() {
+	c.decoderLock.Unlock()
 }
 
 func (c *TermiteClient) GetHashFormat() string {
@@ -98,27 +122,23 @@ func (c *TermiteClient) GetHashFormat() string {
 }
 
 func (c *TermiteClient) StartSocks5Server() {
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	c.Send(message.Message{
 		Type: message.DYNAMIC_TUNNEL_CREATE,
 		Body: message.BodyDynamicTunnelCreate{},
 	})
-	c.EncoderLock.Unlock()
 }
 
 func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	log.Info("Gathering information from termite client...")
 
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
+	c.LockAtom()
+	defer c.UnlockAtom()
 
 	// Send gather info request
-	c.EncoderLock.Lock()
-	err := c.Encoder.Encode(message.Message{
+	err := c.Send(message.Message{
 		Type: message.GET_CLIENT_INFO,
 		Body: message.BodyGetClientInfo{},
 	})
-	c.EncoderLock.Unlock()
 
 	if err != nil {
 		// Network
@@ -127,10 +147,8 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	}
 
 	// Read client response
-	msg := &message.Message{}
-	c.DecoderLock.Lock()
-	err = c.Decoder.Decode(msg)
-	c.DecoderLock.Unlock()
+	msg := message.Message{}
+	c.Recv(&msg)
 
 	if err != nil {
 		log.Error("%s", err)
@@ -149,15 +167,13 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 		c.Hash = c.makeHash(hashFormat)
 		if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
 			// Termite needs up to date
-			c.EncoderLock.Lock()
-			c.Encoder.Encode(message.Message{
+			c.Send(message.Message{
 				Type: message.UPDATE,
 				Body: message.BodyUpdate{
 					DistributorURL: Ctx.Distributor.Url,
 					Version:        update.Version,
 				},
 			})
-			c.EncoderLock.Unlock()
 			return false
 		}
 		return true
@@ -167,21 +183,33 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	}
 }
 
-func (c *TermiteClient) NotifyPlatypusWindowSize(columns int, rows int) {
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
+func (c *TermiteClient) Send(message message.Message) error {
+	c.LockEncoder()
+	err := c.encoder.Encode(message)
+	c.UnlockEncoder()
+	return err
+}
 
-	if _, exists := c.Processes[c.CurrentProcessKey]; exists {
-		c.EncoderLock.Lock()
-		err := c.Encoder.Encode(message.Message{
+func (c *TermiteClient) Recv(msg *message.Message) error {
+	c.LockDecoder()
+	err := c.decoder.Decode(msg)
+	c.UnlockDecoder()
+	return err
+}
+
+func (c *TermiteClient) NotifyPlatypusWindowSize(columns int, rows int) {
+	c.LockAtom()
+	defer c.UnlockAtom()
+
+	if _, exists := c.processes[c.currentProcessKey]; exists {
+		err := c.Send(message.Message{
 			Type: message.WINDOW_SIZE,
 			Body: message.BodyWindowSize{
-				Key:     c.CurrentProcessKey,
+				Key:     c.currentProcessKey,
 				Columns: columns,
 				Rows:    rows,
 			},
 		})
-		c.EncoderLock.Unlock()
 
 		if err != nil {
 			// Network
@@ -193,19 +221,17 @@ func (c *TermiteClient) NotifyPlatypusWindowSize(columns int, rows int) {
 }
 
 func (c *TermiteClient) RequestTerminate(key string) {
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
+	c.LockAtom()
+	defer c.UnlockAtom()
 
 	// Find process
-	if process, exists := c.Processes[key]; exists {
-		c.EncoderLock.Lock()
-		err := c.Encoder.Encode(message.Message{
+	if process, exists := c.processes[key]; exists {
+		err := c.Send(message.Message{
 			Type: message.PROCESS_TERMINATE,
 			Body: message.BodyTerminateProcess{
 				Key: key,
 			},
 		})
-		c.EncoderLock.Unlock()
 
 		process.State = terminatRequested
 
@@ -219,11 +245,10 @@ func (c *TermiteClient) RequestTerminate(key string) {
 }
 
 func (c *TermiteClient) RequestStartProcess(path string, columns int, rows int, key string) {
-	c.AtomLock.Lock()
-	defer func() { c.AtomLock.Unlock() }()
+	c.LockAtom()
+	defer c.UnlockAtom()
 
-	c.EncoderLock.Lock()
-	err := c.Encoder.Encode(message.Message{
+	err := c.Send(message.Message{
 		Type: message.PROCESS_START,
 		Body: message.BodyStartProcess{
 			Path:          path,
@@ -232,7 +257,6 @@ func (c *TermiteClient) RequestStartProcess(path string, columns int, rows int, 
 			Key:           key,
 		},
 	})
-	c.EncoderLock.Unlock()
 
 	if err != nil {
 		// Network
@@ -250,20 +274,18 @@ func (c *TermiteClient) InteractWith(key string) {
 	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 
 	for {
-		process, exists := c.Processes[key]
+		process, exists := c.processes[key]
 		if exists && process.State != terminated {
 			buffer := make([]byte, 0x10)
 			n, _ := os.Stdin.Read(buffer)
 			if n > 0 {
-				c.EncoderLock.Lock()
-				err = c.Encoder.Encode(message.Message{
+				err = c.Send(message.Message{
 					Type: message.STDIO,
 					Body: message.BodyStdio{
 						Key:  key,
 						Data: buffer[0:n],
 					},
 				})
-				c.EncoderLock.Unlock()
 				if err != nil {
 					// Network
 					// TODO: Handle network error
@@ -292,23 +314,24 @@ func (c *TermiteClient) StartShell() {
 		State:         startRequested,
 		WebSocket:     nil,
 	}
-	c.Processes[key] = &process
+	c.processes[key] = &process
 
 	c.InteractWith(key)
 }
 
 func (c *TermiteClient) System(command string) string {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	Ctx.MessageQueue[token] = make(chan message.Message)
+	err := c.Send(message.Message{
 		Type: message.CALL_SYSTEM,
 		Body: message.BodyCallSystem{
 			Command: command,
 			Token:   token,
 		},
 	})
-	c.EncoderLock.Unlock()
+	if err != nil {
+		return err.Error()
+	}
 	msg := <-Ctx.MessageQueue[token]
 
 	if msg.Type == message.CALL_SYSTEM_RESULT {
@@ -321,16 +344,14 @@ func (c *TermiteClient) System(command string) string {
 
 func (c *TermiteClient) FileSize(path string) (int64, error) {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	Ctx.MessageQueue[token] = make(chan message.Message)
+	c.Send(message.Message{
 		Type: message.FILE_SIZE,
 		Body: message.BodyFileSize{
 			Path:  path,
 			Token: token,
 		},
 	})
-	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
 
 	if msg.Type == message.FILE_SIZE_RESULT {
@@ -347,10 +368,9 @@ func (c *TermiteClient) FileSize(path string) (int64, error) {
 
 func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte, error) {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
+	Ctx.MessageQueue[token] = make(chan message.Message)
 
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	c.Send(message.Message{
 		Type: message.READ_FILE_EX,
 		Body: message.BodyReadFileEx{
 			Path:  path,
@@ -359,7 +379,6 @@ func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte
 			Token: token,
 		},
 	})
-	c.EncoderLock.Unlock()
 
 	msg := <-Ctx.MessageQueue[token]
 	if msg.Type == message.READ_FILE_EX_RESULT {
@@ -372,16 +391,14 @@ func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte
 
 func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	Ctx.MessageQueue[token] = make(chan message.Message)
+	c.Send(message.Message{
 		Type: message.READ_FILE,
 		Body: message.BodyReadFile{
 			Path:  path,
 			Token: token,
 		},
 	})
-	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
 
 	if msg.Type == message.READ_FILE_RESULT {
@@ -394,9 +411,8 @@ func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 
 func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	Ctx.MessageQueue[token] = make(chan message.Message)
+	c.Send(message.Message{
 		Type: message.WRITE_FILE,
 		Body: message.BodyWriteFile{
 			Path:    path,
@@ -404,7 +420,6 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 			Token:   token,
 		},
 	})
-	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
 
 	if msg.Type == message.WRITE_FILE_RESULT {
@@ -417,9 +432,8 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 
 func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
 	token := uuid.New().String()
-	Ctx.MessageQueue[token] = make(chan *message.Message)
-	c.EncoderLock.Lock()
-	c.Encoder.Encode(message.Message{
+	Ctx.MessageQueue[token] = make(chan message.Message)
+	c.Send(message.Message{
 		Type: message.WRITE_FILE_EX,
 		Body: message.BodyWriteFileEx{
 			Path:    path,
@@ -427,7 +441,6 @@ func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
 			Token:   token,
 		},
 	})
-	c.EncoderLock.Unlock()
 	msg := <-Ctx.MessageQueue[token]
 
 	if msg.Type == message.WRITE_FILE_EX_RESULT {
@@ -556,4 +569,8 @@ func (c *TermiteClient) FullDesc() string {
 	addr := c.conn.RemoteAddr()
 	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s]", c.Hash, addr.Network(), addr.String(),
 		humanize.Time(c.TimeStamp), c.OS.String())
+}
+
+func (c *TermiteClient) AddProcess(key string, process *Process) {
+	c.processes[key] = process
 }

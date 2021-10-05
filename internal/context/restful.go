@@ -165,7 +165,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				State:         startRequested,
 				WebSocket:     s,
 			}
-			currentTermite.Processes[key] = &process
+			currentTermite.AddProcess(key, &process)
 			return
 		}
 	})
@@ -213,15 +213,13 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				body := msg[1:]
 				switch opcode {
 				case '0': // INPUT '0'
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.STDIO,
 						Body: message.BodyStdio{
 							Key:  key.(string),
 							Data: body,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 
 					if err != nil {
 						// Network
@@ -232,8 +230,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					var ws WindowSize
 					json.Unmarshal(body, &ws)
 
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.WINDOW_SIZE,
 						Body: message.BodyWindowSize{
 							Key:     key.(string),
@@ -241,7 +238,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 							Rows:    ws.Rows,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 
 					if err != nil {
 						// Network
@@ -256,8 +252,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					var ws WindowSize
 					json.Unmarshal([]byte(msg), &ws)
 
-					currentTermite.EncoderLock.Lock()
-					err := currentTermite.Encoder.Encode(message.Message{
+					err := currentTermite.Send(message.Message{
 						Type: message.WINDOW_SIZE,
 						Body: message.BodyWindowSize{
 							Key:     key.(string),
@@ -265,7 +260,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 							Rows:    ws.Rows,
 						},
 					})
-					currentTermite.EncoderLock.Unlock()
 
 					if err != nil {
 						// Network
