@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
@@ -75,6 +76,9 @@ func system(command string) (string, string, error) {
 }
 
 func Executor(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
 	// Save into history
 	AppendHistory(ctx.GetHistoryFilepath(), text)
 	// Execute
@@ -94,7 +98,7 @@ func Executor(text string) {
 }
 
 func AppendHistory(path string, content string) {
-	fs.AppendFile(path, []byte(content+"\n"))
+	fs.AppendFile(path, []byte(fmt.Sprintf("%d %s", time.Now().Unix(), content+"\n")))
 }
 
 func LoadHistory(path string) []string {
@@ -106,7 +110,11 @@ func LoadHistory(path string) []string {
 	scanner.Split(bufio.ScanLines)
 	var text []string
 	for scanner.Scan() {
-		text = append(text, scanner.Text())
+		line := scanner.Text()
+		parts := strings.Split(line, " ")
+		if len(parts) > 1 {
+			text = append(text, line[len(parts[0])+1:])
+		}
 	}
 	defer file.Close()
 	return text
@@ -125,6 +133,7 @@ func StartCli() {
 		prompt.OptionHistory(LoadHistory(ctx.GetHistoryFilepath())),
 	)
 	p.Run()
+	ctx.RestoreTermState()
 }
 
 func main() {
