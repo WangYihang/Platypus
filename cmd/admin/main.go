@@ -75,6 +75,7 @@ func LoadHistory(path string) []string {
 }
 
 func StartCli() {
+	ctx.SaveTermState()
 	c, err := NewCompleter()
 	if err != nil {
 		fmt.Println("error", err)
@@ -83,11 +84,7 @@ func StartCli() {
 	p := prompt.New(
 		Executor,
 		c.Complete,
-		// prompt.OptionTitle("platypus-admin: interactive platypus client"),
-		// prompt.OptionPrefix(">> "),
 		prompt.OptionHistory(LoadHistory(ctx.GetHistoryFilepath())),
-		// prompt.OptionInputTextColor(prompt.Yellow),
-		// prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
 	)
 	p.Run()
 }

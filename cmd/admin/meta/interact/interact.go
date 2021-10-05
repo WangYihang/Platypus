@@ -65,7 +65,6 @@ func interact(hash string) {
 
 	defer func() {
 		term.Restore(int(os.Stdin.Fd()), oldState)
-		log.Info("Restoring...")
 	}()
 
 	go func() {

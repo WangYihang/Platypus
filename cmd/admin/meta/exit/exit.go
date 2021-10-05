@@ -3,6 +3,7 @@ package exit
 import (
 	"os"
 
+	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/c-bata/go-prompt"
 )
@@ -26,6 +27,7 @@ func (command Command) Arguments() []meta.Argument {
 }
 
 func (command Command) Execute(args []string) {
+	ctx.RestoreTermState()
 	os.Exit(0)
 }
 

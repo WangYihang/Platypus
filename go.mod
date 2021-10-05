@@ -9,7 +9,7 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/c-bata/go-prompt v0.2.6 // indirect
+	github.com/c-bata/go-prompt v0.2.6
 	github.com/creack/pty v1.1.16
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
@@ -34,12 +34,10 @@ require (
 	github.com/lithammer/fuzzysearch v1.1.3
 	github.com/mattn/go-colorable v0.1.11 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
-	github.com/mattn/go-tty v0.0.3 // indirect
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/onsi/gomega v1.11.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	github.com/pkg/term v1.2.0-beta.2 // indirect
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/sevlyar/go-daemon v0.1.5
 	github.com/tidwall/pretty v1.0.1 // indirect
