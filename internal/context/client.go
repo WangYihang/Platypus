@@ -27,9 +27,9 @@ import (
 )
 
 type TCPClient struct {
-	conn              net.Conn
-	interactive       bool
-	ptyEstablished    bool
+	conn              net.Conn            `json:"-"`
+	interactive       bool                `json:"-"`
+	ptyEstablished    bool                `json:"-"`
 	GroupDispatch     bool                `json:"group_dispatch"`
 	Hash              string              `json:"hash"`
 	Host              string              `json:"host"`
@@ -41,12 +41,12 @@ type TCPClient struct {
 	Python2           string              `json:"python2"`
 	Python3           string              `json:"python3"`
 	TimeStamp         time.Time           `json:"timestamp"`
-	echoEnabled       bool
-	server            *TCPServer
-	readLock          *sync.Mutex
-	writeLock         *sync.Mutex
-	interacting       *sync.Mutex
-	mature            bool
+	echoEnabled       bool                `json:"-"`
+	server            *TCPServer          `json:"-"`
+	readLock          *sync.Mutex         `json:"-"`
+	writeLock         *sync.Mutex         `json:"-"`
+	interacting       *sync.Mutex         `json:"-"`
+	mature            bool                `json:"-"`
 }
 
 func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
