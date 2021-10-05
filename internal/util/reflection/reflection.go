@@ -6,7 +6,7 @@ import (
 
 func Invoke(any interface{}, name string, args ...interface{}) []reflect.Value {
 	params := make([]reflect.Value, len(args))
-	for i, _ := range args {
+	for i := range args {
 		params[i] = reflect.ValueOf(args[i])
 	}
 	return reflect.ValueOf(any).MethodByName(name).Call(params)

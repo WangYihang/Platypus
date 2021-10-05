@@ -1,7 +1,7 @@
 package run
 
 import (
-	"github.com/WangYihang/Platypus/internal/cmd"
+	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/c-bata/go-prompt"
 )
@@ -16,8 +16,8 @@ func (command Command) Description() string {
 	return "Run"
 }
 
-func (command Command) Arguments() []cmd.Argument {
-	return []cmd.Argument{
+func (command Command) Arguments() []meta.Argument {
+	return []meta.Argument{
 		{Name: "host", Desc: "network interface to bind", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "port", Desc: "port to bind", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: command.Suggest},
 		{Name: "termite", Desc: "enable encryption by termite", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},

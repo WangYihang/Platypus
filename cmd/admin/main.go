@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/cmd"
+	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/suggest"
@@ -56,7 +56,7 @@ func Executor(text string) {
 	if len(arguments) > 0 {
 		command := arguments[0]
 		if val, ok := suggest.GetMetaCommandsMap()[strings.ToLower(command)]; ok {
-			val.(cmd.MetaCommand).Execute(arguments[1:])
+			val.(meta.MetaCommand).Execute(arguments[1:])
 		}
 	}
 }

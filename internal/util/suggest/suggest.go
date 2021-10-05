@@ -3,10 +3,10 @@ package suggest
 import (
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/cmd"
-	"github.com/WangYihang/Platypus/internal/cmd/auth"
-	"github.com/WangYihang/Platypus/internal/cmd/connect"
-	"github.com/WangYihang/Platypus/internal/cmd/run"
+	"github.com/WangYihang/Platypus/cmd/admin/meta"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/auth"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/connect"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/run"
 	"github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -23,7 +23,7 @@ func GetMetaCommandsMap() map[string]interface{} {
 func GetCommandSuggestions() []prompt.Suggest {
 	var suggests []prompt.Suggest
 	for name, command := range GetMetaCommandsMap() {
-		suggest := prompt.Suggest{Text: name, Description: command.(cmd.MetaCommand).Description()}
+		suggest := prompt.Suggest{Text: name, Description: command.(meta.MetaCommand).Description()}
 		suggests = append(suggests, suggest)
 	}
 	return suggests
@@ -42,18 +42,18 @@ func GetFuzzyCommandSuggestions(pattern string) []prompt.Suggest {
 	var suggests []prompt.Suggest
 	for name, command := range GetMetaCommandsMap() {
 		if fuzzy.MatchFold(pattern, name) {
-			suggest := prompt.Suggest{Text: name, Description: command.(cmd.MetaCommand).Description()}
+			suggest := prompt.Suggest{Text: name, Description: command.(meta.MetaCommand).Description()}
 			suggests = append(suggests, suggest)
 		}
 	}
 	return suggests
 }
 
-func GetPreconfiguredArguments(command string) []cmd.Argument {
+func GetPreconfiguredArguments(command string) []meta.Argument {
 	if val, ok := GetMetaCommandsMap()[strings.ToLower(command)]; ok {
-		return val.(cmd.MetaCommand).Arguments()
+		return val.(meta.MetaCommand).Arguments()
 	}
-	return []cmd.Argument{}
+	return []meta.Argument{}
 }
 
 func GetArgumentsSuggestions(text string) []prompt.Suggest {
