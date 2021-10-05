@@ -76,7 +76,7 @@ func interact(hash string) {
 			_, message, err := c.ReadMessage()
 			// opcode := message[0]
 			if err != nil {
-				log.Info("read:", err)
+				log.Info(err.Error())
 				continue
 			}
 			body := message[1:]
