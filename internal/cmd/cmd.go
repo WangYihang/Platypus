@@ -1,6 +1,8 @@
 package cmd
 
-import "github.com/c-bata/go-prompt"
+import (
+	"github.com/c-bata/go-prompt"
+)
 
 type Argument struct {
 	Name        string
