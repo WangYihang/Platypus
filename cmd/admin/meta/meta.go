@@ -1,7 +1,6 @@
 package meta
 
 import (
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/akamensky/argparse"
 	"github.com/c-bata/go-prompt"
 )
@@ -38,7 +37,6 @@ func ParseArguments(command MetaCommand, args []string) (map[string]interface{},
 	}
 	err := parser.Parse(args)
 	if err != nil {
-		log.Error(err.Error())
 		return nil, err
 	}
 	return result, nil

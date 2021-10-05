@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"golang.org/x/term"
 )
 
@@ -25,16 +24,13 @@ func IsValidToken(token string) bool {
 func SaveTermState() {
 	oldState, err := term.GetState(int(os.Stdin.Fd()))
 	if err != nil {
-		log.Warn("Cannot get termial state: %s", err.Error())
 		return
 	}
 	Ctx.TermState = oldState
-	log.Info("Termianl state saved: %v", *Ctx.TermState)
 }
 
 func RestoreTermState() {
 	term.Restore(int(os.Stdin.Fd()), Ctx.TermState)
-	log.Info("Termianl state stored: %v", *Ctx.TermState)
 }
 
 func GetHistoryFilepath() string {

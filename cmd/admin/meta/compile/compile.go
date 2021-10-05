@@ -101,7 +101,17 @@ func (command Command) Suggest(name string, typed string) []prompt.Suggest {
 		}
 		return suggests
 	case "port":
-		return []prompt.Suggest{}
+		suggests := []prompt.Suggest{}
+		for _, server := range server_api.GetServers().Servers {
+			if server.Encrypted {
+				suggest := prompt.Suggest{
+					Text:        fmt.Sprintf("%d", server.Port),
+					Description: server.OnelineDesc(),
+				}
+				suggests = append(suggests, suggest)
+			}
+		}
+		return suggests
 	case "os":
 		return []prompt.Suggest{
 			{Text: "linux", Description: "for Linux"},

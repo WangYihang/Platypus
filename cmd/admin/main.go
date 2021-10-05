@@ -2,13 +2,17 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/internal/util/fs"
+	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/suggest"
 	prompt "github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
@@ -42,6 +46,34 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 	}
 }
 
+func system(command string) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	os := runtime.GOOS
+	switch os {
+	case "windows":
+		cmd := exec.Command("cmd", "/C", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	case "darwin":
+		cmd := exec.Command("/bin/sh", "-c", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	case "linux":
+		cmd := exec.Command("/bin/sh", "-c", command)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	default:
+		return "", "", fmt.Errorf("unsupported OS type: %s", os)
+	}
+}
+
 func Executor(text string) {
 	// Save into history
 	AppendHistory(ctx.GetHistoryFilepath(), text)
@@ -51,6 +83,12 @@ func Executor(text string) {
 		command := arguments[0]
 		if val, ok := suggest.GetMetaCommandsMap()[strings.ToLower(command)]; ok {
 			val.(meta.MetaCommand).Execute(arguments)
+		} else {
+			log.Error("No such command, use <TAB> to auto complete available commands")
+			stdout, stderr, _ := system(text)
+			log.Info("Executing locally: %s", text)
+			fmt.Printf("%s", stdout)
+			fmt.Printf("%s", stderr)
 		}
 	}
 }
