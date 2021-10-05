@@ -7,12 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
+	"github.com/WangYihang/Platypus/internal/cmd"
 	server_controller "github.com/WangYihang/Platypus/internal/controller/server"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/reflection"
 	prompt "github.com/c-bata/go-prompt"
 	"github.com/c-bata/go-prompt/completer"
+	"github.com/google/shlex"
 	"github.com/gorilla/websocket"
 	"github.com/imroc/req"
 	"golang.org/x/term"
@@ -33,26 +34,31 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 	// eg: ``
 	text := d.TextBeforeCursor()
 	if strings.TrimSpace(text) == "" {
-		return reflection.GetCommandSuggestions(dispatcher.CommandDispatcher{})
+		return reflection.GetCommandSuggestions()
 	}
-
 	// User typed something
 	// eg: `prox`
 	args := strings.Split(text, " ")
 	cmd := args[0]
 	if len(args) <= 1 {
-		return reflection.GetFuzzyCommandSuggestions(dispatcher.CommandDispatcher{}, cmd)
+		return reflection.GetFuzzyCommandSuggestions(cmd)
 	} else {
 		// Ensure cmd is a valid cmd
-		if !reflection.IsValidCmd(dispatcher.CommandDispatcher{}, cmd) {
+		if !reflection.IsValidCommand(cmd) {
 			return []prompt.Suggest{}
 		}
-		return reflection.GetArgumentsSuggestions(dispatcher.CommandDispatcher{}, text)
+		return reflection.GetArgumentsSuggestions(text)
 	}
 }
 
-func Executor(s string) {
-	fmt.Println(s)
+func Executor(text string) {
+	arguments, _ := shlex.Split(text)
+	if len(arguments) > 0 {
+		command := arguments[0]
+		if val, ok := reflection.GetMetaCommandsMap()[strings.ToLower(command)]; ok {
+			val.(cmd.MetaCommand).Execute(arguments[1:])
+		}
+	}
 }
 
 type LoginResponse struct {

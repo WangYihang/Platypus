@@ -4,7 +4,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
+	"github.com/WangYihang/Platypus/internal/cmd"
+	"github.com/WangYihang/Platypus/internal/cmd/auth"
+	"github.com/WangYihang/Platypus/internal/cmd/connect"
+	"github.com/WangYihang/Platypus/internal/cmd/run"
 	"github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -18,101 +21,51 @@ func Invoke(any interface{}, name string, args ...interface{}) []reflect.Value {
 	return reflect.ValueOf(any).MethodByName(name).Call(params)
 }
 
-func GetAllMethods(any interface{}) []string {
-	var methods []string
-	anyType := reflect.TypeOf(any)
-	for i := 0; i < anyType.NumMethod(); i++ {
-		method := anyType.Method(i)
-		methods = append(methods, method.Name)
+func GetMetaCommandsMap() map[string]interface{} {
+	return map[string]interface{}{
+		"auth":    auth.Command{},
+		"connect": connect.Command{},
+		"run":     run.Command{},
 	}
-	return methods
 }
 
-func GetCommandSuggestions(any interface{}) []prompt.Suggest {
+func GetCommandSuggestions() []prompt.Suggest {
 	var suggests []prompt.Suggest
-	anyType := reflect.TypeOf(any)
-	for i := 0; i < anyType.NumMethod(); i++ {
-		method := anyType.Method(i)
-		methodName := method.Name
-		descMethodName := methodName + "Desc"
-		descMethod := reflect.ValueOf(any).MethodByName(descMethodName)
-		if descMethod.Kind() != reflect.Func {
-			continue
-		}
-		result := descMethod.Call(nil)
-		if len(result) == 1 && result[0].Kind() == reflect.String {
-			suggest := prompt.Suggest{Text: methodName, Description: result[0].String()}
-			suggests = append(suggests, suggest)
-		}
+	for name, command := range GetMetaCommandsMap() {
+		suggest := prompt.Suggest{Text: name, Description: command.(cmd.MetaCommand).Description()}
+		suggests = append(suggests, suggest)
 	}
 	return suggests
 }
 
-func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
+func IsValidCommand(command string) bool {
+	for name := range GetMetaCommandsMap() {
+		if strings.EqualFold(command, name) {
 			return true
 		}
 	}
 	return false
 }
 
-func IsValidCmd(any interface{}, cmd string) bool {
-	return contains(GetAllMethods(any), cmd)
-}
-
-func GetFuzzyCommandSuggestions(any interface{}, pattern string) []prompt.Suggest {
+func GetFuzzyCommandSuggestions(pattern string) []prompt.Suggest {
 	var suggests []prompt.Suggest
-
-	commands := GetAllMethods(any)
-	matches := fuzzy.FindFold(pattern, commands)
-
-	anyType := reflect.TypeOf(any)
-	for i := 0; i < anyType.NumMethod(); i++ {
-		method := anyType.Method(i)
-		methodName := method.Name
-		if contains(matches, methodName) {
-			descMethodName := methodName + "Desc"
-			descMethod := reflect.ValueOf(any).MethodByName(descMethodName)
-			if descMethod.Kind() != reflect.Func {
-				continue
-			}
-			result := descMethod.Call(nil)
-			if len(result) == 1 && result[0].Kind() == reflect.String {
-				suggest := prompt.Suggest{Text: methodName, Description: result[0].String()}
-				suggests = append(suggests, suggest)
-			}
+	for name, command := range GetMetaCommandsMap() {
+		if fuzzy.MatchFold(pattern, name) {
+			suggest := prompt.Suggest{Text: name, Description: command.(cmd.MetaCommand).Description()}
+			suggests = append(suggests, suggest)
 		}
 	}
 	return suggests
 }
-func GetPreconfiguredArguments(any interface{}, cmd string) []dispatcher.Argument {
-	arguments := []dispatcher.Argument{}
-	argumentsMethodName := cmd + "Arguments"
-	descMethod := reflect.ValueOf(any).MethodByName(argumentsMethodName)
-	if descMethod.Kind() == reflect.Func {
-		result := descMethod.Call(nil)
-		if len(result) == 1 && result[0].Kind() == reflect.Slice {
-			elements := result[0]
-			for i := 0; i < elements.Len(); i++ {
-				element := elements.Index(i)
-				argument := dispatcher.Argument{
-					Name:        element.FieldByName("Name").String(),
-					Desc:        element.FieldByName("Desc").String(),
-					IsFlag:      element.FieldByName("IsFlag").Bool(),
-					AllowRepeat: element.FieldByName("AllowRepeat").Bool(),
-					IsRequired:  element.FieldByName("IsRequired").Bool(),
-					Default:     element.FieldByName("Default").Interface(),
-					SuggestFunc: element.FieldByName("SuggestFunc").Interface().(func(name string) []prompt.Suggest),
-				}
-				arguments = append(arguments, argument)
-			}
-		}
+
+func GetPreconfiguredArguments(command string) []cmd.Argument {
+	if val, ok := GetMetaCommandsMap()[strings.ToLower(command)]; ok {
+		return val.(cmd.MetaCommand).Arguments()
 	}
-	return arguments
+	return []cmd.Argument{}
 }
 
-func GetArgumentsSuggestions(any interface{}, text string) []prompt.Suggest {
+func GetArgumentsSuggestions(text string) []prompt.Suggest {
 	var suggests []prompt.Suggest
 	args, _ := shlex.Split(text)
 
@@ -120,9 +73,9 @@ func GetArgumentsSuggestions(any interface{}, text string) []prompt.Suggest {
 		args = append(args, "")
 	}
 
-	cmd := args[0]
+	command := args[0]
 	previousArgument := args[len(args)-1]
-	preconfiguredArguments := GetPreconfiguredArguments(any, cmd)
+	preconfiguredArguments := GetPreconfiguredArguments(command)
 
 	// Mode: Value suggestion
 	if len(args) > 1 {

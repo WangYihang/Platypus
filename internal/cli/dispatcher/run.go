@@ -8,16 +8,6 @@ import (
 	"github.com/c-bata/go-prompt"
 )
 
-type Argument struct {
-	Name        string
-	Desc        string
-	IsFlag      bool
-	AllowRepeat bool
-	IsRequired  bool
-	Default     interface{}
-	SuggestFunc func(name string) []prompt.Suggest
-}
-
 func (dispatcher CommandDispatcher) RunArgumentsSuggestion(name string) []prompt.Suggest {
 	switch name {
 	case "host":

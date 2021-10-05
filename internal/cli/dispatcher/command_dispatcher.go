@@ -8,8 +8,19 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/readline"
+	"github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
 )
+
+type Argument struct {
+	Name        string
+	Desc        string
+	IsFlag      bool
+	AllowRepeat bool
+	IsRequired  bool
+	Default     interface{}
+	SuggestFunc func(name string) []prompt.Suggest
+}
 
 type CommandDispatcher struct{}
 
