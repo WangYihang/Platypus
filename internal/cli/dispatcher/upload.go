@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -93,13 +92,13 @@ func (dispatcher CommandDispatcher) Upload(args []string) {
 }
 
 func (dispatcher CommandDispatcher) UploadHelp() string {
-	fmt.Println("Usage of Upload")
-	fmt.Println("\tUpload [SRC] [DST]")
+	// fmt.Println("Usage of Upload")
+	// fmt.Println("\tUpload [SRC] [DST]")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) UploadDesc() string {
-	fmt.Println("Upload")
-	fmt.Println("\tUpload file from local machine to remote server")
+	// fmt.Println("Upload")
+	// fmt.Println("\tUpload file from local machine to remote server")
 	return ""
 }

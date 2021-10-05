@@ -47,7 +47,7 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 		if !reflection.IsValidCmd(dispatcher.CommandDispatcher{}, cmd) {
 			return []prompt.Suggest{}
 		}
-		return reflection.GetFuzzyArgumentsSuggestions(dispatcher.CommandDispatcher{}, text)
+		return reflection.GetArgumentsSuggestions(dispatcher.CommandDispatcher{}, text)
 	}
 }
 

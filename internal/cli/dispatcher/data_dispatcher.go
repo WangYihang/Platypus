@@ -35,13 +35,13 @@ func (dispatcher CommandDispatcher) DataDispatcher(args []string) {
 }
 
 func (dispatcher CommandDispatcher) DataDispatcherHelp() string {
-	fmt.Println("Usage of DataDispatcher")
-	fmt.Println("\tDataDispatcher")
+	// fmt.Println("Usage of DataDispatcher")
+	// fmt.Println("\tDataDispatcher")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) DataDispatcherDesc() string {
-	fmt.Println("DataDispatcher")
-	fmt.Println("\tDataDispatcher command on all clients which are interactive")
+	// fmt.Println("DataDispatcher")
+	// fmt.Println("\tDataDispatcher command on all clients which are interactive")
 	return ""
 }

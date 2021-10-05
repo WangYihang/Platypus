@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/c-bata/go-prompt"
 	"github.com/google/shlex"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -67,7 +66,6 @@ func GetFuzzyCommandSuggestions(any interface{}, pattern string) []prompt.Sugges
 
 	commands := GetAllMethods(any)
 	matches := fuzzy.FindFold(pattern, commands)
-	log.Info("%v", matches)
 
 	anyType := reflect.TypeOf(any)
 	for i := 0; i < anyType.NumMethod(); i++ {
@@ -114,7 +112,7 @@ func GetPreconfiguredArguments(any interface{}, cmd string) []dispatcher.Argumen
 	return arguments
 }
 
-func GetFuzzyArgumentsSuggestions(any interface{}, text string) []prompt.Suggest {
+func GetArgumentsSuggestions(any interface{}, text string) []prompt.Suggest {
 	var suggests []prompt.Suggest
 	args, _ := shlex.Split(text)
 
@@ -123,12 +121,14 @@ func GetFuzzyArgumentsSuggestions(any interface{}, text string) []prompt.Suggest
 	}
 
 	cmd := args[0]
+	previousArgument := args[len(args)-1]
 	preconfiguredArguments := GetPreconfiguredArguments(any, cmd)
 
+	// Mode: Value suggestion
 	if len(args) > 1 {
 		previousPreviousArgument := args[len(args)-2]
 		for _, a := range preconfiguredArguments {
-			if "--"+a.Name == previousPreviousArgument && !a.IsFlag {
+			if "--"+a.Name == previousPreviousArgument && !a.IsFlag && a.SuggestFunc != nil {
 				suggests = append(suggests, a.SuggestFunc(a.Name)...)
 				return suggests
 			}
@@ -140,7 +140,7 @@ func GetFuzzyArgumentsSuggestions(any interface{}, text string) []prompt.Suggest
 	for _, a := range preconfiguredArguments {
 		found := false
 		for _, arg := range args[1:] {
-			if strings.EqualFold("--"+a.Name, arg) {
+			if "--"+a.Name == arg {
 				if a.AllowRepeat {
 					// Arguments which is appeared and allow repeating
 					suggest := prompt.Suggest{Text: "--" + a.Name, Description: a.Desc}
@@ -151,8 +151,15 @@ func GetFuzzyArgumentsSuggestions(any interface{}, text string) []prompt.Suggest
 		}
 		if !found {
 			// Arguments which is not appeared
-			suggest := prompt.Suggest{Text: "--" + a.Name, Description: a.Desc}
-			suggests = append(suggests, suggest)
+			if strings.Trim(previousArgument, " ") == "" {
+				suggest := prompt.Suggest{Text: "--" + a.Name, Description: a.Desc}
+				suggests = append(suggests, suggest)
+			} else {
+				if fuzzy.MatchFold(strings.Trim(previousArgument, "- "), a.Name) {
+					suggest := prompt.Suggest{Text: "--" + a.Name, Description: a.Desc}
+					suggests = append(suggests, suggest)
+				}
+			}
 		}
 	}
 

@@ -1,8 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
-
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/fatih/color"
@@ -60,15 +58,15 @@ func (dispatcher CommandDispatcher) Jump(args []string) {
 }
 
 func (dispatcher CommandDispatcher) JumpHelp() string {
-	fmt.Println("Usage of Jump")
-	fmt.Println("\tJump [HASH | NAME]")
-	fmt.Println("\tHASH\tThe hash of a node which you want to interact with.")
-	fmt.Println("\tNAME\tThe name of a node which you want to interact with. The name can be set via `Rename` command.")
+	// fmt.Println("Usage of Jump")
+	// fmt.Println("\tJump [HASH | NAME]")
+	// fmt.Println("\tHASH\tThe hash of a node which you want to interact with.")
+	// fmt.Println("\tNAME\tThe name of a node which you want to interact with. The name can be set via `Rename` command.")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) JumpDesc() string {
-	fmt.Println("Jump")
-	fmt.Println("\tJump to a node, waiting for interactiving with it.")
+	// fmt.Println("Jump")
+	// fmt.Println("\tJump to a node, waiting for interactiving with it.")
 	return ""
 }

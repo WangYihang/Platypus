@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/context"
@@ -40,14 +39,14 @@ func (dispatcher CommandDispatcher) Command(args []string) {
 }
 
 func (dispatcher CommandDispatcher) CommandHelp() string {
-	fmt.Println("Usage of Command [CMD]")
-	fmt.Println("\tCommand")
-	fmt.Println("\tCMD\tThe command that you want to execute on the current session")
+	// fmt.Println("Usage of Command [CMD]")
+	// fmt.Println("\tCommand")
+	// fmt.Println("\tCMD\tThe command that you want to execute on the current session")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) CommandDesc() string {
-	fmt.Println("Command")
-	fmt.Println("\texecute a command on the current session")
+	// fmt.Println("Command")
+	// fmt.Println("\texecute a command on the current session")
 	return ""
 }

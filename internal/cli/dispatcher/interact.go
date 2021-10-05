@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -149,13 +148,13 @@ func (dispatcher CommandDispatcher) Interact(args []string) {
 }
 
 func (dispatcher CommandDispatcher) InteractHelp() string {
-	fmt.Println("Usage of Interact")
-	fmt.Println("\tInteract")
+	// fmt.Println("Usage of Interact")
+	// fmt.Println("\tInteract")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) InteractDesc() string {
-	fmt.Println("Interact")
-	fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
+	// fmt.Println("Interact")
+	// fmt.Println("\tPop up a interactive session, you can communicate with it via stdin/stdout")
 	return ""
 }

@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -169,13 +168,13 @@ func (dispatcher CommandDispatcher) Download(args []string) {
 }
 
 func (dispatcher CommandDispatcher) DownloadHelp() string {
-	fmt.Println("Usage of Download")
-	fmt.Println("\tDownload [SRC] [DST]")
+	// fmt.Println("Usage of Download")
+	// fmt.Println("\tDownload [SRC] [DST]")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) DownloadDesc() string {
-	fmt.Println("Download")
-	fmt.Println("\tDownload file from remote client (the current client) to local machine")
+	// fmt.Println("Download")
+	// fmt.Println("\tDownload file from remote client (the current client) to local machine")
 	return ""
 }

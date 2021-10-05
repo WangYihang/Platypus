@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/context"
@@ -41,13 +40,13 @@ func (dispatcher CommandDispatcher) Alias(args []string) {
 }
 
 func (dispatcher CommandDispatcher) AliasHelp() string {
-	fmt.Println("Usage of Alias")
-	fmt.Println("\tAlias")
+	// fmt.Println("Usage of Alias")
+	// fmt.Println("\tAlias")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) AliasDesc() string {
-	fmt.Println("Alias")
-	fmt.Println("\tAlias the current session with a human-readable name.")
+	// fmt.Println("Alias")
+	// fmt.Println("\tAlias the current session with a human-readable name.")
 	return ""
 }

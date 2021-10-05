@@ -1,8 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
-
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
@@ -58,14 +56,14 @@ func (dispatcher CommandDispatcher) Info(args []string) {
 }
 
 func (dispatcher CommandDispatcher) InfoHelp() string {
-	fmt.Println("Usage of Info")
-	fmt.Println("\tInfo [HASH]")
-	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	// fmt.Println("Usage of Info")
+	// fmt.Println("\tInfo [HASH]")
+	// fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) InfoDesc() string {
-	fmt.Println("Info")
-	fmt.Println("\tDisplay the information of a node, using the hash of the node")
+	// fmt.Println("Info")
+	// fmt.Println("\tDisplay the information of a node, using the hash of the node")
 	return ""
 }

@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/context"
@@ -45,18 +44,18 @@ func (dispatcher CommandDispatcher) Switching(args []string) {
 }
 
 func (dispatcher CommandDispatcher) SwitchingHelp() string {
-	fmt.Println("Usage of Switching")
-	fmt.Println("\tSwitching [HASH]")
-	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
-	fmt.Println("\t\tThe hash can either be the hash of an client or the hash of an server")
-	fmt.Println("\t\tWhen the server: Swiching ON/OFF ALL the clients related to this server")
-	fmt.Println("\t\tWhen the client: Swiching ON/OFF state of the client")
+	// fmt.Println("Usage of Switching")
+	// fmt.Println("\tSwitching [HASH]")
+	// fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	// fmt.Println("\t\tThe hash can either be the hash of an client or the hash of an server")
+	// fmt.Println("\t\tWhen the server: Swiching ON/OFF ALL the clients related to this server")
+	// fmt.Println("\t\tWhen the client: Swiching ON/OFF state of the client")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) SwitchingDesc() string {
-	fmt.Println("Switching")
-	fmt.Println("\tSwitch the interactive field of a node(s), allows you to interactive with it(them)")
-	fmt.Println("\tIf the current status is ON, it will turns to OFF. If OFF, turns ON")
+	// fmt.Println("Switching")
+	// fmt.Println("\tSwitch the interactive field of a node(s), allows you to interactive with it(them)")
+	// fmt.Println("\tIf the current status is ON, it will turns to OFF. If OFF, turns ON")
 	return ""
 }

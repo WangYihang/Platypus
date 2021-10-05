@@ -1,8 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
-
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/os"
@@ -32,15 +30,15 @@ func (dispatcher CommandDispatcher) Upgrade(args []string) {
 }
 
 func (dispatcher CommandDispatcher) UpgradeHelp() string {
-	fmt.Println("Usage of Upgrade")
-	fmt.Println("\tUpgrade [Connect Back Addr]")
-	fmt.Println("Example")
-	fmt.Println("\tUpgrade 1.3.3.7:13337")
+	// fmt.Println("Usage of Upgrade")
+	// fmt.Println("\tUpgrade [Connect Back Addr]")
+	// fmt.Println("Example")
+	// fmt.Println("\tUpgrade 1.3.3.7:13337")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) UpgradeDesc() string {
-	fmt.Println("Upgrade")
-	fmt.Println("\tUpgrade Platypus session to encrypted Termite session")
+	// fmt.Println("Upgrade")
+	// fmt.Println("\tUpgrade Platypus session to encrypted Termite session")
 	return ""
 }

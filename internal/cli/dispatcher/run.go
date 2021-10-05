@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/WangYihang/Platypus/internal/context"
@@ -31,12 +30,13 @@ func (dispatcher CommandDispatcher) RunArgumentsSuggestion(name string) []prompt
 }
 
 func (dispatcher CommandDispatcher) RunArguments() []Argument {
-	arguments := []Argument{
-		{Name: "host", Desc: "todo", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: dispatcher.RunArgumentsSuggestion},
-		{Name: "port", Desc: "todo", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: dispatcher.RunArgumentsSuggestion},
-		{Name: "debug", Desc: "todo", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: dispatcher.RunArgumentsSuggestion},
+	return []Argument{
+		{Name: "host", Desc: "network interface to bind", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: dispatcher.RunArgumentsSuggestion},
+		{Name: "port", Desc: "port to bind", IsFlag: false, IsRequired: true, AllowRepeat: false, Default: nil, SuggestFunc: dispatcher.RunArgumentsSuggestion},
+		{Name: "termite", Desc: "enable encryption by termite", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
+		{Name: "debug", Desc: "enable debug", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
+		{Name: "help", Desc: "print help information", IsFlag: true, IsRequired: false, AllowRepeat: false, Default: false, SuggestFunc: nil},
 	}
-	return arguments
 }
 
 func (dispatcher CommandDispatcher) Run(args []string) {
@@ -61,15 +61,15 @@ func (dispatcher CommandDispatcher) Run(args []string) {
 }
 
 func (dispatcher CommandDispatcher) RunHelp() string {
-	fmt.Println("Usage of Run")
-	fmt.Println("\tRun [HOST] [PORT]")
-	fmt.Println("\tHOST\tTHe host you want to listen on")
-	fmt.Println("\tPORT\tTHe port you want to listen on")
+	// fmt.Println("Usage of Run")
+	// fmt.Println("\tRun [HOST] [PORT]")
+	// fmt.Println("\tHOST\tTHe host you want to listen on")
+	// fmt.Println("\tPORT\tTHe port you want to listen on")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) RunDesc() string {
-	fmt.Println("Run")
-	fmt.Println("\tTry to run a server, listening on a port, waiting for client to connect")
+	// fmt.Println("Run")
+	// fmt.Println("\tTry to run a server, listening on a port, waiting for client to connect")
 	return "Run a server"
 }

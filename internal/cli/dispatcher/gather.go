@@ -1,8 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
-
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/fatih/color"
@@ -65,14 +63,14 @@ func (dispatcher CommandDispatcher) Gather(args []string) {
 }
 
 func (dispatcher CommandDispatcher) GatherHelp() string {
-	fmt.Println("Usage of Gather")
-	fmt.Println("\tGather [HASH]")
-	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	// fmt.Println("Usage of Gather")
+	// fmt.Println("\tGather [HASH]")
+	// fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) GatherDesc() string {
-	fmt.Println("Gather")
-	fmt.Println("\tGather information from the current client or the client with hash provided")
+	// fmt.Println("Gather")
+	// fmt.Println("\tGather information from the current client or the client with hash provided")
 	return ""
 }

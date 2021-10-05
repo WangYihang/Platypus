@@ -1,8 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
-
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
 )
@@ -20,13 +18,13 @@ func (dispatcher CommandDispatcher) List(args []string) {
 }
 
 func (dispatcher CommandDispatcher) ListHelp() string {
-	fmt.Println("Usage of List")
-	fmt.Println("\tList")
+	// fmt.Println("Usage of List")
+	// fmt.Println("\tList")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) ListDesc() string {
-	fmt.Println("List")
-	fmt.Println("\tTry list all listening servers and connected clients")
+	// fmt.Println("List")
+	// fmt.Println("\tTry list all listening servers and connected clients")
 	return ""
 }

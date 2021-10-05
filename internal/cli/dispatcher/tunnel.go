@@ -95,13 +95,13 @@ func (dispatcher CommandDispatcher) Tunnel(args []string) {
 }
 
 func (dispatcher CommandDispatcher) TunnelHelp() string {
-	fmt.Println("Usage of Tunnel")
-	fmt.Println("\tTunnel [Create|Delete] [Pull|Push|Dynamic|Internet] [Src Host] [Src Port] [Dst Host] [Dst Port]")
+	// fmt.Println("Usage of Tunnel")
+	// fmt.Println("\tTunnel [Create|Delete] [Pull|Push|Dynamic|Internet] [Src Host] [Src Port] [Dst Host] [Dst Port]")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) TunnelDesc() string {
-	fmt.Println("Tunnel")
-	fmt.Println("\tStart a tunnel on local machine which connect to a port in internal network")
+	// fmt.Println("Tunnel")
+	// fmt.Println("\tStart a tunnel on local machine which connect to a port in internal network")
 	return ""
 }

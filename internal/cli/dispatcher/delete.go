@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/context"
@@ -55,14 +54,14 @@ func (dispatcher CommandDispatcher) Delete(args []string) {
 }
 
 func (dispatcher CommandDispatcher) DeleteHelp() string {
-	fmt.Println("Usage of Delete")
-	fmt.Println("\tDelete [HASH]")
-	fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
+	// fmt.Println("Usage of Delete")
+	// fmt.Println("\tDelete [HASH]")
+	// fmt.Println("\tHASH\tThe hash of an node, node can be both a server or a client")
 	return ""
 }
 
 func (dispatcher CommandDispatcher) DeleteDesc() string {
-	fmt.Println("Delete")
-	fmt.Println("\tDelete a node, node can be both a server or a client")
+	// fmt.Println("Delete")
+	// fmt.Println("\tDelete a node, node can be both a server or a client")
 	return ""
 }
