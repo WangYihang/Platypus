@@ -300,9 +300,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	})
 
 	// Static files
-	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./html/frontend/build")))
+	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
 	// WebSocket TTYd
-	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./html/ttyd/dist")))
+	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
 
 	// TODO: Websocket UI Auth (to be implemented)
 	endpoint.GET("/token", func(c *gin.Context) {
