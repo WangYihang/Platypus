@@ -553,12 +553,10 @@ func (c *TermiteClient) makeHash(hashFormat string) string {
 }
 
 func (c *TermiteClient) OnelineDesc() string {
-	addr := c.conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
+	return fmt.Sprintf("[%s] %s:%d [%s]", c.Hash, c.Host, c.Port, c.OS.String())
 }
 
 func (c *TermiteClient) FullDesc() string {
-	addr := c.conn.RemoteAddr()
-	return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s]", c.Hash, addr.Network(), addr.String(),
+	return fmt.Sprintf("[%s] %s:%d (connected at: %s) [%s]", c.Hash, c.Host, c.Port,
 		humanize.Time(c.TimeStamp), c.OS.String())
 }

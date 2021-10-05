@@ -1,5 +1,10 @@
 package ctx
 
+import (
+	"os"
+	"path/filepath"
+)
+
 type Context struct {
 	Token string
 	Host  string
@@ -13,5 +18,10 @@ func IsValidToken(token string) bool {
 }
 
 func GetHistoryFilepath() string {
-	return ".history"
+	dirname, err := os.UserHomeDir()
+	filename := ".platypus_history"
+	if err != nil {
+		return filename
+	}
+	return filepath.Join(dirname, filename)
 }

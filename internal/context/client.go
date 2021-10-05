@@ -192,21 +192,19 @@ func (c *TCPClient) makeHash(hashFormat string) string {
 }
 
 func (c *TCPClient) OnelineDesc() string {
-	addr := c.conn.RemoteAddr()
 	if c.mature {
-		return fmt.Sprintf("[%s] %s://%s [%s]", c.Hash, addr.Network(), addr.String(), c.OS.String())
+		return fmt.Sprintf("[%s] %s:%d [%s]", c.Hash, c.Host, c.Port, c.OS.String())
 	} else {
-		return fmt.Sprintf("[Premature Death] %s://%s [%s]", addr.Network(), addr.String(), c.OS.String())
+		return fmt.Sprintf("[Premature Death] %s:%d [%s]", c.Host, c.Port, c.OS.String())
 	}
 }
 
 func (c *TCPClient) FullDesc() string {
-	addr := c.conn.RemoteAddr()
 	if c.mature {
-		return fmt.Sprintf("[%s] %s://%s (connected at: %s) [%s] [%t]", c.Hash, addr.Network(), addr.String(),
+		return fmt.Sprintf("[%s] %s:%d (connected at: %s) [%s] [%t]", c.Hash, c.Host, c.Port,
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	} else {
-		return fmt.Sprintf("[Premature Death] %s://%s (connected at: %s) [%s] [%t]", addr.Network(), addr.String(),
+		return fmt.Sprintf("[Premature Death] %s:%d (connected at: %s) [%s] [%t]", c.Host, c.Port,
 			humanize.Time(c.TimeStamp), c.OS.String(), c.GroupDispatch)
 	}
 }

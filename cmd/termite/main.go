@@ -801,7 +801,7 @@ func asVirus() {
 }
 
 func main() {
-	release := true
+	release := false
 	platypusAddr := "127.0.0.1:13337"
 	/*
 		Each element of a domain name separated by [.] is called a “label.”

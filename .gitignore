@@ -26,3 +26,6 @@ config-v*.yml
 
 # History file
 .history
+
+# dlv debug file
+__debug_bin

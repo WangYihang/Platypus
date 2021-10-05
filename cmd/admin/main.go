@@ -3,21 +3,16 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
 	"github.com/WangYihang/Platypus/cmd/admin/ctx"
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/internal/util/fs"
-	"github.com/WangYihang/Platypus/internal/util/log"
 	"github.com/WangYihang/Platypus/internal/util/suggest"
 	prompt "github.com/c-bata/go-prompt"
 	"github.com/c-bata/go-prompt/completer"
 	"github.com/google/shlex"
-	"github.com/gorilla/websocket"
-	"golang.org/x/term"
 )
 
 type Completer struct {
@@ -100,65 +95,6 @@ func StartCli() {
 		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
 	)
 	p.Run()
-}
-
-func Interact(hash string) {
-	u := url.URL{Scheme: "ws", Host: "127.0.0.1:7331", Path: fmt.Sprintf("/ws/tty/%s", hash)}
-	log.Info("connecting to %s", u.String())
-	authedHeader := http.Header{}
-	authedHeader.Add("Accept", "application/json")
-	authedHeader.Add("Authorization", fmt.Sprintf("Bearer %s", ctx.Ctx.Token))
-
-	fmt.Println(u.String())
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), authedHeader)
-	if err != nil {
-		log.Error(err.Error())
-		return
-	}
-	defer c.Close()
-
-	// Set stdin in raw mode.
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		log.Error(err.Error())
-		return
-	}
-
-	defer func() {
-		term.Restore(int(os.Stdin.Fd()), oldState)
-		log.Info("Restoring...")
-	}()
-
-	go func() {
-		for {
-			_, message, err := c.ReadMessage()
-			// opcode := message[0]
-			if err != nil {
-				log.Info("read:", err)
-				continue
-			}
-			body := message[1:]
-			os.Stdout.Write(body)
-		}
-	}()
-
-	for {
-		buffer := make([]byte, 0x10)
-		n, err := os.Stdin.Read(buffer)
-		if err != nil {
-			log.Error(err.Error())
-			continue
-		}
-		if n > 0 {
-			message := make([]byte, 0)
-			message = append(message, []byte("0")...)
-			message = append(message, buffer[0:n]...)
-			err := c.WriteMessage(websocket.BinaryMessage, message)
-			if err != nil {
-				break
-			}
-		}
-	}
 }
 
 func main() {
