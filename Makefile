@@ -1,3 +1,5 @@
+all: install_dependency release
+
 build: build_platypus
 
 install_dependency:
@@ -17,7 +19,8 @@ install_dependency:
 	sudo apt install -y upx
 
 install_dependency_github_action:
-	sudo apt install go-bindata
+	sudo apt-get update
+	sudo apt install -y go-bindata
 
 prepare: 
 	bash -c "[[ -d termites ]] || mkdir termites"
@@ -48,11 +51,11 @@ build_platypus: collect_assets
 	env go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
 
 release: install_dependency_github_action collect_assets
-	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_linux_amd64 cmd/platypus/main.go
-	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_amd64 cmd/platypus/main.go
-	env GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_darwin_arm64 cmd/platypus/main.go
-	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/Platypus_windows_amd64.exe cmd/platypus/main.go
-	find build -type f -executable | xargs upx --ultra-brute
+	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_linux_amd64 cmd/platypus/main.go
+	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_darwin_amd64 cmd/platypus/main.go
+	env GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_darwin_arm64 cmd/platypus/main.go
+	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_windows_amd64.exe cmd/platypus/main.go
+	find build -type f -executable | xargs upx
 
 clean:
 	rm -rf build

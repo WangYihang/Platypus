@@ -35,7 +35,7 @@ func Compress(target string) bool {
 	}
 	log.Success("Upx detected: %s", upx)
 	log.Info("Compressing %s via upx", target)
-	output, err := exec.Command("upx", "--ultra-brute", target).Output()
+	output, err := exec.Command("upx", target).Output()
 	if err != nil {
 		log.Error("Compressing %s failed: %s, %s", target, err, output)
 		return false
