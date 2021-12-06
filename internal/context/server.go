@@ -185,11 +185,6 @@ func (s *TCPServer) Handle(conn net.Conn) {
 func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
-	if err != nil {
-		log.Error("Resolve TCP address failed: %s", err)
-		Ctx.DeleteServer(s)
-		return
-	}
 
 	var listener net.Listener
 	if s.Encrypted {
