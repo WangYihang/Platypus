@@ -782,8 +782,8 @@ func (c *TCPClient) detectOS() {
 		}
 	}
 
-	// For Windows
-	c.System(fmt.Sprintf("echo %s & ver & echo %s", tokenA, tokenB))
+	// For Windows(or unknown)
+	c.System(fmt.Sprintf("echo %s && ver && echo %s", tokenA, tokenB))
 
 	if c.echoEnabled {
 		// Read echo
