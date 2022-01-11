@@ -30,6 +30,15 @@ func (dispatcher commandDispatcher) DataDispatcher(args []string) {
 				n++
 			}
 		}
+
+		for _, client := range (*server).GetAllTermiteClients() {
+			if client.GroupDispatch {
+				log.Info("Executing on %s: %s", client.FullDesc(), command)
+				result := client.System(command)
+				log.Success("%s", result)
+				n++
+			}
+		}
 	}
 	log.Success("Execution finished, %d node DataDispatcherd", n)
 }
