@@ -36,16 +36,16 @@ func (dispatcher commandDispatcher) Turn(args []string) {
 	if client != nil {
 		client.GroupDispatch = !client.GroupDispatch
 		log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
-	}
-
-	// handle the hash represent a termite client
-	termiteclient := context.Ctx.FindTermiteClientByHash(hash)
-	if termiteclient != nil {
-		termiteclient.GroupDispatch = !termiteclient.GroupDispatch
-		log.Success("[%t->%t] %s", !termiteclient.GroupDispatch, termiteclient.GroupDispatch, termiteclient.FullDesc())
 	} else {
-		// handle invalid hash
-		log.Error("No such node")
+		// handle the hash represent a termite client
+		termiteclient := context.Ctx.FindTermiteClientByHash(hash)
+		if termiteclient != nil {
+			termiteclient.GroupDispatch = !termiteclient.GroupDispatch
+			log.Success("[%t->%t] %s", !termiteclient.GroupDispatch, termiteclient.GroupDispatch, termiteclient.FullDesc())
+		} else {
+			// handle invalid hash
+			log.Error("No such node")
+		}
 	}
 }
 
