@@ -258,7 +258,7 @@ func (s *TCPServer) AsTable() {
 			s.Hash,
 			(*s).Host,
 			(*s).Port,
-			len((*s).Clients),
+			len((*s).Clients)+len((*s).TermiteClients),
 		))
 
 		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
@@ -285,7 +285,7 @@ func (s *TCPServer) AsTable() {
 				client.Python2 != "" || client.Python3 != "",
 				humanize.Time(client.TimeStamp),
 				client.Alias,
-				"",
+				client.GroupDispatch,
 			})
 		}
 
@@ -456,6 +456,7 @@ func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
 
 // Encrypted clients
 func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
+	client.GroupDispatch = s.GroupDispatch
 	if _, exists := s.TermiteClients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
 

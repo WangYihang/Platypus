@@ -24,6 +24,10 @@ func (dispatcher commandDispatcher) Turn(args []string) {
 			client.GroupDispatch = !client.GroupDispatch
 			log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 		}
+		for _, client := range (*server).GetAllTermiteClients() {
+			client.GroupDispatch = !client.GroupDispatch
+			log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
+		}
 		return
 	}
 
@@ -33,8 +37,15 @@ func (dispatcher commandDispatcher) Turn(args []string) {
 		client.GroupDispatch = !client.GroupDispatch
 		log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 	} else {
-		// handle invalid hash
-		log.Error("No such node")
+		// handle the hash represent a termite client
+		termiteclient := context.Ctx.FindTermiteClientByHash(hash)
+		if termiteclient != nil {
+			termiteclient.GroupDispatch = !termiteclient.GroupDispatch
+			log.Success("[%t->%t] %s", !termiteclient.GroupDispatch, termiteclient.GroupDispatch, termiteclient.FullDesc())
+		} else {
+			// handle invalid hash
+			log.Error("No such node")
+		}
 	}
 }
 

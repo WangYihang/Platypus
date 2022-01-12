@@ -25,6 +25,10 @@ func (dispatcher commandDispatcher) Switching(args []string) {
 				client.GroupDispatch = server.GroupDispatch
 				log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 			}
+			for _, client := range (*server).GetAllTermiteClients() {
+				client.GroupDispatch = server.GroupDispatch
+				log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
+			}
 			return
 		}
 	}
@@ -32,6 +36,13 @@ func (dispatcher commandDispatcher) Switching(args []string) {
 	// handle the hash represent a client
 	for _, server := range context.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
+			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
+				client.GroupDispatch = !client.GroupDispatch
+				log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
+				return
+			}
+		}
+		for _, client := range (*server).GetAllTermiteClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				client.GroupDispatch = !client.GroupDispatch
 				log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
