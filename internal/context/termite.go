@@ -123,6 +123,10 @@ func (c *TermiteClient) GetHashFormat() string {
 	return c.server.hashFormat
 }
 
+func (c *TermiteClient) GetShellPath() string {
+	return c.server.ShellPath
+}
+
 func (c *TermiteClient) StartSocks5Server() {
 	c.Send(message.Message{
 		Type: message.DYNAMIC_TUNNEL_CREATE,
@@ -306,7 +310,7 @@ func (c *TermiteClient) StartShell() {
 	columns, rows, _ := term.GetSize(0)
 
 	key := str.RandomString(0x10)
-	c.RequestStartProcess("/bin/bash", columns, rows, key)
+	c.RequestStartProcess(c.GetShellPath(), columns, rows, key)
 
 	// Create Process Object
 	process := Process{

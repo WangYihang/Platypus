@@ -12,12 +12,14 @@ servers:
     encrypted: true
     disable_history: true
     public_ip: ""
+    shell_path: "/bin/bash"
   - host: "0.0.0.0"
     port: 13338
     # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
     hashFormat: "%i %u %m %o %t"
     disable_history: true
     public_ip: ""
+    shell_path: "/bin/bash"
 restful:
   # Because RESTful DO NOT support any authentication mechanism,
   # DO NOT expose the restful server into any external network.
