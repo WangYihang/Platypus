@@ -382,7 +382,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				shellpath := c.PostForm("host")
+				shellpath := c.PostForm("shellpath")
 				if len(shellpath) <= 0 {
 					shellpath = "/bin/bash"
 				}
