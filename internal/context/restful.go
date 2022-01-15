@@ -382,11 +382,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				shellpath := c.PostForm("shellpath")
-				if len(shellpath) <= 0 {
-					shellpath = "/bin/bash"
-				}
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", shellpath)
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
