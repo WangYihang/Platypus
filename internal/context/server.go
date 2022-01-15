@@ -40,11 +40,12 @@ type TCPServer struct {
 	Encrypted      bool                        `json:"encrypted"`
 	DisableHistory bool                        `json:"disable_history"`
 	PublicIP       string                      `json:"public_ip"`
+	ShellPath      string                      `json:"shell_path"`
 	hashFormat     string                      `json:"-"`
 	stopped        chan struct{}               `json:"-"`
 }
 
-func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string) *TCPServer {
+func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)
 
 	if _, ok := Ctx.Servers[hash.MD5(service)]; ok {
@@ -71,6 +72,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 		Encrypted:      encrypted,
 		DisableHistory: disableHistory,
 		PublicIP:       PublicIP,
+		ShellPath:      ShellPath,
 	}
 
 	Ctx.Servers[hash.MD5(service)] = tcpServer
@@ -97,6 +99,14 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
 	} else {
 		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)
+	}
+
+	// Use /bin/bash if no ShellPath was specified
+	if tcpServer.ShellPath == "" {
+		log.Info("No ShellPath was specified, using /bin/bash...")
+		tcpServer.ShellPath = "/bin/bash"
+	} else {
+		log.Info("ShellPath (%s) is set in config file.", tcpServer.ShellPath)
 	}
 
 	// Try to check

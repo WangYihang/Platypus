@@ -119,7 +119,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Incase somebody is interacting via cli
 			current.EstablishPTY()
 			// SET_WINDOW_TITLE '1'
-			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
+			s.WriteBinary([]byte("1" + current.GetShellPath() + " (ubuntu)"))
 			// SET_PREFERENCES '2'
 			s.WriteBinary([]byte("2" + "{ }"))
 
@@ -144,18 +144,18 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		currentTermite := Ctx.FindTermiteClientByHash(hash)
 		if currentTermite != nil {
 			log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
-			// Start process /bin/bash
+			// Start shell process
 			s.Set("termiteClient", currentTermite)
 
 			// SET_WINDOW_TITLE '1'
-			s.WriteBinary([]byte("1" + "/bin/bash (ubuntu)"))
+			s.WriteBinary([]byte("1" + currentTermite.GetShellPath() + " (ubuntu)"))
 			// SET_PREFERENCES '2'
 			s.WriteBinary([]byte("2" + "{ }"))
 			// OUTPUT '0'
 			key := str.RandomString(0x10)
 			s.Set("key", key)
 
-			currentTermite.RequestStartProcess("/bin/bash", 0, 0, key)
+			currentTermite.RequestStartProcess(currentTermite.GetShellPath(), 0, 0, key)
 
 			// Create Process Object
 			process := Process{
@@ -382,7 +382,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "")
+				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{

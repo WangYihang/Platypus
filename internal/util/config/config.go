@@ -8,6 +8,7 @@ type Config struct {
 		Encrypted      bool   `yaml:"encrypted"`
 		DisableHistory bool   `yaml:"disable_history"`
 		PublicIP       string `yaml:"public_ip"`
+		ShellPath      string `yaml:"shell_path"`
 	}
 	RESTful struct {
 		Host   string `yaml:"host"`

@@ -36,6 +36,8 @@ build_termite: prepare
 	echo "Building termite"
 	# echo -e "Building termite_linux_amd64"
 	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/termite/termite_linux_amd64 cmd/termite/main.go
+	# echo -e "Building termite_linux_arm"
+	env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags="-s -w " -trimpath -o ./build/termite/termite_linux_arm cmd/termite/main.go
 
 collect_assets: build_frontend build_termite
 	echo "Collecting assets files"
