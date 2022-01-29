@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/util/log"
@@ -34,8 +35,18 @@ func (dispatcher commandDispatcher) DataDispatcher(args []string) {
 		for _, client := range (*server).GetAllTermiteClients() {
 			if client.GroupDispatch {
 				log.Info("Executing on %s: %s", client.FullDesc(), command)
-				result := client.System(command)
-				log.Success("%s", result)
+				// Check for timeout
+				c1 := make(chan string, 1)
+				go func() {
+					result := client.System(command)
+					c1 <- result
+				}()
+				select {
+				case result := <-c1:
+					log.Success("%s", result)
+				case <-time.After(3 * time.Second):
+					log.Error("Command timed out %s: %s", client.FullDesc(), command)
+				}
 				n++
 			}
 		}
