@@ -8,11 +8,11 @@
 准备一个纯净的 Ubuntu 20.04 环境，然后执行如下命令：
 
 ```bash
-sudo apt update
-sudo apt install -y curl make
-git clone https://github.com/WangYihang/Platypus.git
-cd Platypus
-make install_dependency
+sudo apt update && \
+sudo apt install -y curl make && \
+git clone https://github.com/WangYihang/Platypus.git && \
+cd Platypus && \
+make install_dependency && \
 make release
 ```
 
