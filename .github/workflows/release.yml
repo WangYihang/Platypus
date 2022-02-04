@@ -18,6 +18,8 @@ jobs:
 
     - name: Setup Node.js environment
       uses: actions/setup-node@v2.2.0
+      with:
+        node-version: '14'
 
     - name: Build
       run: make release

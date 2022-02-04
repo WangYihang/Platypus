@@ -1,4 +1,4 @@
-all: install_dependency release
+all: release
 
 build: build_platypus
 
@@ -16,10 +16,6 @@ install_dependency:
 	/usr/local/go/bin/go env -w GOPROXY=https://goproxy.cn,direct
 	# upx
 	sudo apt install -y upx
-
-install_dependency_github_action:
-	sudo apt-get update
-	sudo apt install -y go-bindata
 
 prepare: 
 	bash -c "[[ -d termites ]] || mkdir termites"
@@ -51,7 +47,7 @@ build_platypus: collect_assets
 	echo "Building platypus"
 	/usr/local/go/bin/go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus cmd/platypus/main.go
 
-release: install_dependency_github_action collect_assets
+release: install_dependency collect_assets
 	env GOOS=linux GOARCH=amd64 /usr/local/go/bin/go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_linux_amd64 cmd/platypus/main.go
 	env GOOS=darwin GOARCH=amd64 /usr/local/go/bin/go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_darwin_amd64 cmd/platypus/main.go
 	env GOOS=darwin GOARCH=arm64 /usr/local/go/bin/go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus_darwin_arm64 cmd/platypus/main.go
