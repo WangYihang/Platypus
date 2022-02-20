@@ -8,7 +8,7 @@ RUN git checkout .
 FROM node:14 as frontend
 COPY --from=source /app/web /app/web
 # Change yarn registry to fit in the networking situation in China
-RUN yarn config set registry https://registry.npm.taobao.org
+RUN yarn config set registry https://registry.npmmirror.com
 RUN cd /app/web/frontend && rm -rf node_modules && yarn install && yarn build
 RUN cd /app/web/ttyd && rm -rf node_modules && yarn install && yarn build
 
