@@ -162,27 +162,32 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 	}
 
 	if msg.Type == message.CLIENT_INFO {
-		clientInfo := msg.Body.(*message.BodyClientInfo)
-		c.Version = clientInfo.Version
-		log.Info("Client version: v%s", c.Version)
-		c.OS = oss.Parse(clientInfo.OS)
-		c.User = clientInfo.User
-		c.Python2 = clientInfo.Python2
-		c.Python3 = clientInfo.Python3
-		c.NetworkInterfaces = clientInfo.NetworkInterfaces
-		c.Hash = c.makeHash(hashFormat)
-		if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
-			// Termite needs up to date
-			c.Send(message.Message{
-				Type: message.UPDATE,
-				Body: message.BodyUpdate{
-					DistributorURL: Ctx.Distributor.Url,
-					Version:        update.Version,
-				},
-			})
+		if msg.Body != nil {
+			clientInfo := msg.Body.(*message.BodyClientInfo)
+			c.Version = clientInfo.Version
+			log.Info("Client version: v%s", c.Version)
+			c.OS = oss.Parse(clientInfo.OS)
+			c.User = clientInfo.User
+			c.Python2 = clientInfo.Python2
+			c.Python3 = clientInfo.Python3
+			c.NetworkInterfaces = clientInfo.NetworkInterfaces
+			c.Hash = c.makeHash(hashFormat)
+			if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
+				// Termite needs up to date
+				c.Send(message.Message{
+					Type: message.UPDATE,
+					Body: message.BodyUpdate{
+						DistributorURL: Ctx.Distributor.Url,
+						Version:        update.Version,
+					},
+				})
+				return false
+			}
+			return true
+		} else {
+			log.Error("Client sent empty client info body: %v", msg)
 			return false
 		}
-		return true
 	} else {
 		log.Error("Client sent unexpected message type: %v", msg)
 		return false
