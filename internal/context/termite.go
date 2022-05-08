@@ -185,7 +185,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 			}
 			return true
 		} else {
-			log.Error("Client sent empty client info body", msg)
+			log.Error("Client sent empty client info body: %v", msg)
 			return false
 		}
 	} else {
