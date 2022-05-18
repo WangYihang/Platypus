@@ -295,8 +295,12 @@ func handleConnection(c *client) {
 			key := msg.Body.(*message.BodyTerminateProcess).Key
 			log.Success("Request terminate %s", key)
 			if termiteProcess, exists := processes[key]; exists {
-				syscall.Kill(termiteProcess.process.Process.Pid, syscall.SIGTERM)
-				termiteProcess.ptmx.Close()
+				if p, err := os.FindProcess(termiteProcess.process.Process.Pid); err != nil {
+					log.Error("Unable to find process: %s", err)
+				} else {
+					p.Signal(syscall.SIGTERM)
+					termiteProcess.ptmx.Close()
+				}
 			}
 		case message.PULL_TUNNEL_CONNECT:
 			address := msg.Body.(*message.BodyPullTunnelConnect).Address
