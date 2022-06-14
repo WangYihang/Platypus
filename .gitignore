@@ -21,3 +21,6 @@ build/
 config.yml
 config-v*.yml
 .pre-commit-config.yaml
+
+# VSCode
+.vscode/
