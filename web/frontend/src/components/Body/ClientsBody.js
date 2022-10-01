@@ -2,6 +2,7 @@ import React from "react";
 import { Divider, Layout } from "antd";
 import Hint from "./Hint/Hint";
 import ClientTable from "./ClientTable/ClientTable";
+import Rbac from "../Rbac";
 
 const { Content } = Layout;
 
@@ -9,7 +10,8 @@ export default class ClientsBody extends React.Component {
     render() {
         return <>
             <Layout style={{ padding: "0 24px 24px" }}>
-                <Content style={{ margin: "0 0" }}>
+                {this.props.showRbac ? <Rbac rbacUrl={this.props.rbacUrl}></Rbac>:
+                    <Content style={{ margin: "0 0" }}>
                     <Hint
                         currentServer={this.props.currentServer}
                         distributor={this.props.distributor}
@@ -29,7 +31,8 @@ export default class ClientsBody extends React.Component {
                         showModal={this.props.showModal}
                         upgradeToTermite={this.props.upgradeToTermite}
                     />
-                </Content>
+                </Content>}
+
             </Layout>
         </>;
     }

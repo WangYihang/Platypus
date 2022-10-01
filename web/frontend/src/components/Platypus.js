@@ -1,6 +1,6 @@
 import React from "react";
 import { Layout, message } from "antd";
-
+import BeforeAuth from "./BeforeAuth/index";
 import Banner from "./Banner/Banner";
 import SideBar from "./SideBar/SideBar";
 import ClientsBody from "./Body/ClientsBody";
@@ -16,6 +16,7 @@ var filesize = require("filesize");
 let endPoint = process.env.NODE_ENV === "development" ? "127.0.0.1:7331" : window.location.host;
 let baseUrl = ["http://", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
+let rbacUrl = [apiUrl, "/rbac"].join("");
 let wsUrl = ["ws://", endPoint, "/notify"].join("");
 
 const axios = require("axios");
@@ -37,8 +38,14 @@ export default class Platypus extends React.Component {
     axios
       .get([apiUrl, "/server"].join(""))
       .then((response) => {
-        if (Object.values(response.data.msg).length > 0) {
-          this.props.setData(response.data)
+        if (response.data.status === true){
+          if (Object.values(response.data.msg).length > 0) {
+            this.props.setData(response.data)
+          }
+          this.props.AuthSuccess()
+        }
+        if(response.data.status === false){
+          this.props.AuthFail()
         }
       })
       .catch((error) => {
@@ -166,47 +173,58 @@ export default class Platypus extends React.Component {
   }
 
   render() {
-    return <Layout>
-      <Banner
-        apiUrl={apiUrl}
-        currentServer={this.props.currentServer}
-        serverCreated={this.props.serverCreated}
-        serverCreateHost={this.props.serverCreateHost}
-        serverCreatePort={this.props.serverCreatePort}
-        serverCreateEncrypted={this.props.serverCreateEncrypted}
-        serversList={this.props.serversList}
-        serversMap={this.props.serversMap}
-        setServerCreateHost={this.props.setServerCreateHost}
-        setServerCreatePort={this.props.setServerCreatePort}
-        setServerCreateEncrypted={this.props.setServerCreateEncrypted}
-      />
-      <Layout style={{ height: "100%" }}>
-        <SideBar
-          apiUrl={apiUrl}
-          currentServer={this.props.currentServer}
-          selectServer={this.props.selectServer}
-          serverCreated={this.props.serverCreated}
-          serverCreateHost={this.props.serverCreateHost}
-          serverCreatePort={this.props.serverCreatePort}
-          serversList={this.props.serversList}
-          serversMap={this.props.serversMap}
-        />
-        <ClientsBody
-          baseUrl={baseUrl}
-          currentServer={this.props.currentServer}
-          distributor={this.props.distributor}
-          bottom={this.props.bottom}
-          connectBack={this.props.connectBack}
-          handleCancel={this.props.handleCancel}
-          handleOk={this.props.handleOk}
-          isModalVisible={this.props.isModalVisible}
-          serversList={this.props.serversList}
-          setConnectBack={this.props.setConnectBack}
-          showModal={this.props.showModal}
-          upgradeToTermite={this.upgradeToTermite}
-          setCopied={this.props.setCopied}
-        />
-      </Layout>
-    </Layout>;
+    return(
+        <div>
+          { this.props.isAuth ?
+              <Layout>
+                <Banner
+                    apiUrl={apiUrl}
+                    currentServer={this.props.currentServer}
+                    serverCreated={this.props.serverCreated}
+                    serverCreateHost={this.props.serverCreateHost}
+                    serverCreatePort={this.props.serverCreatePort}
+                    serverCreateEncrypted={this.props.serverCreateEncrypted}
+                    serversList={this.props.serversList}
+                    serversMap={this.props.serversMap}
+                    setServerCreateHost={this.props.setServerCreateHost}
+                    setServerCreatePort={this.props.setServerCreatePort}
+                    setServerCreateEncrypted={this.props.setServerCreateEncrypted}
+                    logOut={this.props.logOut}
+                    ctxName={this.props.ctxName}
+                />
+                <Layout style={{ height: "100%" }}>
+                  <SideBar
+                      apiUrl={apiUrl}
+                      currentServer={this.props.currentServer}
+                      selectServer={this.props.selectServer}
+                      serverCreated={this.props.serverCreated}
+                      serverCreateHost={this.props.serverCreateHost}
+                      serverCreatePort={this.props.serverCreatePort}
+                      serversList={this.props.serversList}
+                      serversMap={this.props.serversMap}
+                      ToShowRbac={this.props.ToShowRbac}
+                      unShowRbac={this.props.unShowRbac}
+                  />
+                  <ClientsBody
+                      baseUrl={baseUrl}
+                      rbacUrl={rbacUrl}
+                      currentServer={this.props.currentServer}
+                      distributor={this.props.distributor}
+                      bottom={this.props.bottom}
+                      connectBack={this.props.connectBack}
+                      handleCancel={this.props.handleCancel}
+                      handleOk={this.props.handleOk}
+                      isModalVisible={this.props.isModalVisible}
+                      serversList={this.props.serversList}
+                      setConnectBack={this.props.setConnectBack}
+                      showModal={this.props.showModal}
+                      upgradeToTermite={this.upgradeToTermite}
+                      setCopied={this.props.setCopied}
+                      showRbac={this.props.showRbac}
+                  />
+                </Layout>
+              </Layout> :<BeforeAuth  baseUrl={baseUrl} refreshIndex={this.props.refreshIndex} AuthSuccess={this.props.AuthSuccess} ></BeforeAuth>}
+        </div>
+    )
   }
 }

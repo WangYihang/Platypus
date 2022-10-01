@@ -1,0 +1,17 @@
+RefreshExpireTime : 1000
+AccessExpireTime  : 10
+JWTRefreshKey     : "cc"
+JWTAccessKey      : "cc"
+AESKey            : "AESCCaesccluckly"
+DBFile            : "./internal/context/db/gorm.db"
+#jwt:
+#  JWTRefreshKey: "cc"
+#  JWTAccessKey: "cc"
+#  RefreshExpireTime: 1000 // s
+#  AccessExpireTime: 10   // s
+#db:
+#  DBFile            : "./db/gorm.db"
+#http:
+#  IP                : "127.0.0.1"
+#  Host: "0.0.0.0"
+#  Port: 8080

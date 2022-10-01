@@ -10,6 +10,8 @@ export default class SideBar extends React.Component {
       <ServersList
         serversList={this.props.serversList}
         selectServer={this.props.selectServer}
+        ToShowRbac={this.props.ToShowRbac}
+        unShowRbac={this.props.unShowRbac}
       />
     </Sider>;
   }

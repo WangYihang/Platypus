@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/WangYihang/Platypus/internal/context/Conf"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -44,6 +45,7 @@ func main() {
 		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
 		return
 	}
+	Conf.MainConf = config
 
 	// Display platypus information
 	log.Success("Platypus %s is starting...", update.Version)
