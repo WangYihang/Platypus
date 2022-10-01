@@ -27,6 +27,11 @@ restful:
   port: 7331
   # `enable: true` means starting RESTful Server when Platypus starts.
   enable: true
+  JWTRefreshKey: "cc"
+  JWTAccessKey: "cc"
+  RefreshExpireTime: 864000
+  AccessExpireTime: 120
+  DBFile: "gorm.db"
 # Termite binary distributor
 distributor:
   host: "0.0.0.0"

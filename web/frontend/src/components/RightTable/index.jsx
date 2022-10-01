@@ -1,4 +1,5 @@
 import React, { Component } from 'react'
+import Access from "../Access";
 
 
 
@@ -9,6 +10,22 @@ export default class RightTable extends Component {
         isChecked : false,
         rightList :[],
         
+    }
+    showOS=(data) => {
+        switch (data) {
+            case 1:
+                return "Linux"
+            case 2:
+                return "Windows";
+            case 3:
+                return "SunOS";
+            case 4:
+                return "MacOS";
+            case 5:
+                return "FreeBSD";
+            default:
+                return "Unknown Operating System";
+        }
     }
 
     funx=(newList)=>{
@@ -95,7 +112,7 @@ export default class RightTable extends Component {
                     <tr>
                         <td className="row">
                             <input type="checkbox"  checked={rightitem.get} onChange={()=>{this.changeSingleRow(hasCreate? rightitem.hash:rightitem.role)}} />
-                            <span>{hasCreate? rightitem.info :rightitem.role}</span>
+                            {hasCreate? <Access hash={rightitem.hash} address={rightitem.address} os={this.showOS(rightitem.os)} user={rightitem.user} timestamp={rightitem.timestamp}/> :<span>{rightitem.role}</span>}
                         </td>
                     </tr>
                     )

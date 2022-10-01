@@ -41,8 +41,8 @@ func LoginGet(c *gin.Context) {
 }
 
 func LogOut(c *gin.Context) {
-	c.SetCookie("refresh", "", Conf.ConfData.RefreshExpireTime, "/", Conf.ConfData.IP, false, true)
-	c.SetCookie("access", "", Conf.ConfData.RefreshExpireTime, "/", Conf.ConfData.IP, false, true)
+	c.SetCookie("refresh", "", Conf.RestfulConf.RefreshExpireTime, "/", Conf.RestfulConf.Domain, false, true)
+	c.SetCookie("access", "", Conf.RestfulConf.RefreshExpireTime, "/", Conf.RestfulConf.Domain, false, true)
 	c.JSON(http.StatusOK, gin.H{
 		"status": true,
 		"msg":    "登出成功",
@@ -81,13 +81,12 @@ func LoginPost(c *gin.Context) {
 		})
 		return
 	}
-	fmt.Printf("verifyUser前:::结果:::%v", Models.VerifyUser(loginInfo.Username, loginInfo.Password))
 	if Models.VerifyUser(loginInfo.Username, loginInfo.Password) {
 		refreshToken, err := Middlewares.CreateRefreshToken(loginInfo.Username)
 		if err != nil {
 			panic(fmt.Sprintf("CreateRefreshToken err: %s", err))
 		} else {
-			c.SetCookie("refresh", refreshToken, Conf.ConfData.RefreshExpireTime, "/", Conf.ConfData.IP, false, true)
+			c.SetCookie("refresh", refreshToken, Conf.RestfulConf.RefreshExpireTime, "/", Conf.RestfulConf.Domain, false, true)
 			c.JSON(http.StatusOK, gin.H{
 				"status": true,
 				"msg":    "登录成功",
@@ -349,12 +348,27 @@ func SaveUserRolesHelper(username string, roles []RoleList) {
 	}
 	var user Models.User
 	//Models.Db.Preload("Roles").First(&user, "user_name = ?", username)
-	Models.Db.First(&user, "user_name = ?", username)
+	Models.Db.Preload("Roles").First(&user, "user_name = ?", username)
+
+	// 无论怎么样超级管理员都不会丢失超级管理员权限
+	isSuper := false
+	getSuper := false
+	for _, r := range user.Roles {
+		if r.Grade == Models.SuperRole {
+			isSuper = true
+		}
+	}
 	var tempArr = make([]Models.Role, 0)
 	for _, r := range roles {
 		if r.Get {
 			tempArr = append(tempArr, orolesMap[r.Role])
+			if r.Role == Models.SuperRole {
+				getSuper = true
+			}
 		}
+	}
+	if isSuper && !getSuper {
+		tempArr = append(tempArr, orolesMap[Models.SuperRole])
 	}
 	user.Roles = tempArr
 	Models.Db.Model(&user).Association("Roles").Replace(tempArr)
@@ -372,20 +386,25 @@ func ListRoleAccesses(c *gin.Context) {
 		roleAccessesMap[s.Hash] = true
 	}
 
-	rs := make([]ServerAccess, 0, len(accesses))
-	for _, s := range accesses {
-		if _, ok := roleAccessesMap[s.Hash]; ok {
-			rs = append(rs, ServerAccess{
-				Get:  true,
-				Info: fmt.Sprintf("%s:%d", s.Host, s.Port),
-				Hash: s.Hash,
+	rs := make([]AccessResponse, 0, len(accesses))
+	for _, ac := range accesses {
+		if _, ok := roleAccessesMap[ac.Hash]; ok {
+			rs = append(rs, AccessResponse{
+				Get:       true,
+				Address:   fmt.Sprintf("%s:%d", ac.Host, ac.Port),
+				User:      ac.User,
+				OS:        ac.OS,
+				TimeStamp: ac.TimeStamp,
+				Hash:      ac.Hash,
 			})
 		} else {
-			rs = append(rs, ServerAccess{
-				Get: false,
-
-				Info: fmt.Sprintf("%s:%d", s.Host, s.Port),
-				Hash: s.Hash,
+			rs = append(rs, AccessResponse{
+				Get:       false,
+				User:      ac.User,
+				OS:        ac.OS,
+				TimeStamp: ac.TimeStamp,
+				Address:   fmt.Sprintf("%s:%d", ac.Host, ac.Port),
+				Hash:      ac.Hash,
 			})
 		}
 	}
@@ -412,8 +431,8 @@ func CreateRole(c *gin.Context) {
 }
 
 type SaveNewRoleAccesses struct {
-	Rolename string         `json:"rolename"`
-	Accesses []ServerAccess `json:"accesses"`
+	Rolename string           `json:"rolename"`
+	Accesses []AccessResponse `json:"accesses"`
 }
 
 func SaveRoleAccesses(c *gin.Context) {
@@ -423,7 +442,7 @@ func SaveRoleAccesses(c *gin.Context) {
 	return
 }
 
-func SaveRoleAccessesHelper(rolegrade string, accesses []ServerAccess) {
+func SaveRoleAccessesHelper(rolegrade string, accesses []AccessResponse) {
 	//数据库找出所有access
 	var oaccesses []Models.Access
 	Models.Db.Find(&oaccesses)

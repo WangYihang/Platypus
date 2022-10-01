@@ -185,9 +185,12 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				return false
 			}
 			Models.CreateAccess(&Models.Access{
-				Host: c.Host,
-				Port: c.Port,
-				Hash: c.Hash,
+				Host:      c.Host,
+				Port:      c.Port,
+				Hash:      c.Hash,
+				TimeStamp: c.TimeStamp,
+				User:      c.User,
+				OS:        c.OS,
 			})
 
 			return true

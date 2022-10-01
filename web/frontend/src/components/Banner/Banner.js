@@ -26,7 +26,7 @@ export default class Banner extends React.Component {
                             setServerCreateEncrypted={this.props.setServerCreateEncrypted}
                         />
                         <span>   </span>
-                        <button className="ant-btn ant-btn-primary"  style={{borderRadius:25}} title="µã»÷ÍË³öµÇÂ¼" onClick={this.props.logOut}>µÇ³ö</button>
+                        <button className="ant-btn ant-btn-primary"  style={{borderRadius:25}} title="ç‚¹å‡»é€€å‡ºç™»å½•" onClick={this.props.logOut}>ç™»å‡º</button>
                     </Col>
                     <Col>
 

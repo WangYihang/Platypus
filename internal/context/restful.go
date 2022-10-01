@@ -7,18 +7,18 @@ import (
 	"github.com/WangYihang/Platypus/internal/context/Middlewares"
 	"github.com/WangYihang/Platypus/internal/context/Models"
 	"github.com/WangYihang/Platypus/internal/util/fs"
+	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/WangYihang/Platypus/internal/util/message"
+	"github.com/WangYihang/Platypus/internal/util/str"
 	"github.com/gin-contrib/static"
+	"gopkg.in/olahol/melody.v1"
 	"io/ioutil"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/message"
-	"github.com/WangYihang/Platypus/internal/util/str"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/olahol/melody.v1"
 )
 
 type WindowSize struct {

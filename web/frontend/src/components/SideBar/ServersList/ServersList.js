@@ -21,7 +21,7 @@ export default class ServersList extends React.Component {
           <SingleServer onClick={this.props.unShowRbac} server={value} />
         </Menu.Item>
       })}
-      <button style={{height:27,marginLeft:10}} onClick={this.props.ToShowRbac}>³¬¼¶¹ÜÀíÔ±Ò³Ãæ</button>
+      <button style={{height:27,marginLeft:10}} onClick={this.props.ToShowRbac}>è¶…çº§ç®¡ç†å‘˜é¡µé¢</button>
     </Menu>;
   }
 }

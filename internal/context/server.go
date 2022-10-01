@@ -98,7 +98,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 			log.Error("Public IP Detection failed: %s", err.Error())
 		}
 		tcpServer.PublicIP = ip
-		Conf.ConfData.IP = ip
+		Conf.RestfulConf.Domain = ip
 		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
 	} else {
 		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)

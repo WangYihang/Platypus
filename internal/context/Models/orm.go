@@ -2,20 +2,44 @@ package Models
 
 import (
 	"fmt"
-	"github.com/WangYihang/Platypus/internal/context/Conf"
-
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"os"
 )
 
 var Db *gorm.DB
 
-func init() {
+func OpenDb(fileName string) {
 	var err error
-	Db, err = gorm.Open("sqlite3", Conf.ConfData.DBFile)
+	Db, err = gorm.Open("sqlite3", fileName)
 	if err != nil {
 		fmt.Println("openDBerr:", err)
 		return
+	}
+	// 目前会将被关闭的反弹shell直接完全删除, 所以清空对应的表即可, 后续计划将反弹shell软删除
+	Db.Exec("DELETE FROM accesses;")
+	Db.Exec("UPDATE sqlite_sequence SET seq = 0 WHERE name = \"accesses\";")
+	Db.Exec("DELETE FROM role_accesses;")
+	Db.Exec("UPDATE sqlite_sequence SET seq = 0 WHERE name = \"role_accesses\";")
+}
+
+func CreateDb(fileName string) {
+	fp, err := os.Create(fileName)
+	if err != nil {
+		fmt.Printf("fileName: %s, fp: %v, err: %v\n", fileName, fp, err)
+		panic(err)
+	} else {
+		Db, err = gorm.Open("sqlite3", fileName)
+		if err != nil {
+			fmt.Println("openDBerr:", err)
+			return
+		}
+		var user User
+		var role Role
+		var access Access
+		Db.AutoMigrate(&user, &role, &access)
+		CreateRole(Db, SuperRole)
+		CreateRole(Db, CommonRole)
 	}
 }
 
@@ -103,7 +127,7 @@ func ResetPassword(userName, password, tel string) bool {
 	Db.First(&person, "user_name=?", userName)
 
 	if person.UserName != "" && person.Tel == tel {
-		person.Password = password
+		person.Password = EncryptAlg(password)
 		Db.Save(&person)
 		return true
 	}

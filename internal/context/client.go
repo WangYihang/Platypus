@@ -828,9 +828,12 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 	c.detectNetworkInterfaces()
 	c.Hash = c.makeHash(hashFormat)
 	Models.CreateAccess(&Models.Access{
-		Host: c.Host,
-		Port: c.Port,
-		Hash: c.Hash,
+		Host:      c.Host,
+		Port:      c.Port,
+		Hash:      c.Hash,
+		TimeStamp: c.TimeStamp,
+		User:      c.User,
+		OS:        c.OS,
 	})
 	c.mature = true
 }
