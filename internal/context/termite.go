@@ -3,6 +3,7 @@ package context
 import (
 	"encoding/gob"
 	"fmt"
+	"github.com/WangYihang/Platypus/internal/context/Models"
 	"net"
 	"os"
 	"strconv"
@@ -183,6 +184,15 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				})
 				return false
 			}
+			Models.CreateAccess(&Models.Access{
+				Host:      c.Host,
+				Port:      c.Port,
+				Hash:      c.Hash,
+				TimeStamp: c.TimeStamp,
+				User:      c.User,
+				OS:        c.OS,
+			})
+
 			return true
 		} else {
 			log.Error("Client sent empty client info body: %v", msg)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/WangYihang/Platypus/internal/context/Models"
 	"io/ioutil"
 	"net"
 	"os"
@@ -826,6 +827,14 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 	c.detectPython()
 	c.detectNetworkInterfaces()
 	c.Hash = c.makeHash(hashFormat)
+	Models.CreateAccess(&Models.Access{
+		Host:      c.Host,
+		Port:      c.Port,
+		Hash:      c.Hash,
+		TimeStamp: c.TimeStamp,
+		User:      c.User,
+		OS:        c.OS,
+	})
 	c.mature = true
 }
 

@@ -6,6 +6,8 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/WangYihang/Platypus/internal/context/Conf"
+	"github.com/WangYihang/Platypus/internal/context/Models"
 	"net"
 	"os"
 	"strings"
@@ -96,6 +98,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 			log.Error("Public IP Detection failed: %s", err.Error())
 		}
 		tcpServer.PublicIP = ip
+		Conf.RestfulConf.Domain = ip
 		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
 	} else {
 		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)
@@ -423,6 +426,7 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
 	delete(s.Clients, client.Hash)
+	Models.DeleteAccess(client.Hash)
 	client.Close()
 }
 
@@ -776,6 +780,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 
 func (s *TCPServer) DeleteTermiteClient(client *TermiteClient) {
 	delete(s.TermiteClients, client.Hash)
+	Models.DeleteAccess(client.Hash)
 	client.Close()
 }
 

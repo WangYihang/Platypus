@@ -3,19 +3,22 @@ package context
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/WangYihang/Platypus/internal/context/Controller"
+	"github.com/WangYihang/Platypus/internal/context/Middlewares"
+	"github.com/WangYihang/Platypus/internal/context/Models"
+	"github.com/WangYihang/Platypus/internal/util/fs"
+	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/WangYihang/Platypus/internal/util/message"
+	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/gin-contrib/static"
+	"gopkg.in/olahol/melody.v1"
 	"io/ioutil"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/util/fs"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/message"
-	"github.com/WangYihang/Platypus/internal/util/str"
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/olahol/melody.v1"
 )
 
 type WindowSize struct {
@@ -63,6 +66,19 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	sR := endpoint.Use(Models.Session("golang-tech-stack"))
+	sR.GET("/captcha", Controller.CreateCaptcha)
+	sR.GET("/login", Controller.LoginGet)
+	sR.POST("/login", Controller.LoginPost)
+	sR.GET("/register", Controller.RegisterGet)
+	sR.POST("/register", Controller.RegisterPost)
+	endpoint.GET("/reset", Controller.ResetPasswordGet)
+	endpoint.POST("/reset", Controller.ResetPasswordPost)
+	// Static files
+	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
+	// WebSocket TTYd
+	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
 
 	// Notify client online event
 	notifyWebSocket := melody.New()
@@ -299,11 +315,6 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 	})
 
-	// Static files
-	endpoint.Use(static.Serve("/", fs.BinaryFileSystem("./web/frontend/build")))
-	// WebSocket TTYd
-	endpoint.Use(static.Serve("/shell/", fs.BinaryFileSystem("./web/ttyd/dist")))
-
 	// TODO: Websocket UI Auth (to be implemented)
 	endpoint.GET("/token", func(c *gin.Context) {
 		c.String(200, "")
@@ -317,6 +328,19 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	// Server related
 	// Simple group: v1
 	RESTfulAPIGroup := endpoint.Group("/api")
+	RESTfulAPIGroup.Use(Middlewares.Oauth())
+	RESTfulAPIGroup.GET("/logout", Controller.LogOut)
+	rbacAPIGroup := RESTfulAPIGroup.Group("/rbac")
+	rbacAPIGroup.Use(Middlewares.Super())
+	{
+		rbacAPIGroup.GET("/users", Controller.ListUsers)
+		rbacAPIGroup.GET("/user/:user", Controller.ListUserRoles)
+		rbacAPIGroup.GET("/roles", Controller.ListRoles)
+		rbacAPIGroup.GET("/role/:role", Controller.ListRoleAccesses)
+		rbacAPIGroup.POST("/role", Controller.CreateRole)
+		rbacAPIGroup.POST("/userRoles", Controller.SaveUserRoles)
+		rbacAPIGroup.POST("/roleAccesses", Controller.SaveRoleAccesses)
+	}
 	{
 		serverAPIGroup := RESTfulAPIGroup.Group("/server")
 		{
@@ -324,6 +348,23 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				response := ServersWithDistributorAddress{
 					Servers:     Ctx.Servers,
 					Distributor: *Ctx.Distributor,
+				}
+				userName, ok := c.Get(Middlewares.CtxUser)
+				if !ok {
+					return
+				}
+				accesses := Models.ListAllAccesses(userName.(string))
+				for _, server := range response.Servers {
+					for k, client := range server.Clients {
+						if _, ok := accesses[client.Hash]; !ok {
+							delete(server.Clients, k)
+						}
+					}
+					for k, client := range server.TermiteClients {
+						if _, ok := accesses[client.Hash]; !ok {
+							delete(server.Clients, k)
+						}
+					}
 				}
 				c.JSON(200, gin.H{
 					"status": true,

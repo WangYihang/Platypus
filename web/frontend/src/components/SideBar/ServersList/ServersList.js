@@ -15,11 +15,14 @@ export default class ServersList extends React.Component {
           key={value.hash}
           onClick={(item, key, keyPath, domEvent) => {
             this.props.selectServer(item.key)
+            this.props.unShowRbac()
           }}
         >
-          <SingleServer server={value} />
+          <SingleServer onClick={this.props.unShowRbac} server={value} />
         </Menu.Item>
-      })}</Menu>;
+      })}
+      <button style={{height:27,marginLeft:10}} onClick={this.props.ToShowRbac}>超级管理员页面</button>
+    </Menu>;
   }
 }
 

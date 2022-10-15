@@ -1,12 +1,18 @@
 import React from "react";
+import axios from "axios";
 import "./App.css";
 
 import Platypus from "./components/Platypus";
-
+let endPoint = process.env.NODE_ENV === "development" ? "127.0.0.1:7331" : window.location.host;
+let baseUrl = ["http://", endPoint].join("");
+let apiUrl = [baseUrl, "/api"].join("");
 class App extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
+      ctxName:"",
+      showRbac:false,
+      isAuth:true,
       bottom: "bottomLeft",
       serversMap: null,
       serversList: [],
@@ -30,6 +36,42 @@ class App extends React.Component {
     this.setServerCreatePort = this.setServerCreatePort.bind(this);
     this.setServerCreateEncrypted = this.setServerCreateEncrypted.bind(this);
   }
+  refreshIndex=()=>{
+    window.location.reload()
+  }
+
+  AuthSuccess=()=>{
+    this.setState({isAuth:true})
+  }
+
+  AuthFail=()=>{
+    this.setState({isAuth:false})
+  }
+
+  getCtxName=(userName)=>{
+    this.setState({ctxName:userName})
+  }
+
+  ToShowRbac=()=>{
+    this.setState({showRbac:true})
+  }
+
+  unShowRbac=()=>{
+    this.setState({showRbac:false})
+  }
+
+  logOut=()=>{
+    axios
+        .get([apiUrl, "/logout"].join(""))
+        .then((response)=>{
+          this.setState({isAuth:false})
+        })
+        .catch(
+            //
+        )
+  }
+
+
 
   setServerCreateHost(host) {
     this.setState({ serverCreateHost: host });
@@ -106,31 +148,44 @@ class App extends React.Component {
 
   render() {
     return (
-        <Platypus
-          bottom={this.state.bottom}
-          connectBack={this.state.connectBack}
-          currentServer={this.state.currentServer}
-          distributor={this.state.distributor}
-          handleCancel={this.handleCancel}
-          handleOk={this.handleOk}
-          isModalVisible={this.state.isModalVisible}
-          selectServer={this.selectServer}
-          serverCreated={this.serverCreated}
-          serverCreateHost={this.state.serverCreateHost}
-          serverCreatePort={this.state.serverCreatePort}
-          serverCreateEncrypted={this.state.serverCreateEncrypted}
-          serversList={this.state.serversList}
-          serversMap={this.state.serversMap}
-          setConnectBack={this.setConnectBack}
-          setCopied={this.setCopied}
-          setData={this.setData}
-          setServerCreateHost={this.setServerCreateHost}
-          setServerCreatePort={this.setServerCreatePort}
-          setServerCreateEncrypted={this.setServerCreateEncrypted}
-          setServersMap={this.setServersMap}
-          showModal={this.showModal}
-        />
-    );
+        <div>
+          <Platypus
+              bottom={this.state.bottom}
+              connectBack={this.state.connectBack}
+              currentServer={this.state.currentServer}
+              distributor={this.state.distributor}
+              handleCancel={this.handleCancel}
+              handleOk={this.handleOk}
+              isModalVisible={this.state.isModalVisible}
+              selectServer={this.selectServer}
+              serverCreated={this.serverCreated}
+              serverCreateHost={this.state.serverCreateHost}
+              serverCreatePort={this.state.serverCreatePort}
+              serverCreateEncrypted={this.state.serverCreateEncrypted}
+              serversList={this.state.serversList}
+              serversMap={this.state.serversMap}
+              setConnectBack={this.setConnectBack}
+              setCopied={this.setCopied}
+              setData={this.setData}
+              setServerCreateHost={this.setServerCreateHost}
+              setServerCreatePort={this.setServerCreatePort}
+              setServerCreateEncrypted={this.setServerCreateEncrypted}
+              setServersMap={this.setServersMap}
+              showModal={this.showModal}
+
+              refreshIndex={this.refreshIndex}
+              logOut={this.logOut}
+              ctxName={this.state.ctxName}
+              showRbac={this.state.showRbac}
+              ToShowRbac={this.ToShowRbac}
+              unShowRbac={this.unShowRbac}
+              isAuth={this.state.isAuth}
+              getCtxName={this.getCtxName}
+              AuthSuccess={this.AuthSuccess}
+              AuthFail={this.AuthFail}
+          /> 
+        </div>
+    )
   }
 }
 
