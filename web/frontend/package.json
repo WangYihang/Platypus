@@ -13,7 +13,7 @@
     "filesize": "^6.3.0",
     "glob-parent": "^6.0.1",
     "moment": "^2.29.4",
-    "qs": "^6.10.1",
+    "qs": "^6.10.3",
     "randomstring": "^1.1.5",
     "react": "^17.0.2",
     "react-copy-to-clipboard": "^5.0.3",
