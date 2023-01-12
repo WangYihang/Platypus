@@ -29,3 +29,6 @@ config-v*.yml
 
 # dlv debug file
 __debug_bin
+
+# Vagrant file
+.vagrant/
