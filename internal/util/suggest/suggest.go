@@ -1,6 +1,7 @@
 package suggest
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/WangYihang/Platypus/cmd/admin/ctx"
@@ -39,6 +40,11 @@ func GetCommandSuggestions() []prompt.Suggest {
 		suggest := prompt.Suggest{Text: name, Description: command.(meta.MetaCommand).Description()}
 		suggests = append(suggests, suggest)
 	}
+
+	sort.Slice(suggests, func(i, j int) bool {
+		return suggests[i].Text < suggests[j].Text
+	})
+
 	return suggests
 }
 

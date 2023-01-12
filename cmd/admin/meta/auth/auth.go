@@ -36,9 +36,9 @@ func (command Command) Arguments() []meta.Argument {
 
 type LoginResponse struct {
 	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Expire  string `json:"expire"`
-	Token   string `json:"token"`
+	Expire  string `json:"expire,omitempty"`
+	Token   string `json:"token,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func login(username string, password string) (*LoginResponse, error) {
