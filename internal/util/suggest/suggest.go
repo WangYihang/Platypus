@@ -8,6 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/cmd/admin/meta"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/auth"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/compile"
+	"github.com/WangYihang/Platypus/cmd/admin/meta/count"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/exit"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/info"
 	"github.com/WangYihang/Platypus/cmd/admin/meta/interact"
@@ -25,11 +26,12 @@ func GetMetaCommandsMap() map[string]interface{} {
 		}
 	} else {
 		return map[string]interface{}{
-			"run":      run.Command{},
+			"compile":  compile.Command{},
+			"count":    count.Command{},
+			"exit":     exit.Command{},
 			"info":     info.Command{},
 			"interact": interact.Command{},
-			"compile":  compile.Command{},
-			"exit":     exit.Command{},
+			"run":      run.Command{},
 		}
 	}
 }
