@@ -32,3 +32,15 @@ __debug_bin
 
 # Vagrant file
 .vagrant/
+
+# Database file
+db.sqlite3
+
+# Asciinema Record files
+records/
+
+# Config files
+config.y[a]ml
+
+# Swagger files
+api/

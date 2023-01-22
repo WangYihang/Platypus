@@ -1,0 +1,13 @@
+[Unit]
+Description=Platypus
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/platypus-server
+ExecReload=/usr/local/bin/platypus-server
+Type=notify
+Restart=always
+
+[Install]
+WantedBy=default.target
+RequiredBy=network.target

@@ -1,57 +1,112 @@
 module github.com/WangYihang/Platypus
 
-go 1.16
+go 1.19
 
 require (
-	github.com/WangYihang/readline v0.0.0-20200229084751-518dcf4f57b3
-	github.com/akamensky/argparse v1.3.1
-	github.com/appleboy/gin-jwt/v2 v2.6.4
-	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
-	github.com/blang/semver v3.5.1+incompatible
-	github.com/c-bata/go-prompt v0.2.6
-	github.com/creack/pty v1.1.16
-	github.com/dustin/go-humanize v1.0.0
-	github.com/elazarl/go-bindata-assetfs v1.0.1
-	github.com/erikdubbelboer/gspt v0.0.0-20210805194459-ce36a5128377
-	github.com/fatih/color v1.13.0
-	github.com/gin-contrib/cors v1.3.1
-	github.com/gin-contrib/static v0.0.1
-	github.com/gin-gonic/gin v1.7.4
-	github.com/go-openapi/errors v0.20.1 // indirect
-	github.com/go-openapi/strfmt v0.20.2 // indirect
-	github.com/go-playground/validator/v10 v10.9.0
-	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/BurntSushi/toml v1.2.1 // indirect
+	github.com/KyleBanks/depth v1.2.1 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/vcs v1.13.3 // indirect
+	github.com/PuerkitoBio/purell v1.2.0 // indirect
+	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
+	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
+	github.com/alecthomas/repr v0.2.0 // indirect
+	github.com/appleboy/gin-jwt/v2 v2.9.1 // indirect
+	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/bcicen/grmon v0.0.0-20211013120613-63facda35286 // indirect
+	github.com/bcicen/termui v0.0.0-20180326052246-4eb80249d3f5 // indirect
+	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/boltdb/bolt v1.3.1 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/elazarl/go-bindata-assetfs v1.0.1 // indirect
+	github.com/fatih/color v1.13.0 // indirect
+	github.com/felixge/fgprof v0.9.3 // indirect
+	github.com/getsentry/sentry-go v0.17.0 // indirect
+	github.com/ghodss/yaml v1.0.0 // indirect
+	github.com/gin-contrib/cors v1.4.0 // indirect
+	github.com/gin-contrib/sse v0.1.0 // indirect
+	github.com/gin-contrib/static v0.0.1 // indirect
+	github.com/gin-gonic/gin v1.8.2 // indirect
+	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/go-openapi/jsonpointer v0.19.6 // indirect
+	github.com/go-openapi/jsonreference v0.20.1 // indirect
+	github.com/go-openapi/spec v0.20.7 // indirect
+	github.com/go-openapi/swag v0.22.3 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.0 // indirect
+	github.com/go-playground/validator/v10 v10.11.1 // indirect
+	github.com/goccy/go-json v0.10.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.3 // indirect
+	github.com/golang/dep v0.5.4 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-	github.com/google/uuid v1.3.0
-	github.com/gorilla/websocket v1.4.2
-	github.com/imroc/req v0.3.0
-	github.com/imroc/req/v3 v3.29.0 // indirect
-	github.com/jedib0t/go-pretty v4.3.0+incompatible
+	github.com/golobby/cast v1.3.3 // indirect
+	github.com/golobby/config/v3 v3.4.2 // indirect
+	github.com/golobby/dotenv v1.3.2 // indirect
+	github.com/golobby/env/v2 v2.2.4 // indirect
+	github.com/google/go-github/v30 v30.1.0 // indirect
+	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
+	github.com/influxdata/influxdb v1.11.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/jmank88/nuts v0.4.0 // indirect
+	github.com/josharian/intern v1.0.0 // indirect
+	github.com/jpillora/overseer v1.1.6 // indirect
+	github.com/jpillora/s3 v1.1.4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
-	github.com/lithammer/fuzzysearch v1.1.3
-	github.com/mattn/go-colorable v0.1.11 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
-	github.com/mitchellh/mapstructure v1.4.2 // indirect
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	github.com/rhysd/go-github-selfupdate v1.2.3
-	github.com/sevlyar/go-daemon v0.1.5
-	github.com/tidwall/pretty v1.0.1 // indirect
-	github.com/ugorji/go v1.2.6 // indirect
-	github.com/ulikunitz/xz v0.5.10 // indirect
-	github.com/vbauerster/mpb/v6 v6.0.4
-	go.mongodb.org/mongo-driver v1.7.2 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
-	golang.org/x/term v0.4.0
+	github.com/jtaczanowski/go-graphite-client v1.0.0 // indirect
+	github.com/jtaczanowski/go-runtime-stats v0.2.0 // indirect
+	github.com/jtaczanowski/go-scheduler v0.1.0 // indirect
+	github.com/leodido/go-urn v1.2.1 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/maruel/panicparse v1.6.2 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.17 // indirect
+	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/mattn/go-sqlite3 v1.14.16 // indirect
+	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/nightlyone/lockfile v1.0.0 // indirect
+	github.com/nsf/termbox-go v1.1.1 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/profile v1.7.0 // indirect
+	github.com/rhysd/go-github-selfupdate v1.2.3 // indirect
+	github.com/rivo/uniseg v0.4.3 // indirect
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/sdboyer/constext v0.0.0-20170321163424-836a14457353 // indirect
+	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
+	github.com/swaggo/files v1.0.0 // indirect
+	github.com/swaggo/gin-swagger v1.5.3 // indirect
+	github.com/swaggo/swag v1.8.9 // indirect
+	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
+	github.com/ugorji/go/codec v1.2.8 // indirect
+	github.com/ulikunitz/xz v0.5.9 // indirect
+	github.com/urfave/cli/v2 v2.23.7 // indirect
+	github.com/urfave/negroni v1.0.0 // indirect
+	github.com/wgliang/goappmonitor v0.0.0-20171025033046-08869d495310 // indirect
+	github.com/wgliang/metrics v0.0.0-20161208130154-60c18d201264 // indirect
+	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
+	golang.org/x/crypto v0.5.0 // indirect
+	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c // indirect
+	golang.org/x/sync v0.1.0 // indirect
+	golang.org/x/sys v0.4.0 // indirect
+	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/tools v0.5.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
-	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376
-	gopkg.in/yaml.v2 v2.4.0
-	gorm.io/driver/sqlite v1.1.5
-	gorm.io/gorm v1.21.15
+	google.golang.org/protobuf v1.28.1 // indirect
+	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/sqlite v1.4.4 // indirect
+	gorm.io/gorm v1.24.3 // indirect
 )
