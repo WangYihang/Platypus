@@ -7,4 +7,4 @@ services:
     network_mode: host
     volumes: 
       - ./config.yml:/app/config.yml
-    entrypoint: tmux new -s platypus ./platypus
+    entrypoint: /app/platypus

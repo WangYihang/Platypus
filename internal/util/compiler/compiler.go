@@ -51,7 +51,7 @@ func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) err
 		return errors.New("can not read termite.go")
 	}
 	contentString := string(content)
-	contentString = strings.Replace(contentString, "xxx.xxx.xxx.xxx:xxxxx", targetAddress, -1)
+	contentString = strings.Replace(contentString, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx", targetAddress, -1)
 	err = ioutil.WriteFile("termite.go", []byte(contentString), 0644)
 	if err != nil {
 		log.Error("Can not write termite.go: %s", err)
@@ -76,7 +76,7 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 	}
 
 	// Step 2: Generating the placeholder
-	placeHolder := "xxx.xxx.xxx.xxx:xxxxx"
+	placeHolder := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx"
 	replacement := make([]byte, len(placeHolder))
 
 	for i := 0; i < len(placeHolder); i++ {
