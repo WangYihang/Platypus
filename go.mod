@@ -13,7 +13,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/fatih/color v1.12.0
-	github.com/gin-contrib/cors v1.3.1
+	github.com/gin-contrib/cors v1.6.0
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-contrib/static v0.0.1
 	github.com/gin-gonic/gin v1.9.1
@@ -26,13 +26,11 @@ require (
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/jinzhu/gorm v1.9.16
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
-	github.com/kr/pretty v0.3.0 // indirect
 	github.com/onsi/ginkgo v1.16.1 // indirect
 	github.com/onsi/gomega v1.11.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/browser v0.0.0-20210706143420-7d21f8c997e2
 	github.com/rhysd/go-github-selfupdate v1.2.3
-	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/sevlyar/go-daemon v0.1.5
 	github.com/tidwall/pretty v1.0.1 // indirect
 	github.com/ugorji/go v1.2.7 // indirect
@@ -40,9 +38,8 @@ require (
 	github.com/vbauerster/mpb/v6 v6.0.4
 	golang.org/x/mod v0.8.0
 	golang.org/x/oauth2 v0.0.0-20210313182246-cd4f82c27b84 // indirect
-	golang.org/x/term v0.8.0
+	golang.org/x/term v0.18.0
 	google.golang.org/appengine v1.6.7 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376
 	gopkg.in/yaml.v2 v2.4.0
 )
