@@ -20,7 +20,7 @@
     "react-dom": "^17.0.2",
     "react-scripts": "4.0.3",
     "web-vitals": "^1.0.1",
-    "webpack": "4.44.2",
+    "webpack": "5.94.0",
     "websocket": "^1.0.34"
   },
   "scripts": {
