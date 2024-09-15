@@ -8,7 +8,6 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/creack/pty v1.1.18
 	github.com/dustin/go-humanize v1.0.0
-	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/fatih/color v1.12.0
 	github.com/gin-contrib/cors v1.6.0
 	github.com/gin-contrib/static v0.0.1

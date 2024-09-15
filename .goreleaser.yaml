@@ -14,8 +14,6 @@ before:
     - go mod tidy
     # you may remove this if you don't need go generate
     - go generate ./...
-    # use go-bindata to generate assets.go
-    - go-bindata -pkg assets -o ./internal/utils/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/...
 
 builds:
   - id: platypus-server
@@ -29,9 +27,9 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
 
   - id: platypus-admin
     main: cmd/platypus-admin/main.go
@@ -44,9 +42,9 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
 
   - id: platypus-agent
     main: cmd/platypus-agent/main.go
@@ -59,9 +57,9 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
 
 archives:
   - format: tar.gz

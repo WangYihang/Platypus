@@ -9,7 +9,6 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/utils/assets"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/fs"
 	"github.com/WangYihang/Platypus/internal/utils/log"
@@ -22,7 +21,7 @@ func main() {
 	// Detect and create config file
 	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilenameWithVersion) {
-		content, _ := assets.Asset("assets/config.example.yml")
+		content, _ := os.ReadFile("assets/config.example.yml")
 		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 
