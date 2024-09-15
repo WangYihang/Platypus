@@ -49,6 +49,6 @@
     ]
   },
   "devDependencies": {
-    "yarn-audit-fix": "^6.3.8"
+    "yarn-audit-fix": "^10.0.9"
   }
 }
