@@ -1,10 +1,6 @@
 package Models
 
-import (
-	"github.com/jinzhu/gorm"
-)
-
-func ListUsers(db *gorm.DB) []User {
+func ListUsers(db *db.sqlite3) []User {
 	var users []User
 	// 指定user表, 查找所有user, 并且预加载Languages项外键, 不预加载的话看不到这项内容
 	db.Find(&users)
@@ -84,7 +80,7 @@ func RoleAddAccess(grade string, accesses ...string) bool {
 
 }
 
-//TODO: 当得到一个新的反弹shell要把他记录在数据库中 所有server创建时都会归到超级管理员手里
+// TODO: 当得到一个新的反弹shell要把他记录在数据库中 所有server创建时都会归到超级管理员手里
 func ListRolesExpectSuperAdmin() []string {
 
 	var roles []Role

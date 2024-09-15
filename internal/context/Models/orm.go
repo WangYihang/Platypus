@@ -2,12 +2,13 @@ package Models
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
-	"os"
 )
 
-var Db *gorm.DB
+var Db *db.sqlite3
 
 func OpenDb(fileName string) {
 	var err error
@@ -56,14 +57,14 @@ func DeleteAccess(hash string) {
 	Db.Delete(&ac)
 }
 
-func CreateRole(db *gorm.DB, grade string) *Role {
+func CreateRole(db *db.sqlite3, grade string) *Role {
 	r := Role{Grade: grade}
 	db.Create(&r)
 	db.Save(&r)
 	return &r
 }
 
-func CreateUser(db *gorm.DB, user *User) {
+func CreateUser(db *db.sqlite3, user *User) {
 
 	var role Role
 	if user.ID == 1 {

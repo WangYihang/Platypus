@@ -3,14 +3,14 @@ AccessExpireTime  : 10
 JWTRefreshKey     : "cc"
 JWTAccessKey      : "cc"
 AESKey            : "AESCCaesccluckly"
-DBFile            : "./internal/context/db/gorm.db"
+DBFile            : "./internal/context/db/db.sqlite3"
 #jwt:
 #  JWTRefreshKey: "cc"
 #  JWTAccessKey: "cc"
 #  RefreshExpireTime: 1000 // s
 #  AccessExpireTime: 10   // s
 #db:
-#  DBFile            : "./db/gorm.db"
+#  DBFile            : "./db/db.sqlite3"
 #http:
 #  IP                : "127.0.0.1"
 #  Host: "0.0.0.0"

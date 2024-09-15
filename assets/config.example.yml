@@ -31,7 +31,7 @@ restful:
   JWTAccessKey: "cc"
   RefreshExpireTime: 864000
   AccessExpireTime: 120
-  DBFile: "gorm.db"
+  DBFile: "db.sqlite3"
 # Termite binary distributor
 distributor:
   host: "0.0.0.0"
