@@ -40,11 +40,11 @@ const baseConfig = {
         ]
     },
     resolve: {
-        extensions: [ '.tsx', '.ts', '.js' ]
+        extensions: ['.tsx', '.ts', '.js']
     },
     plugins: [
         new CopyWebpackPlugin({
-            patterns:[
+            patterns: [
                 { from: './favicon.png', to: '.' }
             ],
         }),
@@ -62,32 +62,39 @@ const baseConfig = {
             template: './template.html'
         })
     ],
-    performance : {
-        hints : false
+    performance: {
+        hints: false
     },
 };
 
-const devConfig =  {
+const devConfig = {
     mode: 'development',
     devServer: {
-        contentBase: path.join(__dirname, 'dist'),
+        static: {
+            directory: path.join(__dirname, 'dist'),
+        },
         compress: true,
         port: 9000,
         proxy: [{
             context: ['/token', '/ws'],
             target: 'http://localhost:7681',
-            ws: true
+            ws: true,
         }]
     },
     devtool: 'inline-source-map',
 };
+
 
 const prodConfig = {
     mode: 'production',
     optimization: {
         minimizer: [
             new TerserPlugin({
-                sourceMap: true
+                terserOptions: {
+                    // Move sourceMap inside the terserOptions object
+                    sourceMap: true,
+                },
+                // Remove the extraneous sourceMap property here
             }),
             new OptimizeCSSAssetsPlugin({
                 cssProcessorOptions: {
@@ -101,6 +108,5 @@ const prodConfig = {
     },
     devtool: 'source-map',
 };
-
 
 module.exports = merge(baseConfig, devMode ? devConfig : prodConfig);
