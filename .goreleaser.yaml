@@ -1,0 +1,87 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    - go generate ./...
+
+builds:
+  - id: platypus
+    main: cmd/platypus/main.go
+    binary: platypus
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+
+  - id: termite
+    main: cmd/termite/main.go
+    binary: termite
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+upx:
+  -
+    # Whether to enable it or not.
+    enabled: true
+
+    # Filter by build ID.
+    ids: [ "platypus", "termite" ]
+
+    # Compress argument.
+    # Valid options are from '1' (faster) to '9' (better), and 'best'.
+    compress: best
+
+    # Whether to try LZMA (slower).
+    lzma: true
+
+    # Whether to try all methods and filters (slow).
+    brute: false
