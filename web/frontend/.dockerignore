@@ -1,0 +1,7 @@
+Dockerfile
+.github/
+LICENSE
+README.md
+node_modules/
+web/frontend/node_modules/
+web/ttyd/node_modules/

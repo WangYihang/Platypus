@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres
+    environment:
+      - POSTGRES_USER=platypus
+      - POSTGRES_PASSWORD=platypus
+      - POSTGRES_DB=platypus
+      - PGDATA=/var/lib/postgres/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgres/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platypus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: 
+      context: ../
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+    command: sleep infinity
+    volumes:
+      - ../:/workspace
+
+  frontend:
+    build: 
+      context: ../web/frontend
+      dockerfile: Dockerfile
+    command: sleep infinity
+    volumes:
+      - ../:/workspace
+
+volumes:
+  postgres_data:

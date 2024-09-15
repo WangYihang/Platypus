@@ -1,0 +1,56 @@
+{
+  "name": "Napoleon Container",
+  "dockerComposeFile": "docker-compose.yaml",
+  "service": "backend",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "none",
+  "forwardPorts": [
+    // Frontend
+    3000,
+    // Backend
+    8080,
+    // Postgres
+    "postgres:5432"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.22.6"
+    },
+    "ghcr.io/devcontainers/features/python:1": {},
+    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {},
+    "ghcr.io/prulloac/devcontainer-features/pre-commit:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
+      "packages": "zsh,tmux,locales"
+    }
+  },
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "eamodio.gitlens",
+        "github.vscode-github-actions",
+        "golang.go",
+        "ms-azuretools.vscode-docker",
+        "ms-edgedevtools.vscode-edge-devtools",
+        "ms-ossdata.vscode-postgres",
+        "redhat.vscode-yaml",
+        "VisualStudioExptTeam.vscodeintellicode"
+      ]
+    },
+    "settings": {
+      "editor.tabSize": 4,
+      "terminal.integrated.defaultProfile.linux": "zsh",
+      "terminal.integrated.profiles.linux": {
+        "zsh": {
+          "path": "zsh"
+        }
+      }
+    }
+  }
+}
