@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/os"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/os"
 )
 
 func (dispatcher commandDispatcher) Upgrade(args []string) {

@@ -2,28 +2,26 @@ package main
 
 import (
 	"fmt"
-	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
-	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/context/Conf"
-	"github.com/WangYihang/Platypus/internal/context/Models"
-	"github.com/WangYihang/Platypus/internal/util/assets"
-	"github.com/WangYihang/Platypus/internal/util/config"
-	"github.com/WangYihang/Platypus/internal/util/fs"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/update"
-	"github.com/pkg/browser"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
+	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/utils/config"
+	"github.com/WangYihang/Platypus/internal/utils/fs"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/update"
+	"github.com/pkg/browser"
+	"gopkg.in/yaml.v2"
 )
 
 func main() {
 	// Detect and create config file
 	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilenameWithVersion) {
-		content, _ := assets.Asset("assets/config.example.yml")
+		content, _ := os.ReadFile("assets/config.example.yml")
 		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 
@@ -45,13 +43,6 @@ func main() {
 		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
 		return
 	}
-	if !fs.FileExists(config.RESTful.DBFile) {
-		Models.CreateDb(config.RESTful.DBFile)
-	} else {
-		Models.OpenDb(config.RESTful.DBFile)
-	}
-
-	Conf.RestfulConf = config.RESTful
 
 	// Display platypus information
 	log.Success("Platypus %s is starting...", update.Version)

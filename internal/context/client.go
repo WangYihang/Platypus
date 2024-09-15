@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/WangYihang/Platypus/internal/context/Models"
 	"io/ioutil"
 	"net"
 	"os"
@@ -15,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/util/compiler"
-	"github.com/WangYihang/Platypus/internal/util/hash"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	oss "github.com/WangYihang/Platypus/internal/util/os"
-	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/WangYihang/Platypus/internal/utils/compiler"
+	"github.com/WangYihang/Platypus/internal/utils/hash"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	oss "github.com/WangYihang/Platypus/internal/utils/os"
+	"github.com/WangYihang/Platypus/internal/utils/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/vbauerster/mpb/v6"
@@ -827,14 +826,6 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 	c.detectPython()
 	c.detectNetworkInterfaces()
 	c.Hash = c.makeHash(hashFormat)
-	Models.CreateAccess(&Models.Access{
-		Host:      c.Host,
-		Port:      c.Port,
-		Hash:      c.Hash,
-		TimeStamp: c.TimeStamp,
-		User:      c.User,
-		OS:        c.OS,
-	})
 	c.mature = true
 }
 

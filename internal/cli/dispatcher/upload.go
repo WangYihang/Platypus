@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	oss "github.com/WangYihang/Platypus/internal/util/os"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/vbauerster/mpb/v6"
 	"github.com/vbauerster/mpb/v6/decor"
 )

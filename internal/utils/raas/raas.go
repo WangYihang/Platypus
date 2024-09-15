@@ -2,11 +2,11 @@ package raas
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/util/assets"
-	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
 func ParsePort(host string, defaultPort uint16) uint16 {
@@ -60,11 +60,11 @@ func URI2Command(requestURI string, httpHost string) string {
 	// read reverse shell template file from assets
 	// preread to check the language is valid or not
 	templateFilename := fmt.Sprintf("assets/template/rsh/%s.tpl", language)
-	_, err := assets.Asset(templateFilename)
+	_, err := os.ReadFile(templateFilename)
 	if err != nil {
 		templateFilename = "assets/template/rsh/bash.tpl"
 	}
-	templateContent, _ := assets.Asset(templateFilename)
+	templateContent, _ := os.ReadFile(templateFilename)
 
 	// step 4: render target host and port into template
 	renderedContent := string(templateContent)

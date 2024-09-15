@@ -16,9 +16,9 @@ before:
     - go generate ./...
 
 builds:
-  - id: platypus
-    main: cmd/platypus/main.go
-    binary: platypus
+  - id: platypus-server
+    main: cmd/platypus-server/main.go
+    binary: platypus-platypus-server
     env:
       - CGO_ENABLED=0
     goos:
@@ -27,13 +27,13 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
 
-  - id: termite
-    main: cmd/termite/main.go
-    binary: termite
+  - id: platypus-admin
+    main: cmd/platypus-admin/main.go
+    binary: platypus-admin
     env:
       - CGO_ENABLED=0
     goos:
@@ -42,9 +42,24 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
+
+  - id: platypus-agent
+    main: cmd/platypus-agent/main.go
+    binary: platypus-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X "github.com/WangYihang/platypus/internal/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/platypus/internal/version.Date={{.Date}}"
 
 archives:
   - format: tar.gz
@@ -60,6 +75,9 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+    files:
+      - README.md
+      - assets/*
 
 changelog:
   sort: asc
@@ -74,7 +92,7 @@ upx:
     enabled: true
 
     # Filter by build ID.
-    ids: [ "platypus", "termite" ]
+    ids: [ "platypus-server", "platypus-admin", "platypus-agent" ]
 
     # Compress argument.
     # Valid options are from '1' (faster) to '9' (better), and 'best'.

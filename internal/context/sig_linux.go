@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/WangYihang/Platypus/internal/util/ui"
+	"github.com/WangYihang/Platypus/internal/utils/ui"
 	"golang.org/x/term"
 )
 
