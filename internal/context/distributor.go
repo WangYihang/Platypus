@@ -5,9 +5,9 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/WangYihang/Platypus/internal/util/compiler"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/network"
+	"github.com/WangYihang/Platypus/internal/utils/compiler"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/network"
 	"github.com/gin-gonic/gin"
 )
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/reflection"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/reflection"
 )
 
 func (dispatcher commandDispatcher) Help(args []string) {

@@ -3,7 +3,6 @@ package context
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/WangYihang/Platypus/internal/context/Models"
 	"net"
 	"os"
 	"strconv"
@@ -16,12 +15,12 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 
-	"github.com/WangYihang/Platypus/internal/util/hash"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/message"
-	oss "github.com/WangYihang/Platypus/internal/util/os"
-	"github.com/WangYihang/Platypus/internal/util/str"
-	"github.com/WangYihang/Platypus/internal/util/update"
+	"github.com/WangYihang/Platypus/internal/utils/hash"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/message"
+	oss "github.com/WangYihang/Platypus/internal/utils/os"
+	"github.com/WangYihang/Platypus/internal/utils/str"
+	"github.com/WangYihang/Platypus/internal/utils/update"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
@@ -184,14 +183,6 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				})
 				return false
 			}
-			Models.CreateAccess(&Models.Access{
-				Host:      c.Host,
-				Port:      c.Port,
-				Hash:      c.Hash,
-				TimeStamp: c.TimeStamp,
-				User:      c.User,
-				OS:        c.OS,
-			})
 
 			return true
 		} else {

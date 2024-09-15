@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/context"
-	"github.com/WangYihang/Platypus/internal/util/log"
+	"github.com/WangYihang/Platypus/internal/utils/log"
 	"golang.org/x/term"
 )
 

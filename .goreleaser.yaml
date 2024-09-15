@@ -14,11 +14,13 @@ before:
     - go mod tidy
     # you may remove this if you don't need go generate
     - go generate ./...
+    # use go-bindata to generate assets.go
+    - go-bindata -pkg assets -o ./internal/utils/assets/assets.go ./assets/config.example.yml ./assets/template/rsh/... ./web/ttyd/dist/... ./web/frontend/build/...
 
 builds:
-  - id: platypus
-    main: cmd/platypus/main.go
-    binary: platypus
+  - id: platypus-server
+    main: cmd/platypus-server/main.go
+    binary: platypus-platypus-server
     env:
       - CGO_ENABLED=0
     goos:
@@ -31,9 +33,24 @@ builds:
       - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
       - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
 
-  - id: termite
-    main: cmd/termite/main.go
-    binary: termite
+  - id: platypus-admin
+    main: cmd/platypus-admin/main.go
+    binary: platypus-admin
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X "github.com/WangYihang/napoleon/pkg/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/napoleon/pkg/version.Date={{.Date}}"
+
+  - id: platypus-agent
+    main: cmd/platypus-agent/main.go
+    binary: platypus-agent
     env:
       - CGO_ENABLED=0
     goos:
@@ -60,6 +77,9 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+    files:
+      - README.md
+      - assets/*
 
 changelog:
   sort: asc
@@ -74,7 +94,7 @@ upx:
     enabled: true
 
     # Filter by build ID.
-    ids: [ "platypus", "termite" ]
+    ids: [ "platypus-server", "platypus-admin", "platypus-agent" ]
 
     # Compress argument.
     # Valid options are from '1' (faster) to '9' (better), and 'best'.

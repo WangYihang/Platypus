@@ -6,20 +6,18 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/WangYihang/Platypus/internal/context/Conf"
-	"github.com/WangYihang/Platypus/internal/context/Models"
 	"net"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/util/crypto"
-	"github.com/WangYihang/Platypus/internal/util/hash"
-	"github.com/WangYihang/Platypus/internal/util/log"
-	"github.com/WangYihang/Platypus/internal/util/message"
-	"github.com/WangYihang/Platypus/internal/util/network"
-	"github.com/WangYihang/Platypus/internal/util/raas"
-	"github.com/WangYihang/Platypus/internal/util/str"
+	"github.com/WangYihang/Platypus/internal/utils/crypto"
+	"github.com/WangYihang/Platypus/internal/utils/hash"
+	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/utils/message"
+	"github.com/WangYihang/Platypus/internal/utils/network"
+	"github.com/WangYihang/Platypus/internal/utils/raas"
+	"github.com/WangYihang/Platypus/internal/utils/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/phayes/freeport"
@@ -98,7 +96,6 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 			log.Error("Public IP Detection failed: %s", err.Error())
 		}
 		tcpServer.PublicIP = ip
-		Conf.RestfulConf.Domain = ip
 		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
 	} else {
 		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)
@@ -426,7 +423,6 @@ func (s *TCPServer) AddTCPClient(client *TCPClient) {
 
 func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
 	delete(s.Clients, client.Hash)
-	Models.DeleteAccess(client.Hash)
 	client.Close()
 }
 
@@ -780,7 +776,6 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 
 func (s *TCPServer) DeleteTermiteClient(client *TermiteClient) {
 	delete(s.TermiteClients, client.Hash)
-	Models.DeleteAccess(client.Hash)
 	client.Close()
 }
 
