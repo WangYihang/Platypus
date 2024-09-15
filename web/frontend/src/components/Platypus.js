@@ -4,6 +4,7 @@ import BeforeAuth from "./BeforeAuth/index";
 import Banner from "./Banner/Banner";
 import SideBar from "./SideBar/SideBar";
 import ClientsBody from "./Body/ClientsBody";
+import axios from 'axios';
 
 message.config({
   duration: 3,
@@ -18,9 +19,6 @@ let baseUrl = [window.location.protocol, "//", endPoint].join("");
 let apiUrl = [baseUrl, "/api"].join("");
 let rbacUrl = [apiUrl, "/rbac"].join("");
 let wsUrl = [window.location.protocol === "https:" ? "wss://" : "ws://", endPoint, "/notify"].join("");
-
-const axios = require("axios");
-axios.defaults.headers.post["Content-Type"] = "application/x-www-form-urlencoded";
 
 export default class Platypus extends React.Component {
   upgradeToTermite(clientHash, target) {
