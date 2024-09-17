@@ -9,7 +9,10 @@ RUN apk add --no-cache git upx \
     && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest \
     && go install github.com/go-critic/go-critic/cmd/gocritic@latest \
     && go install github.com/BurntSushi/toml/cmd/tomlv@latest \
-    && go get -u github.com/go-bindata/go-bindata/...
+    && go get -u github.com/go-bindata/go-bindata/... \
+    && go install github.com/wangyihang/platypus/cmd/platypus-server@latest \
+    && go install github.com/wangyihang/platypus/cmd/platypus-agent@latest \
+    && go install github.com/wangyihang/platypus/cmd/platypus-admin@latest
 
 # Set up the working directory
 WORKDIR /app
@@ -35,4 +38,6 @@ COPY --from=builder /go/bin/air /usr/local/bin/air
 COPY --from=builder /go/bin/goimports /usr/local/bin/goimports
 COPY --from=builder /go/bin/gocyclo /usr/local/bin/gocyclo
 COPY --from=builder /go/bin/gocritic /usr/local/bin/gocritic
-COPY --from=builder /app/dist/platypus_linux_amd64_v1/platypus /usr/local/bin/platypus
+COPY --from=builder /go/bin/platypus-server /usr/local/bin/platypus-server
+COPY --from=builder /go/bin/platypus-agent /usr/local/bin/platypus-agent
+COPY --from=builder /go/bin/platypus-admin /usr/local/bin/platypus-admin
