@@ -10,9 +10,6 @@ class App extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      ctxName:"",
-      showRbac:false,
-      isAuth:true,
       bottom: "bottomLeft",
       serversMap: null,
       serversList: [],
@@ -70,7 +67,6 @@ class App extends React.Component {
             //
         )
   }
-
 
 
   setServerCreateHost(host) {
