@@ -22,14 +22,91 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
+      - aix
+      - android
       - darwin
+      - dragonfly
+      - freebsd
+      - illumos
+      - ios
+      - js
       - linux
+      - netbsd
+      - openbsd
+      - plan9
+      - solaris
+      - wasip1
       - windows
     goarch:
       - "386"
       - amd64
       - arm
       - arm64
+      - loong64
+      - mips
+      - mips64
+      - mips64le
+      - mipsle
+      - ppc64
+      - ppc64le
+      - riscv64
+      - s390x
+      - wasm
+    ignore:
+      - goos: android
+        goarch: "386"
+      - goos: android
+        goarch: amd64
+      - goos: android
+        goarch: arm64
+      - goos: android
+        goarch: arm
+      - goos: ios
+        goarch: arm64
+      - goos: js
+        goarch: wasm
+      - goos: plan9
+        goarch: amd64
+      - goos: plan9
+        goarch: "386"
+      - goos: plan9
+        goarch: arm64
+      - goos: plan9
+        goarch: arm
+      - goos: wasip1
+        goarch: wasm
+      - goos: aix
+        goarch: ppc64
+      - goos: freebsd
+        goarch: "386"
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
+      - goos: freebsd
+        goarch: amd64
+      - goos: netbsd
+        goarch: amd64
+      - goos: netbsd
+        goarch: "386"
+      - goos: netbsd
+        goarch: arm64
+      - goos: netbsd
+        goarch: arm
+      - goos: openbsd
+        goarch: amd64
+      - goos: openbsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm64
+      - goos: openbsd
+        goarch: "386"
+      - goos: solaris
+        goarch: amd64
+      - goos: dragonfly
+        goarch: amd64
+      - goos: illumos
+        goarch: amd64
     ldflags:
       - -s -w
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
@@ -42,14 +119,65 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
+      - aix
+      - android
       - darwin
+      - dragonfly
+      - freebsd
+      - illumos
+      - ios
+      - js
       - linux
+      - netbsd
+      - openbsd
+      - plan9
+      - solaris
+      - wasip1
       - windows
     goarch:
       - "386"
       - amd64
       - arm
       - arm64
+      - loong64
+      - mips
+      - mips64
+      - mips64le
+      - mipsle
+      - ppc64
+      - ppc64le
+      - riscv64
+      - s390x
+      - wasm
+    ignore:
+      - goos: android
+        goarch: "386"
+      - goos: android
+        goarch: amd64
+      - goos: android
+        goarch: arm64
+      - goos: android
+        goarch: arm
+      - goos: ios
+        goarch: arm64
+      - goos: js
+        goarch: wasm
+      - goos: plan9
+        goarch: amd64
+      - goos: plan9
+        goarch: "386"
+      - goos: plan9
+        goarch: arm64
+      - goos: plan9
+        goarch: arm
+      - goos: wasip1
+        goarch: wasm
+      - goos: aix
+        goarch: ppc64
+      - goos: openbsd
+        goarch: arm
+      - goos: dragonfly
+        goarch: amd64
     ldflags:
       - -s -w
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
@@ -62,18 +190,67 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
+      - aix
+      - android
       - darwin
+      - dragonfly
+      - freebsd
+      - illumos
+      - ios
+      - js
       - linux
+      - netbsd
+      - openbsd
+      - plan9
+      - solaris
+      - wasip1
       - windows
     goarch:
       - "386"
       - amd64
       - arm
       - arm64
+      - loong64
       - mips
+      - mips64
+      - mips64le
       - mipsle
       - ppc64
       - ppc64le
+      - riscv64
+      - s390x
+      - wasm
+    ignore:
+      - goos: android
+        goarch: "386"
+      - goos: android
+        goarch: amd64
+      - goos: android
+        goarch: arm64
+      - goos: android
+        goarch: arm
+      - goos: ios
+        goarch: arm64
+      - goos: js
+        goarch: wasm
+      - goos: plan9
+        goarch: amd64
+      - goos: plan9
+        goarch: "386"
+      - goos: plan9
+        goarch: arm64
+      - goos: plan9
+        goarch: arm
+      - goos: wasip1
+        goarch: wasm
+      - goos: aix
+        goarch: ppc64
+      - goos: openbsd
+        goarch: "386"
+      - goos: freebsd
+        goarch: amd64
+      - goos: illumos
+        goarch: amd64
     ldflags:
       - -s -w
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"

@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log/slog"
 	"net"
 	"os"
@@ -532,7 +531,7 @@ func handleConnection(c *client) {
 		case message.READ_FILE:
 			token := msg.Body.(*message.BodyReadFile).Token
 			path := msg.Body.(*message.BodyReadFile).Path
-			content, err := ioutil.ReadFile(path)
+			content, err := os.ReadFile(path)
 			if err != nil {
 				content = []byte("")
 			}
@@ -638,7 +637,7 @@ func handleConnection(c *client) {
 			})
 			c.EncoderLock.Unlock()
 		case message.UPDATE:
-			file, _ := ioutil.TempFile(os.TempDir(), "temp")
+			file, _ := os.CreateTemp(os.TempDir(), "temp")
 			exe := file.Name()
 			log.Info("New filename: %s", exe)
 			DistributorURL := msg.Body.(*message.BodyUpdate).DistributorURL
