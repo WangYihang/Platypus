@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -10,7 +9,7 @@ import (
 func ListFiles(path string) func(string) []string {
 	return func(line string) []string {
 		names := make([]string, 0)
-		files, _ := ioutil.ReadDir(path)
+		files, _ := os.ReadDir(path)
 		for _, f := range files {
 			names = append(names, f.Name())
 		}

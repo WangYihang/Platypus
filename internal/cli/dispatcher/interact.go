@@ -47,7 +47,11 @@ func (dispatcher commandDispatcher) Interact(args []string) {
 			// Client output -> Platypus stdout
 			go func() {
 				for current.GetInteractive() && current.GetPtyEstablished() && cont {
-					current.GetConn().SetReadDeadline(time.Time{})
+					err := current.GetConn().SetReadDeadline(time.Time{})
+					if err != nil {
+						log.Error("Failed to set read deadline: %s", err)
+						break
+					}
 					m := make([]byte, 1)
 					n, err := current.ReadConnLock(m)
 					if err == nil {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 )
 
+// GatherInterfacesList returns a list of interfaces
 func GatherInterfacesList(host string) []string {
 	// Gather interface info
 	var interfaces []string
@@ -35,10 +36,12 @@ func GatherInterfacesList(host string) []string {
 	return interfaces
 }
 
+// IP represents the IP address
 type IP struct {
 	Query string
 }
 
+// GetPublicIP returns the public IP address
 func GetPublicIP() (string, error) {
 	req, err := http.Get("http://ip-api.com/json/")
 	if err != nil {
@@ -52,7 +55,11 @@ func GetPublicIP() (string, error) {
 	}
 
 	var ip IP
-	json.Unmarshal(body, &ip)
+
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
 
 	return ip.Query, nil
 }

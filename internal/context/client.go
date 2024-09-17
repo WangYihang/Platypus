@@ -26,6 +26,7 @@ import (
 	"golang.org/x/term"
 )
 
+// TCPClient represents the client connected to the server
 type TCPClient struct {
 	conn              net.Conn            `json:"-"`
 	interactive       bool                `json:"-"`
@@ -49,6 +50,7 @@ type TCPClient struct {
 	mature            bool                `json:"-"`
 }
 
+// CreateTCPClient creates a new TCP client
 func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
@@ -218,7 +220,11 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 	inputBuffer := make([]byte, 1)
 	var outputBuffer bytes.Buffer
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
+		err := c.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
+		if err != nil {
+			log.Error("Set read time out failed")
+			break
+		}
 		n, err := c.ReadConnLock(inputBuffer)
 
 		if err != nil {
@@ -234,7 +240,11 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 			break
 		}
 
-		outputBuffer.Write(inputBuffer[:n])
+		_, err = outputBuffer.Write(inputBuffer[:n])
+		if err != nil {
+			log.Error("Write to buffer failed")
+			break
+		}
 		// If found token, then finish reading
 		if strings.HasSuffix(outputBuffer.String(), token) {
 			break
