@@ -28,7 +28,6 @@ dist/
 # Config file
 config.yml
 config-v*.yml
-.pre-commit-config.yaml
 
 # Visual Studio Code
 .vscode/
