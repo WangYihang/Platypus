@@ -47,5 +47,7 @@ func (b *binaryFileSystem) Exists(prefix string, filepath string) bool {
 }
 
 func BinaryFileSystem(root string) *binaryFileSystem {
-	return &binaryFileSystem{}
+	return &binaryFileSystem{
+		fs: http.Dir(root),
+	}
 }
