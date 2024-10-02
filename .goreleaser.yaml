@@ -14,8 +14,6 @@ before:
     - go mod tidy
     # you may remove this if you don't need go generate
     - go generate ./...
-    # build the docs
-    - sh -c "cd docs/platypus && yarn install && yarn build"
 
 builds:
   - id: platypus-server
@@ -275,9 +273,6 @@ archives:
         format: zip
     files:
       - README.md
-      - src: docs/platypus/build
-        dst: docs
-        strip_parent: true
 
 changelog:
   sort: asc
