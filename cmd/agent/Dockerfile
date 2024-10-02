@@ -17,7 +17,9 @@ RUN if git describe --tags --exact-match >/dev/null 2>&1; then \
       goreleaser build --id platypus-agent --clean --snapshot; \
     fi
 
+RUN cp dist/platypus-agent_${TARGETOS}_${TARGETARCH}_v1/platypus-agent /usr/local/bin/platypus-agent
+
 FROM alpine:3.12
 RUN apk add --no-cache ca-certificates
-COPY --from=builder /app/dist/platypus-agent_${TARGETOS}_${TARGETARCH}_v1/platypus-agent /usr/local/bin/platypus-agent
+COPY --from=builder /usr/local/bin/platypus-agent /usr/local/bin/platypus-agent
 ENTRYPOINT [ "/usr/local/bin/platypus-agent" ]
