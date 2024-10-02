@@ -3,20 +3,20 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
-  favicon: 'img/favicon.ico',
+  title: 'Platypus ',
+  tagline: 'A Modern Multi-Session Reverse Shell Manager',
+  favicon: 'images/favicon.ico',
 
   // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://platypus-reverse-shell.vercel.app',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'facebook', // Usually your GitHub org/user name.
-  projectName: 'docusaurus', // Usually your repo name.
+  organizationName: 'Platypus', // Usually your GitHub org/user name.
+  projectName: 'platypus', // Usually your repo name.
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -64,23 +64,27 @@ const config: Config = {
 
   themeConfig: {
     // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'images/docusaurus-social-card.jpg',
     navbar: {
-      title: 'My Site',
+      title: 'Platypus',
       logo: {
         alt: 'My Site Logo',
-        src: 'img/logo.svg',
+        src: 'images/logo.svg',
       },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Tutorial',
+          label: 'Documents',
         },
-        {to: '/blog', label: 'Blog', position: 'left'},
+        {to: '/download', label: 'Download', position: 'left'},
+        {to: '/internals', label: 'Internals', position: 'left'},
+        {to: '/roadmap', label: 'Roadmap', position: 'left'},
+        {to: '/changelogs', label: 'Change Logs', position: 'left'},
+        {to: '/about', label: 'About', position: 'left'},
         {
-          href: 'https://github.com/facebook/docusaurus',
+          href: 'https://github.com/wangyihang/platypus',
           label: 'GitHub',
           position: 'right',
         },
