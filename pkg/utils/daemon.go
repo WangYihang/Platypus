@@ -25,10 +25,16 @@ func StartDaemonMode(logger *zap.Logger) error {
 	if d != nil {
 		logger.Info("exiting parent process")
 		os.Exit(0)
-		return nil
 	}
-	defer ctx.Release()
+	defer func() {
+		err := ctx.Release()
+		if err != nil {
+			logger.Error("failed to release context", zap.String("error", err.Error()))
+		}
+	}()
 	logger.Info("daemon process started")
-	RemoveSelfExecutable(logger)
+	if err := RemoveSelfExecutable(logger); err != nil {
+		logger.Warn("failed to remove self executable", zap.String("error", err.Error()))
+	}
 	return nil
 }

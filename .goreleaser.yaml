@@ -17,8 +17,8 @@ before:
 
 builds:
   - id: platypus-server
-    main: cmd/platypus-server/main.go
-    binary: platypus-platypus-server
+    main: cmd/server/main.go
+    binary: platypus-server
     env:
       - CGO_ENABLED=0
     goos:
@@ -114,7 +114,7 @@ builds:
       - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
 
   - id: platypus-admin
-    main: cmd/platypus-admin/main.go
+    main: cmd/admin/main.go
     binary: platypus-admin
     env:
       - CGO_ENABLED=0
@@ -185,7 +185,7 @@ builds:
       - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
 
   - id: platypus-agent
-    main: cmd/platypus-agent/main.go
+    main: cmd/agent/main.go
     binary: platypus-agent
     env:
       - CGO_ENABLED=0
