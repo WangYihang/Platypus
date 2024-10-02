@@ -1,0 +1,7 @@
+Dockerfile
+.github/
+.next/
+dist/
+LICENSE
+README.md
+node_modules/
