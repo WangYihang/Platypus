@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  backend:
+    image: ghcr.io/wangyihang/platypus-server:ng
+
+  frontend:
+    image: ghcr.io/wangyihang/platypus-frontend:ng
+    ports:
+      - "80:80"
