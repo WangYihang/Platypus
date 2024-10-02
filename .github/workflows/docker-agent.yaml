@@ -1,13 +1,11 @@
-name: worker
+name: platypus-agent
 
 on:
   push:
-    tags:
-      - 'v*'
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}-agent
 
 jobs:
   docker:
@@ -53,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: cmd/agent/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
