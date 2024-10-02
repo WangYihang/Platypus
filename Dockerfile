@@ -3,7 +3,7 @@ FROM golang:1.22.6-alpine AS builder
 
 # Install necessary packages and tools
 RUN apk add --no-cache git upx \
-    && go install github.com/goreleaser/goreleaser/v2@latest \
+    && go install github.com/goreleaser/goreleaser/v2@v2.2.0 \
     && go install github.com/air-verse/air@latest \
     && go install golang.org/x/tools/cmd/goimports@latest \
     && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest \
