@@ -14,7 +14,7 @@ RUN if git describe --tags --exact-match >/dev/null 2>&1; then \
       goreleaser build --id platypus-agent --clean; \
     else \
       echo "Commit is not tagged. Creating a snapshot build."; \
-      goreleaser build --id platypus-agent --clean --snapshot; \
+      goreleaser build --id platypus-agent --clean --snapshot --single-target; \
     fi
 
 RUN cp dist/platypus-agent_${TARGETOS}_${TARGETARCH}_v1/platypus-agent /usr/local/bin/platypus-agent
