@@ -1,11 +1,11 @@
-FROM node:20-alpine AS builder
+FROM node:22.9-alpine AS builder
 WORKDIR /app
 COPY yarn.lock package.json ./
 RUN yarn install
 COPY . .
 RUN yarn build
 
-FROM node:20-alpine
+FROM node:22.9-alpine
 RUN apk update && apk upgrade
 RUN apk add --no-cache dumb-init
 WORKDIR /app

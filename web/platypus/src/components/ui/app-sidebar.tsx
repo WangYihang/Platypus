@@ -26,7 +26,7 @@ const items = [
   {
     title: "Machines",
     url: "machines",
-    icon: Inbox,
+    icon: Calendar,
   },
   {
     title: "Binaries",
@@ -41,7 +41,7 @@ const items = [
   {
     title: "Logs",
     url: "logs",
-    icon: Inbox,
+    icon: Search,
   },
   {
     title: "Settings",
