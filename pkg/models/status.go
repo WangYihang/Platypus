@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/matishsiao/goInfo"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
@@ -52,11 +54,20 @@ type DiskStatus struct {
 
 // NewDiskStatus returns a new disk status of the server
 func NewDiskStatus() DiskStatus {
-	diskStat, _ := disk.Usage("/")
-	return DiskStatus{
-		Total: diskStat.Total,
-		Used:  diskStat.Used,
-	}
+	cache := expirable.NewLRU[string, DiskStatus](1, nil, 30*time.Minute)
+	return func() DiskStatus {
+		r, ok := cache.Get("disk_status")
+		if ok {
+			return r
+		}
+		diskStat, _ := disk.Usage("/")
+		status := DiskStatus{
+			Total: diskStat.Total,
+			Used:  diskStat.Used,
+		}
+		cache.Add("disk_status", status)
+		return status
+	}()
 }
 
 // MemoryStatus represents the memory status of the server
@@ -76,31 +87,44 @@ func NewMemoryStatus() MemoryStatus {
 
 // GoStatus represents the Go status of the server
 type GoStatus struct {
-	NumGoroutines int   `json:"num_goroutines"`
-	NumCgoCalls   int64 `json:"num_cgo_calls"`
+	Version       string `json:"version"`
+	NumGoroutines int    `json:"num_goroutines"`
+	NumCgoCalls   int64  `json:"num_cgo_calls"`
+	MemoryUsage   int64  `json:"memory_usage"`
 }
 
 // NewGoStatus returns a new Go status of the server
 func NewGoStatus() GoStatus {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
 	numGoroutines := runtime.NumGoroutine()
 	numCgoCalls := runtime.NumCgoCall()
 	return GoStatus{
 		NumGoroutines: numGoroutines,
+		Version:       runtime.Version(),
 		NumCgoCalls:   numCgoCalls,
+		MemoryUsage:   int64(m.Alloc),
 	}
 }
 
 // OSStatus represents the OS status of the server
 type OSStatus struct {
-	OS   string `json:"os"`
-	Arch string `json:"arch"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Arch    string `json:"arch"`
 }
 
 // NewOSStatus returns a new OS status of the server
 func NewOSStatus() OSStatus {
+	var version string = "unknown"
+	gi, err := goInfo.GetInfo()
+	if err == nil {
+		version = gi.Core
+	}
 	return OSStatus{
-		OS:   runtime.GOOS,
-		Arch: runtime.GOARCH,
+		Name:    runtime.GOOS,
+		Version: version,
+		Arch:    runtime.GOARCH,
 	}
 }
 
@@ -133,6 +157,7 @@ type Status struct {
 	DiskStatus    `json:"disk,omitempty,omitzero"`
 	MemoryStatus  `json:"memory,omitempty,omitzero"`
 	GoStatus      `json:"go,omitempty,omitzero"`
+	UserStatus    `json:"user,omitempty,omitzero"`
 	Timestamp     time.Time `json:"timestamp,omitzero"`
 }
 
@@ -143,6 +168,7 @@ type StatusGrabber struct {
 	withCPU     bool
 	withDisk    bool
 	withMemory  bool
+	withUser    bool
 	withGo      bool
 }
 
@@ -192,6 +218,12 @@ func (s StatusGrabber) WithMemory() StatusGrabber {
 	return s
 }
 
+// WithUser adds user status to the status
+func (s StatusGrabber) WithUser() StatusGrabber {
+	s.withUser = true
+	return s
+}
+
 // WithGo adds Go status to the status
 func (s StatusGrabber) WithGo() StatusGrabber {
 	s.withGo = true
@@ -218,6 +250,9 @@ func (s StatusGrabber) Grab() Status {
 	}
 	if s.withGo {
 		status.GoStatus = NewGoStatus()
+	}
+	if s.withUser {
+		status.UserStatus = NewUserStatus()
 	}
 	return status
 }

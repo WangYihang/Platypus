@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/matishsiao/goInfo v0.0.0-20240924010139-10388a85396f
 	github.com/sevlyar/go-daemon v0.1.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	go.uber.org/fx v1.22.2

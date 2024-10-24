@@ -10,14 +10,14 @@ import (
 
 // RESTfulListener represents a RESTful listener.
 type RESTfulListener struct {
-	Listener
+	commonListener
 	Token string `json:"token" yaml:"token" toml:"token"`
 }
 
 // NewRESTfulListener creates a new RESTful listener.
 func NewRESTfulListener(host string, port uint16, token string) *RESTfulListener {
 	return &RESTfulListener{
-		Listener: Listener{
+		commonListener: commonListener{
 			BindHost: host,
 			BindPort: port,
 		},
@@ -30,6 +30,7 @@ func (l *RESTfulListener) Start(logger *zap.Logger) {
 	logger.Info("starting RESTful listener", zap.String("host", l.BindHost), zap.Uint16("port", l.BindPort))
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	logger.Info("configuring routes with token", zap.String("token", l.Token))
 	routes.ConfigureRoutes(r, logger, l.Token)
 	err := r.Run(fmt.Sprintf("%s:%d", l.BindHost, l.BindPort))
 	if err != nil {

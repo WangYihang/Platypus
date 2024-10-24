@@ -13,7 +13,9 @@ import (
 
 // Config represents the configuration.
 type Config struct {
-	Listeners []listeners.Listener `json:"listeners" yaml:"listeners" toml:"listeners"`
+	PlainListeners     []listeners.PlainListener     `json:"plain" yaml:"plain" toml:"plain"`
+	EncryptedListeners []listeners.EncryptedListener `json:"encrypted" yaml:"encrypted" toml:"encrypted"`
+	RestfulListeners   []listeners.RESTfulListener   `json:"restful" yaml:"restful" toml:"restful"`
 }
 
 // LoadConfig loads the configuration from the given path.
@@ -24,7 +26,7 @@ func LoadConfig(path string) (*Config, error) {
 		return loadJSONConfig(path)
 	case ".yaml", ".yml":
 		return loadYAMLConfig(path)
-	case ".toml":
+	case ".toml", ".tml":
 		return loadTOMLConfig(path)
 	default:
 		return nil, fmt.Errorf("unsupported config file format: %s", ext)

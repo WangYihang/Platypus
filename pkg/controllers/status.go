@@ -11,7 +11,7 @@ import (
 // NewStatusController returns a new status controller
 // Status controller returns the status of the server, including hostname, CPU usage, disk usage, and memory usage
 func NewStatusController() func(c *gin.Context) {
-	cache := expirable.NewLRU[string, models.Status](1, nil, time.Second*60)
+	cache := expirable.NewLRU[string, models.Status](1, nil, time.Minute)
 	return func(c *gin.Context) {
 		r, ok := cache.Get("status")
 		if ok {
