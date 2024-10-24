@@ -22,6 +22,6 @@ RUN cp dist/platypus-server_${TARGETOS}_${TARGETARCH}_v1/platypus-server /usr/lo
 FROM alpine:3.12
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /usr/local/bin/platypus-server /usr/local/bin/platypus-server
-COPY --from=builder /app/cmd/server/config.example.prod.yaml /etc/platypus/server/config.yaml
+COPY --from=builder /app/cmd/server/config.example.prod.json /etc/platypus/server/config.json
 
-ENTRYPOINT [ "/usr/local/bin/platypus-server", "-c", "/etc/platypus/server/config.yaml" ]
+ENTRYPOINT [ "/usr/local/bin/platypus-server", "-c", "/etc/platypus/server/config.json" ]
