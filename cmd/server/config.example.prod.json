@@ -1,0 +1,21 @@
+{
+  "restful": [
+    {
+      "bind_host": "0.0.0.0",
+      "bind_port": 7070,
+      "token": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "plain": [
+    {
+      "bind_host": "0.0.0.0",
+      "bind_port": 8080
+    }
+  ],
+  "encrypted": [
+    {
+      "bind_host": "0.0.0.0",
+      "bind_port": 9090
+    }
+  ]
+}
