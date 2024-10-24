@@ -14,28 +14,38 @@ import {
 // Menu items.
 const items = [
   {
-    title: "Home",
-    url: "#",
+    title: "Dashboard",
+    url: "dashboard",
     icon: Home,
   },
   {
-    title: "Inbox",
-    url: "#",
+    title: "Listeners",
+    url: "listeners",
     icon: Inbox,
   },
   {
-    title: "Calendar",
-    url: "#",
-    icon: Calendar,
+    title: "Machines",
+    url: "machines",
+    icon: Inbox,
   },
   {
-    title: "Search",
-    url: "#",
-    icon: Search,
+    title: "Binaries",
+    url: "binaries",
+    icon: Inbox,
+  },
+  {
+    title: "Records",
+    url: "records",
+    icon: Inbox,
+  },
+  {
+    title: "Logs",
+    url: "logs",
+    icon: Inbox,
   },
   {
     title: "Settings",
-    url: "#",
+    url: "settings",
     icon: Settings,
   },
 ]
