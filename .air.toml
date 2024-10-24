@@ -3,9 +3,9 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = []
-  bin = "./tmp/platypus-server"
-  cmd = "go build -o ./tmp/platypus-server cmd/platypus-server/main.go"
+  args_bin = ["-c", "cmd/server/config.example.dev.json"]
+  bin = "./tmp/server"
+  cmd = "go build -o ./tmp/server cmd/server/main.go"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "docs", ".github"]
   exclude_file = []
