@@ -22,7 +22,7 @@ func main() {
 	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
 	if !fs.FileExists(configFilenameWithVersion) {
 		content, _ := os.ReadFile("assets/config.example.yml")
-		ioutil.WriteFile(configFilenameWithVersion, content, 0644)
+		os.WriteFile(configFilenameWithVersion, content, 0644)
 	}
 
 	var configFilename string
