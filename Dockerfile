@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM golang:1.23.2 AS builder
+FROM golang:1.24 AS builder
 
 # # replace shell with bash so we can source files
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
