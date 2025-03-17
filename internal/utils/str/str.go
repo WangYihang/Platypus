@@ -3,15 +3,7 @@ package str
 import (
 	"crypto/rand"
 	"math/big"
-	"strings"
 )
-
-func UpperCaseFirstChar(str string) string {
-	if len(str) == 0 {
-		return str
-	}
-	return strings.ToUpper(str[0:1]) + str[1:]
-}
 
 func RandomString(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
