@@ -23,13 +23,13 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/sevlyar/go-daemon v0.1.6
+	github.com/spf13/viper v1.20.0
 	github.com/vbauerster/mpb/v6 v6.0.4
 	go.uber.org/fx v1.23.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/mod v0.24.0
 	golang.org/x/term v0.30.0
 	gopkg.in/olahol/melody.v1 v1.0.0-20170518105555-d52139073376
-	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -73,7 +73,6 @@ require (
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/spf13/viper v1.20.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

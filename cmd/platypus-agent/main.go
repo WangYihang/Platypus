@@ -731,7 +731,7 @@ func connect(endpoint, token string, logger *zap.Logger) error {
 func onStart(ctx context.Context, opts *options.Options, logger *zap.Logger) error {
 	logger.Info("starting application", zap.String("host", opts.RemoteHost), zap.Int("port", opts.RemotePort), zap.String("token", opts.Token), zap.String("env", opts.Environment))
 	if opts.Environment == string(models.Production) {
-		utils.StartDaemonMode(logger)
+		utils.StartDaemonMode(logger, nil)
 	}
 	logger.Info("registering gob")
 	message.RegisterGob()

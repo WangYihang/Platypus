@@ -2,71 +2,65 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
-	"runtime"
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
 	"github.com/WangYihang/Platypus/internal/context"
 	"github.com/WangYihang/Platypus/internal/utils/config"
-	"github.com/WangYihang/Platypus/internal/utils/fs"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	"github.com/pkg/browser"
-	"gopkg.in/yaml.v2"
+	"github.com/spf13/viper"
 )
 
-func main() {
-	// Detect and create config file
-	configFilenameWithVersion := fmt.Sprintf("config-v%s.yml", update.Version)
-	if !fs.FileExists(configFilenameWithVersion) {
-		content, _ := os.ReadFile("assets/config.example.yml")
-		os.WriteFile(configFilenameWithVersion, content, 0644)
-	}
+var cfg config.Config
+var v = viper.New()
 
-	var configFilename string
-	if runtime.GOOS == "windows" {
-		configFilename = configFilenameWithVersion
-	} else {
-		configFilename = "config.yml"
-		if fs.FileExists(configFilename) {
-			os.Remove(configFilename)
+func init() {
+	// Configure Viper
+	v.SetConfigName("config")
+	v.SetConfigType("yml")
+	v.AddConfigPath(".")
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			log.Error("Config file not found")
+		} else {
+			log.Error("Failed to read config file: %v", err)
 		}
-		os.Symlink(configFilenameWithVersion, configFilename)
-	}
-	// Read config file
-	var config config.Config
-	content, _ := ioutil.ReadFile(configFilename)
-	err := yaml.Unmarshal(content, &config)
-	if err != nil {
-		log.Error("Read config file failed, please check syntax of file `%s`, or just delete the `%s` to force regenerate config file", configFilename, configFilename)
 		return
 	}
+	if err := v.Unmarshal(&cfg); err != nil {
+		log.Error("Failed to unmarshal config: %v", err)
+		return
+	}
+}
+
+func main() {
 
 	// Display platypus information
 	log.Success("Platypus %s is starting...", update.Version)
+	log.Success("Using configuration file: %s", v.ConfigFileUsed())
 
 	// Create context
 	context.CreateContext()
-	context.Ctx.Config = &config
+	context.Ctx.Config = &cfg
 
 	// Detect new version
-	if config.Update {
+	if cfg.Update {
 		update.ConfirmAndSelfUpdate()
 	}
 
 	// Init distributor server from config file
-	rh := config.Distributor.Host
-	rp := config.Distributor.Port
-	distributor := context.CreateDistributorServer(rh, rp, config.Distributor.Url)
+	rh := cfg.Distributor.Host
+	rp := cfg.Distributor.Port
+	distributor := context.CreateDistributorServer(rh, rp, cfg.Distributor.Url)
 
 	go distributor.Run(fmt.Sprintf("%s:%d", rh, rp))
 
 	// Init RESTful Server from config file
-	if config.RESTful.Enable {
-		rh := config.RESTful.Host
-		rp := config.RESTful.Port
+	if cfg.RESTful.Enable {
+		rh := cfg.RESTful.Host
+		rp := cfg.RESTful.Port
 		rest := context.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
@@ -77,7 +71,7 @@ func main() {
 	}
 
 	// Init servers from config file
-	for _, s := range config.Servers {
+	for _, s := range cfg.Servers {
 		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
 		if server != nil {
 			// avoid terminal being disrupted
@@ -86,8 +80,8 @@ func main() {
 		}
 	}
 
-	if config.OpenBrowser {
-		browser.OpenURL(fmt.Sprintf("http://%s:%d/", config.RESTful.Host, config.RESTful.Port))
+	if cfg.OpenBrowser {
+		browser.OpenURL(fmt.Sprintf("http://%s:%d/", cfg.RESTful.Host, cfg.RESTful.Port))
 	}
 
 	// Run main loop
