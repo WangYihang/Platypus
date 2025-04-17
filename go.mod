@@ -20,7 +20,6 @@ require (
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/spf13/viper v1.20.0
