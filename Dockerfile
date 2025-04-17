@@ -15,14 +15,13 @@ RUN go install github.com/go-critic/go-critic/cmd/gocritic@latest
 RUN go install github.com/BurntSushi/toml/cmd/tomlv@latest
 
 # Installs nvm (Node Version Manager)
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
 
 # Download and install Node.js (you may need to restart the terminal)
 RUN source ~/.nvm/nvm.sh \
-    && nvm install 20 \
-    && nvm alias default 20 \
+    && nvm install 22 \
+    && nvm alias default 22 \
     && nvm use default \
-    && npm config set registry https://registry.npmmirror.com/ \
     && npm install -g yarn
 
 # Set up the working directory
