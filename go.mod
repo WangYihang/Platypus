@@ -78,7 +78,7 @@ require (
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	github.com/ulikunitz/xz v0.5.12 // indirect
+	github.com/ulikunitz/xz v0.5.14 // indirect
 	go.mongodb.org/mongo-driver v1.17.3 // indirect
 	go.uber.org/dig v1.18.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
