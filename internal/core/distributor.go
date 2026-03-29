@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/WangYihang/Platypus/internal/utils/compiler"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/network"
 	"github.com/gin-gonic/gin"
 )

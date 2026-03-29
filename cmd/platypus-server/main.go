@@ -8,7 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/cli/cmd"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/config"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	"github.com/pkg/browser"
 	"github.com/spf13/viper"

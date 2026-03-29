@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 )
 

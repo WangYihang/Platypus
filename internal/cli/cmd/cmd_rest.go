@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/WangYihang/Platypus/internal/api"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/spf13/cobra"
 )
 

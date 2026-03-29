@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/core"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"golang.org/x/term"
 
 	"github.com/spf13/cobra"

@@ -39,7 +39,8 @@ func (m *mockSession) GetPrompt() string                { return "» " }
 func (m *mockSession) OnelineDesc() string              { return m.hash }
 func (m *mockSession) FullDesc() string                 { return m.hash }
 func (m *mockSession) AsTable()                         {}
-func (m *mockSession) Close()                           {}
+func (m *mockSession) Execute(cmd string) (string, error) { return "", nil }
+func (m *mockSession) Close()                             {}
 
 func newMock(hash, alias string) *mockSession {
 	return &mockSession{hash: hash, alias: alias, host: "127.0.0.1", port: 1234, ts: time.Now()}

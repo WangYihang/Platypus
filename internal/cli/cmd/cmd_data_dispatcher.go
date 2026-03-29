@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/core"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/spf13/cobra"
 )
 

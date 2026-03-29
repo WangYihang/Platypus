@@ -15,7 +15,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/utils/compiler"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/session"

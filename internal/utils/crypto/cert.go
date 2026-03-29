@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/utils/log"
+	"github.com/WangYihang/Platypus/internal/log"
 )
 
 var (
