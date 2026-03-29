@@ -8,32 +8,39 @@ import (
 	"io"
 )
 
+// Encrypt encrypts plainText using AES-GCM with the given key.
+// Returns nonce + ciphertext + authentication tag.
 func Encrypt(key []byte, plainText []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	cipherText := make([]byte, aes.BlockSize+len(plainText))
-	iv := cipherText[:aes.BlockSize]
-	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
-		return []byte{}, err
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
 	}
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(cipherText[aes.BlockSize:], plainText)
-	return cipherText, nil
+	nonce := make([]byte, aead.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+	return aead.Seal(nonce, nonce, plainText, nil), nil
 }
 
-func Decrypt(key []byte, securemess []byte) ([]byte, error) {
+// Decrypt decrypts cipherText using AES-GCM with the given key.
+// Expects nonce + ciphertext + authentication tag as input.
+func Decrypt(key []byte, cipherText []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	if len(securemess) < aes.BlockSize {
-		return []byte{}, errors.New("Cipher too short")
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
 	}
-	iv := securemess[:aes.BlockSize]
-	cipherText := securemess[aes.BlockSize:]
-	stream := cipher.NewCFBDecrypter(block, iv)
-	stream.XORKeyStream(cipherText, cipherText)
-	return cipherText, nil
+	nonceSize := aead.NonceSize()
+	if len(cipherText) < nonceSize {
+		return nil, errors.New("ciphertext too short")
+	}
+	nonce, cipherText := cipherText[:nonceSize], cipherText[nonceSize:]
+	return aead.Open(nil, nonce, cipherText, nil)
 }
