@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/fatih/color"
 )
@@ -19,40 +19,40 @@ func (dispatcher commandDispatcher) Jump(args []string) {
 
 	// TCPClient
 	// Search via Hash
-	var target *context.TCPClient = context.Ctx.FindTCPClientByHash(clue)
+	var target *core.TCPClient = core.Ctx.FindTCPClientByHash(clue)
 
 	// Searching via Hash failed, search via Alias
 	if target == nil {
-		target = context.Ctx.FindTCPClientByAlias(clue)
+		target = core.Ctx.FindTCPClientByAlias(clue)
 	}
 
 	if target != nil {
 		// TODO: lock, websocket race condition when jumping
-		context.Ctx.CurrentTermite = nil
-		context.Ctx.Current = target
-		log.Success("The current interactive shell is set to: %s", context.Ctx.Current.FullDesc())
+		core.Ctx.CurrentTermite = nil
+		core.Ctx.Current = target
+		log.Success("The current interactive shell is set to: %s", core.Ctx.Current.FullDesc())
 		// Update prompt
 		// BUG:
 		// The prompt will set only at the `Jump` command once.
 		// If we jump to a client before the os & user is detected
 		// So the prompt will be:
 		// (Unknown) 127.0.0.1:43802 [unknown] »
-		readLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
+		readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.GetPrompt()))
 		return
 	}
 
 	// TermiteClient
-	var targetTermite *context.TermiteClient = context.Ctx.FindTermiteClientByHash(clue)
+	var targetTermite *core.TermiteClient = core.Ctx.FindTermiteClientByHash(clue)
 
 	if targetTermite == nil {
-		targetTermite = context.Ctx.FindTermiteClientByAlias(clue)
+		targetTermite = core.Ctx.FindTermiteClientByAlias(clue)
 	}
 
 	if targetTermite != nil {
-		context.Ctx.Current = nil
-		context.Ctx.CurrentTermite = targetTermite
-		log.Success("The current termite interactive shell is set to: %s", context.Ctx.CurrentTermite.FullDesc())
-		readLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		core.Ctx.Current = nil
+		core.Ctx.CurrentTermite = targetTermite
+		log.Success("The current termite interactive shell is set to: %s", core.Ctx.CurrentTermite.FullDesc())
+		readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.GetPrompt()))
 		return
 	}
 

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/update"
@@ -42,8 +42,8 @@ func main() {
 	log.Success("Using configuration file: %s", v.ConfigFileUsed())
 
 	// Create context
-	context.CreateContext()
-	context.Ctx.Config = &cfg
+	core.CreateContext()
+	core.Ctx.Config = &cfg
 
 	// Detect new version
 	if cfg.Update {
@@ -53,7 +53,7 @@ func main() {
 	// Init distributor server from config file
 	rh := cfg.Distributor.Host
 	rp := cfg.Distributor.Port
-	distributor := context.CreateDistributorServer(rh, rp, cfg.Distributor.Url)
+	distributor := core.CreateDistributorServer(rh, rp, cfg.Distributor.Url)
 
 	go distributor.Run(fmt.Sprintf("%s:%d", rh, rp))
 
@@ -61,18 +61,18 @@ func main() {
 	if cfg.RESTful.Enable {
 		rh := cfg.RESTful.Host
 		rp := cfg.RESTful.Port
-		rest := context.CreateRESTfulAPIServer()
+		rest := core.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
 		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
 		log.Success("You can use PythonSDK to manager all your clients automatically.")
-		context.Ctx.RESTful = rest
+		core.Ctx.RESTful = rest
 	}
 
 	// Init servers from config file
 	for _, s := range cfg.Servers {
-		server := context.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
+		server := core.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
 		if server != nil {
 			// avoid terminal being disrupted
 			time.Sleep(0x100 * time.Millisecond)

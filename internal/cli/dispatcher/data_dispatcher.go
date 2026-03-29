@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -22,7 +22,7 @@ func (dispatcher commandDispatcher) DataDispatcher(args []string) {
 	}
 	n := 0
 	command = strings.TrimSpace(command)
-	for _, server := range context.Ctx.Servers {
+	for _, server := range core.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if client.GroupDispatch {
 				log.Info("Executing on %s: %s", client.FullDesc(), command)

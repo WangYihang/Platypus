@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/os"
 )
@@ -18,17 +18,17 @@ func (dispatcher commandDispatcher) Upgrade(args []string) {
 	connectBackAddr := args[0]
 	// TODO: Check format: [Dotted Decimal Notation]:[uint16 Port]
 
-	if context.Ctx.Current == nil {
+	if core.Ctx.Current == nil {
 		log.Error("The current client is not set, please use `Jump` to set the current client")
 		return
 	}
 
-	if context.Ctx.Current.OS != os.Linux {
+	if core.Ctx.Current.OS != os.Linux {
 		log.Error("The operating system of the current client is supported, will be supported soon in the next few releases.")
 		return
 	}
 
-	context.Ctx.Current.UpgradeToTermite(connectBackAddr)
+	core.Ctx.Current.UpgradeToTermite(connectBackAddr)
 }
 
 func (dispatcher commandDispatcher) UpgradeHelp(args []string) {

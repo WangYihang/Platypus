@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -23,7 +23,7 @@ func (dispatcher commandDispatcher) REST(args []string) {
 		return
 	}
 
-	rest := context.CreateRESTfulAPIServer()
+	rest := core.CreateRESTfulAPIServer()
 	go rest.Run(fmt.Sprintf("%s:%d", host, port))
 
 	log.Info("RESTful HTTP Server running at %s:%d", host, port)

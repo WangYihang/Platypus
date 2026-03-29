@@ -3,18 +3,18 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
 func (dispatcher commandDispatcher) List(args []string) {
-	if len(context.Ctx.Servers) == 0 {
+	if len(core.Ctx.Servers) == 0 {
 		log.Warn("No listening servers")
 		return
 	}
-	log.Info("Listing %d listening servers", len(context.Ctx.Servers))
+	log.Info("Listing %d listening servers", len(core.Ctx.Servers))
 
-	for _, server := range context.Ctx.Servers {
+	for _, server := range core.Ctx.Servers {
 		server.AsTable()
 	}
 }

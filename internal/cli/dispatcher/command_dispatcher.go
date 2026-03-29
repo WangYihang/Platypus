@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/reflection"
 	"github.com/WangYihang/readline"
@@ -105,7 +105,7 @@ func REPL() {
 	// Construct the IO
 	var err error
 	readLineInstance, err = readline.NewEx(&readline.Config{
-		Prompt:              context.Ctx.CommandPrompt,
+		Prompt:              core.Ctx.CommandPrompt,
 		HistoryFile:         "/tmp/platypus.history",
 		AutoComplete:        completer,
 		InterruptPrompt:     "^C",
@@ -119,7 +119,7 @@ func REPL() {
 		return
 	}
 
-	context.Ctx.RLInstance = readLineInstance
+	core.Ctx.RLInstance = readLineInstance
 
 	log.Logger.SetOutput(readLineInstance.Stderr())
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/fatih/color"
 )
@@ -17,24 +17,24 @@ func (dispatcher commandDispatcher) Alias(args []string) {
 	}
 
 	// Ensure the interactive session is set
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
 
-	if context.Ctx.Current != nil {
+	if core.Ctx.Current != nil {
 		// Alias session
-		log.Info("Renaming session: %s", context.Ctx.Current.FullDesc())
-		context.Ctx.Current.Alias = strings.TrimSpace(args[0])
-		readLineInstance.SetPrompt(color.CyanString(context.Ctx.Current.GetPrompt()))
+		log.Info("Renaming session: %s", core.Ctx.Current.FullDesc())
+		core.Ctx.Current.Alias = strings.TrimSpace(args[0])
+		readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.GetPrompt()))
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
+	if core.Ctx.CurrentTermite != nil {
 		// Alias session
-		log.Info("Renaming session: %s", context.Ctx.CurrentTermite.FullDesc())
-		context.Ctx.CurrentTermite.Alias = strings.TrimSpace(args[0])
-		readLineInstance.SetPrompt(color.CyanString(context.Ctx.CurrentTermite.GetPrompt()))
+		log.Info("Renaming session: %s", core.Ctx.CurrentTermite.FullDesc())
+		core.Ctx.CurrentTermite.Alias = strings.TrimSpace(args[0])
+		readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.GetPrompt()))
 		return
 	}
 

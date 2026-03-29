@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -18,7 +18,7 @@ func (dispatcher commandDispatcher) Turn(args []string) {
 	hash := strings.ToLower(args[0])
 
 	// handle the hash represent a server
-	server := context.Ctx.FindServerByHash(hash)
+	server := core.Ctx.FindServerByHash(hash)
 	if server != nil {
 		for _, client := range (*server).GetAllTCPClients() {
 			client.GroupDispatch = !client.GroupDispatch
@@ -32,13 +32,13 @@ func (dispatcher commandDispatcher) Turn(args []string) {
 	}
 
 	// handle the hash represent a client
-	client := context.Ctx.FindTCPClientByHash(hash)
+	client := core.Ctx.FindTCPClientByHash(hash)
 	if client != nil {
 		client.GroupDispatch = !client.GroupDispatch
 		log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 	} else {
 		// handle the hash represent a termite client
-		termiteclient := context.Ctx.FindTermiteClientByHash(hash)
+		termiteclient := core.Ctx.FindTermiteClientByHash(hash)
 		if termiteclient != nil {
 			termiteclient.GroupDispatch = !termiteclient.GroupDispatch
 			log.Success("[%t->%t] %s", !termiteclient.GroupDispatch, termiteclient.GroupDispatch, termiteclient.FullDesc())

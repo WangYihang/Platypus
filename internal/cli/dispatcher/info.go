@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -15,40 +15,40 @@ func (dispatcher commandDispatcher) Info(args []string) {
 	}
 
 	if len(args) == 0 {
-		if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+		if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 			log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 			return
 		}
 
-		if context.Ctx.Current != nil {
-			current := context.Ctx.Current
+		if core.Ctx.Current != nil {
+			current := core.Ctx.Current
 			current.AsTable()
 			return
 		}
 
-		if context.Ctx.CurrentTermite != nil {
-			current := context.Ctx.CurrentTermite
+		if core.Ctx.CurrentTermite != nil {
+			current := core.Ctx.CurrentTermite
 			current.AsTable()
 			return
 		}
 	} else {
 		clue := args[0]
 		// Client Information
-		targetClient := context.Ctx.FindTCPClientByHash(clue)
+		targetClient := core.Ctx.FindTCPClientByHash(clue)
 		if targetClient != nil {
 			targetClient.AsTable()
 			return
 		}
 
 		// Client Information
-		targetTermiteClient := context.Ctx.FindTermiteClientByHash(clue)
+		targetTermiteClient := core.Ctx.FindTermiteClientByHash(clue)
 		if targetTermiteClient != nil {
 			targetTermiteClient.AsTable()
 			return
 		}
 
 		// Server Information
-		targetServer := context.Ctx.FindServerByHash(clue)
+		targetServer := core.Ctx.FindServerByHash(clue)
 		if targetServer != nil {
 			targetServer.AsTable()
 			return

@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/vbauerster/mpb/v6"
@@ -19,7 +19,7 @@ func (dispatcher commandDispatcher) Upload(args []string) {
 		return
 	}
 
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("The current client is not set, please use `Jump` command to select the current client")
 		return
 	}
@@ -27,22 +27,22 @@ func (dispatcher commandDispatcher) Upload(args []string) {
 	src := args[0]
 	dst := args[1]
 
-	if context.Ctx.Current != nil {
+	if core.Ctx.Current != nil {
 
-		if context.Ctx.Current.OS == oss.Windows {
+		if core.Ctx.Current.OS == oss.Windows {
 			log.Error("Upload command does not support Windows platform")
 			return
 		}
 
-		context.Ctx.Current.Upload(src, dst, false)
+		core.Ctx.Current.Upload(src, dst, false)
 
 		// TODO: Check file md5 to verify
 		log.Success("File %s uploaded to %s", src, dst)
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
-		log.Info("Uploading %s to %s from client: %s", src, dst, context.Ctx.CurrentTermite.OnelineDesc())
+	if core.Ctx.CurrentTermite != nil {
+		log.Info("Uploading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.OnelineDesc())
 
 		srcfd, err := os.OpenFile(src, os.O_RDONLY, 0644)
 		if err != nil {
@@ -79,7 +79,7 @@ func (dispatcher commandDispatcher) Upload(args []string) {
 				log.Error("%s", err)
 				return
 			}
-			if n, err = context.Ctx.CurrentTermite.WriteFileEx(dst, buffer[0:n]); err != nil {
+			if n, err = core.Ctx.CurrentTermite.WriteFileEx(dst, buffer[0:n]); err != nil {
 				log.Error("Failed to write data to target file: %s", err)
 				bar.Abort(true)
 				return

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -16,7 +16,7 @@ func (dispatcher commandDispatcher) Switching(args []string) {
 	}
 
 	// handle the hash represent a server
-	for _, server := range context.Ctx.Servers {
+	for _, server := range core.Ctx.Servers {
 		if strings.HasPrefix(server.Hash, strings.ToLower(args[0])) {
 			// flip server `GroupDispatch` state
 			server.GroupDispatch = !server.GroupDispatch
@@ -34,7 +34,7 @@ func (dispatcher commandDispatcher) Switching(args []string) {
 	}
 
 	// handle the hash represent a client
-	for _, server := range context.Ctx.Servers {
+	for _, server := range core.Ctx.Servers {
 		for _, client := range (*server).GetAllTCPClients() {
 			if strings.HasPrefix(client.Hash, strings.ToLower(args[0])) {
 				client.GroupDispatch = !client.GroupDispatch

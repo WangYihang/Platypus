@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -18,36 +18,36 @@ func (dispatcher commandDispatcher) Delete(args []string) {
 	clue := strings.ToLower(args[0])
 
 	// Delete TCPClient
-	target := context.Ctx.FindTCPClientByHash(clue)
+	target := core.Ctx.FindTCPClientByHash(clue)
 	if target == nil {
-		target = context.Ctx.FindTCPClientByAlias(clue)
+		target = core.Ctx.FindTCPClientByAlias(clue)
 	}
 	if target != nil {
 		log.Success("Delete client node [%s]", target.Hash)
-		context.Ctx.DeleteTCPClient(target)
+		core.Ctx.DeleteTCPClient(target)
 		return
 	}
 
 	// Delete TermiteClient
-	targetTermite := context.Ctx.FindTermiteClientByHash(clue)
+	targetTermite := core.Ctx.FindTermiteClientByHash(clue)
 	if targetTermite == nil {
-		targetTermite = context.Ctx.FindTermiteClientByAlias(clue)
+		targetTermite = core.Ctx.FindTermiteClientByAlias(clue)
 	}
 	if targetTermite != nil {
 		log.Success("Delete encrypted client node [%s]", targetTermite.Hash)
-		context.Ctx.DeleteTermiteClient(targetTermite)
+		core.Ctx.DeleteTermiteClient(targetTermite)
 		return
 	}
 
 	// Delete Server
-	targetServer := context.Ctx.FindServerByHash(clue)
+	targetServer := core.Ctx.FindServerByHash(clue)
 	if targetServer != nil {
 		if targetServer.Encrypted {
 			log.Success("Delete encrypted server node [%s]", targetServer.Hash)
 		} else {
 			log.Success("Delete server node [%s]", targetServer.Hash)
 		}
-		context.Ctx.DeleteServer(targetServer)
+		core.Ctx.DeleteServer(targetServer)
 		return
 	}
 

@@ -3,16 +3,16 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
 func (dispatcher commandDispatcher) PTY(args []string) {
-	if context.Ctx.Current == nil {
+	if core.Ctx.Current == nil {
 		log.Error("The current client is not set, please use `Jump` to set the current client")
 		return
 	}
-	if err := context.Ctx.Current.EstablishPTY(); err != nil {
+	if err := core.Ctx.Current.EstablishPTY(); err != nil {
 		log.Error("Establish PTY failed: %s", err)
 	}
 }

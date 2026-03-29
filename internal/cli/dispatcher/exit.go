@@ -3,11 +3,11 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 )
 
 func (dispatcher commandDispatcher) Exit(args []string) {
-	context.Shutdown()
+	core.Shutdown()
 }
 
 func (dispatcher commandDispatcher) ExitHelp(args []string) {

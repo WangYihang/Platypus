@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"fmt"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/fatih/color"
 )
@@ -16,20 +16,20 @@ func (dispatcher commandDispatcher) Gather(args []string) {
 	}
 
 	if len(args) == 0 {
-		if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+		if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 			log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 			return
 		}
 
-		if context.Ctx.Current != nil {
-			current := context.Ctx.Current
+		if core.Ctx.Current != nil {
+			current := core.Ctx.Current
 			current.GatherClientInfo(current.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
 			return
 		}
 
-		if context.Ctx.CurrentTermite != nil {
-			current := context.Ctx.CurrentTermite
+		if core.Ctx.CurrentTermite != nil {
+			current := core.Ctx.CurrentTermite
 			current.GatherClientInfo(current.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(current.GetPrompt()))
 			return
@@ -37,7 +37,7 @@ func (dispatcher commandDispatcher) Gather(args []string) {
 	} else {
 		clue := args[0]
 		// Client information
-		targetClient := context.Ctx.FindTCPClientByHash(clue)
+		targetClient := core.Ctx.FindTCPClientByHash(clue)
 		if targetClient != nil {
 			targetClient.GatherClientInfo(targetClient.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(targetClient.GetPrompt()))
@@ -45,7 +45,7 @@ func (dispatcher commandDispatcher) Gather(args []string) {
 		}
 
 		// Client information
-		targetTermiteClient := context.Ctx.FindTermiteClientByHash(clue)
+		targetTermiteClient := core.Ctx.FindTermiteClientByHash(clue)
 		if targetTermiteClient != nil {
 			targetTermiteClient.GatherClientInfo(targetTermiteClient.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(targetTermiteClient.GetPrompt()))
@@ -53,7 +53,7 @@ func (dispatcher commandDispatcher) Gather(args []string) {
 		}
 
 		// Server information
-		targetServer := context.Ctx.FindServerByHash(clue)
+		targetServer := core.Ctx.FindServerByHash(clue)
 		if targetServer != nil {
 			for _, client := range targetServer.Clients {
 				client.GatherClientInfo(client.GetHashFormat())

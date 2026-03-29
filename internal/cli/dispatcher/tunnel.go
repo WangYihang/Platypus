@@ -5,17 +5,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
 func (dispatcher commandDispatcher) Tunnel(args []string) {
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
+	if core.Ctx.CurrentTermite != nil {
 		if len(args) != 6 {
 			log.Error("Arguments error, use `Help Tunnel` to get more information")
 			dispatcher.TunnelHelp([]string{})
@@ -48,24 +48,24 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 			case "pull":
 				localAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
 				remoteAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
-				context.AddPullTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
+				core.AddPullTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
 			case "push":
 				localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
 				remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
-				context.AddPushTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
+				core.AddPushTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
 			case "dynamic":
-				context.Ctx.CurrentTermite.StartSocks5Server()
+				core.Ctx.CurrentTermite.StartSocks5Server()
 			case "internet":
 				localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
 				remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
-				if _, exists := context.Ctx.Socks5Servers[localAddress]; exists {
+				if _, exists := core.Ctx.Socks5Servers[localAddress]; exists {
 					log.Warn("Socks5 server (%s) already exists", localAddress)
 				} else {
-					err := context.StartSocks5Server(localAddress)
+					err := core.StartSocks5Server(localAddress)
 					if err != nil {
 						log.Error("Starting local socks5 server failed: %s", err.Error())
 					} else {
-						context.AddPushTunnelConfig(context.Ctx.CurrentTermite, localAddress, remoteAddress)
+						core.AddPushTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
 					}
 				}
 			default:
@@ -89,7 +89,7 @@ func (dispatcher commandDispatcher) Tunnel(args []string) {
 		}
 	}
 
-	if context.Ctx.Current != nil {
+	if core.Ctx.Current != nil {
 		log.Error("Tunneling is not supported in plain reverse shell")
 	}
 }

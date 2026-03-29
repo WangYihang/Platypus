@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 )
 
@@ -15,25 +15,25 @@ func (dispatcher commandDispatcher) Command(args []string) {
 		return
 	}
 
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("Current session is not set, please use `Jump` command to set the interactive Command")
 		return
 	}
 
-	if context.Ctx.Current != nil {
+	if core.Ctx.Current != nil {
 		command := strings.Join(args, " ")
-		log.Info("Execute %s on %s", command, context.Ctx.Current.FullDesc())
+		log.Info("Execute %s on %s", command, core.Ctx.Current.FullDesc())
 
-		result := context.Ctx.Current.SystemToken(command)
+		result := core.Ctx.Current.SystemToken(command)
 		log.Info("Result: %s", result)
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
+	if core.Ctx.CurrentTermite != nil {
 		command := strings.Join(args, " ")
-		log.Info("Execute %s on %s", command, context.Ctx.CurrentTermite.FullDesc())
+		log.Info("Execute %s on %s", command, core.Ctx.CurrentTermite.FullDesc())
 
-		result := context.Ctx.CurrentTermite.System(command)
+		result := core.Ctx.CurrentTermite.System(command)
 		log.Info("Result: %s", result)
 		return
 	}

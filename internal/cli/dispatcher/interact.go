@@ -7,20 +7,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"golang.org/x/term"
 )
 
 func (dispatcher commandDispatcher) Interact(args []string) {
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("Interactive session is not set, please use `Jump` command to set the interactive Interact")
 		return
 	}
 
-	if context.Ctx.Current != nil {
+	if core.Ctx.Current != nil {
 
-		current := context.Ctx.Current
+		current := core.Ctx.Current
 		log.Info("Interacting with %s", current.FullDesc())
 
 		// Set to interactive
@@ -29,8 +29,8 @@ func (dispatcher commandDispatcher) Interact(args []string) {
 		current.SetInteractive(true)
 		defer func() { current.SetInteractive(false) }()
 
-		context.Ctx.Interacting.Lock()
-		defer func() { context.Ctx.Interacting.Unlock() }()
+		core.Ctx.Interacting.Lock()
+		defer func() { core.Ctx.Interacting.Unlock() }()
 
 		if current.GetPtyEstablished() {
 			// Step 4: Enable Raw mode of attacker pty
@@ -147,8 +147,8 @@ func (dispatcher commandDispatcher) Interact(args []string) {
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
-		current := context.Ctx.CurrentTermite
+	if core.Ctx.CurrentTermite != nil {
+		current := core.Ctx.CurrentTermite
 		current.StartShell()
 	}
 }

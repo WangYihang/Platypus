@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/context"
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
 	"github.com/vbauerster/mpb/v6"
@@ -27,7 +27,7 @@ func (dispatcher commandDispatcher) Download(args []string) {
 		return
 	}
 
-	if context.Ctx.Current == nil && context.Ctx.CurrentTermite == nil {
+	if core.Ctx.Current == nil && core.Ctx.CurrentTermite == nil {
 		log.Error("The current client is not set, please use `Jump` command to select the current client")
 		return
 	}
@@ -48,9 +48,9 @@ func (dispatcher commandDispatcher) Download(args []string) {
 	}
 	defer dstfd.Close()
 
-	if context.Ctx.Current != nil {
-		log.Info("Downloading %s to %s from client: %s", src, dst, context.Ctx.Current.OnelineDesc())
-		totalBytes, err := context.Ctx.Current.FileSize(src)
+	if core.Ctx.Current != nil {
+		log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.Current.OnelineDesc())
+		totalBytes, err := core.Ctx.Current.FileSize(src)
 		if err != nil {
 			log.Error("Failed to get file size: %s", err)
 			return
@@ -83,7 +83,7 @@ func (dispatcher commandDispatcher) Download(args []string) {
 
 		// Read from remote client
 		start := time.Now()
-		content, err := context.Ctx.Current.ReadFileEx(src, 0, firstBlockSize)
+		content, err := core.Ctx.Current.ReadFileEx(src, 0, firstBlockSize)
 		if err != nil {
 			bar.Abort(true)
 			log.Error("%s", err)
@@ -99,7 +99,7 @@ func (dispatcher commandDispatcher) Download(args []string) {
 
 		for i := 0; i < totalBytes/blockSize; i++ {
 			start = time.Now()
-			content, err := context.Ctx.Current.ReadFileEx(src, firstBlockSize+i*blockSize, blockSize)
+			content, err := core.Ctx.Current.ReadFileEx(src, firstBlockSize+i*blockSize, blockSize)
 			if err != nil {
 				bar.Abort(true)
 				log.Error("%s", err)
@@ -117,9 +117,9 @@ func (dispatcher commandDispatcher) Download(args []string) {
 		return
 	}
 
-	if context.Ctx.CurrentTermite != nil {
-		log.Info("Downloading %s to %s from client: %s", src, dst, context.Ctx.CurrentTermite.OnelineDesc())
-		totalBytes, err := context.Ctx.CurrentTermite.FileSize(src)
+	if core.Ctx.CurrentTermite != nil {
+		log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.OnelineDesc())
+		totalBytes, err := core.Ctx.CurrentTermite.FileSize(src)
 		if err != nil {
 			log.Error("Failed to get file size: %s", err)
 			return
@@ -149,7 +149,7 @@ func (dispatcher commandDispatcher) Download(args []string) {
 		blockSize := int64(0x400 * 512) // 128KB
 		for i := int64(0); i < totalBytes; i += blockSize {
 			start := time.Now()
-			content, err := context.Ctx.CurrentTermite.ReadFileEx(src, i, blockSize)
+			content, err := core.Ctx.CurrentTermite.ReadFileEx(src, i, blockSize)
 			if err != nil {
 				log.Error(err.Error())
 				return
