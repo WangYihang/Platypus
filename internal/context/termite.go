@@ -281,7 +281,8 @@ func (c *TermiteClient) InteractWith(key string) {
 	// Set stdin in raw mode.
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		panic(err)
+		log.Error("Failed to set terminal to raw mode: %s", err)
+		return
 	}
 	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
 
@@ -333,7 +334,9 @@ func (c *TermiteClient) StartShell() {
 
 func (c *TermiteClient) System(command string) string {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 	err := c.Send(message.Message{
 		Type: message.CALL_SYSTEM,
 		Body: message.BodyCallSystem{
@@ -356,7 +359,9 @@ func (c *TermiteClient) System(command string) string {
 
 func (c *TermiteClient) FileSize(path string) (int64, error) {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 	c.Send(message.Message{
 		Type: message.FILE_SIZE,
 		Body: message.BodyFileSize{
@@ -380,7 +385,9 @@ func (c *TermiteClient) FileSize(path string) (int64, error) {
 
 func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte, error) {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 
 	c.Send(message.Message{
 		Type: message.READ_FILE_EX,
@@ -403,7 +410,9 @@ func (c *TermiteClient) ReadFileEx(path string, start int64, size int64) ([]byte
 
 func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 	c.Send(message.Message{
 		Type: message.READ_FILE,
 		Body: message.BodyReadFile{
@@ -423,7 +432,9 @@ func (c *TermiteClient) ReadFile(path string) ([]byte, error) {
 
 func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 	c.Send(message.Message{
 		Type: message.WRITE_FILE,
 		Body: message.BodyWriteFile{
@@ -444,7 +455,9 @@ func (c *TermiteClient) WriteFile(path string, content []byte) (int, error) {
 
 func (c *TermiteClient) WriteFileEx(path string, content []byte) (int, error) {
 	token := uuid.New().String()
+	Ctx.MessageQueueMu.Lock()
 	Ctx.MessageQueue[token] = make(chan message.Message)
+	Ctx.MessageQueueMu.Unlock()
 	c.Send(message.Message{
 		Type: message.WRITE_FILE_EX,
 		Body: message.BodyWriteFileEx{

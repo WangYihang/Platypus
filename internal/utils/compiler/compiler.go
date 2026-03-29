@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,14 +44,14 @@ func Compress(target string) bool {
 }
 
 func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) error {
-	content, err := ioutil.ReadFile("termite.go")
+	content, err := os.ReadFile("termite.go")
 	if err != nil {
 		log.Error("Can not read termite.go: %s", err)
 		return errors.New("can not read termite.go")
 	}
 	contentString := string(content)
 	contentString = strings.Replace(contentString, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx", targetAddress, -1)
-	err = ioutil.WriteFile("termite.go", []byte(contentString), 0644)
+	err = os.WriteFile("termite.go", []byte(contentString), 0644)
 	if err != nil {
 		log.Error("Can not write termite.go: %s", err)
 		return errors.New("can not write termite.go")
@@ -92,7 +91,7 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
 
 	// Step 4: Create binary file
-	err = ioutil.WriteFile(targetFilename, content, 0755)
+	err = os.WriteFile(targetFilename, content, 0755)
 	if err != nil {
 		log.Error("Failed to write file: %s", targetFilename)
 		return err
@@ -101,7 +100,7 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 }
 
 func GenerateDirFilename() (string, string, error) {
-	dir, err := ioutil.TempDir("", str.RandomString(0x08))
+	dir, err := os.MkdirTemp("", str.RandomString(0x08))
 	if err != nil {
 		return "", "", err
 	}

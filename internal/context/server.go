@@ -214,7 +214,7 @@ func (s *TCPServer) Run() {
 		}
 		config := tls.Config{Certificates: []tls.Certificate{cert}}
 		config.Rand = rand.Reader
-		listener, _ = tls.Listen("tcp", service, &config)
+		listener, err = tls.Listen("tcp", service, &config)
 	} else {
 		listener, err = net.ListenTCP("tcp", tcpAddr)
 	}
@@ -730,42 +730,60 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			log.Error(msg.Body.(*message.BodyDynamicTunnelCreateFailed).Reason)
 		case message.CALL_SYSTEM_RESULT:
 			token := msg.Body.(*message.BodyCallSystemResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)
 			}
 		case message.READ_FILE_RESULT:
 			token := msg.Body.(*message.BodyReadFileResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)
 			}
 		case message.READ_FILE_EX_RESULT:
 			token := msg.Body.(*message.BodyReadFileExResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)
 			}
 		case message.FILE_SIZE_RESULT:
 			token := msg.Body.(*message.BodyFileSizeResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)
 			}
 		case message.WRITE_FILE_RESULT:
 			token := msg.Body.(*message.BodyWriteFileResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)
 			}
 		case message.WRITE_FILE_EX_RESULT:
 			token := msg.Body.(*message.BodyWriteFileExResult).Token
-			if channel, exists := Ctx.MessageQueue[token]; exists {
+			Ctx.MessageQueueMu.RLock()
+			channel, exists := Ctx.MessageQueue[token]
+			Ctx.MessageQueueMu.RUnlock()
+			if exists {
 				channel <- msg
 			} else {
 				log.Error("No such channel: %s", token)

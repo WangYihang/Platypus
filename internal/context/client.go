@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -964,7 +963,7 @@ func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
 	}
 
 	// Read local file content
-	content, err := ioutil.ReadFile(src)
+	content, err := os.ReadFile(src)
 	if err != nil {
 		log.Error(err.Error())
 		return false

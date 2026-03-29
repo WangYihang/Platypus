@@ -3,7 +3,7 @@ package context
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -53,7 +53,7 @@ func panicRESTfully(c *gin.Context, msg string) bool {
 
 func CreateRESTfulAPIServer() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = io.Discard
 	endpoint := gin.Default()
 
 	endpoint.Use(cors.New(cors.Config{

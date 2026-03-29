@@ -2,7 +2,7 @@ package network
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 )
@@ -49,7 +49,7 @@ func GetPublicIP() (string, error) {
 	}
 	defer req.Body.Close()
 
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		return "", err
 	}

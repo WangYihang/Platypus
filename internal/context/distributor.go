@@ -2,7 +2,7 @@ package context
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/WangYihang/Platypus/internal/utils/compiler"
@@ -21,7 +21,7 @@ type Distributor struct {
 
 func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = io.Discard
 	endpoint := gin.Default()
 
 	// Connect with context

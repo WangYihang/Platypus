@@ -53,6 +53,7 @@ type Context struct {
 	PushTunnelInstance map[string]PushTunnelInstance
 	Socks5Servers      map[string](*socks5.Server)
 	MessageQueue       map[string](chan message.Message)
+	MessageQueueMu     sync.RWMutex
 	// Set later in platypus.go
 	Distributor *Distributor
 	RESTful     *gin.Engine
@@ -89,16 +90,16 @@ func GetContext() *Context {
 	return Ctx
 }
 
-func (ctx Context) AddServer(s *TCPServer) {
+func (ctx *Context) AddServer(s *TCPServer) {
 	ctx.Servers[(*s).Hash] = s
 }
 
-func (ctx Context) DeleteServer(s *TCPServer) {
+func (ctx *Context) DeleteServer(s *TCPServer) {
 	(*s).Stop()
 	delete(ctx.Servers, (*s).Hash)
 }
 
-func (ctx Context) DeleteTCPClient(c *TCPClient) {
+func (ctx *Context) DeleteTCPClient(c *TCPClient) {
 	// recover command prompt
 	ctx.RLInstance.SetPrompt(color.CyanString("» "))
 	for _, server := range Ctx.Servers {
@@ -106,14 +107,14 @@ func (ctx Context) DeleteTCPClient(c *TCPClient) {
 	}
 }
 
-func (ctx Context) DeleteTermiteClient(c *TermiteClient) {
+func (ctx *Context) DeleteTermiteClient(c *TermiteClient) {
 	ctx.RLInstance.SetPrompt(color.CyanString("» "))
 	for _, server := range Ctx.Servers {
 		(*server).DeleteTermiteClient(c)
 	}
 }
 
-func (ctx Context) FindTCPClientByAlias(alias string) *TCPClient {
+func (ctx *Context) FindTCPClientByAlias(alias string) *TCPClient {
 	if alias == "" {
 		return nil
 	}
@@ -127,7 +128,7 @@ func (ctx Context) FindTCPClientByAlias(alias string) *TCPClient {
 	return nil
 }
 
-func (ctx Context) FindTermiteClientByAlias(alias string) *TermiteClient {
+func (ctx *Context) FindTermiteClientByAlias(alias string) *TermiteClient {
 	if alias == "" {
 		return nil
 	}
@@ -141,7 +142,7 @@ func (ctx Context) FindTermiteClientByAlias(alias string) *TermiteClient {
 	return nil
 }
 
-func (ctx Context) FindTCPClientByHash(hash string) *TCPClient {
+func (ctx *Context) FindTCPClientByHash(hash string) *TCPClient {
 	if hash == "" {
 		return nil
 	}
@@ -155,7 +156,7 @@ func (ctx Context) FindTCPClientByHash(hash string) *TCPClient {
 	return nil
 }
 
-func (ctx Context) FindTermiteClientByHash(hash string) *TermiteClient {
+func (ctx *Context) FindTermiteClientByHash(hash string) *TermiteClient {
 	if hash == "" {
 		return nil
 	}
@@ -169,7 +170,7 @@ func (ctx Context) FindTermiteClientByHash(hash string) *TermiteClient {
 	return nil
 }
 
-func (ctx Context) FindServerByHash(hash string) *TCPServer {
+func (ctx *Context) FindServerByHash(hash string) *TCPServer {
 	if hash == "" {
 		return nil
 	}
@@ -181,7 +182,7 @@ func (ctx Context) FindServerByHash(hash string) *TCPServer {
 	return nil
 }
 
-func (ctx Context) FindServerListeningAddressByRouteKey(routeKey string) string {
+func (ctx *Context) FindServerListeningAddressByRouteKey(routeKey string) string {
 	for k, v := range ctx.Distributor.Route {
 		if v == routeKey {
 			return k

@@ -37,7 +37,8 @@ func (dispatcher commandDispatcher) Interact(args []string) {
 			log.Info("Setting attacker terminal to raw mode")
 			oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 			if err != nil {
-				panic(err)
+				log.Error("Failed to set terminal to raw mode: %s", err)
+				return
 			}
 			// Restore tty properties
 			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
