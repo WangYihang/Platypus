@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/api"
-	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
+	"github.com/WangYihang/Platypus/internal/cli/cmd"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/log"
@@ -86,5 +86,5 @@ func main() {
 	}
 
 	// Run main loop
-	dispatcher.REPL()
+	cmd.RunREPL()
 }

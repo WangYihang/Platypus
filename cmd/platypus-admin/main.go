@@ -1,8 +1,8 @@
 package main
 
-import "github.com/WangYihang/Platypus/internal/cli/dispatcher"
+import "github.com/WangYihang/Platypus/internal/cli/cmd"
 
 func main() {
 	// Run main loop
-	dispatcher.REPL()
+	cmd.RunREPL()
 }
