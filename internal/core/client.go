@@ -18,12 +18,16 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/WangYihang/Platypus/internal/utils/str"
+	"github.com/WangYihang/Platypus/internal/session"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/vbauerster/mpb/v6"
 	"github.com/vbauerster/mpb/v6/decor"
 	"golang.org/x/term"
 )
+
+// Compile-time check: TCPClient implements session.Session
+var _ session.Session = (*TCPClient)(nil)
 
 // TCPClient represents the client connected to the server
 type TCPClient struct {
@@ -76,6 +80,17 @@ func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 		mature:            false,
 	}
 }
+
+func (c *TCPClient) GetHash() string          { return c.Hash }
+func (c *TCPClient) GetAlias() string         { return c.Alias }
+func (c *TCPClient) SetAlias(alias string)    { c.Alias = alias }
+func (c *TCPClient) IsEncrypted() bool        { return false }
+func (c *TCPClient) GetHost() string          { return c.Host }
+func (c *TCPClient) GetPort() uint16          { return c.Port }
+func (c *TCPClient) GetOS() oss.OperatingSystem { return c.OS }
+func (c *TCPClient) GetTimeStamp() time.Time  { return c.TimeStamp }
+func (c *TCPClient) GetGroupDispatch() bool   { return c.GroupDispatch }
+func (c *TCPClient) SetGroupDispatch(v bool)  { c.GroupDispatch = v }
 
 func (c *TCPClient) Close() {
 	c.conn.Close()

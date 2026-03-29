@@ -21,9 +21,13 @@ import (
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/utils/update"
+	"github.com/WangYihang/Platypus/internal/session"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/table"
 )
+
+// Compile-time check: TermiteClient implements session.Session
+var _ session.Session = (*TermiteClient)(nil)
 
 type processState int
 
@@ -94,6 +98,17 @@ func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) 
 		GroupDispatch:     false,
 	}
 }
+
+func (c *TermiteClient) GetHash() string          { return c.Hash }
+func (c *TermiteClient) GetAlias() string         { return c.Alias }
+func (c *TermiteClient) SetAlias(alias string)    { c.Alias = alias }
+func (c *TermiteClient) IsEncrypted() bool        { return true }
+func (c *TermiteClient) GetHost() string          { return c.Host }
+func (c *TermiteClient) GetPort() uint16          { return c.Port }
+func (c *TermiteClient) GetOS() oss.OperatingSystem { return c.OS }
+func (c *TermiteClient) GetTimeStamp() time.Time  { return c.TimeStamp }
+func (c *TermiteClient) GetGroupDispatch() bool   { return c.GroupDispatch }
+func (c *TermiteClient) SetGroupDispatch(v bool)  { c.GroupDispatch = v }
 
 func (c *TermiteClient) LockAtom() {
 	c.atomLock.Lock()
