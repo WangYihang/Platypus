@@ -11,6 +11,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func distributorParamsExist(c *gin.Context, params []string) bool {
+	for _, param := range params {
+		if c.Param(param) == "" {
+			c.JSON(200, gin.H{"status": false, "msg": fmt.Sprintf("%s is required", param)})
+			c.Abort()
+			return false
+		}
+	}
+	return true
+}
+
+func distributorPanic(c *gin.Context, msg string) {
+	c.JSON(200, gin.H{"status": false, "msg": msg})
+	c.Abort()
+}
+
 type Distributor struct {
 	Host       string            `json:"host"`
 	Port       uint16            `json:"port"`
@@ -34,7 +50,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 	}
 
 	endpoint.GET("/termite/:target", func(c *gin.Context) {
-		if !paramsExistOrAbort(c, []string{"target"}) {
+		if !distributorParamsExist(c, []string{"target"}) {
 			return
 		}
 		target := c.Param("target")
@@ -42,7 +58,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 
 		if target == "" {
 			log.Error("Invalid connect back addr: %v", target)
-			panicRESTfully(c, "Invalid connect back addr")
+			distributorPanic(c,"Invalid connect back addr")
 			return
 		}
 
@@ -50,7 +66,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		dir, filename, err := compiler.GenerateDirFilename()
 		if err != nil {
 			log.Error(fmt.Sprint(err))
-			panicRESTfully(c, err.Error())
+			distributorPanic(c,err.Error())
 			return
 		}
 		defer os.RemoveAll(dir)
@@ -59,7 +75,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
 		if err != nil {
 			log.Error(fmt.Sprint(err))
-			panicRESTfully(c, err.Error())
+			distributorPanic(c,err.Error())
 			return
 		}
 

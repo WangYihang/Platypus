@@ -1,4 +1,4 @@
-package core
+package api
 
 import (
 	"encoding/json"
@@ -8,21 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/fs"
 	"github.com/WangYihang/Platypus/internal/utils/log"
 	"github.com/WangYihang/Platypus/internal/utils/message"
 	"github.com/WangYihang/Platypus/internal/utils/str"
-	"github.com/gin-contrib/static"
-	"gopkg.in/olahol/melody.v1"
-
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/olahol/melody.v1"
 )
-
-type WindowSize struct {
-	Columns int
-	Rows    int
-}
 
 func formExistOrAbort(c *gin.Context, params []string) bool {
 	for _, param := range params {
@@ -86,7 +81,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	notifyWebSocket.HandleDisconnect(func(s *melody.Session) {
 		log.Info("Notify client disconencted from: %s", s.Request.RemoteAddr)
 	})
-	Ctx.NotifyWebSocket = notifyWebSocket
+	core.Ctx.NotifyWebSocket = notifyWebSocket
 
 	// Websocket
 	ttyWebSocket := melody.New()
@@ -95,8 +90,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
-		client := Ctx.FindTCPClientByHash(c.Param("hash"))
-		termiteClient := Ctx.FindTermiteClientByHash(c.Param("hash"))
+		client := core.Ctx.FindTCPClientByHash(c.Param("hash"))
+		termiteClient := core.Ctx.FindTermiteClientByHash(c.Param("hash"))
 		if client == nil && termiteClient == nil {
 			panicRESTfully(c, "client is not found")
 			return
@@ -115,7 +110,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
 
 		// Handle TCPClient
-		current := Ctx.FindTCPClientByHash(hash)
+		current := core.Ctx.FindTCPClientByHash(hash)
 		if current != nil {
 			s.Set("client", current)
 			// Lock
@@ -147,7 +142,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 
 		// Handle TermiteClient
-		currentTermite := Ctx.FindTermiteClientByHash(hash)
+		currentTermite := core.Ctx.FindTermiteClientByHash(hash)
 		if currentTermite != nil {
 			log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
 			// Start shell process
@@ -164,11 +159,11 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			currentTermite.RequestStartProcess(currentTermite.GetShellPath(), 0, 0, key)
 
 			// Create Process Object
-			process := Process{
+			process := core.Process{
 				Pid:           -2,
 				WindowColumns: 0,
 				WindowRows:    0,
-				State:         startRequested,
+				State:         core.StartRequested,
 				WebSocket:     s,
 			}
 			currentTermite.AddProcess(key, &process)
@@ -181,7 +176,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TCPClient
 		value, exists := s.Get("client")
 		if exists {
-			current := value.(*TCPClient)
+			current := value.(*core.TCPClient)
 			if current.GetInteractive() {
 				opcode := msg[0]
 				body := msg[1:]
@@ -191,7 +186,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '1': // RESIZE_TERMINAL '1'
 					// Raw reverse shell does not support resize terminal size when
 					// in interactive foreground program, eg: vim
-					// var ws WindowSize
+					// var ws core.WindowSize
 					// json.Unmarshal(body, &ws)
 					// current.SetWindowSize(&ws)
 				case '2': // PAUSE '2'
@@ -201,7 +196,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '{': // JSON_DATA '{'
 					// Raw reverse shell does not support resize terminal size when
 					// in interactive foreground program, eg: vim
-					// var ws WindowSize
+					// var ws core.WindowSize
 					// json.Unmarshal([]byte("{"+string(body)), &ws)
 					// current.SetWindowSize(&ws)
 				default:
@@ -213,7 +208,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 
 		// Handle TermiteClient
 		if termiteValue, exists := s.Get("termiteClient"); exists {
-			currentTermite := termiteValue.(*TermiteClient)
+			currentTermite := termiteValue.(*core.TermiteClient)
 			if key, exists := s.Get("key"); exists {
 				opcode := msg[0]
 				body := msg[1:]
@@ -233,7 +228,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 						return
 					}
 				case '1': // RESIZE_TERMINAL '1'
-					var ws WindowSize
+					var ws core.WindowSize
 					json.Unmarshal(body, &ws)
 
 					err := currentTermite.Send(message.Message{
@@ -255,7 +250,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				case '3': // RESUME '3'
 					// TODO: Pause, support for zmodem
 				case '{': // JSON_DATA '{'
-					var ws WindowSize
+					var ws core.WindowSize
 					json.Unmarshal([]byte(msg), &ws)
 
 					err := currentTermite.Send(message.Message{
@@ -285,7 +280,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TCPClient
 		value, exists := s.Get("client")
 		if exists {
-			current := value.(*TCPClient)
+			current := value.(*core.TCPClient)
 			log.Success("Closing websocket shell for: %s", current.OnelineDesc())
 			current.SetInteractive(false)
 			current.GetInteractingLock().Unlock()
@@ -295,7 +290,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		// Handle TermiteClient
 		termiteValue, exists := s.Get("termiteClient")
 		if exists {
-			currentTermite := termiteValue.(*TermiteClient)
+			currentTermite := termiteValue.(*core.TermiteClient)
 			if key, exists := s.Get("key"); exists {
 				currentTermite.RequestTerminate(key.(string))
 			} else {
@@ -311,8 +306,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 	})
 
 	type ServersWithDistributorAddress struct {
-		Servers     map[string](*TCPServer) `json:"servers"`
-		Distributor Distributor             `json:"distributor"`
+		Servers     map[string](*core.TCPServer) `json:"servers"`
+		Distributor core.Distributor             `json:"distributor"`
 	}
 
 	// Server related
@@ -323,8 +318,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		{
 			serverAPIGroup.GET("", func(c *gin.Context) {
 				response := ServersWithDistributorAddress{
-					Servers:     Ctx.Servers,
-					Distributor: *Ctx.Distributor,
+					Servers:     core.Ctx.Servers,
+					Distributor: *core.Ctx.Distributor,
 				}
 				c.JSON(200, gin.H{
 					"status": true,
@@ -337,7 +332,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if server.Hash == hash {
 						c.JSON(200, gin.H{
 							"status": true,
@@ -354,7 +349,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if server.Hash == hash {
 						clients := make(map[string]interface{})
 						for k, v := range server.Clients {
@@ -383,7 +378,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-				server := CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
+				server := core.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
 				if server != nil {
 					go (*server).Run()
 					c.JSON(200, gin.H{
@@ -404,9 +399,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if server.Hash == hash {
-						Ctx.DeleteServer(server)
+						core.Ctx.DeleteServer(server)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -423,7 +418,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Client related
 			clientAPIGroup.GET("", func(c *gin.Context) {
 				clients := make(map[string]interface{})
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					for k, v := range server.Clients {
 						clients[k] = v
 					}
@@ -442,7 +437,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
 						c.JSON(200, gin.H{
 							"status": true,
@@ -467,7 +462,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 
-				client := Ctx.FindTCPClientByHash(hash)
+				client := core.Ctx.FindTCPClientByHash(hash)
 				if client != nil {
 					// Upgrade
 					go client.UpgradeToTermite(target)
@@ -486,9 +481,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
-						Ctx.DeleteTCPClient(client)
+						core.Ctx.DeleteTCPClient(client)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -507,7 +502,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 				hash := c.Param("hash")
 				cmd := c.PostForm("cmd")
-				for _, server := range Ctx.Servers {
+				for _, server := range core.Ctx.Servers {
 					if client, exist := server.Clients[hash]; exist {
 						if client.GetPtyEstablished() {
 							c.JSON(200, gin.H{

@@ -18,6 +18,11 @@ import (
 	"gopkg.in/olahol/melody.v1"
 )
 
+type WindowSize struct {
+	Columns int
+	Rows    int
+}
+
 type PullTunnelConfig struct {
 	Termite *TermiteClient
 	Address string

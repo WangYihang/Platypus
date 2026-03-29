@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/cli/dispatcher"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -61,7 +62,7 @@ func main() {
 	if cfg.RESTful.Enable {
 		rh := cfg.RESTful.Host
 		rp := cfg.RESTful.Port
-		rest := core.CreateRESTfulAPIServer()
+		rest := api.CreateRESTfulAPIServer()
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
 		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")

@@ -32,7 +32,7 @@ var _ session.Session = (*TermiteClient)(nil)
 type processState int
 
 const (
-	startRequested processState = iota
+	StartRequested processState = iota
 	started
 	terminatRequested
 	terminated
@@ -339,7 +339,7 @@ func (c *TermiteClient) StartShell() {
 		Pid:           -2,
 		WindowColumns: 0,
 		WindowRows:    0,
-		State:         startRequested,
+		State:         StartRequested,
 		WebSocket:     nil,
 	}
 	c.processes[key] = &process
