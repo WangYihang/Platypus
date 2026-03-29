@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	"github.com/WangYihang/Platypus/internal/utils/log"
@@ -28,6 +29,9 @@ type WebSocketMessage struct {
 	Data interface{}
 }
 
+// Compile-time check: TCPServer implements listener.Listener
+var _ listener.Listener = (*TCPServer)(nil)
+
 type TCPServer struct {
 	Host           string                      `json:"host"`
 	GroupDispatch  bool                        `json:"group_dispatch"`
@@ -44,6 +48,11 @@ type TCPServer struct {
 	hashFormat     string                      `json:"-"`
 	stopped        chan struct{}               `json:"-"`
 }
+
+func (s *TCPServer) GetHash() string    { return s.Hash }
+func (s *TCPServer) GetHost() string    { return s.Host }
+func (s *TCPServer) GetPort() uint16    { return s.Port }
+func (s *TCPServer) IsEncrypted() bool  { return s.Encrypted }
 
 func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)
