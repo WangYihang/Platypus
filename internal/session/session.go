@@ -34,6 +34,9 @@ type Session interface {
 	FullDesc() string
 	AsTable()
 
+	// Operations
+	Execute(command string) (string, error)
+
 	// Lifecycle
 	Close()
 }

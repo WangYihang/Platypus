@@ -347,6 +347,12 @@ func (c *TermiteClient) StartShell() {
 	c.InteractWith(key)
 }
 
+// Execute runs a command on the remote and returns its output.
+// Implements session.Session.
+func (c *TermiteClient) Execute(command string) (string, error) {
+	return c.System(command), nil
+}
+
 func (c *TermiteClient) System(command string) string {
 	token := uuid.New().String()
 	Ctx.MessageQueueMu.Lock()

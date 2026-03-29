@@ -649,6 +649,12 @@ func (c *TCPClient) EstablishPTY() error {
 	return nil
 }
 
+// Execute runs a command on the remote and returns its output.
+// Implements session.Session.
+func (c *TCPClient) Execute(command string) (string, error) {
+	return c.SystemToken(command), nil
+}
+
 func (c *TCPClient) SystemToken(command string) string {
 	tokenA := str.RandomString(0x08)
 	tokenB := str.RandomString(0x08)
