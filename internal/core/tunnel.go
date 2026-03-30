@@ -5,44 +5,46 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/message"
 	"github.com/WangYihang/Platypus/internal/utils/str"
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	"github.com/armon/go-socks5"
 )
 
-func AddPushTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
-	log.Info("Mapping local (%s) to remote (%s)", local_address, remote_address)
+func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {
+	log.Info("Mapping local (%s) to remote (%s)", localAddress, remoteAddress)
 
 	termite.LockAtom()
 	defer termite.UnlockAtom()
 
-	err := termite.Send(message.Message{
-		Type: message.PUSH_TUNNEL_CREATE,
-		Body: message.BodyPushTunnelCreate{
-			Address: remote_address,
+	err := termite.Send(&agentpb.Envelope{
+		Payload: &agentpb.Envelope_TunnelCreateRequest{
+			TunnelCreateRequest: &agentpb.TunnelCreateRequest{
+				Address: remoteAddress,
+				Mode:    agentpb.TunnelMode_TUNNEL_MODE_PUSH,
+			},
 		},
 	})
 
 	if err != nil {
 		log.Error(err.Error())
 	} else {
-		Ctx.PushTunnelConfig[remote_address] = app.PushTunnelConfig{
+		Ctx.PushTunnelConfig[remoteAddress] = app.PushTunnelConfig{
 			Termite: termite,
-			Address: local_address,
+			Address: localAddress,
 		}
 	}
 }
 
-func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_address string) {
-	log.Info("Mapping remote (%s) to local (%s)", remote_address, local_address)
-	tunnel, err := net.Listen("tcp", local_address)
+func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {
+	log.Info("Mapping remote (%s) to local (%s)", remoteAddress, localAddress)
+	tunnel, err := net.Listen("tcp", localAddress)
 	if err != nil {
 		log.Error(err.Error())
 		return
 	}
-	Ctx.PullTunnelConfig[local_address] = app.PullTunnelConfig{
+	Ctx.PullTunnelConfig[localAddress] = app.PullTunnelConfig{
 		Termite: termite,
-		Address: remote_address,
+		Address: remoteAddress,
 		Server:  &tunnel,
 	}
 
@@ -50,11 +52,12 @@ func AddPullTunnelConfig(termite *TermiteClient, local_address string, remote_ad
 		for {
 			conn, _ := tunnel.Accept()
 			token := str.RandomString(0x10)
-			err := termite.Send(message.Message{
-				Type: message.PULL_TUNNEL_CONNECT,
-				Body: message.BodyPullTunnelConnect{
-					Token:   token,
-					Address: remote_address,
+			err := termite.Send(&agentpb.Envelope{
+				Payload: &agentpb.Envelope_TunnelConnectRequest{
+					TunnelConnectRequest: &agentpb.TunnelConnectRequest{
+						TunnelId: token,
+						Address:  remoteAddress,
+					},
 				},
 			})
 			if err == nil {
@@ -71,11 +74,12 @@ func WriteTunnel(termite *TermiteClient, token string, data []byte) {
 	termite.LockAtom()
 	defer termite.UnlockAtom()
 
-	err := termite.Send(message.Message{
-		Type: message.PULL_TUNNEL_DATA,
-		Body: message.BodyPullTunnelData{
-			Token: token,
-			Data:  data,
+	err := termite.Send(&agentpb.Envelope{
+		Payload: &agentpb.Envelope_TunnelData{
+			TunnelData: &agentpb.TunnelData{
+				TunnelId: token,
+				Data:     data,
+			},
 		},
 	})
 	if err != nil {
@@ -83,8 +87,8 @@ func WriteTunnel(termite *TermiteClient, token string, data []byte) {
 	}
 }
 
-func StartSocks5Server(local_address string) error {
-	socks5ServerListener, err := net.Listen("tcp", local_address)
+func StartSocks5Server(localAddress string) error {
+	listener, err := net.Listen("tcp", localAddress)
 	if err != nil {
 		return err
 	}
@@ -92,8 +96,8 @@ func StartSocks5Server(local_address string) error {
 	if err != nil {
 		return err
 	}
-	Ctx.Socks5Servers[local_address] = server
-	go server.Serve(socks5ServerListener)
-	log.Success("Socks server started at: %s", local_address)
+	Ctx.Socks5Servers[localAddress] = server
+	go server.Serve(listener)
+	log.Success("Socks server started at: %s", localAddress)
 	return nil
 }

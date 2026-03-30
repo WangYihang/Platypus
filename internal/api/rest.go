@@ -10,8 +10,8 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/utils/fs"
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/message"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
@@ -214,11 +214,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				body := msg[1:]
 				switch opcode {
 				case '0': // INPUT '0'
-					err := currentTermite.Send(message.Message{
-						Type: message.STDIO,
-						Body: message.BodyStdio{
-							Key:  key.(string),
-							Data: body,
+					err := currentTermite.Send(&agentpb.Envelope{
+						Payload: &agentpb.Envelope_Stdio{
+							Stdio: &agentpb.StdioData{Key: key.(string), Data: body},
 						},
 					})
 
@@ -231,12 +229,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					var ws core.WindowSize
 					json.Unmarshal(body, &ws)
 
-					err := currentTermite.Send(message.Message{
-						Type: message.WINDOW_SIZE,
-						Body: message.BodyWindowSize{
-							Key:     key.(string),
-							Columns: ws.Columns,
-							Rows:    ws.Rows,
+					err := currentTermite.Send(&agentpb.Envelope{
+						Payload: &agentpb.Envelope_WindowSize{
+							WindowSize: &agentpb.WindowSizeUpdate{Key: key.(string), Columns: int32(ws.Columns), Rows: int32(ws.Rows)},
 						},
 					})
 
@@ -253,12 +248,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					var ws core.WindowSize
 					json.Unmarshal([]byte(msg), &ws)
 
-					err := currentTermite.Send(message.Message{
-						Type: message.WINDOW_SIZE,
-						Body: message.BodyWindowSize{
-							Key:     key.(string),
-							Columns: ws.Columns,
-							Rows:    ws.Rows,
+					err := currentTermite.Send(&agentpb.Envelope{
+						Payload: &agentpb.Envelope_WindowSize{
+							WindowSize: &agentpb.WindowSizeUpdate{Key: key.(string), Columns: int32(ws.Columns), Rows: int32(ws.Rows)},
 						},
 					})
 

@@ -73,9 +73,12 @@ type App struct {
 	PushTunnelInstance map[string]PushTunnelInstance
 	Socks5Servers      map[string]*socks5.Server
 
-	// Messaging
+	// Messaging (gob - legacy, will be removed)
 	MessageQueue   map[string](chan message.Message)
 	MessageQueueMu sync.RWMutex
+
+	// Messaging (protobuf)
+	EnvelopeQueue map[string](chan interface{}) // chan *agentpb.Envelope (interface{} avoids circular import)
 
 	// Distributor
 	Distributor interface{} // *core.Distributor
@@ -99,6 +102,7 @@ func New(cfg *config.Config) *App {
 		PushTunnelInstance: make(map[string]PushTunnelInstance),
 		Socks5Servers:      make(map[string]*socks5.Server),
 		MessageQueue:       make(map[string](chan message.Message)),
+		EnvelopeQueue:      make(map[string](chan interface{})),
 	}
 }
 
