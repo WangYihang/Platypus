@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/app"
-	"github.com/WangYihang/Platypus/internal/utils/message"
-	"github.com/fatih/color"
 )
 
 // WindowSize represents terminal dimensions.
@@ -18,12 +16,9 @@ type WindowSize struct {
 // with the App type from the app package.
 var Ctx *app.App
 
-// CreateContext initializes the global Ctx and registers gob types.
+// CreateContext initializes signal handlers.
 func CreateContext() {
-	// Signal Handler
 	Signal()
-	// Register gob
-	message.RegisterGob()
 }
 
 // --- Helper functions that operate on Ctx for backward compatibility ---
@@ -102,9 +97,6 @@ func FindServerByHash(hash string) *TCPServer {
 }
 
 func DeleteTCPClient(c *TCPClient) {
-	if Ctx.RLInstance != nil {
-		Ctx.RLInstance.SetPrompt(color.CyanString("» "))
-	}
 	for _, s := range Ctx.Servers {
 		server := s.(*TCPServer)
 		server.DeleteTCPClient(c)
@@ -112,9 +104,6 @@ func DeleteTCPClient(c *TCPClient) {
 }
 
 func DeleteTermiteClient(c *TermiteClient) {
-	if Ctx.RLInstance != nil {
-		Ctx.RLInstance.SetPrompt(color.CyanString("» "))
-	}
 	for _, s := range Ctx.Servers {
 		server := s.(*TCPServer)
 		server.DeleteTermiteClient(c)

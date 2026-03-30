@@ -10,7 +10,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
-	"github.com/pkg/browser"
 	"github.com/spf13/viper"
 )
 
@@ -84,10 +83,6 @@ func main() {
 			time.Sleep(0x100 * time.Millisecond)
 			go (*server).Run()
 		}
-	}
-
-	if cfg.OpenBrowser {
-		browser.OpenURL(fmt.Sprintf("http://%s:%d/", cfg.RESTful.Host, cfg.RESTful.Port))
 	}
 
 	// Block forever — server runs as daemon, managed via API

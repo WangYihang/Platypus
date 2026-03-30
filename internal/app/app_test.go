@@ -25,17 +25,11 @@ func TestNewApp(t *testing.T) {
 	if a.Interacting == nil {
 		t.Error("interacting mutex not initialized")
 	}
-	if a.MessageQueue == nil {
-		t.Error("message queue not initialized")
-	}
 	if a.EnvelopeQueue == nil {
 		t.Error("envelope queue not initialized")
 	}
 	if a.Socks5Servers == nil {
 		t.Error("socks5 servers map not initialized")
-	}
-	if a.CommandPrompt == "" {
-		t.Error("command prompt not set")
 	}
 }
 

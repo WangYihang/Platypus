@@ -11,11 +11,8 @@ import (
 	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/utils/config"
-	"github.com/WangYihang/Platypus/internal/utils/message"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
-	"github.com/WangYihang/readline"
 	"github.com/armon/go-socks5"
-	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
@@ -58,10 +55,8 @@ type App struct {
 	// Server registry (keyed by hash)
 	Servers map[string]interface{} // map[string]*core.TCPServer
 
-	// UI
-	CommandPrompt string
-	RLInstance    *readline.Instance
-	Interacting   *sync.Mutex
+	// Concurrency
+	Interacting *sync.Mutex
 
 	// WebSocket
 	NotifyWebSocket *melody.Melody
@@ -73,12 +68,9 @@ type App struct {
 	PushTunnelInstance map[string]PushTunnelInstance
 	Socks5Servers      map[string]*socks5.Server
 
-	// Messaging (gob - legacy, will be removed)
-	MessageQueue   map[string](chan message.Message)
+	// Messaging (protobuf RPC response channels)
+	EnvelopeQueue  map[string](chan interface{})
 	MessageQueueMu sync.RWMutex
-
-	// Messaging (protobuf)
-	EnvelopeQueue map[string](chan interface{}) // chan *agentpb.Envelope (interface{} avoids circular import)
 
 	// Distributor
 	Distributor interface{} // *core.Distributor
@@ -94,14 +86,12 @@ func New(cfg *config.Config) *App {
 		Sessions:           session.NewManager(),
 		Listeners:          listener.NewManager(),
 		Servers:            make(map[string]interface{}),
-		CommandPrompt:      color.CyanString("» "),
 		Interacting:        &sync.Mutex{},
 		PullTunnelConfig:   make(map[string]PullTunnelConfig),
 		PullTunnelInstance: make(map[string]PullTunnelInstance),
 		PushTunnelConfig:   make(map[string]PushTunnelConfig),
 		PushTunnelInstance: make(map[string]PushTunnelInstance),
 		Socks5Servers:      make(map[string]*socks5.Server),
-		MessageQueue:       make(map[string](chan message.Message)),
 		EnvelopeQueue:      make(map[string](chan interface{})),
 	}
 }
@@ -117,13 +107,10 @@ func (a *App) FindSession(clue string) session.Session {
 	return a.Sessions.FindByAlias(clue)
 }
 
-// SetCurrentSession sets the current interactive session and updates the prompt.
+// SetCurrentSession sets the current interactive session.
 func (a *App) SetCurrentSession(s session.Session) {
 	a.Current = nil
 	a.CurrentTermite = nil
-	if a.RLInstance != nil && s != nil {
-		a.RLInstance.SetPrompt(color.CyanString(s.GetPrompt()))
-	}
 }
 
 // AllSessions returns all sessions from all listeners.

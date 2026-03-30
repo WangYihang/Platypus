@@ -10,7 +10,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/utils/message"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
@@ -87,8 +86,7 @@ func Connect(endpoint, token string, state *State) error {
 	return err
 }
 
-// Init initializes the agent's state and gob registration (for backward compat).
+// Init initializes the agent's state.
 func Init() *State {
-	message.RegisterGob() // Keep for backward compat during transition
 	return NewState()
 }
