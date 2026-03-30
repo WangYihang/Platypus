@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/api"
+	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/cli/cmd"
 	"github.com/WangYihang/Platypus/internal/core"
-	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	"github.com/pkg/browser"
 	"github.com/spf13/viper"
@@ -42,9 +43,9 @@ func main() {
 	log.Success("Platypus %s is starting...", update.Version)
 	log.Success("Using configuration file: %s", v.ConfigFileUsed())
 
-	// Create context
+	// Create App and set as global Ctx
+	core.Ctx = app.New(&cfg)
 	core.CreateContext()
-	core.Ctx.Config = &cfg
 
 	// Detect new version
 	if cfg.Update {

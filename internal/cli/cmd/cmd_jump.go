@@ -15,28 +15,28 @@ var jumpCmd = &cobra.Command{
 		clue := args[0]
 
 		// TCPClient
-		target := core.Ctx.FindTCPClientByHash(clue)
+		target := core.FindTCPClientByHash(clue)
 		if target == nil {
-			target = core.Ctx.FindTCPClientByAlias(clue)
+			target = core.FindTCPClientByAlias(clue)
 		}
 		if target != nil {
 			core.Ctx.CurrentTermite = nil
 			core.Ctx.Current = target
-			log.Success("The current interactive shell is set to: %s", core.Ctx.Current.FullDesc())
-			readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.GetPrompt()))
+			log.Success("The current interactive shell is set to: %s", core.Ctx.Current.(*core.TCPClient).FullDesc())
+			readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.(*core.TCPClient).GetPrompt()))
 			return
 		}
 
 		// TermiteClient
-		targetTermite := core.Ctx.FindTermiteClientByHash(clue)
+		targetTermite := core.FindTermiteClientByHash(clue)
 		if targetTermite == nil {
-			targetTermite = core.Ctx.FindTermiteClientByAlias(clue)
+			targetTermite = core.FindTermiteClientByAlias(clue)
 		}
 		if targetTermite != nil {
 			core.Ctx.Current = nil
 			core.Ctx.CurrentTermite = targetTermite
-			log.Success("The current termite interactive shell is set to: %s", core.Ctx.CurrentTermite.FullDesc())
-			readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.GetPrompt()))
+			log.Success("The current termite interactive shell is set to: %s", core.Ctx.CurrentTermite.(*core.TermiteClient).FullDesc())
+			readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.(*core.TermiteClient).GetPrompt()))
 			return
 		}
 

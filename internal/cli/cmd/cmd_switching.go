@@ -15,7 +15,7 @@ var switchingCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		hash := strings.ToLower(args[0])
 
-		for _, server := range core.Ctx.Servers {
+		for _, server := range core.GetServers() {
 			if strings.HasPrefix(server.Hash, hash) {
 				server.GroupDispatch = !server.GroupDispatch
 				for _, client := range server.GetAllTCPClients() {
@@ -30,7 +30,7 @@ var switchingCmd = &cobra.Command{
 			}
 		}
 
-		for _, server := range core.Ctx.Servers {
+		for _, server := range core.GetServers() {
 			for _, client := range server.GetAllTCPClients() {
 				if strings.HasPrefix(client.Hash, hash) {
 					client.GroupDispatch = !client.GroupDispatch

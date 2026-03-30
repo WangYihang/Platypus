@@ -39,8 +39,8 @@ var downloadCmd = &cobra.Command{
 		defer dstfd.Close()
 
 		if core.Ctx.Current != nil {
-			log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.Current.OnelineDesc())
-			totalBytes, err := core.Ctx.Current.FileSize(src)
+			log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.Current.(*core.TCPClient).OnelineDesc())
+			totalBytes, err := core.Ctx.Current.(*core.TCPClient).FileSize(src)
 			if err != nil {
 				log.Error("Failed to get file size: %s", err)
 				return
@@ -61,7 +61,7 @@ var downloadCmd = &cobra.Command{
 			firstBlockSize := totalBytes % blockSize
 
 			start := time.Now()
-			content, err := core.Ctx.Current.ReadFileEx(src, 0, firstBlockSize)
+			content, err := core.Ctx.Current.(*core.TCPClient).ReadFileEx(src, 0, firstBlockSize)
 			if err != nil {
 				bar.Abort(true)
 				log.Error("%s", err)
@@ -78,7 +78,7 @@ var downloadCmd = &cobra.Command{
 
 			for i := 0; i < totalBytes/blockSize; i++ {
 				start = time.Now()
-				content, err := core.Ctx.Current.ReadFileEx(src, firstBlockSize+i*blockSize, blockSize)
+				content, err := core.Ctx.Current.(*core.TCPClient).ReadFileEx(src, firstBlockSize+i*blockSize, blockSize)
 				if err != nil {
 					bar.Abort(true)
 					log.Error("%s", err)
@@ -98,8 +98,8 @@ var downloadCmd = &cobra.Command{
 		}
 
 		if core.Ctx.CurrentTermite != nil {
-			log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.OnelineDesc())
-			totalBytes, err := core.Ctx.CurrentTermite.FileSize(src)
+			log.Info("Downloading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.(*core.TermiteClient).OnelineDesc())
+			totalBytes, err := core.Ctx.CurrentTermite.(*core.TermiteClient).FileSize(src)
 			if err != nil {
 				log.Error("Failed to get file size: %s", err)
 				return
@@ -119,7 +119,7 @@ var downloadCmd = &cobra.Command{
 			blockSize := int64(0x400 * 512)
 			for i := int64(0); i < totalBytes; i += blockSize {
 				start := time.Now()
-				content, err := core.Ctx.CurrentTermite.ReadFileEx(src, i, blockSize)
+				content, err := core.Ctx.CurrentTermite.(*core.TermiteClient).ReadFileEx(src, i, blockSize)
 				if err != nil {
 					log.Error(err.Error())
 					return

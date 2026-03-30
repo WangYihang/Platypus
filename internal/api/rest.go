@@ -90,8 +90,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
-		client := core.Ctx.FindTCPClientByHash(c.Param("hash"))
-		termiteClient := core.Ctx.FindTermiteClientByHash(c.Param("hash"))
+		client := core.FindTCPClientByHash(c.Param("hash"))
+		termiteClient := core.FindTermiteClientByHash(c.Param("hash"))
 		if client == nil && termiteClient == nil {
 			panicRESTfully(c, "client is not found")
 			return
@@ -110,7 +110,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
 
 		// Handle TCPClient
-		current := core.Ctx.FindTCPClientByHash(hash)
+		current := core.FindTCPClientByHash(hash)
 		if current != nil {
 			s.Set("client", current)
 			// Lock
@@ -142,7 +142,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		}
 
 		// Handle TermiteClient
-		currentTermite := core.Ctx.FindTermiteClientByHash(hash)
+		currentTermite := core.FindTermiteClientByHash(hash)
 		if currentTermite != nil {
 			log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
 			// Start shell process
@@ -318,8 +318,8 @@ func CreateRESTfulAPIServer() *gin.Engine {
 		{
 			serverAPIGroup.GET("", func(c *gin.Context) {
 				response := ServersWithDistributorAddress{
-					Servers:     core.Ctx.Servers,
-					Distributor: *core.Ctx.Distributor,
+					Servers:     core.GetServers(),
+					Distributor: *core.Ctx.Distributor.(*core.Distributor),
 				}
 				c.JSON(200, gin.H{
 					"status": true,
@@ -332,7 +332,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if server.Hash == hash {
 						c.JSON(200, gin.H{
 							"status": true,
@@ -349,7 +349,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if server.Hash == hash {
 						clients := make(map[string]interface{})
 						for k, v := range server.Clients {
@@ -399,9 +399,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if server.Hash == hash {
-						core.Ctx.DeleteServer(server)
+						core.DeleteServer(server)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -418,7 +418,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 			// Client related
 			clientAPIGroup.GET("", func(c *gin.Context) {
 				clients := make(map[string]interface{})
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					for k, v := range server.Clients {
 						clients[k] = v
 					}
@@ -437,7 +437,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if client, exist := server.Clients[hash]; exist {
 						c.JSON(200, gin.H{
 							"status": true,
@@ -462,7 +462,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 
-				client := core.Ctx.FindTCPClientByHash(hash)
+				client := core.FindTCPClientByHash(hash)
 				if client != nil {
 					// Upgrade
 					go client.UpgradeToTermite(target)
@@ -481,9 +481,9 @@ func CreateRESTfulAPIServer() *gin.Engine {
 					return
 				}
 				hash := c.Param("hash")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if client, exist := server.Clients[hash]; exist {
-						core.Ctx.DeleteTCPClient(client)
+						core.DeleteTCPClient(client)
 						c.JSON(200, gin.H{
 							"status": true,
 						})
@@ -502,7 +502,7 @@ func CreateRESTfulAPIServer() *gin.Engine {
 				}
 				hash := c.Param("hash")
 				cmd := c.PostForm("cmd")
-				for _, server := range core.Ctx.Servers {
+				for _, server := range core.GetServers() {
 					if client, exist := server.Clients[hash]; exist {
 						if client.GetPtyEstablished() {
 							c.JSON(200, gin.H{

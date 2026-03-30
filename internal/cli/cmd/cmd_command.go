@@ -19,14 +19,14 @@ var commandCmd = &cobra.Command{
 		}
 		command := strings.Join(args, " ")
 		if core.Ctx.Current != nil {
-			log.Info("Execute %s on %s", command, core.Ctx.Current.FullDesc())
-			result := core.Ctx.Current.SystemToken(command)
+			log.Info("Execute %s on %s", command, core.Ctx.Current.(*core.TCPClient).FullDesc())
+			result := core.Ctx.Current.(*core.TCPClient).SystemToken(command)
 			log.Info("Result: %s", result)
 			return
 		}
 		if core.Ctx.CurrentTermite != nil {
-			log.Info("Execute %s on %s", command, core.Ctx.CurrentTermite.FullDesc())
-			result := core.Ctx.CurrentTermite.System(command)
+			log.Info("Execute %s on %s", command, core.Ctx.CurrentTermite.(*core.TermiteClient).FullDesc())
+			result := core.Ctx.CurrentTermite.(*core.TermiteClient).System(command)
 			log.Info("Result: %s", result)
 		}
 	},

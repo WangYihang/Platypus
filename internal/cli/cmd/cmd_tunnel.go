@@ -42,13 +42,13 @@ var tunnelCmd = &cobra.Command{
 				case "pull":
 					localAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
 					remoteAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
-					core.AddPullTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
+					core.AddPullTunnelConfig(core.Ctx.CurrentTermite.(*core.TermiteClient), localAddress, remoteAddress)
 				case "push":
 					localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
 					remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
-					core.AddPushTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
+					core.AddPushTunnelConfig(core.Ctx.CurrentTermite.(*core.TermiteClient), localAddress, remoteAddress)
 				case "dynamic":
-					core.Ctx.CurrentTermite.StartSocks5Server()
+					core.Ctx.CurrentTermite.(*core.TermiteClient).StartSocks5Server()
 				case "internet":
 					localAddress := fmt.Sprintf("%s:%d", srcHost, srcPort)
 					remoteAddress := fmt.Sprintf("%s:%d", dstHost, dstPort)
@@ -58,7 +58,7 @@ var tunnelCmd = &cobra.Command{
 						if err := core.StartSocks5Server(localAddress); err != nil {
 							log.Error("Starting local socks5 server failed: %s", err.Error())
 						} else {
-							core.AddPushTunnelConfig(core.Ctx.CurrentTermite, localAddress, remoteAddress)
+							core.AddPushTunnelConfig(core.Ctx.CurrentTermite.(*core.TermiteClient), localAddress, remoteAddress)
 						}
 					}
 				default:

@@ -1,9 +1,10 @@
 // Package app provides the top-level application struct that wires together
-// all subsystems. It replaces the global core.Ctx singleton with explicit
-// dependency injection.
+// all subsystems, replacing the former global core.Ctx singleton.
 package app
 
 import (
+	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -11,36 +12,93 @@ import (
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/message"
+	"github.com/WangYihang/Platypus/internal/utils/ui"
 	"github.com/WangYihang/readline"
 	"github.com/armon/go-socks5"
+	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )
+
+// PullTunnelConfig represents a local-to-remote port forwarding configuration.
+type PullTunnelConfig struct {
+	Termite interface{} // *core.TermiteClient (avoids circular import)
+	Address string
+	Server  *net.Listener
+}
+
+// PullTunnelInstance represents an active pull tunnel connection.
+type PullTunnelInstance struct {
+	Termite interface{} // *core.TermiteClient
+	Conn    *net.Conn
+}
+
+// PushTunnelConfig represents a remote-to-local port forwarding configuration.
+type PushTunnelConfig struct {
+	Termite interface{} // *core.TermiteClient
+	Address string
+}
+
+// PushTunnelInstance represents an active push tunnel connection.
+type PushTunnelInstance struct {
+	Termite interface{} // *core.TermiteClient
+	Conn    *net.Conn
+}
 
 // App is the top-level application container.
 type App struct {
 	Config          *config.Config
 	Sessions        *session.Manager
 	Listeners       *listener.Manager
-	CurrentSession  session.Session
-	Prompt          *readline.Instance
-	Interacting     *sync.Mutex
+
+	// Current session state
+	Current        interface{} // *core.TCPClient (avoids circular import)
+	CurrentTermite interface{} // *core.TermiteClient
+
+	// Server registry (keyed by hash)
+	Servers map[string]interface{} // map[string]*core.TCPServer
+
+	// UI
+	CommandPrompt string
+	RLInstance    *readline.Instance
+	Interacting   *sync.Mutex
+
+	// WebSocket
 	NotifyWebSocket *melody.Melody
-	MessageQueue    map[string](chan message.Message)
-	MessageQueueMu  sync.RWMutex
-	Socks5Servers   map[string]*socks5.Server
-	RESTful         *gin.Engine
+
+	// Tunneling
+	PullTunnelConfig   map[string]PullTunnelConfig
+	PullTunnelInstance map[string]PullTunnelInstance
+	PushTunnelConfig   map[string]PushTunnelConfig
+	PushTunnelInstance map[string]PushTunnelInstance
+	Socks5Servers      map[string]*socks5.Server
+
+	// Messaging
+	MessageQueue   map[string](chan message.Message)
+	MessageQueueMu sync.RWMutex
+
+	// Distributor
+	Distributor interface{} // *core.Distributor
+
+	// REST
+	RESTful *gin.Engine
 }
 
 // New creates a new App with initialized managers.
 func New(cfg *config.Config) *App {
 	return &App{
-		Config:        cfg,
-		Sessions:      session.NewManager(),
-		Listeners:     listener.NewManager(),
-		Interacting:   &sync.Mutex{},
-		MessageQueue:  make(map[string](chan message.Message)),
-		Socks5Servers: make(map[string]*socks5.Server),
+		Config:             cfg,
+		Sessions:           session.NewManager(),
+		Listeners:          listener.NewManager(),
+		Servers:            make(map[string]interface{}),
+		CommandPrompt:      color.CyanString("» "),
+		Interacting:        &sync.Mutex{},
+		PullTunnelConfig:   make(map[string]PullTunnelConfig),
+		PullTunnelInstance: make(map[string]PullTunnelInstance),
+		PushTunnelConfig:   make(map[string]PushTunnelConfig),
+		PushTunnelInstance: make(map[string]PushTunnelInstance),
+		Socks5Servers:      make(map[string]*socks5.Server),
+		MessageQueue:       make(map[string](chan message.Message)),
 	}
 }
 
@@ -57,9 +115,10 @@ func (a *App) FindSession(clue string) session.Session {
 
 // SetCurrentSession sets the current interactive session and updates the prompt.
 func (a *App) SetCurrentSession(s session.Session) {
-	a.CurrentSession = s
-	if a.Prompt != nil && s != nil {
-		a.Prompt.SetPrompt(s.GetPrompt())
+	a.Current = nil
+	a.CurrentTermite = nil
+	if a.RLInstance != nil && s != nil {
+		a.RLInstance.SetPrompt(color.CyanString(s.GetPrompt()))
 	}
 }
 
@@ -74,4 +133,12 @@ func (a *App) FindListener(clue string) listener.Listener {
 		return nil
 	}
 	return a.Listeners.FindByHashPrefix(strings.ToLower(clue))
+}
+
+// Shutdown gracefully stops all servers and exits.
+func (a *App) Shutdown() {
+	if len(a.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
+		return
+	}
+	os.Exit(0)
 }

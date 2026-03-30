@@ -23,7 +23,7 @@ var interactCmd = &cobra.Command{
 		}
 
 		if core.Ctx.Current != nil {
-			current := core.Ctx.Current
+			current := core.Ctx.Current.(*core.TCPClient)
 			log.Info("Interacting with %s", current.FullDesc())
 
 			current.GetInteractingLock().Lock()
@@ -131,7 +131,7 @@ var interactCmd = &cobra.Command{
 		}
 
 		if core.Ctx.CurrentTermite != nil {
-			core.Ctx.CurrentTermite.StartShell()
+			core.Ctx.CurrentTermite.(*core.TermiteClient).StartShell()
 		}
 	},
 }

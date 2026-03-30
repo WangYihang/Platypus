@@ -248,7 +248,7 @@ func (c *TCPClient) ReadUntilClean(token string) string {
 				log.Error("Read from client failed")
 				c.interactive = false
 				Ctx.Current = nil
-				Ctx.DeleteTCPClient(c)
+				DeleteTCPClient(c)
 				return outputBuffer.String()
 			}
 			break
@@ -284,7 +284,7 @@ func (c *TCPClient) ReadUntil(token string) (string, bool) {
 				log.Error("Read from client failed")
 				c.interactive = false
 				Ctx.Current = nil
-				Ctx.DeleteTCPClient(c)
+				DeleteTCPClient(c)
 				isTimeout = false
 			}
 			break
@@ -314,7 +314,7 @@ func (c *TCPClient) ReadSize(size int) string {
 				log.Error("Read from client failed")
 				c.interactive = false
 				Ctx.Current = nil
-				Ctx.DeleteTCPClient(c)
+				DeleteTCPClient(c)
 			}
 			break
 		}
@@ -345,7 +345,7 @@ func (c *TCPClient) Read(timeout time.Duration) (string, bool) {
 				log.Error("Read from client failed")
 				c.interactive = false
 				Ctx.Current = nil
-				Ctx.DeleteTCPClient(c)
+				DeleteTCPClient(c)
 				isTimeout = false
 			}
 			break
@@ -396,7 +396,7 @@ func (c *TCPClient) tryReadEcho(echo string) (bool, string) {
 				log.Error("Read from client failed")
 				c.interactive = false
 				Ctx.Current = nil
-				Ctx.DeleteTCPClient(c)
+				DeleteTCPClient(c)
 			}
 			break
 		}
@@ -418,7 +418,7 @@ func (c *TCPClient) Write(data []byte) int {
 			log.Error("Write to client failed, ")
 			c.interactive = false
 			Ctx.Current = nil
-			Ctx.DeleteTCPClient(c)
+			DeleteTCPClient(c)
 		}
 	}
 

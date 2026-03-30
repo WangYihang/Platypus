@@ -17,24 +17,24 @@ var infoCmd = &cobra.Command{
 				return
 			}
 			if core.Ctx.Current != nil {
-				core.Ctx.Current.AsTable()
+				core.Ctx.Current.(*core.TCPClient).AsTable()
 				return
 			}
 			if core.Ctx.CurrentTermite != nil {
-				core.Ctx.CurrentTermite.AsTable()
+				core.Ctx.CurrentTermite.(*core.TermiteClient).AsTable()
 				return
 			}
 		}
 		clue := args[0]
-		if c := core.Ctx.FindTCPClientByHash(clue); c != nil {
+		if c := core.FindTCPClientByHash(clue); c != nil {
 			c.AsTable()
 			return
 		}
-		if c := core.Ctx.FindTermiteClientByHash(clue); c != nil {
+		if c := core.FindTermiteClientByHash(clue); c != nil {
 			c.AsTable()
 			return
 		}
-		if s := core.Ctx.FindServerByHash(clue); s != nil {
+		if s := core.FindServerByHash(clue); s != nil {
 			s.AsTable()
 			return
 		}

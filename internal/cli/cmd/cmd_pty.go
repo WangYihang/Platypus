@@ -14,7 +14,7 @@ var ptyCmd = &cobra.Command{
 			log.Error("The current client is not set, please use `Jump` to set it")
 			return
 		}
-		if err := core.Ctx.Current.EstablishPTY(); err != nil {
+		if err := core.Ctx.Current.(*core.TCPClient).EstablishPTY(); err != nil {
 			log.Error("Establish PTY failed: %s", err)
 		}
 	},

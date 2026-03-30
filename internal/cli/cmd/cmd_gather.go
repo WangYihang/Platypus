@@ -18,28 +18,28 @@ var gatherCmd = &cobra.Command{
 				return
 			}
 			if core.Ctx.Current != nil {
-				core.Ctx.Current.GatherClientInfo(core.Ctx.Current.GetHashFormat())
-				readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.GetPrompt()))
+				core.Ctx.Current.(*core.TCPClient).GatherClientInfo(core.Ctx.Current.(*core.TCPClient).GetHashFormat())
+				readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.(*core.TCPClient).GetPrompt()))
 				return
 			}
 			if core.Ctx.CurrentTermite != nil {
-				core.Ctx.CurrentTermite.GatherClientInfo(core.Ctx.CurrentTermite.GetHashFormat())
-				readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.GetPrompt()))
+				core.Ctx.CurrentTermite.(*core.TermiteClient).GatherClientInfo(core.Ctx.CurrentTermite.(*core.TermiteClient).GetHashFormat())
+				readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.(*core.TermiteClient).GetPrompt()))
 				return
 			}
 		}
 		clue := args[0]
-		if c := core.Ctx.FindTCPClientByHash(clue); c != nil {
+		if c := core.FindTCPClientByHash(clue); c != nil {
 			c.GatherClientInfo(c.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(c.GetPrompt()))
 			return
 		}
-		if c := core.Ctx.FindTermiteClientByHash(clue); c != nil {
+		if c := core.FindTermiteClientByHash(clue); c != nil {
 			c.GatherClientInfo(c.GetHashFormat())
 			readLineInstance.SetPrompt(color.CyanString(c.GetPrompt()))
 			return
 		}
-		if s := core.Ctx.FindServerByHash(clue); s != nil {
+		if s := core.FindServerByHash(clue); s != nil {
 			for _, client := range s.Clients {
 				client.GatherClientInfo(client.GetHashFormat())
 			}

@@ -19,11 +19,11 @@ var upgradeCmd = &cobra.Command{
 			log.Error("The current client is not set, please use `Jump` to set it")
 			return
 		}
-		if core.Ctx.Current.OS != oss.Linux {
+		if core.Ctx.Current.(*core.TCPClient).OS != oss.Linux {
 			log.Error("The operating system of the current client is not supported")
 			return
 		}
-		core.Ctx.Current.UpgradeToTermite(connectBackAddr)
+		core.Ctx.Current.(*core.TCPClient).UpgradeToTermite(connectBackAddr)
 	},
 }
 

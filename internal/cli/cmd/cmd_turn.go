@@ -15,7 +15,7 @@ var turnCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		hash := strings.ToLower(args[0])
 
-		server := core.Ctx.FindServerByHash(hash)
+		server := core.FindServerByHash(hash)
 		if server != nil {
 			for _, client := range server.GetAllTCPClients() {
 				client.GroupDispatch = !client.GroupDispatch
@@ -28,14 +28,14 @@ var turnCmd = &cobra.Command{
 			return
 		}
 
-		client := core.Ctx.FindTCPClientByHash(hash)
+		client := core.FindTCPClientByHash(hash)
 		if client != nil {
 			client.GroupDispatch = !client.GroupDispatch
 			log.Success("[%t->%t] %s", !client.GroupDispatch, client.GroupDispatch, client.FullDesc())
 			return
 		}
 
-		termiteclient := core.Ctx.FindTermiteClientByHash(hash)
+		termiteclient := core.FindTermiteClientByHash(hash)
 		if termiteclient != nil {
 			termiteclient.GroupDispatch = !termiteclient.GroupDispatch
 			log.Success("[%t->%t] %s", !termiteclient.GroupDispatch, termiteclient.GroupDispatch, termiteclient.FullDesc())

@@ -26,7 +26,7 @@ var dataDispatcherCmd = &cobra.Command{
 		}
 		n := 0
 		command = strings.TrimSpace(command)
-		for _, server := range core.Ctx.Servers {
+		for _, server := range core.GetServers() {
 			for _, client := range server.GetAllTCPClients() {
 				if client.GroupDispatch {
 					log.Info("Executing on %s: %s", client.FullDesc(), command)

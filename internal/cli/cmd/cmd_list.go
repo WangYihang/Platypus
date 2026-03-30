@@ -10,12 +10,12 @@ var listCmd = &cobra.Command{
 	Use:   "List",
 	Short: "List all listening servers and their clients",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(core.Ctx.Servers) == 0 {
+		if len(core.GetServers()) == 0 {
 			log.Warn("No listening servers")
 			return
 		}
-		log.Info("Listing %d listening servers", len(core.Ctx.Servers))
-		for _, server := range core.Ctx.Servers {
+		log.Info("Listing %d listening servers", len(core.GetServers()))
+		for _, server := range core.GetServers() {
 			server.AsTable()
 		}
 	},

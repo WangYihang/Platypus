@@ -20,15 +20,15 @@ var aliasCmd = &cobra.Command{
 		}
 		name := strings.TrimSpace(args[0])
 		if core.Ctx.Current != nil {
-			log.Info("Renaming session: %s", core.Ctx.Current.FullDesc())
-			core.Ctx.Current.Alias = name
-			readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.GetPrompt()))
+			log.Info("Renaming session: %s", core.Ctx.Current.(*core.TCPClient).FullDesc())
+			core.Ctx.Current.(*core.TCPClient).Alias = name
+			readLineInstance.SetPrompt(color.CyanString(core.Ctx.Current.(*core.TCPClient).GetPrompt()))
 			return
 		}
 		if core.Ctx.CurrentTermite != nil {
-			log.Info("Renaming session: %s", core.Ctx.CurrentTermite.FullDesc())
-			core.Ctx.CurrentTermite.Alias = name
-			readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.GetPrompt()))
+			log.Info("Renaming session: %s", core.Ctx.CurrentTermite.(*core.TermiteClient).FullDesc())
+			core.Ctx.CurrentTermite.(*core.TermiteClient).Alias = name
+			readLineInstance.SetPrompt(color.CyanString(core.Ctx.CurrentTermite.(*core.TermiteClient).GetPrompt()))
 		}
 	},
 }

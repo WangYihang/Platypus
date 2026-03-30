@@ -192,7 +192,7 @@ func (c *TermiteClient) GatherClientInfo(hashFormat string) bool {
 				c.Send(message.Message{
 					Type: message.UPDATE,
 					Body: message.BodyUpdate{
-						DistributorURL: Ctx.Distributor.Url,
+						DistributorURL: Ctx.Distributor.(*Distributor).Url,
 						Version:        update.Version,
 					},
 				})
@@ -241,7 +241,7 @@ func (c *TermiteClient) NotifyPlatypusWindowSize(columns int, rows int) {
 		if err != nil {
 			// Network
 			log.Error("Network error: %s", err)
-			Ctx.DeleteTermiteClient(c)
+			DeleteTermiteClient(c)
 			return
 		}
 	}

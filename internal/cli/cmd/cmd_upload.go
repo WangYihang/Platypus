@@ -25,17 +25,17 @@ var uploadCmd = &cobra.Command{
 		dst := args[1]
 
 		if core.Ctx.Current != nil {
-			if core.Ctx.Current.OS == oss.Windows {
+			if core.Ctx.Current.(*core.TCPClient).OS == oss.Windows {
 				log.Error("Upload command does not support Windows platform")
 				return
 			}
-			core.Ctx.Current.Upload(src, dst, false)
+			core.Ctx.Current.(*core.TCPClient).Upload(src, dst, false)
 			log.Success("File %s uploaded to %s", src, dst)
 			return
 		}
 
 		if core.Ctx.CurrentTermite != nil {
-			log.Info("Uploading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.OnelineDesc())
+			log.Info("Uploading %s to %s from client: %s", src, dst, core.Ctx.CurrentTermite.(*core.TermiteClient).OnelineDesc())
 			srcfd, err := os.OpenFile(src, os.O_RDONLY, 0644)
 			if err != nil {
 				log.Error(err.Error())
@@ -64,7 +64,7 @@ var uploadCmd = &cobra.Command{
 					log.Error("%s", err)
 					return
 				}
-				if n, err = core.Ctx.CurrentTermite.WriteFileEx(dst, buffer[0:n]); err != nil {
+				if n, err = core.Ctx.CurrentTermite.(*core.TermiteClient).WriteFileEx(dst, buffer[0:n]); err != nil {
 					log.Error("Failed to write data: %s", err)
 					bar.Abort(true)
 					return
