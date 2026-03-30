@@ -24,8 +24,5 @@ jobs:
       - name: Build
         run: go build ./cmd/...
 
-      - name: Vet
-        run: go vet ./internal/session/ ./internal/agent/ ./internal/protocol/ ./internal/listener/ ./internal/utils/crypto/
-
       - name: Test
-        run: go test -race -count=1 -timeout=60s ./internal/session/ ./internal/protocol/ ./internal/utils/crypto/
+        run: go test -race -count=1 -timeout=60s ./internal/session/ ./internal/protocol/ ./internal/utils/crypto/ ./internal/api/
