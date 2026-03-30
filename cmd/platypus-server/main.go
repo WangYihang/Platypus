@@ -64,11 +64,16 @@ func main() {
 		rh := cfg.RESTful.Host
 		rp := cfg.RESTful.Port
 		rest := api.CreateRESTfulAPIServer()
+
+		// Register v1 API with authentication
+		auth := api.NewAuth()
+		api.RegisterV1Routes(rest, auth)
+		log.Success("API secret: %s", auth.GetSecret())
+		log.Success("  Obtain token: curl -X POST http://%s:%d/api/v1/auth/token -d '{\"secret\":\"%s\"}'", rh, rp, auth.GetSecret())
+
 		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
 		log.Success("Web FrontEnd started at: http://%s:%d/", rh, rp)
-		log.Success("You can use Web FrontEnd to manager all your clients with any web browser.")
-		log.Success("RESTful API EndPoint at: http://%s:%d/api/", rh, rp)
-		log.Success("You can use PythonSDK to manager all your clients automatically.")
+		log.Success("RESTful API at: http://%s:%d/api/v1/", rh, rp)
 		core.Ctx.RESTful = rest
 	}
 
