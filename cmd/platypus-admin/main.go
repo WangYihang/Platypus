@@ -1,8 +1,7 @@
 package main
 
-import "github.com/WangYihang/Platypus/internal/cli/cmd"
+import "github.com/WangYihang/Platypus/internal/admin/commands"
 
 func main() {
-	// Run main loop
-	cmd.RunREPL()
+	commands.Execute()
 }
