@@ -218,7 +218,7 @@ func handleProcessTerminate(state *State, req *agentpb.ProcessTerminateRequest) 
 func handleTunnelConnect(c *Client, state *State, req *agentpb.TunnelConnectRequest) {
 	conn, err := net.Dial("tcp", req.Address)
 	if err != nil {
-		log.Error(err.Error())
+		log.Error("%s", err.Error())
 		send(c, &agentpb.Envelope{
 			Payload: &agentpb.Envelope_TunnelConnectFailed{
 				TunnelConnectFailed: &agentpb.TunnelConnectFailed{TunnelId: req.TunnelId, Reason: err.Error()},

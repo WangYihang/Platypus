@@ -620,7 +620,7 @@ func (c *TCPClient) EstablishPTY() error {
 
 	// Step 1: Spawn /bin/sh via pty of victim
 	command := "python3 -c 'import pty;pty.spawn(\"" + c.GetShellPath() + "\")'"
-	log.Info("spawning " + c.GetShellPath() + " on the current client")
+	log.Info("spawning %s on the current client", c.GetShellPath())
 	c.System(command)
 
 	// TODO: Check whether pty is established
@@ -827,7 +827,7 @@ func (c *TCPClient) detectOS() {
 		c.ReadUntil(tokenA)
 	}
 	output, _ = c.ReadUntil(tokenB)
-	log.Info(output)
+	log.Info("%s", output)
 	if strings.Contains(strings.ToLower(output), "windows") {
 		// CMD
 		c.OS = oss.Windows
@@ -934,7 +934,7 @@ func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
 	// Step 0: Generate temp folder and filename
 	dir, filename, err := compiler.GenerateDirFilename()
 	if err != nil {
-		log.Error(fmt.Sprint(err))
+		log.Error("%s", err)
 		return
 	}
 	defer os.RemoveAll(dir)
@@ -974,7 +974,7 @@ func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
 	// Check existance of remote path
 	dstExists, err := c.FileExists(dst)
 	if err != nil {
-		log.Error(err.Error())
+		log.Error("%s", err.Error())
 		return false
 	}
 
@@ -986,7 +986,7 @@ func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
 	// Read local file content
 	content, err := os.ReadFile(src)
 	if err != nil {
-		log.Error(err.Error())
+		log.Error("%s", err.Error())
 		return false
 	}
 

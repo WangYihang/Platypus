@@ -26,7 +26,7 @@ func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 	})
 
 	if err != nil {
-		log.Error(err.Error())
+		log.Error("%s", err.Error())
 	} else {
 		Ctx.PushTunnelConfig[remoteAddress] = app.PushTunnelConfig{
 			Termite: termite,
@@ -39,7 +39,7 @@ func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 	log.Info("Mapping remote (%s) to local (%s)", remoteAddress, localAddress)
 	tunnel, err := net.Listen("tcp", localAddress)
 	if err != nil {
-		log.Error(err.Error())
+		log.Error("%s", err.Error())
 		return
 	}
 	Ctx.PullTunnelConfig[localAddress] = app.PullTunnelConfig{

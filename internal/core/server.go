@@ -234,7 +234,7 @@ func (s *TCPServer) Run() {
 		DeleteServer(s)
 		return
 	}
-	log.Info(fmt.Sprintf("Server running at: %s", s.FullDesc()))
+	log.Info("Server running at: %s", s.FullDesc())
 
 	if s.Encrypted {
 		for _, ifname := range s.Interfaces {
@@ -310,20 +310,11 @@ func (s *TCPServer) AsTable() {
 		}
 
 		t.Render()
-		log.Success(fmt.Sprintf(
-			"%s is listening on %s:%d, %d clients listed",
-			s.Hash,
-			(*s).Host,
-			(*s).Port,
-			len((*s).Clients)+len((*s).TermiteClients),
-		))
+		log.Success("%s is listening on %s:%d, %d clients listed",
+			s.Hash, (*s).Host, (*s).Port, len((*s).Clients)+len((*s).TermiteClients))
 	} else {
-		log.Warn(fmt.Sprintf(
-			"[%s] is listening on %s:%d, 0 clients",
-			s.Hash,
-			(*s).Host,
-			(*s).Port,
-		))
+		log.Warn("[%s] is listening on %s:%d, 0 clients",
+			s.Hash, (*s).Host, (*s).Port)
 	}
 }
 
@@ -364,7 +355,7 @@ func (s *TCPServer) FullDesc() string {
 }
 
 func (s *TCPServer) Stop() {
-	log.Info(fmt.Sprintf("Stopping server: %s", s.OnelineDesc()))
+	log.Info("Stopping server: %s", s.OnelineDesc())
 	s.stopped <- struct{}{}
 
 	for _, client := range s.Clients {
@@ -675,7 +666,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			log.Success("Mapping remote socks server (%s) into local address (%s)", remoteAddr, localAddr)
 			AddPullTunnelConfig(Ctx.CurrentTermite.(*TermiteClient), localAddr, remoteAddr)
 		case *agentpb.Envelope_Socks5CreateFailed:
-			log.Error(p.Socks5CreateFailed.Reason)
+			log.Error("%s", p.Socks5CreateFailed.Reason)
 
 		// RPC responses — route to EnvelopeQueue by request_id
 		case *agentpb.Envelope_ExecResponse,

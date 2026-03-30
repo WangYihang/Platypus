@@ -65,7 +65,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		// Generate temp folder and filename
 		dir, filename, err := compiler.GenerateDirFilename()
 		if err != nil {
-			log.Error(fmt.Sprint(err))
+			log.Error("%s", err)
 			distributorPanic(c,err.Error())
 			return
 		}
@@ -74,7 +74,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		// Build Termite binary
 		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
 		if err != nil {
-			log.Error(fmt.Sprint(err))
+			log.Error("%s", err)
 			distributorPanic(c,err.Error())
 			return
 		}
