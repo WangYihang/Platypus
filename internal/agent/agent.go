@@ -2,33 +2,30 @@ package agent
 
 import (
 	"crypto/tls"
-	"encoding/gob"
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
+	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/message"
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // Client represents an agent's connection to the platypus server.
 type Client struct {
-	Conn        *tls.Conn
-	Encoder     *gob.Encoder
-	Decoder     *gob.Decoder
-	EncoderLock *sync.Mutex
-	DecoderLock *sync.Mutex
-	Service     string
+	Conn    *tls.Conn
+	Codec   *protocol.ProtoCodec
+	Service string
 }
 
 // State holds the mutable state for a running agent.
 type State struct {
-	Processes   *ProcessMap
-	PullTunnels *ConnMap
-	PushTunnels *ConnMap
+	Processes      *ProcessMap
+	PullTunnels    *ConnMap
+	PushTunnels    *ConnMap
 	Socks5Listener *net.Listener
 }
 
@@ -39,6 +36,16 @@ func NewState() *State {
 		PullTunnels: NewConnMap(),
 		PushTunnels: NewConnMap(),
 	}
+}
+
+// SendEnvelope sends a protobuf envelope via the codec.
+func (c *Client) SendEnvelope(env *agentpb.Envelope) error {
+	return c.Codec.Send(env)
+}
+
+// RecvEnvelope receives a protobuf envelope via the codec.
+func (c *Client) RecvEnvelope() (*agentpb.Envelope, error) {
+	return c.Codec.Recv()
 }
 
 // Connect establishes a TLS connection to the server endpoint and runs
@@ -70,12 +77,9 @@ func Connect(endpoint, token string, state *State) error {
 		log.Success("Secure connection established on %s", conn.RemoteAddr())
 
 		c := &Client{
-			Conn:        conn,
-			Encoder:     gob.NewEncoder(conn),
-			Decoder:     gob.NewDecoder(conn),
-			EncoderLock: &sync.Mutex{},
-			DecoderLock: &sync.Mutex{},
-			Service:     endpoint,
+			Conn:    conn,
+			Codec:   protocol.NewProtoCodec(conn),
+			Service: endpoint,
 		}
 		HandleConnection(c, state)
 		return nil
@@ -83,8 +87,8 @@ func Connect(endpoint, token string, state *State) error {
 	return err
 }
 
-// Init initializes the agent's gob registration and state.
+// Init initializes the agent's state and gob registration (for backward compat).
 func Init() *State {
-	message.RegisterGob()
+	message.RegisterGob() // Keep for backward compat during transition
 	return NewState()
 }
