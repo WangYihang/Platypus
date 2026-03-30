@@ -24,6 +24,9 @@ build_frontend: prepare
 	echo "Building ttyd"
 	cd web/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && NODE_OPTIONS='--max-old-space-size=1024' yarn build"
 
+proto:
+	protoc --go_out=pkg/proto/agent/v1 --go_opt=paths=source_relative proto/agent/v1/agent.proto
+
 build_platypus: prepare
 	echo "Building platypus-server"
 	go build -ldflags="-s -w " -trimpath -o ./build/platypus-server ./cmd/platypus-server

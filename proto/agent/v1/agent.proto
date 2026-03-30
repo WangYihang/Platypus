@@ -1,0 +1,232 @@
+syntax = "proto3";
+package platypus.agent.v1;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/agent/v1;agentpb";
+
+// Envelope is the top-level message for all Agent <-> Server communication.
+message Envelope {
+  uint32 version = 1;       // Protocol version (current = 1)
+  string request_id = 2;    // UUID for RPC request/response correlation
+  int64 timestamp = 3;      // Unix nanosecond timestamp
+
+  oneof payload {
+    // Connection lifecycle
+    GetClientInfoRequest   get_client_info_request   = 10;
+    ClientInfoResponse     client_info_response      = 11;
+    DuplicateClientNotice  duplicate_client          = 12;
+    UpdateRequest          update_request            = 13;
+
+    // Process management
+    ProcessStartRequest    process_start_request     = 20;
+    ProcessStartedResponse process_started_response  = 21;
+    ProcessStoppedNotice   process_stopped           = 22;
+    ProcessTerminateRequest process_terminate_request = 23;
+    StdioData              stdio                     = 24;
+    WindowSizeUpdate       window_size               = 25;
+
+    // RPC: command execution
+    ExecRequest            exec_request              = 30;
+    ExecResponse           exec_response             = 31;
+
+    // RPC: file operations
+    ReadFileRequest        read_file_request         = 32;
+    ReadFileResponse       read_file_response        = 33;
+    WriteFileRequest       write_file_request        = 34;
+    WriteFileResponse      write_file_response       = 35;
+    FileSizeRequest        file_size_request         = 36;
+    FileSizeResponse       file_size_response        = 37;
+
+    // Tunneling
+    TunnelCreateRequest    tunnel_create_request     = 40;
+    TunnelCreatedResponse  tunnel_created_response   = 41;
+    TunnelCreateFailed     tunnel_create_failed      = 42;
+    TunnelData             tunnel_data               = 43;
+    TunnelCloseRequest     tunnel_close_request      = 44;
+    TunnelClosedNotice     tunnel_closed             = 45;
+    TunnelConnectRequest   tunnel_connect_request    = 46;
+    TunnelConnectedResponse tunnel_connected_response = 47;
+    TunnelConnectFailed    tunnel_connect_failed     = 48;
+    TunnelDisconnectedNotice tunnel_disconnected     = 49;
+
+    // SOCKS5
+    Socks5CreateRequest    socks5_create_request     = 50;
+    Socks5CreatedResponse  socks5_created_response   = 51;
+    Socks5CreateFailed     socks5_create_failed      = 52;
+    Socks5DestroyRequest   socks5_destroy_request    = 53;
+    Socks5DestroyedResponse socks5_destroyed_response = 54;
+    Socks5DestroyFailed    socks5_destroy_failed     = 55;
+  }
+}
+
+// --- Connection lifecycle ---
+
+message GetClientInfoRequest {}
+
+message ClientInfoResponse {
+  string version = 1;
+  string os = 2;
+  string arch = 3;
+  string user = 4;
+  string hostname = 5;
+  map<string, string> network_interfaces = 6;
+  repeated string available_languages = 7;  // e.g. ["python2", "python3", "perl"]
+}
+
+message DuplicateClientNotice {}
+
+message UpdateRequest {
+  string distributor_url = 1;
+  string version = 2;
+}
+
+// --- Process management ---
+
+message ProcessStartRequest {
+  string key = 1;
+  string path = 2;
+  int32 window_columns = 3;
+  int32 window_rows = 4;
+}
+
+message ProcessStartedResponse {
+  string key = 1;
+  int32 pid = 2;
+}
+
+message ProcessStoppedNotice {
+  string key = 1;
+  int32 exit_code = 2;
+}
+
+message ProcessTerminateRequest {
+  string key = 1;
+}
+
+message StdioData {
+  string key = 1;
+  bytes data = 2;
+}
+
+message WindowSizeUpdate {
+  string key = 1;
+  int32 columns = 2;
+  int32 rows = 3;
+}
+
+// --- RPC: command execution ---
+
+message ExecRequest {
+  string command = 1;
+}
+
+message ExecResponse {
+  bytes output = 1;
+  int32 exit_code = 2;
+  string error = 3;
+}
+
+// --- RPC: file operations ---
+
+message ReadFileRequest {
+  string path = 1;
+  int64 offset = 2;  // 0 = from start
+  int64 size = 3;    // 0 = read all
+}
+
+message ReadFileResponse {
+  bytes data = 1;
+  string error = 2;
+}
+
+message WriteFileRequest {
+  string path = 1;
+  bytes data = 2;
+  bool append = 3;   // true = append, false = overwrite
+}
+
+message WriteFileResponse {
+  int64 bytes_written = 1;
+  string error = 2;
+}
+
+message FileSizeRequest {
+  string path = 1;
+}
+
+message FileSizeResponse {
+  int64 size = 1;
+  string error = 2;
+}
+
+// --- Tunneling ---
+
+enum TunnelMode {
+  TUNNEL_MODE_PULL = 0;
+  TUNNEL_MODE_PUSH = 1;
+}
+
+message TunnelCreateRequest {
+  string address = 1;
+  TunnelMode mode = 2;
+}
+
+message TunnelCreatedResponse {
+  string tunnel_id = 1;
+  string address = 2;
+}
+
+message TunnelCreateFailed {
+  string address = 1;
+  string reason = 2;
+}
+
+message TunnelConnectRequest {
+  string tunnel_id = 1;
+  string address = 2;
+}
+
+message TunnelConnectedResponse {
+  string tunnel_id = 1;
+}
+
+message TunnelConnectFailed {
+  string tunnel_id = 1;
+  string reason = 2;
+}
+
+message TunnelData {
+  string tunnel_id = 1;
+  bytes data = 2;
+}
+
+message TunnelCloseRequest {
+  string tunnel_id = 1;
+}
+
+message TunnelClosedNotice {
+  string tunnel_id = 1;
+}
+
+message TunnelDisconnectedNotice {
+  string tunnel_id = 1;
+  string reason = 2;
+}
+
+// --- SOCKS5 ---
+
+message Socks5CreateRequest {}
+
+message Socks5CreatedResponse {
+  int32 port = 1;
+}
+
+message Socks5CreateFailed {
+  string reason = 1;
+}
+
+message Socks5DestroyRequest {}
+
+message Socks5DestroyedResponse {}
+
+message Socks5DestroyFailed {
+  string reason = 1;
+}
