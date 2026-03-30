@@ -25,4 +25,15 @@ jobs:
         run: go build ./cmd/...
 
       - name: Test
-        run: go test -race -count=1 -timeout=60s ./internal/session/ ./internal/protocol/ ./internal/utils/crypto/ ./internal/api/
+        run: |
+          go test -race -count=1 -timeout=60s \
+            ./internal/api/ \
+            ./internal/protocol/ \
+            ./internal/session/ \
+            ./internal/listener/ \
+            ./internal/app/ \
+            ./internal/agent/ \
+            ./internal/utils/crypto/ \
+            ./internal/utils/hash/ \
+            ./internal/utils/str/ \
+            ./internal/utils/os/
