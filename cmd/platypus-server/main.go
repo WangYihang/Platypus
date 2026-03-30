@@ -6,7 +6,6 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/app"
-	"github.com/WangYihang/Platypus/internal/cli/cmd"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -91,6 +90,7 @@ func main() {
 		browser.OpenURL(fmt.Sprintf("http://%s:%d/", cfg.RESTful.Host, cfg.RESTful.Port))
 	}
 
-	// Run main loop
-	cmd.RunREPL()
+	// Block forever — server runs as daemon, managed via API
+	log.Success("Server is running. Use platypus-admin or API to manage.")
+	select {}
 }
