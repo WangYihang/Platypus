@@ -109,11 +109,8 @@ and add a fallback in a future iteration.
 
 ## Out of MVP scope
 
-- Group dispatch UI (the `/api/v1/sessions/dispatch` endpoint exists but
-  needs a multi-select session UI + result aggregation view).
 - Directory listing in the file browser (server only exposes read/write/size).
 - WebGL renderer for xterm (Wails WebView compatibility varies across
   platforms — using Canvas).
 - Zmodem file transfer.
 - OpenAPI-codegen client (waiting on swag annotations server-side).
-- CI cross-platform desktop builds (manual `wails build` for now).

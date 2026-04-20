@@ -1,0 +1,79 @@
+name: Desktop
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yaml"
+      - "Makefile"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yaml"
+      - "Makefile"
+
+jobs:
+  test:
+    name: Go test (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - name: Run tests
+        run: make desktop-test
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+
+      - name: Install Linux WebKit deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev pkg-config build-essential
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Install npm deps
+        working-directory: desktop/frontend
+        run: npm ci
+
+      - name: Build
+        run: make desktop-build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: desktop/build/bin/*
+          if-no-files-found: error
+          retention-days: 14
