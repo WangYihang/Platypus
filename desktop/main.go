@@ -2,35 +2,57 @@ package main
 
 import (
 	"embed"
+	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+
+	"github.com/WangYihang/Platypus/desktop/internal/app"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func main() {
-	// Create an instance of the app structure
-	app := NewApp()
+const (
+	appName         = "platypus-desktop"
+	keychainService = "platypus-desktop"
+)
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		Title:  "platypus-desktop",
-		Width:  1024,
-		Height: 768,
+func main() {
+	configPath, err := defaultConfigPath()
+	if err != nil {
+		log.Fatalf("config path: %v", err)
+	}
+
+	a, err := app.New(configPath, keychainService)
+	if err != nil {
+		log.Fatalf("app init: %v", err)
+	}
+
+	if err := wails.Run(&options.App{
+		Title:  "Platypus Desktop",
+		Width:  1280,
+		Height: 800,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
+		OnStartup:        a.Startup,
 		Bind: []interface{}{
-			app,
+			a,
 		},
-	})
-
-	if err != nil {
-		println("Error:", err.Error())
+	}); err != nil {
+		log.Fatalf("wails: %v", err)
 	}
+}
+
+func defaultConfigPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, appName, "profiles.json"), nil
 }
