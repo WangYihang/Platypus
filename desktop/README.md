@@ -56,8 +56,16 @@ make desktop-bindings     # any time you add/remove App methods on the Go side
 make desktop-dev          # hot-reload dev mode
 ```
 
-The `wails dev` command needs the system WebKit dev libs (webkit2gtk-4.1 on
-Linux) — see `wails doctor` for the canonical list.
+On Linux, install the WebKit/GTK dev libs first:
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev pkg-config build-essential
+```
+
+The Makefile passes `-tags webkit2_41` so Wails uses the webkit2gtk-4.1 bindings
+(the only version shipped on Ubuntu 22.04+ / Fedora 37+ / Debian 12+). Override
+via `make desktop-build WAILS_TAGS=""` if you're on an older distro that still
+ships webkit2gtk-4.0. macOS / Windows ignore the tag.
 
 ## Test
 

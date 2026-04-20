@@ -70,18 +70,24 @@ clean:
 
 # ---------- Desktop app ----------
 
+# `webkit2_41` is a no-op on macOS / Windows but required on Linux where only
+# webkit2gtk-4.1 ships (Ubuntu 22.04+, Fedora 37+, Debian 12+). Wails picks the
+# right binding at compile time based on this tag.
+WAILS_TAGS ?= webkit2_41
+WAILS      ?= $(shell $(GO) env GOPATH)/bin/wails
+
 desktop-deps:
 	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
 	cd desktop/frontend && npm install
 
 desktop-bindings:
-	cd desktop && wails generate module
+	cd desktop && $(WAILS) generate module
 
 desktop-dev:
-	cd desktop && wails dev
+	cd desktop && $(WAILS) dev -tags "$(WAILS_TAGS)"
 
 desktop-build:
-	cd desktop && wails build -clean
+	cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)"
 
 desktop-test:
 	cd desktop && $(GO) test -race -count=1 -timeout=120s ./internal/...

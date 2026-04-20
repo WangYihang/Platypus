@@ -2,5 +2,7 @@ build/bin
 node_modules
 frontend/dist
 frontend/wailsjs
+# wails frontend-deps cache marker
+frontend/package.json.md5
 # go build output when invoked from desktop/
 /desktop
