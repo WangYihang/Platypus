@@ -5,7 +5,7 @@ BINS       := platypus-server platypus-admin platypus-agent
 PROTO_SRC  := proto/agent/v1/agent.proto
 PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
-.PHONY: all build proto test lint fmt vet tidy clean release snapshot help \
+.PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings
 
 all: build
@@ -57,6 +57,14 @@ vet:
 
 tidy:
 	$(GO) mod tidy
+
+# swag regenerates docs/swagger.yaml + docs/swagger.json from the //@... tags
+# on the API handlers. Run this any time those tags change; the result is
+# committed so the binary can embed them without a build-time codegen step.
+SWAG ?= $(shell $(GO) env GOPATH)/bin/swag
+
+swag:
+	$(SWAG) init --generalInfo cmd/platypus-server/main.go --output docs --parseDependency --parseInternal
 
 snapshot:
 	goreleaser build --snapshot --clean

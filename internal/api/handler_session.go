@@ -8,8 +8,52 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// PatchSession handles PATCH /api/v1/sessions/:id
-// Allows updating alias and group_dispatch fields.
+// patchSessionRequest is documented purely for swag — gin handlers decode into
+// an anonymous struct. Keeping a typed mirror here gives OpenAPI a schema.
+type patchSessionRequest struct {
+	Alias         *string `json:"alias,omitempty"`
+	GroupDispatch *bool   `json:"group_dispatch,omitempty"`
+}
+
+// dispatchRequest is the typed mirror of POST /api/v1/sessions/dispatch's body.
+type dispatchRequest struct {
+	Command string `json:"command" binding:"required"`
+	Timeout int    `json:"timeout"` // seconds; defaults to 3 when ≤0
+}
+
+// dispatchResult is one row of the dispatch response.
+type dispatchResult struct {
+	SessionHash string `json:"session_hash"`
+	Output      string `json:"output"`
+	Error       string `json:"error,omitempty"`
+}
+
+// dispatchResponse wraps the list of per-session results.
+type dispatchResponse struct {
+	Status  bool             `json:"status"`
+	Count   int              `json:"count"`
+	Results []dispatchResult `json:"results"`
+}
+
+// errorResponse is the standard error body returned with non-2xx statuses.
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+// PatchSession updates mutable fields on an existing session.
+//
+// @Summary     Patch session
+// @Description Update the alias and/or group_dispatch flag on a connected session.
+// @Tags        sessions
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id   path      string              true  "Session hash"
+// @Param       body body      patchSessionRequest true  "Fields to patch (any subset)"
+// @Success     200  {object}  map[string]any      "status + updated session"
+// @Failure     400  {object}  errorResponse
+// @Failure     404  {object}  errorResponse
+// @Router      /api/v1/sessions/{id} [patch]
 func PatchSession(c *gin.Context) {
 	hash := c.Param("id")
 	if hash == "" {
@@ -53,8 +97,17 @@ func PatchSession(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
-// GatherSession handles POST /api/v1/sessions/:id/gather
-// Triggers client info gathering on the specified session.
+// GatherSession re-runs the client-info probe on a session.
+//
+// @Summary     Gather session info
+// @Description Triggers an on-demand re-probe of os/user/version/network for a session.
+// @Tags        sessions
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id   path      string  true "Session hash"
+// @Success     200  {object}  map[string]any
+// @Failure     404  {object}  errorResponse
+// @Router      /api/v1/sessions/{id}/gather [post]
 func GatherSession(c *gin.Context) {
 	hash := c.Param("id")
 
@@ -73,8 +126,19 @@ func GatherSession(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
-// DispatchCommand handles POST /api/v1/sessions/dispatch
-// Executes a command on all sessions with GroupDispatch enabled.
+// DispatchCommand broadcasts a shell command to every session whose
+// group_dispatch flag is true.
+//
+// @Summary     Dispatch command to flagged sessions
+// @Description Runs a command on every session with group_dispatch=true. Per-session timeouts surface as {error:"timeout"} inside results, not as a request error.
+// @Tags        sessions
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       body body      dispatchRequest  true "Command + timeout"
+// @Success     200  {object}  dispatchResponse
+// @Failure     400  {object}  errorResponse
+// @Router      /api/v1/sessions/dispatch [post]
 func DispatchCommand(c *gin.Context) {
 	var req struct {
 		Command string `json:"command" binding:"required"`

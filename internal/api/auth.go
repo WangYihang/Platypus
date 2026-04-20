@@ -48,7 +48,34 @@ func (a *Auth) ValidateToken(token string) bool {
 	return a.tokens[token]
 }
 
-// TokenEndpoint handles POST /api/v1/auth/token to issue tokens.
+// tokenRequest is the POST body for /api/v1/auth/token.
+type tokenRequest struct {
+	// Secret is the value printed at server startup ("API secret: …").
+	Secret string `json:"secret" binding:"required"`
+}
+
+// tokenResponse is the successful response body.
+type tokenResponse struct {
+	Token string `json:"token"`
+}
+
+// tokenError is the error body when auth fails.
+type tokenError struct {
+	Error string `json:"error"`
+}
+
+// TokenEndpoint exchanges the server secret for a Bearer token.
+//
+// @Summary     Exchange secret for token
+// @Description Bootstraps a session. The returned token must be sent as `Authorization: Bearer <token>` on every other endpoint.
+// @Tags        auth
+// @Accept      json
+// @Produce     json
+// @Param       body body      tokenRequest   true "Server secret"
+// @Success     200  {object}  tokenResponse
+// @Failure     400  {object}  tokenError
+// @Failure     401  {object}  tokenError
+// @Router      /api/v1/auth/token [post]
 func (a *Auth) TokenEndpoint() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {

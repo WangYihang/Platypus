@@ -9,7 +9,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetFileSize handles GET /api/v1/sessions/:id/files/size?path=X
+// GetFileSize returns the size in bytes of a file on the victim.
+//
+// @Summary     File size
+// @Description Stat a remote file and return its size in bytes. Requires the session to be connected.
+// @Tags        files
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id    path      string  true  "Session hash"
+// @Param       path  query     string  true  "Absolute path to the file"
+// @Success     200   {object}  map[string]any "status + size"
+// @Failure     400   {object}  errorResponse
+// @Failure     404   {object}  errorResponse
+// @Router      /api/v1/sessions/{id}/files/size [get]
 func GetFileSize(c *gin.Context) {
 	hash := c.Param("id")
 	path := c.Query("path")
@@ -41,7 +53,21 @@ func GetFileSize(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
-// ReadFile handles GET /api/v1/sessions/:id/files?path=X&offset=N&size=N
+// ReadFile streams part of a remote file.
+//
+// @Summary     Read file
+// @Description Stream a slice of a remote file as application/octet-stream. Omit size=0 to read the whole file; otherwise read [offset, offset+size).
+// @Tags        files
+// @Produce     application/octet-stream
+// @Security    BearerAuth
+// @Param       id     path      string  true   "Session hash"
+// @Param       path   query     string  true   "Absolute path to the file"
+// @Param       offset query     integer false  "Byte offset to start reading from" default(0)
+// @Param       size   query     integer false  "Number of bytes to read; 0 = whole file" default(0)
+// @Success     200    {file}    binary
+// @Failure     400    {object}  errorResponse
+// @Failure     404    {object}  errorResponse
+// @Router      /api/v1/sessions/{id}/files [get]
 func ReadFile(c *gin.Context) {
 	hash := c.Param("id")
 	path := c.Query("path")
@@ -81,7 +107,22 @@ func ReadFile(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
-// WriteFile handles POST /api/v1/sessions/:id/files?path=X&append=true
+// WriteFile uploads raw bytes to a remote file.
+//
+// @Summary     Write file
+// @Description Upload bytes to a remote path. Use append=true to chunk large uploads. Only Termite sessions support file upload.
+// @Tags        files
+// @Accept      application/octet-stream
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id     path      string  true   "Session hash (must be a Termite session)"
+// @Param       path   query     string  true   "Absolute path to write to"
+// @Param       append query     boolean false  "If true, appends to the file instead of truncating" default(false)
+// @Param       body   body      string  true   "Raw file bytes"
+// @Success     200    {object}  map[string]any "status + bytes_written"
+// @Failure     400    {object}  errorResponse
+// @Failure     404    {object}  errorResponse
+// @Router      /api/v1/sessions/{id}/files [post]
 func WriteFile(c *gin.Context) {
 	hash := c.Param("id")
 	path := c.Query("path")

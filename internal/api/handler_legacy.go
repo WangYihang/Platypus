@@ -36,6 +36,14 @@ type serversWithDistributor struct {
 }
 
 // ListServers returns every TCP listener plus the distributor snapshot.
+//
+// @Summary     List listeners
+// @Description Returns every configured TCP listener plus the distributor snapshot.
+// @Tags        listeners
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]any
+// @Router      /api/server [get]
 func ListServers(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"status": true,
@@ -48,6 +56,15 @@ func ListServers(c *gin.Context) {
 }
 
 // GetServer fetches one TCP listener by hash.
+//
+// @Summary     Get listener
+// @Tags        listeners
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true "Listener hash"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/server/{hash} [get]
 func GetServer(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return
@@ -64,6 +81,15 @@ func GetServer(c *gin.Context) {
 }
 
 // GetServerClients lists every TCP/Termite client attached to a listener.
+//
+// @Summary     List sessions on a listener
+// @Tags        listeners
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true "Listener hash"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/server/{hash}/client [get]
 func GetServerClients(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return
@@ -87,6 +113,19 @@ func GetServerClients(c *gin.Context) {
 }
 
 // CreateServer starts a new TCP listener.
+//
+// @Summary     Create listener
+// @Description Opens a new reverse-shell listener. Submit as application/x-www-form-urlencoded.
+// @Tags        listeners
+// @Accept      application/x-www-form-urlencoded
+// @Produce     json
+// @Security    BearerAuth
+// @Param       host      formData string  true  "Bind address (e.g. 0.0.0.0)"
+// @Param       port      formData integer true  "Port 1-65535"
+// @Param       encrypted formData boolean true  "true for Termite listener, false for plain reverse shell"
+// @Success     200       {object} map[string]any
+// @Failure     400       {object} map[string]any
+// @Router      /api/server [post]
 func CreateServer(c *gin.Context) {
 	if !formExistOrAbort(c, []string{"host", "port", "encrypted"}) {
 		return
@@ -112,6 +151,15 @@ func CreateServer(c *gin.Context) {
 }
 
 // DeleteServer tears down a TCP listener by hash.
+//
+// @Summary     Delete listener
+// @Tags        listeners
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true "Listener hash"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/server/{hash} [delete]
 func DeleteServer(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return
@@ -129,6 +177,14 @@ func DeleteServer(c *gin.Context) {
 }
 
 // ListClients returns every connected client across every listener.
+//
+// @Summary     List all sessions
+// @Description Returns every session (plain + termite) across every listener. This is the main session-list endpoint used by the desktop UI.
+// @Tags        sessions
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]any
+// @Router      /api/client [get]
 func ListClients(c *gin.Context) {
 	clients := make(map[string]interface{})
 	for _, server := range core.GetServers() {
@@ -144,6 +200,15 @@ func ListClients(c *gin.Context) {
 }
 
 // GetClient fetches one plain TCP client by hash.
+//
+// @Summary     Get session
+// @Tags        sessions
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true "Session hash"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/client/{hash} [get]
 func GetClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return
@@ -161,6 +226,17 @@ func GetClient(c *gin.Context) {
 
 // UpgradeClient asks the server to compile + push a Termite agent to the
 // target listener, replacing a plain reverse shell with an encrypted one.
+//
+// @Summary     Upgrade to Termite
+// @Description Compile a Termite agent matching the client's architecture, push it over the existing plain shell, and let it reconnect to the target encrypted listener. Progress is broadcast on /notify; this endpoint only acknowledges the request.
+// @Tags        sessions
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash   path     string true "Source session hash (plain TCP client)"
+// @Param       target path     string true "Destination listener hash (must be encrypted)"
+// @Success     200    {object} map[string]any
+// @Failure     404    {object} map[string]any
+// @Router      /api/client/{hash}/upgrade/{target} [get]
 func UpgradeClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash", "target"}) {
 		return
@@ -185,6 +261,15 @@ func UpgradeClient(c *gin.Context) {
 }
 
 // DeleteClient disconnects a TCP client by hash.
+//
+// @Summary     Delete session
+// @Tags        sessions
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true "Session hash"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/client/{hash} [delete]
 func DeleteClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return
@@ -202,6 +287,18 @@ func DeleteClient(c *gin.Context) {
 }
 
 // ExecClient executes a command on a TCP or Termite client and returns the output.
+//
+// @Summary     Execute command
+// @Description Runs a single command on one session and returns its stdout. Submit cmd as form-encoded. Plain TCP sessions in PTY mode are refused; switch to non-PTY or use the WebSocket terminal instead.
+// @Tags        sessions
+// @Accept      application/x-www-form-urlencoded
+// @Produce     json
+// @Security    BearerAuth
+// @Param       hash path     string true  "Session hash"
+// @Param       cmd  formData string true  "Shell command"
+// @Success     200  {object} map[string]any
+// @Failure     404  {object} map[string]any
+// @Router      /api/client/{hash} [post]
 func ExecClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
 		return

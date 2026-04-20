@@ -7,7 +7,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CreateTunnel handles POST /api/v1/sessions/:id/tunnels
+// createTunnelRequest is the typed mirror of the POST body for swag.
+type createTunnelRequest struct {
+	// Mode is one of "pull", "push", "dynamic", "internet".
+	Mode string `json:"mode" binding:"required"`
+	// SrcAddress is required for pull/push/internet modes. Ignored for dynamic.
+	SrcAddress string `json:"src_address"`
+	// DstAddress is required for pull/push/internet modes. Ignored for dynamic.
+	DstAddress string `json:"dst_address"`
+}
+
+// CreateTunnel opens a tunnel through an encrypted session.
+//
+// @Summary     Create tunnel
+// @Description Open a tunnel on a Termite session. Modes: pull (agent binds dst, forwards to src), push (operator binds src, agent dials dst), dynamic (agent runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies to dst).
+// @Tags        tunnels
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id   path      string              true "Session hash (Termite only)"
+// @Param       body body      createTunnelRequest true "Mode + addresses"
+// @Success     200  {object}  map[string]any
+// @Failure     400  {object}  errorResponse
+// @Failure     404  {object}  errorResponse
+// @Failure     409  {object}  errorResponse
+// @Failure     500  {object}  errorResponse
+// @Router      /api/v1/sessions/{id}/tunnels [post]
 func CreateTunnel(c *gin.Context) {
 	hash := c.Param("id")
 
@@ -53,7 +78,22 @@ func CreateTunnel(c *gin.Context) {
 	}
 }
 
-// ListTunnels handles GET /api/v1/sessions/:id/tunnels
+// tunnelInfoEntry is one row of ListTunnels's response.
+type tunnelInfoEntry struct {
+	Type    string `json:"type"`    // "pull", "push", or "socks5"
+	Address string `json:"address"` // src→dst for pull/push, single addr for socks5
+}
+
+// ListTunnels returns the active tunnels for a session.
+//
+// @Summary     List tunnels
+// @Description List every pull/push/SOCKS5 tunnel currently routed through this session.
+// @Tags        tunnels
+// @Produce     json
+// @Security    BearerAuth
+// @Param       id  path   string  true "Session hash"
+// @Success     200 {object} map[string]any "status + tunnels:[]tunnelInfoEntry"
+// @Router      /api/v1/sessions/{id}/tunnels [get]
 func ListTunnels(c *gin.Context) {
 	type tunnelInfo struct {
 		Type    string `json:"type"`

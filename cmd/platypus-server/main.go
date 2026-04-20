@@ -1,3 +1,14 @@
+// Package main is the platypus-server entrypoint.
+//
+// @title           Platypus API
+// @version         1.0
+// @description     REST API for managing listeners, reverse-shell sessions, file transfer, and tunnels.
+// @description     Every endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.
+// @BasePath        /
+// @securityDefinitions.apikey BearerAuth
+// @in   header
+// @name Authorization
+// @description Value should be "Bearer <token>". Fetch a token via POST /api/v1/auth/token using the secret printed at server startup.
 package main
 
 import (
@@ -18,6 +29,11 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+
+	// Import the generated OpenAPI docs so `swag init`'s output is wired
+	// into the binary. The swagger UI handler in internal/api looks up
+	// docs by name ("swagger").
+	_ "github.com/WangYihang/Platypus/docs"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -131,9 +147,11 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterWebSocketRoutes(rest)
 		api.RegisterLegacyRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
+		api.RegisterSwaggerRoutes(rest)
 
 		log.Success("API secret: %s", auth.GetSecret())
 		log.Success("  Obtain token: curl -X POST http://%s:%d/api/v1/auth/token -d '{\"secret\":\"%s\"}'", rh, rp, auth.GetSecret())
+		log.Success("  API docs:     http://%s:%d/swagger/index.html", rh, rp)
 
 		restSrv := &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", rh, rp),

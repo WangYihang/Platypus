@@ -1,0 +1,689 @@
+basePath: /
+definitions:
+  internal_api.createTunnelRequest:
+    properties:
+      dst_address:
+        description: DstAddress is required for pull/push/internet modes. Ignored
+          for dynamic.
+        type: string
+      mode:
+        description: Mode is one of "pull", "push", "dynamic", "internet".
+        type: string
+      src_address:
+        description: SrcAddress is required for pull/push/internet modes. Ignored
+          for dynamic.
+        type: string
+    required:
+    - mode
+    type: object
+  internal_api.dispatchRequest:
+    properties:
+      command:
+        type: string
+      timeout:
+        description: seconds; defaults to 3 when ≤0
+        type: integer
+    required:
+    - command
+    type: object
+  internal_api.dispatchResponse:
+    properties:
+      count:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/internal_api.dispatchResult'
+        type: array
+      status:
+        type: boolean
+    type: object
+  internal_api.dispatchResult:
+    properties:
+      error:
+        type: string
+      output:
+        type: string
+      session_hash:
+        type: string
+    type: object
+  internal_api.errorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_api.patchSessionRequest:
+    properties:
+      alias:
+        type: string
+      group_dispatch:
+        type: boolean
+    type: object
+  internal_api.tokenError:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_api.tokenRequest:
+    properties:
+      secret:
+        description: 'Secret is the value printed at server startup ("API secret:
+          …").'
+        type: string
+    required:
+    - secret
+    type: object
+  internal_api.tokenResponse:
+    properties:
+      token:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    REST API for managing listeners, reverse-shell sessions, file transfer, and tunnels.
+    Every endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.
+  title: Platypus API
+  version: "1.0"
+paths:
+  /api/client:
+    get:
+      description: Returns every session (plain + termite) across every listener.
+        This is the main session-list endpoint used by the desktop UI.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all sessions
+      tags:
+      - sessions
+  /api/client/{hash}:
+    delete:
+      parameters:
+      - description: Session hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete session
+      tags:
+      - sessions
+    get:
+      parameters:
+      - description: Session hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get session
+      tags:
+      - sessions
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Runs a single command on one session and returns its stdout. Submit
+        cmd as form-encoded. Plain TCP sessions in PTY mode are refused; switch to
+        non-PTY or use the WebSocket terminal instead.
+      parameters:
+      - description: Session hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      - description: Shell command
+        in: formData
+        name: cmd
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Execute command
+      tags:
+      - sessions
+  /api/client/{hash}/upgrade/{target}:
+    get:
+      description: Compile a Termite agent matching the client's architecture, push
+        it over the existing plain shell, and let it reconnect to the target encrypted
+        listener. Progress is broadcast on /notify; this endpoint only acknowledges
+        the request.
+      parameters:
+      - description: Source session hash (plain TCP client)
+        in: path
+        name: hash
+        required: true
+        type: string
+      - description: Destination listener hash (must be encrypted)
+        in: path
+        name: target
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upgrade to Termite
+      tags:
+      - sessions
+  /api/server:
+    get:
+      description: Returns every configured TCP listener plus the distributor snapshot.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List listeners
+      tags:
+      - listeners
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Opens a new reverse-shell listener. Submit as application/x-www-form-urlencoded.
+      parameters:
+      - description: Bind address (e.g. 0.0.0.0)
+        in: formData
+        name: host
+        required: true
+        type: string
+      - description: Port 1-65535
+        in: formData
+        name: port
+        required: true
+        type: integer
+      - description: true for Termite listener, false for plain reverse shell
+        in: formData
+        name: encrypted
+        required: true
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create listener
+      tags:
+      - listeners
+  /api/server/{hash}:
+    delete:
+      parameters:
+      - description: Listener hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete listener
+      tags:
+      - listeners
+    get:
+      parameters:
+      - description: Listener hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get listener
+      tags:
+      - listeners
+  /api/server/{hash}/client:
+    get:
+      parameters:
+      - description: Listener hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List sessions on a listener
+      tags:
+      - listeners
+  /api/v1/auth/token:
+    post:
+      consumes:
+      - application/json
+      description: 'Bootstraps a session. The returned token must be sent as `Authorization:
+        Bearer <token>` on every other endpoint.'
+      parameters:
+      - description: Server secret
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.tokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.tokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.tokenError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_api.tokenError'
+      summary: Exchange secret for token
+      tags:
+      - auth
+  /api/v1/sessions/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: Update the alias and/or group_dispatch flag on a connected session.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to patch (any subset)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.patchSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + updated session
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Patch session
+      tags:
+      - sessions
+  /api/v1/sessions/{id}/files:
+    get:
+      description: Stream a slice of a remote file as application/octet-stream. Omit
+        size=0 to read the whole file; otherwise read [offset, offset+size).
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute path to the file
+        in: query
+        name: path
+        required: true
+        type: string
+      - default: 0
+        description: Byte offset to start reading from
+        in: query
+        name: offset
+        type: integer
+      - default: 0
+        description: Number of bytes to read; 0 = whole file
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Read file
+      tags:
+      - files
+    post:
+      consumes:
+      - application/octet-stream
+      description: Upload bytes to a remote path. Use append=true to chunk large uploads.
+        Only Termite sessions support file upload.
+      parameters:
+      - description: Session hash (must be a Termite session)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute path to write to
+        in: query
+        name: path
+        required: true
+        type: string
+      - default: false
+        description: If true, appends to the file instead of truncating
+        in: query
+        name: append
+        type: boolean
+      - description: Raw file bytes
+        in: body
+        name: body
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + bytes_written
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Write file
+      tags:
+      - files
+  /api/v1/sessions/{id}/files/size:
+    get:
+      description: Stat a remote file and return its size in bytes. Requires the session
+        to be connected.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute path to the file
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + size
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: File size
+      tags:
+      - files
+  /api/v1/sessions/{id}/gather:
+    post:
+      description: Triggers an on-demand re-probe of os/user/version/network for a
+        session.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Gather session info
+      tags:
+      - sessions
+  /api/v1/sessions/{id}/tunnels:
+    get:
+      description: List every pull/push/SOCKS5 tunnel currently routed through this
+        session.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + tunnels:[]tunnelInfoEntry
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List tunnels
+      tags:
+      - tunnels
+    post:
+      consumes:
+      - application/json
+      description: 'Open a tunnel on a Termite session. Modes: pull (agent binds dst,
+        forwards to src), push (operator binds src, agent dials dst), dynamic (agent
+        runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies
+        to dst).'
+      parameters:
+      - description: Session hash (Termite only)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Mode + addresses
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.createTunnelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create tunnel
+      tags:
+      - tunnels
+  /api/v1/sessions/dispatch:
+    post:
+      consumes:
+      - application/json
+      description: Runs a command on every session with group_dispatch=true. Per-session
+        timeouts surface as {error:"timeout"} inside results, not as a request error.
+      parameters:
+      - description: Command + timeout
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.dispatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.dispatchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Dispatch command to flagged sessions
+      tags:
+      - sessions
+securityDefinitions:
+  BearerAuth:
+    description: Value should be "Bearer <token>". Fetch a token via POST /api/v1/auth/token
+      using the secret printed at server startup.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
