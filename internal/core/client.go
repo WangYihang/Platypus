@@ -13,17 +13,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/utils/compiler"
-	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/log"
-	oss "github.com/WangYihang/Platypus/internal/utils/os"
-	"github.com/WangYihang/Platypus/internal/utils/str"
-	"github.com/WangYihang/Platypus/internal/session"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/vbauerster/mpb/v6"
 	"github.com/vbauerster/mpb/v6/decor"
 	"golang.org/x/term"
+
+	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/session"
+	"github.com/WangYihang/Platypus/internal/utils/compiler"
+	"github.com/WangYihang/Platypus/internal/utils/hash"
+	oss "github.com/WangYihang/Platypus/internal/utils/os"
+	"github.com/WangYihang/Platypus/internal/utils/str"
 )
 
 // Compile-time check: TCPClient implements session.Session
@@ -81,16 +82,16 @@ func CreateTCPClient(conn net.Conn, server *TCPServer) *TCPClient {
 	}
 }
 
-func (c *TCPClient) GetHash() string          { return c.Hash }
-func (c *TCPClient) GetAlias() string         { return c.Alias }
-func (c *TCPClient) SetAlias(alias string)    { c.Alias = alias }
-func (c *TCPClient) IsEncrypted() bool        { return false }
-func (c *TCPClient) GetHost() string          { return c.Host }
-func (c *TCPClient) GetPort() uint16          { return c.Port }
+func (c *TCPClient) GetHash() string            { return c.Hash }
+func (c *TCPClient) GetAlias() string           { return c.Alias }
+func (c *TCPClient) SetAlias(alias string)      { c.Alias = alias }
+func (c *TCPClient) IsEncrypted() bool          { return false }
+func (c *TCPClient) GetHost() string            { return c.Host }
+func (c *TCPClient) GetPort() uint16            { return c.Port }
 func (c *TCPClient) GetOS() oss.OperatingSystem { return c.OS }
-func (c *TCPClient) GetTimeStamp() time.Time  { return c.TimeStamp }
-func (c *TCPClient) GetGroupDispatch() bool   { return c.GroupDispatch }
-func (c *TCPClient) SetGroupDispatch(v bool)  { c.GroupDispatch = v }
+func (c *TCPClient) GetTimeStamp() time.Time    { return c.TimeStamp }
+func (c *TCPClient) GetGroupDispatch() bool     { return c.GroupDispatch }
+func (c *TCPClient) SetGroupDispatch(v bool)    { c.GroupDispatch = v }
 
 func (c *TCPClient) Close() {
 	c.conn.Close()

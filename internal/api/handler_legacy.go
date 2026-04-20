@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/core"
 )
 
 // RegisterLegacyRoutes wires up the pre-v1 /api/server and /api/client routes

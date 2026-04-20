@@ -16,17 +16,17 @@ import (
 
 // recordingHandler captures the last incoming request for assertions.
 type recordingHandler struct {
-	t            *testing.T
-	gotMethod    string
-	gotPath      string
-	gotRawQuery  string
-	gotAuth      string
-	gotCT        string
-	gotBody      []byte
-	respStatus   int
-	respBody     []byte
-	respCT       string
-	delay        time.Duration
+	t           *testing.T
+	gotMethod   string
+	gotPath     string
+	gotRawQuery string
+	gotAuth     string
+	gotCT       string
+	gotBody     []byte
+	respStatus  int
+	respBody    []byte
+	respCT      string
+	delay       time.Duration
 }
 
 func (h *recordingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

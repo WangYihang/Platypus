@@ -3,11 +3,12 @@ package core
 import (
 	"net"
 
+	socks5 "github.com/things-go/go-socks5"
+
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	socks5 "github.com/things-go/go-socks5"
 )
 
 func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {

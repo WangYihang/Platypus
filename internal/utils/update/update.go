@@ -6,9 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/creativeprojects/go-selfupdate"
+
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
-	"github.com/creativeprojects/go-selfupdate"
 )
 
 const Version = "1.5.1"

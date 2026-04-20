@@ -14,6 +14,9 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 
+	humanize "github.com/dustin/go-humanize"
+	"github.com/jedib0t/go-pretty/v6/table"
+
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/session"
@@ -22,8 +25,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	humanize "github.com/dustin/go-humanize"
-	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 // Compile-time check: TermiteClient implements session.Session
@@ -47,25 +48,25 @@ type Process struct {
 }
 
 type TermiteClient struct {
-	conn              net.Conn            `json:"-"`
-	Hash              string              `json:"hash"`
-	Host              string              `json:"host"`
-	Port              uint16              `json:"port"`
-	Alias             string              `json:"alias"`
-	User              string              `json:"user"`
-	OS                oss.OperatingSystem `json:"os"`
-	Version           string              `json:"version"`
-	NetworkInterfaces map[string]string   `json:"network_interfaces"`
-	Python2           string              `json:"python2"`
-	Python3           string              `json:"python3"`
-	TimeStamp         time.Time           `json:"timestamp"`
-	DisableHistory    bool                `json:"disable_hisory"`
-	GroupDispatch     bool                `json:"group_dispatch"`
-	server            *TCPServer          `json:"-"`
+	conn              net.Conn             `json:"-"`
+	Hash              string               `json:"hash"`
+	Host              string               `json:"host"`
+	Port              uint16               `json:"port"`
+	Alias             string               `json:"alias"`
+	User              string               `json:"user"`
+	OS                oss.OperatingSystem  `json:"os"`
+	Version           string               `json:"version"`
+	NetworkInterfaces map[string]string    `json:"network_interfaces"`
+	Python2           string               `json:"python2"`
+	Python3           string               `json:"python3"`
+	TimeStamp         time.Time            `json:"timestamp"`
+	DisableHistory    bool                 `json:"disable_hisory"`
+	GroupDispatch     bool                 `json:"group_dispatch"`
+	server            *TCPServer           `json:"-"`
 	codec             *protocol.ProtoCodec `json:"-"`
-	atomLock          *sync.Mutex         `json:"-"`
+	atomLock          *sync.Mutex          `json:"-"`
 	processes         map[string]*Process  `json:"-"`
-	currentProcessKey string              `json:"-"`
+	currentProcessKey string               `json:"-"`
 }
 
 func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) *TermiteClient {
@@ -93,16 +94,16 @@ func CreateTermiteClient(conn net.Conn, server *TCPServer, disableHistory bool) 
 	}
 }
 
-func (c *TermiteClient) GetHash() string                  { return c.Hash }
-func (c *TermiteClient) GetAlias() string                 { return c.Alias }
-func (c *TermiteClient) SetAlias(alias string)            { c.Alias = alias }
-func (c *TermiteClient) IsEncrypted() bool                { return true }
-func (c *TermiteClient) GetHost() string                  { return c.Host }
-func (c *TermiteClient) GetPort() uint16                  { return c.Port }
-func (c *TermiteClient) GetOS() oss.OperatingSystem       { return c.OS }
-func (c *TermiteClient) GetTimeStamp() time.Time          { return c.TimeStamp }
-func (c *TermiteClient) GetGroupDispatch() bool           { return c.GroupDispatch }
-func (c *TermiteClient) SetGroupDispatch(v bool)          { c.GroupDispatch = v }
+func (c *TermiteClient) GetHash() string            { return c.Hash }
+func (c *TermiteClient) GetAlias() string           { return c.Alias }
+func (c *TermiteClient) SetAlias(alias string)      { c.Alias = alias }
+func (c *TermiteClient) IsEncrypted() bool          { return true }
+func (c *TermiteClient) GetHost() string            { return c.Host }
+func (c *TermiteClient) GetPort() uint16            { return c.Port }
+func (c *TermiteClient) GetOS() oss.OperatingSystem { return c.OS }
+func (c *TermiteClient) GetTimeStamp() time.Time    { return c.TimeStamp }
+func (c *TermiteClient) GetGroupDispatch() bool     { return c.GroupDispatch }
+func (c *TermiteClient) SetGroupDispatch(v bool)    { c.GroupDispatch = v }
 
 func (c *TermiteClient) LockAtom()   { c.atomLock.Lock() }
 func (c *TermiteClient) UnlockAtom() { c.atomLock.Unlock() }

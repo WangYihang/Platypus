@@ -21,14 +21,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-playground/validator/v10"
+	"github.com/spf13/viper"
+
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
-	"github.com/go-playground/validator/v10"
-	"github.com/spf13/viper"
 
 	// Import the generated OpenAPI docs so `swag init`'s output is wired
 	// into the binary. The swagger UI handler in internal/api looks up
@@ -61,7 +62,7 @@ func main() {
 	servers := startHTTPServers(cfg)
 
 	for _, s := range cfg.Servers {
-		listener := core.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
+		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
 		if listener != nil {
 			time.Sleep(0x100 * time.Millisecond)
 			go (*listener).Run()

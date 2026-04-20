@@ -5,8 +5,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/WangYihang/Platypus/internal/utils/ui"
 	"golang.org/x/term"
+
+	"github.com/WangYihang/Platypus/internal/utils/ui"
 )
 
 func Signal() {

@@ -136,11 +136,11 @@ func TestApp_GenerateRaasOneliner(t *testing.T) {
 	// No connection needed — generation is a pure local string op.
 
 	cases := []struct {
-		name        string
-		listener    string
-		lang        string
-		wantSubstr  string
-		wantLang    string
+		name       string
+		listener   string
+		lang       string
+		wantSubstr string
+		wantLang   string
 	}{
 		{"bash", "0.0.0.0:13337", "bash", "13337", "bash"},
 		{"python", "0.0.0.0:13337", "python", "13337", "python"},

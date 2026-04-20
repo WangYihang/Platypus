@@ -22,23 +22,23 @@ type mockSession struct {
 	groupDispatch bool
 }
 
-func (m *mockSession) GetHash() string                  { return m.hash }
-func (m *mockSession) GetAlias() string                 { return m.alias }
-func (m *mockSession) SetAlias(a string)                { m.alias = a }
-func (m *mockSession) IsEncrypted() bool                { return m.encrypted }
-func (m *mockSession) GetHost() string                  { return m.host }
-func (m *mockSession) GetPort() uint16                  { return m.port }
-func (m *mockSession) GetConn() net.Conn                { return nil }
-func (m *mockSession) GetConnString() string            { return m.host }
-func (m *mockSession) GetUsername() string               { return m.user }
-func (m *mockSession) GetOS() oss.OperatingSystem       { return m.os }
-func (m *mockSession) GetTimeStamp() time.Time          { return m.ts }
-func (m *mockSession) GetGroupDispatch() bool           { return m.groupDispatch }
-func (m *mockSession) SetGroupDispatch(v bool)          { m.groupDispatch = v }
-func (m *mockSession) GetPrompt() string                { return "» " }
-func (m *mockSession) OnelineDesc() string              { return m.hash }
-func (m *mockSession) FullDesc() string                 { return m.hash }
-func (m *mockSession) AsTable()                         {}
+func (m *mockSession) GetHash() string                    { return m.hash }
+func (m *mockSession) GetAlias() string                   { return m.alias }
+func (m *mockSession) SetAlias(a string)                  { m.alias = a }
+func (m *mockSession) IsEncrypted() bool                  { return m.encrypted }
+func (m *mockSession) GetHost() string                    { return m.host }
+func (m *mockSession) GetPort() uint16                    { return m.port }
+func (m *mockSession) GetConn() net.Conn                  { return nil }
+func (m *mockSession) GetConnString() string              { return m.host }
+func (m *mockSession) GetUsername() string                { return m.user }
+func (m *mockSession) GetOS() oss.OperatingSystem         { return m.os }
+func (m *mockSession) GetTimeStamp() time.Time            { return m.ts }
+func (m *mockSession) GetGroupDispatch() bool             { return m.groupDispatch }
+func (m *mockSession) SetGroupDispatch(v bool)            { m.groupDispatch = v }
+func (m *mockSession) GetPrompt() string                  { return "» " }
+func (m *mockSession) OnelineDesc() string                { return m.hash }
+func (m *mockSession) FullDesc() string                   { return m.hash }
+func (m *mockSession) AsTable()                           {}
 func (m *mockSession) Execute(cmd string) (string, error) { return "", nil }
 func (m *mockSession) Close()                             {}
 

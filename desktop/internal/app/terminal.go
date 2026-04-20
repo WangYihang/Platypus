@@ -23,8 +23,8 @@ type terminalSession struct {
 // terminalRegistry wraps the App's open terminal map. Its methods take the
 // session lock; the App's own mu protects the registry pointer itself.
 type terminalRegistry struct {
-	mu    sync.Mutex
-	byID  map[string]*terminalSession
+	mu   sync.Mutex
+	byID map[string]*terminalSession
 }
 
 func newTerminalRegistry() *terminalRegistry {

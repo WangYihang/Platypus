@@ -13,14 +13,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/str"
-	"github.com/WangYihang/Platypus/internal/utils/update"
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	"github.com/creack/pty"
 	"github.com/creativeprojects/go-selfupdate"
 	"github.com/phayes/freeport"
 	socks5 "github.com/things-go/go-socks5"
+
+	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/utils/str"
+	"github.com/WangYihang/Platypus/internal/utils/update"
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const protocolVersion = 1

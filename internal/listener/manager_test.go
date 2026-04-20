@@ -13,13 +13,13 @@ type mockListener struct {
 	stopped   bool
 }
 
-func (m *mockListener) GetHash() string  { return m.hash }
-func (m *mockListener) GetHost() string  { return m.host }
-func (m *mockListener) GetPort() uint16  { return m.port }
+func (m *mockListener) GetHash() string   { return m.hash }
+func (m *mockListener) GetHost() string   { return m.host }
+func (m *mockListener) GetPort() uint16   { return m.port }
 func (m *mockListener) IsEncrypted() bool { return m.encrypted }
-func (m *mockListener) FullDesc() string { return m.hash }
-func (m *mockListener) Run()             {}
-func (m *mockListener) Stop()            { m.stopped = true }
+func (m *mockListener) FullDesc() string  { return m.hash }
+func (m *mockListener) Run()              {}
+func (m *mockListener) Stop()             { m.stopped = true }
 
 func TestManagerAddAndGet(t *testing.T) {
 	m := NewManager()

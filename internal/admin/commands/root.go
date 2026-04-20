@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/WangYihang/Platypus/internal/admin"
 	"github.com/spf13/cobra"
+
+	"github.com/WangYihang/Platypus/internal/admin"
 )
 
 var (

@@ -8,13 +8,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gin-gonic/gin"
+	socks5 "github.com/things-go/go-socks5"
+	"gopkg.in/olahol/melody.v1"
+
 	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
-	socks5 "github.com/things-go/go-socks5"
-	"github.com/gin-gonic/gin"
-	"gopkg.in/olahol/melody.v1"
 )
 
 // PullTunnelConfig represents a local-to-remote port forwarding configuration.
@@ -44,9 +45,9 @@ type PushTunnelInstance struct {
 
 // App is the top-level application container.
 type App struct {
-	Config          *config.Config
-	Sessions        *session.Manager
-	Listeners       *listener.Manager
+	Config    *config.Config
+	Sessions  *session.Manager
+	Listeners *listener.Manager
 
 	// Current session state
 	Current        interface{} // *core.TCPClient (avoids circular import)

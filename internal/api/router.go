@@ -1,8 +1,9 @@
 package api
 
 import (
-	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/log"
 )
 
 // RegisterV1Routes registers all /api/v1/ routes with authentication.

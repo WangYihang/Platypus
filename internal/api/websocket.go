@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"gopkg.in/olahol/melody.v1"
+
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	"github.com/gin-gonic/gin"
-	"gopkg.in/olahol/melody.v1"
 )
 
 // RegisterWebSocketRoutes wires up /notify and /ws/:hash WebSocket endpoints.

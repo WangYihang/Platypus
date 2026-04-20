@@ -121,6 +121,8 @@ func (a *Auth) Middleware() gin.HandlerFunc {
 
 func generateRandomHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	// crypto/rand.Read on Linux/macOS reads from getrandom(2) — it only errors
+	// if the OS RNG is completely unavailable, which is fatal anyway. Ignore.
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }

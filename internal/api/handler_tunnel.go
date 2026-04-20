@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/core"
 )
 
 // createTunnelRequest is the typed mirror of the POST body for swag.
@@ -37,9 +38,9 @@ func CreateTunnel(c *gin.Context) {
 	hash := c.Param("id")
 
 	var req struct {
-		Mode       string `json:"mode" binding:"required"`       // "pull", "push", "dynamic", "internet"
-		SrcAddress string `json:"src_address"`                    // required for pull/push/internet
-		DstAddress string `json:"dst_address"`                    // required for pull/push/internet
+		Mode       string `json:"mode" binding:"required"` // "pull", "push", "dynamic", "internet"
+		SrcAddress string `json:"src_address"`             // required for pull/push/internet
+		DstAddress string `json:"dst_address"`             // required for pull/push/internet
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "mode is required"})

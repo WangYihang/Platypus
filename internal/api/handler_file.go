@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/core"
 )
 
 // GetFileSize returns the size in bytes of a file on the victim.

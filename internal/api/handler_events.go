@@ -3,9 +3,10 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
+
+	"github.com/WangYihang/Platypus/internal/log"
 )
 
 // Event represents a server-sent event via WebSocket.

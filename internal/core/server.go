@@ -11,18 +11,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/app"
-	"github.com/WangYihang/Platypus/internal/listener"
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	"github.com/WangYihang/Platypus/internal/utils/crypto"
-	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/network"
-	"github.com/WangYihang/Platypus/internal/utils/raas"
-	"github.com/WangYihang/Platypus/internal/utils/str"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/phayes/freeport"
+
+	"github.com/WangYihang/Platypus/internal/app"
+	"github.com/WangYihang/Platypus/internal/listener"
+	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/utils/crypto"
+	"github.com/WangYihang/Platypus/internal/utils/hash"
+	"github.com/WangYihang/Platypus/internal/utils/network"
+	"github.com/WangYihang/Platypus/internal/utils/raas"
+	"github.com/WangYihang/Platypus/internal/utils/str"
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 type WebSocketMessage struct {
@@ -50,10 +51,10 @@ type TCPServer struct {
 	stopped        chan struct{}               `json:"-"`
 }
 
-func (s *TCPServer) GetHash() string    { return s.Hash }
-func (s *TCPServer) GetHost() string    { return s.Host }
-func (s *TCPServer) GetPort() uint16    { return s.Port }
-func (s *TCPServer) IsEncrypted() bool  { return s.Encrypted }
+func (s *TCPServer) GetHash() string   { return s.Hash }
+func (s *TCPServer) GetHost() string   { return s.Host }
+func (s *TCPServer) GetPort() uint16   { return s.Port }
+func (s *TCPServer) IsEncrypted() bool { return s.Encrypted }
 
 func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)

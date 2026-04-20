@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/WangYihang/Platypus/internal/agent"
 	"github.com/WangYihang/Platypus/pkg/options"
-	"github.com/cenkalti/backoff/v4"
 )
 
 func main() {

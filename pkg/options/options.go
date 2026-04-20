@@ -1,8 +1,9 @@
 package options
 
 import (
-	"github.com/WangYihang/Platypus/pkg/version"
 	"github.com/jessevdk/go-flags"
+
+	"github.com/WangYihang/Platypus/pkg/version"
 )
 
 // Options represents the command line options

@@ -13,8 +13,9 @@ import (
 	"io"
 	"sync"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	"google.golang.org/protobuf/proto"
+
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const (

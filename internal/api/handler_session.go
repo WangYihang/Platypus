@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/core"
 )
 
 // patchSessionRequest is documented purely for swag — gin handlers decode into

@@ -5,10 +5,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/WangYihang/Platypus/internal/utils/compiler"
-	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/network"
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/utils/compiler"
+	"github.com/WangYihang/Platypus/internal/utils/network"
 )
 
 func distributorParamsExist(c *gin.Context, params []string) bool {
@@ -58,7 +59,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 
 		if target == "" {
 			log.Error("Invalid connect back addr: %v", target)
-			distributorPanic(c,"Invalid connect back addr")
+			distributorPanic(c, "Invalid connect back addr")
 			return
 		}
 
@@ -66,7 +67,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		dir, filename, err := compiler.GenerateDirFilename()
 		if err != nil {
 			log.Error("%s", err)
-			distributorPanic(c,err.Error())
+			distributorPanic(c, err.Error())
 			return
 		}
 		defer os.RemoveAll(dir)
@@ -75,7 +76,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
 		if err != nil {
 			log.Error("%s", err)
-			distributorPanic(c,err.Error())
+			distributorPanic(c, err.Error())
 			return
 		}
 

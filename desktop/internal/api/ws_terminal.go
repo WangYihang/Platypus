@@ -133,4 +133,3 @@ func (t *Terminal) Close() {
 	t.cancel()
 	<-t.done
 }
-

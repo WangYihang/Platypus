@@ -60,7 +60,7 @@ func URI2Command(requestURI string, httpHost string) string {
 	}
 
 	// step 2: parse language (last path element)
-	language := strings.Replace(target[len(target)-1], ".", "", -1)
+	language := strings.ReplaceAll(target[len(target)-1], ".", "")
 
 	// step 3: read template (fall back to bash if language is unknown)
 	templateContent, err := readTemplate(language)
@@ -70,7 +70,7 @@ func URI2Command(requestURI string, httpHost string) string {
 
 	// step 4: render target host and port into template
 	rendered := string(templateContent)
-	rendered = strings.Replace(rendered, "__HOST__", host, -1)
-	rendered = strings.Replace(rendered, "__PORT__", strconv.Itoa(int(port)), -1)
+	rendered = strings.ReplaceAll(rendered, "__HOST__", host)
+	rendered = strings.ReplaceAll(rendered, "__PORT__", strconv.Itoa(int(port)))
 	return rendered
 }
