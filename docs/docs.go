@@ -476,6 +476,195 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/listeners": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns every TCP listener currently registered. Replaces the legacy /api/server, which additionally embedded a Distributor snapshot; consumers that need the distributor should fetch it separately (future endpoint).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listeners"
+                ],
+                "summary": "List listeners",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.listenersListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Opens a reverse-shell listener. encrypted=true yields a TLS+proto Termite listener; false yields a plain raw-TCP shell listener.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listeners"
+                ],
+                "summary": "Create listener",
+                "parameters": [
+                    {
+                        "description": "Bind address and encryption mode",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.createListenerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/listeners/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a single listener by hash. Replaces the legacy /api/server/{hash}.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listeners"
+                ],
+                "summary": "Get listener",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Listener hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stops a listener and deregisters it. Returns 204 on success, 404 if no such listener. Replaces DELETE /api/server/{hash}.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listeners"
+                ],
+                "summary": "Delete listener",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Listener hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/listeners/{id}/sessions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns every TCP + Termite session that entered through this listener. Replaces the legacy /api/server/{hash}/client.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listeners"
+                ],
+                "summary": "List sessions on a listener",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Listener hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.sessionsListResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/raas/languages": {
             "get": {
                 "security": [
@@ -1355,6 +1544,24 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api.createListenerRequest": {
+            "type": "object",
+            "required": [
+                "host",
+                "port"
+            ],
+            "properties": {
+                "encrypted": {
+                    "type": "boolean"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_api.createTunnelRequest": {
             "type": "object",
             "required": [
@@ -1516,6 +1723,15 @@ const docTemplate = `{
                 "status": {
                     "type": "boolean",
                     "example": true
+                }
+            }
+        },
+        "internal_api.listenersListResponse": {
+            "type": "object",
+            "properties": {
+                "listeners": {
+                    "type": "array",
+                    "items": {}
                 }
             }
         },

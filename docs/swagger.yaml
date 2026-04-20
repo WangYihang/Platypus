@@ -66,6 +66,18 @@ definitions:
         example: true
         type: boolean
     type: object
+  internal_api.createListenerRequest:
+    properties:
+      encrypted:
+        type: boolean
+      host:
+        type: string
+      port:
+        type: integer
+    required:
+    - host
+    - port
+    type: object
   internal_api.createTunnelRequest:
     properties:
       dst_address:
@@ -176,6 +188,12 @@ definitions:
       status:
         example: true
         type: boolean
+    type: object
+  internal_api.listenersListResponse:
+    properties:
+      listeners:
+        items: {}
+        type: array
     type: object
   internal_api.patchSessionRequest:
     properties:
@@ -581,6 +599,129 @@ paths:
       summary: Exchange secret for token
       tags:
       - auth
+  /api/v1/listeners:
+    get:
+      description: Returns every TCP listener currently registered. Replaces the legacy
+        /api/server, which additionally embedded a Distributor snapshot; consumers
+        that need the distributor should fetch it separately (future endpoint).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.listenersListResponse'
+      security:
+      - BearerAuth: []
+      summary: List listeners
+      tags:
+      - listeners
+    post:
+      consumes:
+      - application/json
+      description: Opens a reverse-shell listener. encrypted=true yields a TLS+proto
+        Termite listener; false yields a plain raw-TCP shell listener.
+      parameters:
+      - description: Bind address and encryption mode
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.createListenerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create listener
+      tags:
+      - listeners
+  /api/v1/listeners/{id}:
+    delete:
+      description: Stops a listener and deregisters it. Returns 204 on success, 404
+        if no such listener. Replaces DELETE /api/server/{hash}.
+      parameters:
+      - description: Listener hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete listener
+      tags:
+      - listeners
+    get:
+      description: Returns a single listener by hash. Replaces the legacy /api/server/{hash}.
+      parameters:
+      - description: Listener hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get listener
+      tags:
+      - listeners
+  /api/v1/listeners/{id}/sessions:
+    get:
+      description: Returns every TCP + Termite session that entered through this listener.
+        Replaces the legacy /api/server/{hash}/client.
+      parameters:
+      - description: Listener hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.sessionsListResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: List sessions on a listener
+      tags:
+      - listeners
   /api/v1/raas/languages:
     get:
       description: Returns the sorted list of one-liner languages the server can render.
