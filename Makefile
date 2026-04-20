@@ -82,7 +82,9 @@ clean:
 # webkit2gtk-4.1 ships (Ubuntu 22.04+, Fedora 37+, Debian 12+). Wails picks the
 # right binding at compile time based on this tag.
 WAILS_TAGS ?= webkit2_41
-WAILS      ?= $(shell $(GO) env GOPATH)/bin/wails
+# GOEXE resolves to ".exe" on Windows, empty elsewhere — without this the
+# Windows runner can't find wails.exe and exits with "command not found".
+WAILS      ?= $(shell $(GO) env GOPATH)/bin/wails$(shell $(GO) env GOEXE)
 
 desktop-deps:
 	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
