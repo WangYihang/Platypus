@@ -23,7 +23,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/jedib0t/go-pretty/table"
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 // Compile-time check: TermiteClient implements session.Session

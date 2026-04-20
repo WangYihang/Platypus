@@ -20,7 +20,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/session"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/jedib0t/go-pretty/table"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/vbauerster/mpb/v6"
 	"github.com/vbauerster/mpb/v6/decor"
 	"golang.org/x/term"
