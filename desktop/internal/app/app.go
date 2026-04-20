@@ -35,6 +35,7 @@ type App struct {
 	apiClient *api.Client
 	connected profile.Profile
 	notifier  *api.Notifier
+	terminals *terminalRegistry
 	mu        sync.Mutex
 
 	// emitFn is the testable seam for runtime.EventsEmit. Production
@@ -139,6 +140,8 @@ func (a *App) Connect(name string) error {
 
 // Disconnect drops the active session. Profile metadata + secret stay.
 func (a *App) Disconnect() {
+	a.closeAllTerminals()
+
 	a.mu.Lock()
 	notifier := a.notifier
 	a.apiClient = nil

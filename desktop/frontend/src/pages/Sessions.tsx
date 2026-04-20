@@ -1,34 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Layout, message, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, message, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
-import {
-    ConnectionStatus,
-    Disconnect,
-    ListSessions,
-} from "../../wailsjs/go/app/App";
+import { ListSessions } from "../../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
-import type { api, app } from "../../wailsjs/go/models";
+import type { api } from "../../wailsjs/go/models";
 
 dayjs.extend(relativeTime);
 
-const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
-export default function Sessions() {
+interface Props {
+    onOpenTerminal: (s: api.Session) => void;
+}
+
+export default function Sessions({ onOpenTerminal }: Props) {
     const [sessions, setSessions] = useState<api.Session[]>([]);
-    const [status, setStatus] = useState<app.ConnectionStatus | null>(null);
     const [loading, setLoading] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
 
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const [st, list] = await Promise.all([ConnectionStatus(), ListSessions()]);
-            setStatus(st);
-            setSessions(list);
+            setSessions(await ListSessions());
         } catch (err) {
             messageApi.error(`refresh: ${String(err)}`);
         } finally {
@@ -38,28 +34,18 @@ export default function Sessions() {
 
     useEffect(() => {
         refresh();
-
-        const onConnected = (payload: unknown) => {
-            messageApi.success(
-                `New client connected${typeof payload === "object" ? "" : ""}`
-            );
+        EventsOn("notify:client_connected", () => {
+            messageApi.success("New client connected");
             refresh();
-        };
-        const onDuplicated = () => {
+        });
+        EventsOn("notify:client_duplicated", () => {
             messageApi.warning("Duplicate client rejected");
-        };
-
-        EventsOn("notify:client_connected", onConnected);
-        EventsOn("notify:client_duplicated", onDuplicated);
+        });
         return () => {
             EventsOff("notify:client_connected");
             EventsOff("notify:client_duplicated");
         };
     }, [refresh, messageApi]);
-
-    async function handleDisconnect() {
-        await Disconnect();
-    }
 
     const columns: ColumnsType<api.Session> = [
         {
@@ -71,11 +57,7 @@ export default function Sessions() {
                 <Tag color={tag === "termite" ? "blue" : "default"}>{tag || "shell"}</Tag>
             ),
         },
-        {
-            title: "Host",
-            key: "host",
-            render: (_, s) => `${s.host}:${s.port}`,
-        },
+        { title: "Host", key: "host", render: (_, s) => `${s.host}:${s.port}` },
         {
             title: "Alias",
             dataIndex: "alias",
@@ -90,11 +72,7 @@ export default function Sessions() {
                 <Tag color={v === "root" ? "red" : undefined}>{v || "unknown"}</Tag>
             ),
         },
-        {
-            title: "OS",
-            dataIndex: "os",
-            key: "os",
-        },
+        { title: "OS", dataIndex: "os", key: "os" },
         {
             title: "Version",
             dataIndex: "version",
@@ -113,66 +91,45 @@ export default function Sessions() {
             key: "group_dispatch",
             render: (v: boolean) => (v ? <Tag color="green">ON</Tag> : null),
         },
+        {
+            title: "",
+            key: "open",
+            width: 120,
+            render: (_, s) => (
+                <Button type="link" onClick={() => onOpenTerminal(s)}>
+                    Open Terminal
+                </Button>
+            ),
+        },
     ];
 
     return (
-        <Layout style={{ minHeight: "100vh" }}>
+        <div>
             {contextHolder}
-            <Header
-                style={{
-                    background: "#1f1f1f",
-                    padding: "0 24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                }}
-            >
-                <Title level={3} style={{ color: "#fff", margin: 0 }}>
-                    Platypus Desktop
+            <Space style={{ marginBottom: 12, justifyContent: "space-between", width: "100%" }}>
+                <Title level={4} style={{ margin: 0 }}>
+                    Sessions ({sessions.length})
                 </Title>
-                {status?.connected && (
-                    <Space>
-                        <Tag color="green">{status.profileName}</Tag>
-                        <Text style={{ color: "#999" }}>{status.url}</Text>
-                        <Button size="small" onClick={handleDisconnect}>
-                            Disconnect
-                        </Button>
-                    </Space>
-                )}
-            </Header>
+                <Button onClick={refresh} loading={loading}>
+                    Refresh
+                </Button>
+            </Space>
 
-            <Content style={{ padding: 24 }}>
-                <div
-                    style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: 12,
-                    }}
-                >
-                    <Title level={4} style={{ margin: 0 }}>
-                        Sessions
-                    </Title>
-                    <Button onClick={refresh} loading={loading}>
-                        Refresh
-                    </Button>
-                </div>
-
-                {sessions.length === 0 ? (
-                    <Alert
-                        type="info"
-                        showIcon
-                        message="No sessions yet. Create a listener on the server and wait for clients to connect."
-                    />
-                ) : (
-                    <Table
-                        rowKey="hash"
-                        columns={columns}
-                        dataSource={sessions}
-                        pagination={{ pageSize: 20 }}
-                        size="middle"
-                    />
-                )}
-            </Content>
-        </Layout>
+            {sessions.length === 0 ? (
+                <Alert
+                    type="info"
+                    showIcon
+                    message="No sessions yet. Create a listener on the server and wait for clients to connect."
+                />
+            ) : (
+                <Table
+                    rowKey="hash"
+                    columns={columns}
+                    dataSource={sessions}
+                    pagination={{ pageSize: 20 }}
+                    size="middle"
+                />
+            )}
+        </div>
     );
 }
