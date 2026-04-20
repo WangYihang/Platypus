@@ -463,6 +463,87 @@
                 }
             }
         },
+        "/api/v1/raas/languages": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the sorted list of one-liner languages the server can render. These map 1:1 with internal/utils/raas/templates/*.tpl.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "raas"
+                ],
+                "summary": "List RaaS languages",
+                "responses": {
+                    "200": {
+                        "description": "status + languages:[]string",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/raas/oneliner": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the shell command victims should execute to connect back. Unknown languages fall back to bash so this endpoint never 404s on lang.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "raas"
+                ],
+                "summary": "Render RaaS one-liner",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target host (listener public IP or bind)",
+                        "name": "host",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Target port 1-65535",
+                        "name": "port",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "bash",
+                        "description": "Language key (bash|python|ruby|...); defaults to bash",
+                        "name": "lang",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "status + oneliner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/sessions/dispatch": {
             "post": {
                 "security": [

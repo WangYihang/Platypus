@@ -385,6 +385,60 @@ paths:
       summary: Exchange secret for token
       tags:
       - auth
+  /api/v1/raas/languages:
+    get:
+      description: Returns the sorted list of one-liner languages the server can render.
+        These map 1:1 with internal/utils/raas/templates/*.tpl.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + languages:[]string
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List RaaS languages
+      tags:
+      - raas
+  /api/v1/raas/oneliner:
+    get:
+      description: Returns the shell command victims should execute to connect back.
+        Unknown languages fall back to bash so this endpoint never 404s on lang.
+      parameters:
+      - description: Target host (listener public IP or bind)
+        in: path
+        name: host
+        required: true
+        type: string
+      - description: Target port 1-65535
+        in: path
+        name: port
+        required: true
+        type: integer
+      - default: bash
+        description: Language key (bash|python|ruby|...); defaults to bash
+        in: query
+        name: lang
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status + oneliner
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Render RaaS one-liner
+      tags:
+      - raas
   /api/v1/sessions/{id}:
     patch:
       consumes:

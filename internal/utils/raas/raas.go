@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,37 @@ import (
 var templates embed.FS
 
 const fallbackLanguage = "bash"
+
+// Languages returns every language key backed by a template in templates/*.tpl,
+// sorted alphabetically. Used by the v1 API so desktop + web clients don't
+// have to hard-code the list.
+func Languages() []string {
+	entries, err := templates.ReadDir("templates")
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".tpl")
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Render returns the one-liner for a given host:port and language. Unknown
+// languages fall back to bash so callers never have to handle the miss case.
+func Render(host string, port uint16, language string) string {
+	content, err := readTemplate(language)
+	if err != nil {
+		content, _ = readTemplate(fallbackLanguage)
+	}
+	rendered := strings.ReplaceAll(string(content), "__HOST__", host)
+	rendered = strings.ReplaceAll(rendered, "__PORT__", strconv.Itoa(int(port)))
+	return rendered
+}
 
 func ParsePort(host string, defaultPort uint16) uint16 {
 	pair := strings.Split(host, ":")
