@@ -5,6 +5,7 @@ import Connect from "./pages/Connect";
 import Sessions from "./pages/Sessions";
 import Listeners from "./pages/Listeners";
 import Files from "./pages/Files";
+import Tunnels from "./pages/Tunnels";
 import Terminal from "./pages/Terminal";
 import { ConnectionStatus, Disconnect } from "../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
@@ -91,6 +92,12 @@ function App() {
             label: "Files",
             closable: false,
             children: <Files />,
+        },
+        {
+            key: "tunnels",
+            label: "Tunnels",
+            closable: false,
+            children: <Tunnels />,
         },
         ...tabs.map((t) => ({
             key: t.key,
