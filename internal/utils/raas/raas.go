@@ -1,13 +1,19 @@
 package raas
 
 import (
+	"embed"
 	"fmt"
-	"os"
+	"io/fs"
 	"strconv"
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/log"
 )
+
+//go:embed templates/*.tpl
+var templates embed.FS
+
+const fallbackLanguage = "bash"
 
 func ParsePort(host string, defaultPort uint16) uint16 {
 	pair := strings.Split(host, ":")
@@ -23,6 +29,10 @@ func ParsePort(host string, defaultPort uint16) uint16 {
 
 func ParseHostname(host string) string {
 	return strings.Split(host, ":")[0]
+}
+
+func readTemplate(language string) ([]byte, error) {
+	return fs.ReadFile(templates, fmt.Sprintf("templates/%s.tpl", language))
 }
 
 func URI2Command(requestURI string, httpHost string) string {
@@ -42,7 +52,6 @@ func URI2Command(requestURI string, httpHost string) string {
 
 	if strings.HasPrefix(requestURI, "/") && len(target) > 1 {
 		host = target[0]
-		// TODO: ensure the format of port is int16
 		t, err := strconv.Atoi(target[1])
 		port = uint16(t)
 		if err != nil {
@@ -50,25 +59,18 @@ func URI2Command(requestURI string, httpHost string) string {
 		}
 	}
 
-	// step 2: parse language
-	// language is the last element of target
+	// step 2: parse language (last path element)
 	language := strings.Replace(target[len(target)-1], ".", "", -1)
 
-	// step 3: read template
-	// template rendering in golang tastes like shit,
-	// here we will trying to use string replace temporarily.
-	// read reverse shell template file from assets
-	// preread to check the language is valid or not
-	templateFilename := fmt.Sprintf("assets/template/rsh/%s.tpl", language)
-	_, err := os.ReadFile(templateFilename)
+	// step 3: read template (fall back to bash if language is unknown)
+	templateContent, err := readTemplate(language)
 	if err != nil {
-		templateFilename = "assets/template/rsh/bash.tpl"
+		templateContent, _ = readTemplate(fallbackLanguage)
 	}
-	templateContent, _ := os.ReadFile(templateFilename)
 
 	// step 4: render target host and port into template
-	renderedContent := string(templateContent)
-	renderedContent = strings.Replace(renderedContent, "__HOST__", host, -1)
-	renderedContent = strings.Replace(renderedContent, "__PORT__", strconv.Itoa(int(port)), -1)
-	return renderedContent
+	rendered := string(templateContent)
+	rendered = strings.Replace(rendered, "__HOST__", host, -1)
+	rendered = strings.Replace(rendered, "__PORT__", strconv.Itoa(int(port)), -1)
+	return rendered
 }
