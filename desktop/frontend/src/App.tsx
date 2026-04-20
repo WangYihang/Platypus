@@ -4,6 +4,7 @@ import { Layout, Spin, Tabs, Typography, Button, Space, Tag } from "antd";
 import Connect from "./pages/Connect";
 import Sessions from "./pages/Sessions";
 import Listeners from "./pages/Listeners";
+import Files from "./pages/Files";
 import Terminal from "./pages/Terminal";
 import { ConnectionStatus, Disconnect } from "../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
@@ -84,6 +85,12 @@ function App() {
             label: "Listeners",
             closable: false,
             children: <Listeners />,
+        },
+        {
+            key: "files",
+            label: "Files",
+            closable: false,
+            children: <Files />,
         },
         ...tabs.map((t) => ({
             key: t.key,
