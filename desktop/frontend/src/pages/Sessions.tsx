@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, message, Space, Table, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Button, message, Space, Switch, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
-import { ListSessions } from "../../wailsjs/go/app/App";
+import { ListSessions, SetGroupDispatch } from "../../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import type { api } from "../../wailsjs/go/models";
+import DispatchModal from "./DispatchModal";
 import UpgradeModal from "./UpgradeModal";
 
 dayjs.extend(relativeTime);
@@ -21,6 +22,10 @@ export default function Sessions({ onOpenTerminal }: Props) {
     const [sessions, setSessions] = useState<api.Session[]>([]);
     const [loading, setLoading] = useState(false);
     const [upgradeFor, setUpgradeFor] = useState<string>("");
+    const [dispatchOpen, setDispatchOpen] = useState(false);
+    // Optimistic local override so the Switch toggle feels instant — we
+    // overlay this on whatever ListSessions returned.
+    const [pendingFlags, setPendingFlags] = useState<Record<string, boolean>>({});
     const [messageApi, contextHolder] = message.useMessage();
 
     const refresh = useCallback(async () => {
@@ -48,6 +53,34 @@ export default function Sessions({ onOpenTerminal }: Props) {
             EventsOff("notify:client_duplicated");
         };
     }, [refresh, messageApi]);
+
+    const effectiveFlag = useCallback(
+        (s: api.Session): boolean =>
+            s.hash in pendingFlags ? pendingFlags[s.hash] : s.group_dispatch,
+        [pendingFlags]
+    );
+
+    const toggleFlag = useCallback(
+        async (hash: string, enabled: boolean) => {
+            setPendingFlags((p) => ({ ...p, [hash]: enabled }));
+            try {
+                await SetGroupDispatch(hash, enabled);
+            } catch (err) {
+                messageApi.error(`toggle: ${String(err)}`);
+                // Roll back the optimistic flip.
+                setPendingFlags((p) => {
+                    const { [hash]: _, ...rest } = p;
+                    return rest;
+                });
+            }
+        },
+        [messageApi]
+    );
+
+    const flaggedCount = useMemo(
+        () => sessions.filter(effectiveFlag).length,
+        [sessions, effectiveFlag]
+    );
 
     const columns: ColumnsType<api.Session> = [
         {
@@ -91,7 +124,14 @@ export default function Sessions({ onOpenTerminal }: Props) {
             title: "Group",
             dataIndex: "group_dispatch",
             key: "group_dispatch",
-            render: (v: boolean) => (v ? <Tag color="green">ON</Tag> : null),
+            width: 90,
+            render: (_v: boolean, s) => (
+                <Switch
+                    size="small"
+                    checked={effectiveFlag(s)}
+                    onChange={(checked) => toggleFlag(s.hash, checked)}
+                />
+            ),
         },
         {
             title: "",
@@ -119,9 +159,18 @@ export default function Sessions({ onOpenTerminal }: Props) {
                 <Title level={4} style={{ margin: 0 }}>
                     Sessions ({sessions.length})
                 </Title>
-                <Button onClick={refresh} loading={loading}>
-                    Refresh
-                </Button>
+                <Space>
+                    {flaggedCount > 0 && <Tag color="green">{flaggedCount} flagged</Tag>}
+                    <Button
+                        onClick={() => setDispatchOpen(true)}
+                        disabled={flaggedCount === 0}
+                    >
+                        Dispatch Command
+                    </Button>
+                    <Button onClick={refresh} loading={loading}>
+                        Refresh
+                    </Button>
+                </Space>
             </Space>
 
             {sessions.length === 0 ? (
@@ -144,6 +193,12 @@ export default function Sessions({ onOpenTerminal }: Props) {
                 open={!!upgradeFor}
                 sessionHash={upgradeFor}
                 onClose={() => setUpgradeFor("")}
+            />
+
+            <DispatchModal
+                open={dispatchOpen}
+                flaggedCount={flaggedCount}
+                onClose={() => setDispatchOpen(false)}
             />
         </div>
     );
