@@ -6,22 +6,18 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/WangYihang/Platypus/desktop/internal/api"
 )
 
-// listServersResp is the shape of GET /api/server.
-type listServersResp struct {
-	Status bool `json:"status"`
-	Msg    struct {
-		Servers map[string]struct {
-			api.Listener
-			Clients        map[string]any `json:"clients"`
-			TermiteClients map[string]any `json:"termite_clients"`
-		} `json:"servers"`
-	} `json:"msg"`
+// listListenersV1Response is the shape of GET /api/v1/listeners.
+type listListenersV1Response struct {
+	Listeners []struct {
+		api.Listener
+		Clients        map[string]any `json:"clients"`
+		TermiteClients map[string]any `json:"termite_clients"`
+	} `json:"listeners"`
 }
 
 // ListListeners returns every TCPServer registered on the server, with a
@@ -31,16 +27,16 @@ func (a *App) ListListeners() ([]api.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.Get(context.Background(), "/api/server", nil)
+	body, err := c.Get(context.Background(), "/api/v1/listeners", nil)
 	if err != nil {
 		return nil, err
 	}
-	var resp listServersResp
+	var resp listListenersV1Response
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("parse /api/server: %w", err)
+		return nil, fmt.Errorf("parse /api/v1/listeners: %w", err)
 	}
-	out := make([]api.Listener, 0, len(resp.Msg.Servers))
-	for _, s := range resp.Msg.Servers {
+	out := make([]api.Listener, 0, len(resp.Listeners))
+	for _, s := range resp.Listeners {
 		l := s.Listener
 		l.NumSessions = len(s.Clients) + len(s.TermiteClients)
 		out = append(out, l)
@@ -49,23 +45,18 @@ func (a *App) ListListeners() ([]api.Listener, error) {
 	return out, nil
 }
 
-// CreateListener spawns a new reverse-shell listener on the server.
-// POST /api/server is form-encoded (legacy contract).
+// CreateListener spawns a new reverse-shell listener on the server via the
+// JSON-native POST /api/v1/listeners.
 func (a *App) CreateListener(host string, port int, encrypted bool) error {
 	c, err := a.client()
 	if err != nil {
 		return err
 	}
-	form := url.Values{}
-	form.Set("host", host)
-	form.Set("port", strconv.Itoa(port))
-	form.Set("encrypted", strconv.FormatBool(encrypted))
-	_, err = c.PostRaw(
-		context.Background(),
-		"/api/server",
-		"application/x-www-form-urlencoded",
-		[]byte(form.Encode()),
-	)
+	_, err = c.Post(context.Background(), "/api/v1/listeners", map[string]any{
+		"host":      host,
+		"port":      port,
+		"encrypted": encrypted,
+	})
 	return err
 }
 
@@ -75,7 +66,7 @@ func (a *App) DeleteListener(hash string) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Delete(context.Background(), "/api/server/"+url.PathEscape(hash))
+	_, err = c.Delete(context.Background(), "/api/v1/listeners/"+url.PathEscape(hash))
 	return err
 }
 

@@ -98,13 +98,13 @@ export async function ConnectionStatus(): Promise<app.ConnectionStatus> {
 // ---------- Sessions ----------------------------------------------------
 
 export async function ListSessions(): Promise<api.Session[]> {
-    const resp = await apiJSON<{ msg: Record<string, any> }>("/api/client");
+    const resp = await apiJSON<{ sessions: any[] }>("/api/v1/sessions");
     const out: api.Session[] = [];
-    for (const raw of Object.values(resp.msg || {})) {
+    for (const raw of resp.sessions || []) {
         const s = raw as api.Session;
         // version field is present only on Termite clients (server never emits
         // an empty string); ListSessions on the Go side uses the same probe.
-        const isTermite = (raw as any).version !== undefined;
+        const isTermite = raw.version !== undefined;
         s.encrypted = isTermite;
         s.tag = isTermite ? "termite" : "shell";
         out.push(s);
@@ -136,11 +136,8 @@ export async function DispatchCommand(
 // ---------- Listeners ---------------------------------------------------
 
 export async function ListListeners(): Promise<api.Listener[]> {
-    const resp = await apiJSON<{
-        msg: { servers: Record<string, any> };
-    }>("/api/server");
-    const servers = resp.msg?.servers || {};
-    return Object.values(servers).map((s: any) => {
+    const resp = await apiJSON<{ listeners: any[] }>("/api/v1/listeners");
+    return (resp.listeners || []).map((s: any) => {
         const l = { ...s } as api.Listener & { NumSessions: number };
         const numClients = s.clients ? Object.keys(s.clients).length : 0;
         const numTermite = s.termite_clients ? Object.keys(s.termite_clients).length : 0;
@@ -150,20 +147,15 @@ export async function ListListeners(): Promise<api.Listener[]> {
 }
 
 export async function CreateListener(host: string, port: number, encrypted: boolean): Promise<void> {
-    const body = new URLSearchParams({
-        host,
-        port: String(port),
-        encrypted: String(encrypted),
-    });
-    await apiFetch("/api/server", {
+    await apiFetch("/api/v1/listeners", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host, port, encrypted }),
     });
 }
 
 export async function DeleteListener(hash: string): Promise<void> {
-    await apiFetch("/api/server/" + encodeURIComponent(hash), { method: "DELETE" });
+    await apiFetch("/api/v1/listeners/" + encodeURIComponent(hash), { method: "DELETE" });
 }
 
 // ---------- RaaS (server is the single source of truth) ----------------
@@ -191,10 +183,12 @@ export async function GenerateRaasOneliner(
 
 export async function UpgradeToTermite(plainHash: string, targetListenerHash: string): Promise<void> {
     await apiFetch(
-        "/api/client/" +
-            encodeURIComponent(plainHash) +
-            "/upgrade/" +
-            encodeURIComponent(targetListenerHash),
+        "/api/v1/sessions/" + encodeURIComponent(plainHash) + "/upgrade",
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ listener_id: targetListenerHash }),
+        },
     );
 }
 

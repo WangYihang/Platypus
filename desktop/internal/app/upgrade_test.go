@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,14 +11,17 @@ import (
 
 func TestApp_UpgradeToTermite_HitsCorrectEndpoint(t *testing.T) {
 	var got *http.Request
+	var body []byte
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/auth/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"token":"tok"}`))
 	})
 	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
-	mux.HandleFunc("/api/client/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		got = r
-		w.Write([]byte(`{"status":true,"msg":"upgrade started"}`))
+		body, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte(`{"status":true,"msg":"upgrade scheduled"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -28,12 +33,21 @@ func TestApp_UpgradeToTermite_HitsCorrectEndpoint(t *testing.T) {
 	if got == nil {
 		t.Fatal("server didn't see the request")
 	}
-	if got.Method != "GET" {
-		t.Errorf("method = %q", got.Method)
+	if got.Method != http.MethodPost {
+		t.Errorf("method = %q, want POST", got.Method)
 	}
-	want := "/api/client/plain-hash-123/upgrade/target-hash-abc"
-	if !strings.HasSuffix(got.URL.Path, want) {
-		t.Errorf("path = %q, want suffix %q", got.URL.Path, want)
+	wantPath := "/api/v1/sessions/plain-hash-123/upgrade"
+	if !strings.HasSuffix(got.URL.Path, wantPath) {
+		t.Errorf("path = %q, want suffix %q", got.URL.Path, wantPath)
+	}
+	var decoded struct {
+		ListenerID string `json:"listener_id"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decode body: %v — raw: %q", err, body)
+	}
+	if decoded.ListenerID != "target-hash-abc" {
+		t.Errorf("listener_id = %q, want target-hash-abc", decoded.ListenerID)
 	}
 }
 

@@ -9,13 +9,12 @@ import (
 	keyring "github.com/zalando/go-keyring"
 )
 
-// fixture: response from GET /api/client containing one TCPClient and one TermiteClient.
+// fixture: response from GET /api/v1/sessions containing one TCPClient and one TermiteClient.
 const clientListResponse = `{
-  "status": true,
-  "msg": {
-    "h-tcp":     {"hash":"h-tcp","host":"1.2.3.4","port":3344,"alias":"t1","user":"root","os":"Linux","group_dispatch":false,"timestamp":"2026-04-20T10:00:00Z"},
-    "h-termite": {"hash":"h-termite","host":"5.6.7.8","port":4455,"alias":"t2","user":"victim","os":"Linux","version":"1.5.1","group_dispatch":true,"timestamp":"2026-04-20T10:01:00Z"}
-  }
+  "sessions": [
+    {"hash":"h-tcp","host":"1.2.3.4","port":3344,"alias":"t1","user":"root","os":"Linux","group_dispatch":false,"timestamp":"2026-04-20T10:00:00Z"},
+    {"hash":"h-termite","host":"5.6.7.8","port":4455,"alias":"t2","user":"victim","os":"Linux","version":"1.5.1","group_dispatch":true,"timestamp":"2026-04-20T10:01:00Z"}
+  ]
 }`
 
 func TestApp_ListSessions_ParsesAndReturnsSlice(t *testing.T) {
@@ -24,7 +23,7 @@ func TestApp_ListSessions_ParsesAndReturnsSlice(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/auth/token":
 			w.Write([]byte(`{"token":"tok"}`))
-		case "/api/client":
+		case "/api/v1/sessions":
 			if r.Header.Get("Authorization") != "Bearer tok" {
 				t.Errorf("missing auth: %q", r.Header.Get("Authorization"))
 			}
@@ -89,8 +88,8 @@ func TestApp_ListSessions_EmptyServerResponse(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/auth/token":
 			w.Write([]byte(`{"token":"tok"}`))
-		case "/api/client":
-			w.Write([]byte(`{"status":true,"msg":{}}`))
+		case "/api/v1/sessions":
+			w.Write([]byte(`{"sessions":[]}`))
 		}
 	}))
 	defer srv.Close()
@@ -113,7 +112,7 @@ func TestApp_ListSessions_ServerError(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/auth/token":
 			w.Write([]byte(`{"token":"tok"}`))
-		case "/api/client":
+		case "/api/v1/sessions":
 			w.WriteHeader(500)
 			w.Write([]byte(`{"error":"boom"}`))
 		}

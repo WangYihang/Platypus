@@ -1,25 +1,21 @@
 package app
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	keyring "github.com/zalando/go-keyring"
 )
 
-const listServersResponse = `{
-  "status": true,
-  "msg": {
-    "servers": {
-      "h1": {"hash":"h1","host":"0.0.0.0","port":13337,"encrypted":false,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{"c1":{}},"termite_clients":{}},
-      "h2": {"hash":"h2","host":"0.0.0.0","port":13338,"encrypted":true,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{},"termite_clients":{"c2":{},"c3":{}}}
-    },
-    "distributor": {"host":"0.0.0.0","port":7331,"interfaces":["eth0"],"route":{},"url":""}
-  }
+const listListenersV1Fixture = `{
+  "listeners": [
+    {"hash":"h1","host":"0.0.0.0","port":13337,"encrypted":false,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{"c1":{}},"termite_clients":{}},
+    {"hash":"h2","host":"0.0.0.0","port":13338,"encrypted":true,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{},"termite_clients":{"c2":{},"c3":{}}}
+  ]
 }`
 
 func startListenersServer(t *testing.T) (*httptest.Server, *http.Request) {
@@ -30,21 +26,19 @@ func startListenersServer(t *testing.T) (*httptest.Server, *http.Request) {
 		w.Write([]byte(`{"token":"tok"}`))
 	})
 	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
-	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/listeners", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			w.Write([]byte(listServersResponse))
+			w.Write([]byte(listListenersV1Fixture))
 		case "POST":
 			lastPost = r
-			body, _ := io.ReadAll(r.Body)
-			r.Body = io.NopCloser(strings.NewReader(string(body)))
-			r.ParseForm()
-			w.Write([]byte(`{"status":true,"msg":{"hash":"new"}}`))
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"hash":"new"}`))
 		}
 	})
-	mux.HandleFunc("/api/server/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/listeners/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "DELETE" {
-			w.Write([]byte(`{"status":true}`))
+			w.WriteHeader(http.StatusNoContent)
 		}
 	})
 	srv := httptest.NewServer(mux)
@@ -87,19 +81,24 @@ func TestApp_ListListeners(t *testing.T) {
 	}
 }
 
-func TestApp_CreateListener_PostsForm(t *testing.T) {
+func TestApp_CreateListener_PostsJSON(t *testing.T) {
 	mux := http.NewServeMux()
-	var got *http.Request
+	var bodyBytes []byte
 	mux.HandleFunc("/api/v1/auth/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"token":"tok"}`))
 	})
 	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
-	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
-		got = r
-		body, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(strings.NewReader(string(body)))
-		_ = r.ParseForm()
-		w.Write([]byte(`{"status":true,"msg":{"hash":"new"}}`))
+	mux.HandleFunc("/api/v1/listeners", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.NotFound(w, r)
+			return
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"hash":"new"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -108,17 +107,16 @@ func TestApp_CreateListener_PostsForm(t *testing.T) {
 	if err := a.CreateListener("0.0.0.0", 4444, true); err != nil {
 		t.Fatalf("CreateListener: %v", err)
 	}
-	if got == nil {
-		t.Fatal("server didn't see the POST")
+	var decoded struct {
+		Host      string `json:"host"`
+		Port      int    `json:"port"`
+		Encrypted bool   `json:"encrypted"`
 	}
-	if got.PostFormValue("host") != "0.0.0.0" {
-		t.Errorf("host = %q", got.PostFormValue("host"))
+	if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
+		t.Fatalf("decode body: %v — raw: %q", err, bodyBytes)
 	}
-	if got.PostFormValue("port") != "4444" {
-		t.Errorf("port = %q", got.PostFormValue("port"))
-	}
-	if got.PostFormValue("encrypted") != "true" {
-		t.Errorf("encrypted = %q", got.PostFormValue("encrypted"))
+	if decoded.Host != "0.0.0.0" || decoded.Port != 4444 || !decoded.Encrypted {
+		t.Errorf("body = %+v", decoded)
 	}
 }
 

@@ -9,30 +9,29 @@ import (
 	"github.com/WangYihang/Platypus/desktop/internal/api"
 )
 
-// listClientsResponse is the shape of GET /api/client.
-type listClientsResponse struct {
-	Status bool                       `json:"status"`
-	Msg    map[string]json.RawMessage `json:"msg"`
+// listSessionsV1Response is the shape of GET /api/v1/sessions.
+type listSessionsV1Response struct {
+	Sessions []json.RawMessage `json:"sessions"`
 }
 
 // ListSessions returns every session (TCPClient + TermiteClient) attached
-// to any listener. Backed by GET /api/client.
+// to any listener. Backed by GET /api/v1/sessions.
 func (a *App) ListSessions() ([]api.Session, error) {
 	c, err := a.client()
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.Get(context.Background(), "/api/client", nil)
+	body, err := c.Get(context.Background(), "/api/v1/sessions", nil)
 	if err != nil {
 		return nil, err
 	}
-	var resp listClientsResponse
+	var resp listSessionsV1Response
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("parse /api/client: %w", err)
+		return nil, fmt.Errorf("parse /api/v1/sessions: %w", err)
 	}
 
-	out := make([]api.Session, 0, len(resp.Msg))
-	for _, raw := range resp.Msg {
+	out := make([]api.Session, 0, len(resp.Sessions))
+	for _, raw := range resp.Sessions {
 		var s api.Session
 		if err := json.Unmarshal(raw, &s); err != nil {
 			continue
