@@ -5,10 +5,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/WangYihang/Platypus/desktop/internal/api"
 	"github.com/WangYihang/Platypus/desktop/internal/keychain"
@@ -30,7 +34,13 @@ type App struct {
 	keychain  *keychain.Store
 	apiClient *api.Client
 	connected profile.Profile
+	notifier  *api.Notifier
 	mu        sync.Mutex
+
+	// emitFn is the testable seam for runtime.EventsEmit. Production
+	// leaves it nil and emit() forwards to the Wails runtime via a.ctx;
+	// tests set it to a recorder to assert forwarding behaviour.
+	emitFn func(name string, data any)
 }
 
 // New constructs an App. configPath is where profile metadata is persisted;
@@ -91,7 +101,10 @@ func (a *App) RemoveProfile(name string) error {
 }
 
 // Connect resolves the named profile, exchanges the secret for a token,
-// and parks the resulting api.Client for subsequent calls.
+// and parks the resulting api.Client for subsequent calls. On success it
+// also subscribes to /notify so the frontend sees real-time events;
+// /notify failures are non-fatal (logged, not surfaced) since the REST
+// API still works without it.
 func (a *App) Connect(name string) error {
 	p, ok := a.registry.Get(name)
 	if !ok {
@@ -109,19 +122,81 @@ func (a *App) Connect(name string) error {
 		return err
 	}
 
+	notifier := api.NewNotifier(p.URL, client.Token, a.onNotifyEvent)
+	if err := notifier.Start(context.Background()); err != nil {
+		slog.Warn("notify subscribe failed", slog.String("error", err.Error()))
+		notifier = nil
+	}
+
 	a.mu.Lock()
 	a.apiClient = client
 	a.connected = p
+	a.notifier = notifier
 	a.mu.Unlock()
+	a.emit("app:connection_changed", a.ConnectionStatus())
 	return nil
 }
 
 // Disconnect drops the active session. Profile metadata + secret stay.
 func (a *App) Disconnect() {
 	a.mu.Lock()
+	notifier := a.notifier
 	a.apiClient = nil
 	a.connected = profile.Profile{}
+	a.notifier = nil
 	a.mu.Unlock()
+
+	if notifier != nil {
+		notifier.Stop()
+	}
+	a.emit("app:connection_changed", a.ConnectionStatus())
+}
+
+// emit routes an event to the frontend. Tests can intercept via emitFn;
+// production sends via Wails runtime if Startup() has cached ctx.
+func (a *App) emit(name string, data any) {
+	if a.emitFn != nil {
+		a.emitFn(name, data)
+		return
+	}
+	if a.ctx != nil {
+		wruntime.EventsEmit(a.ctx, name, data)
+	}
+}
+
+// onNotifyEvent is the Notifier handler. Translates the raw /notify frame
+// into a typed event name + payload for the frontend.
+func (a *App) onNotifyEvent(ev api.Event) {
+	name := notifyEventName(ev.Type)
+	if name == "" {
+		name = "notify:unknown"
+	}
+	// Pass Data through as a decoded map so it's legible JS-side.
+	var payload any = json.RawMessage(ev.Data)
+	var asAny any
+	if err := json.Unmarshal(ev.Data, &asAny); err == nil {
+		payload = asAny
+	}
+	a.emit(name, payload)
+}
+
+func notifyEventName(t api.EventType) string {
+	switch t {
+	case api.EventClientConnected:
+		return "notify:client_connected"
+	case api.EventClientDuplicated:
+		return "notify:client_duplicated"
+	case api.EventServerDuplicated:
+		return "notify:server_duplicated"
+	case api.EventCompiling:
+		return "notify:upgrade:compile"
+	case api.EventCompressing:
+		return "notify:upgrade:compress"
+	case api.EventUploading:
+		return "notify:upgrade:upload"
+	default:
+		return ""
+	}
 }
 
 // ConnectionStatus reflects whether Connect has been called successfully.

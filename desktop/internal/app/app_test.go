@@ -103,6 +103,10 @@ func TestApp_RemoveProfile_Missing(t *testing.T) {
 
 func TestApp_Connect_FetchesTokenAndMarksConnected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/notify" {
+			w.WriteHeader(404) // connect spawns a notifier dial; irrelevant here
+			return
+		}
 		if r.URL.Path != "/api/v1/auth/token" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
