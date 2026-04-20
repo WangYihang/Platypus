@@ -3,7 +3,6 @@ module github.com/WangYihang/Platypus
 go 1.24.0
 
 require (
-	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/creack/pty v1.1.24
@@ -18,6 +17,7 @@ require (
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.20.0
+	github.com/things-go/go-socks5 v0.1.1
 	github.com/vbauerster/mpb/v6 v6.0.4
 	golang.org/x/mod v0.29.0
 	golang.org/x/term v0.37.0

@@ -12,7 +12,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
-	"github.com/armon/go-socks5"
+	socks5 "github.com/things-go/go-socks5"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
 )

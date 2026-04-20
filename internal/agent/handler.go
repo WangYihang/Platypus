@@ -15,10 +15,10 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	"github.com/armon/go-socks5"
 	"github.com/creack/pty"
 	"github.com/phayes/freeport"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
+	socks5 "github.com/things-go/go-socks5"
 )
 
 const protocolVersion = 1
@@ -371,16 +371,7 @@ func handleSocks5Create(c *Client, state *State) {
 		})
 		return
 	}
-	srv, err := socks5.New(&socks5.Config{})
-	if err != nil {
-		send(c, &agentpb.Envelope{
-			Payload: &agentpb.Envelope_Socks5CreateFailed{
-				Socks5CreateFailed: &agentpb.Socks5CreateFailed{Reason: err.Error()},
-			},
-		})
-		listener.Close()
-		return
-	}
+	srv := socks5.NewServer()
 	state.Socks5Listener = &listener
 	go srv.Serve(listener)
 	log.Success("Socks server started at: %s", addr)

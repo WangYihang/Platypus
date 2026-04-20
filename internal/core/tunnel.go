@@ -7,7 +7,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
-	"github.com/armon/go-socks5"
+	socks5 "github.com/things-go/go-socks5"
 )
 
 func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {
@@ -92,10 +92,7 @@ func StartSocks5Server(localAddress string) error {
 	if err != nil {
 		return err
 	}
-	server, err := socks5.New(&socks5.Config{})
-	if err != nil {
-		return err
-	}
+	server := socks5.NewServer()
 	Ctx.Socks5Servers[localAddress] = server
 	go server.Serve(listener)
 	log.Success("Socks server started at: %s", localAddress)
