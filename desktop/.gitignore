@@ -1,6 +1,7 @@
 build/bin
 node_modules
 frontend/dist
+frontend/dist-web
 frontend/wailsjs
 # wails frontend-deps cache marker
 frontend/package.json.md5
