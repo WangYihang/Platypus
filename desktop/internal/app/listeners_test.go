@@ -130,65 +130,94 @@ func TestApp_DeleteListener(t *testing.T) {
 	}
 }
 
-func TestApp_GenerateRaasOneliner(t *testing.T) {
-	keyring.MockInit()
-	a, _ := New(filepath.Join(t.TempDir(), "p.json"), "test-raas-"+t.Name())
-	// No connection needed — generation is a pure local string op.
+// raasTestServer stubs the two v1 RaaS endpoints with controllable responses.
+func raasTestServer(t *testing.T) (*httptest.Server, *http.Request) {
+	t.Helper()
+	var lastOnelinerReq *http.Request
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/auth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"token":"tok"}`))
+	})
+	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	mux.HandleFunc("/api/v1/raas/languages", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"status":true,"languages":["bash","perl","python","ruby"]}`))
+	})
+	mux.HandleFunc("/api/v1/raas/oneliner", func(w http.ResponseWriter, r *http.Request) {
+		lastOnelinerReq = r
+		lang := r.URL.Query().Get("lang")
+		if lang == "" {
+			lang = "bash"
+		}
+		w.Write([]byte(`{"status":true,"oneliner":"echo ran-lang-` + lang + `"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, lastOnelinerReq
+}
 
-	cases := []struct {
-		name       string
-		listener   string
-		lang       string
-		wantSubstr string
-		wantLang   string
-	}{
-		{"bash", "0.0.0.0:13337", "bash", "13337", "bash"},
-		{"python", "0.0.0.0:13337", "python", "13337", "python"},
-		{"perl", "0.0.0.0:13337", "perl", "13337", "perl"},
-		{"unknown falls back to bash", "0.0.0.0:13337", "lolnope", "13337", "bash"},
+func TestApp_GenerateRaasOneliner_SendsHostPortLang(t *testing.T) {
+	var captured *http.Request
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/auth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"token":"tok"}`))
+	})
+	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	mux.HandleFunc("/api/v1/raas/oneliner", func(w http.ResponseWriter, r *http.Request) {
+		captured = r
+		w.Write([]byte(`{"status":true,"oneliner":"the-oneliner"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := freshConnectedApp(t, srv.URL)
+	got, err := a.GenerateRaasOneliner("10.0.0.1:1337", "python")
+	if err != nil {
+		t.Fatalf("GenerateRaasOneliner: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := a.GenerateRaasOneliner(tc.listener, tc.lang)
-			if got == "" {
-				t.Fatal("empty oneliner")
-			}
-			if !strings.Contains(got, tc.wantSubstr) {
-				t.Errorf("missing %q in %q", tc.wantSubstr, got)
-			}
-			if tc.wantLang != "" && !strings.Contains(strings.ToLower(got), strings.ToLower(tc.wantLang)) {
-				// "bash" or "python" etc should appear somewhere in the oneliner.
-				if tc.lang == "lolnope" {
-					// fallback to bash → must contain "bash"
-					if !strings.Contains(got, "bash") {
-						t.Errorf("fallback didn't produce bash: %q", got)
-					}
-				} else {
-					t.Errorf("lang %q not found in %q", tc.wantLang, got)
-				}
-			}
-		})
+	if got != "the-oneliner" {
+		t.Errorf("returned = %q", got)
+	}
+	if captured.URL.Query().Get("host") != "10.0.0.1" {
+		t.Errorf("host = %q", captured.URL.Query().Get("host"))
+	}
+	if captured.URL.Query().Get("port") != "1337" {
+		t.Errorf("port = %q", captured.URL.Query().Get("port"))
+	}
+	if captured.URL.Query().Get("lang") != "python" {
+		t.Errorf("lang = %q", captured.URL.Query().Get("lang"))
 	}
 }
 
-func TestApp_AvailableRaasLanguages(t *testing.T) {
+func TestApp_GenerateRaasOneliner_NotConnected(t *testing.T) {
 	keyring.MockInit()
-	a, _ := New(filepath.Join(t.TempDir(), "p.json"), "test-langs-"+t.Name())
-	got := a.AvailableRaasLanguages()
-	if len(got) < 5 {
-		t.Errorf("len = %d, want at least 5; got %v", len(got), got)
+	a, _ := New(filepath.Join(t.TempDir(), "p.json"), "test-raas-notconn-"+t.Name())
+	if _, err := a.GenerateRaasOneliner("1.2.3.4:1337", "bash"); err != ErrNotConnected {
+		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
-	// Contains expected baseline.
-	for _, want := range []string{"bash", "python", "perl"} {
-		found := false
-		for _, l := range got {
-			if l == want {
-				found = true
-				break
-			}
+}
+
+func TestApp_AvailableRaasLanguages_Remote(t *testing.T) {
+	srv, _ := raasTestServer(t)
+	a := freshConnectedApp(t, srv.URL)
+	got, err := a.AvailableRaasLanguages()
+	if err != nil {
+		t.Fatalf("AvailableRaasLanguages: %v", err)
+	}
+	want := []string{"bash", "perl", "python", "ruby"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (got %v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
 		}
-		if !found {
-			t.Errorf("missing %q in %v", want, got)
-		}
+	}
+}
+
+func TestApp_AvailableRaasLanguages_NotConnected(t *testing.T) {
+	keyring.MockInit()
+	a, _ := New(filepath.Join(t.TempDir(), "p.json"), "test-langs-notconn-"+t.Name())
+	if _, err := a.AvailableRaasLanguages(); err != ErrNotConnected {
+		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 }

