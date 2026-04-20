@@ -12,9 +12,6 @@ var listCmd = &cobra.Command{
 	Short: "List all servers and sessions",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// List servers
-		data, err := apiClient.Get("/api/v1/auth/token", nil) // use legacy API for now
-		_ = data
-
 		serversData, err := apiClient.Get("/api/server", nil)
 		if err != nil {
 			return fmt.Errorf("list servers: %w", err)
