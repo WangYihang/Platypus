@@ -555,6 +555,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/sessions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns every connected session (plain TCP + encrypted Termite) as a flat array. Replaces the legacy /api/client, which stays available but now sends Deprecation headers.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "List sessions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.sessionsListResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/sessions/dispatch": {
             "post": {
                 "security": [
@@ -601,6 +626,79 @@ const docTemplate = `{
             }
         },
         "/api/v1/sessions/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Looks up a single session by hash (plain TCP or Termite). Replaces the legacy /api/client/{hash}.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "bare TCPClient or TermiteClient JSON",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.legacyClientEntry"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Disconnects the session with the given hash. Returns 204 on success, 404 if no such session. Replaces the legacy DELETE /api/client/{hash}.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Delete session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            },
             "patch": {
                 "security": [
                     {
@@ -651,6 +749,70 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sessions/{id}/exec": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Executes one shell command and returns its stdout. Plain TCP sessions in PTY mode are refused (409); switch to non-PTY or use the WebSocket terminal. Replaces the legacy form-encoded POST /api/client/{hash}.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Execute command on session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session hash",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Shell command",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.execRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.execResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/internal_api.errorResponse"
                         }
@@ -1008,6 +1170,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/sessions/{id}/upgrade": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Compiles a Termite agent for the session's architecture and pushes it over the existing plain reverse shell, where it reconnects to the target encrypted listener. Progress is broadcast on /notify; this endpoint returns 202 as soon as the upgrade is scheduled. Replaces the legacy GET /api/client/{hash}/upgrade/{target}.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Upgrade session to Termite",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source session hash (plain TCP client)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target encrypted listener hash",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.upgradeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.ackResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/ws/ticket": {
             "post": {
                 "security": [
@@ -1209,6 +1429,25 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api.execRequest": {
+            "type": "object",
+            "required": [
+                "command"
+            ],
+            "properties": {
+                "command": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api.execResponse": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_api.legacyAck": {
             "type": "object",
             "properties": {
@@ -1332,6 +1571,15 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api.sessionsListResponse": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {}
+                }
+            }
+        },
         "internal_api.sizeResponse": {
             "type": "object",
             "properties": {
@@ -1397,6 +1645,17 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/internal_api.tunnelInfoEntry"
                     }
+                }
+            }
+        },
+        "internal_api.upgradeRequest": {
+            "type": "object",
+            "required": [
+                "listener_id"
+            ],
+            "properties": {
+                "listener_id": {
+                    "type": "string"
                 }
             }
         },

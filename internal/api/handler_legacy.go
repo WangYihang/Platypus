@@ -10,25 +10,38 @@ import (
 )
 
 // RegisterLegacyRoutes wires up the pre-v1 /api/server and /api/client routes
-// behind the same Bearer auth as /api/v1/*. These remain in use by platypus-admin
-// CLI; consolidating them under /api/v1/ is tracked in the modernization plan.
+// behind the same Bearer auth as /api/v1/*. They stay alive for the
+// platypus-admin CLI and older clients; the v1 equivalents under
+// /api/v1/sessions and /api/v1/listeners are preferred. Every legacy response
+// carries a Deprecation: true header with a Link to its successor.
 func RegisterLegacyRoutes(engine *gin.Engine, auth *Auth) {
 	g := engine.Group("/api")
 	g.Use(auth.Middleware())
 
 	servers := g.Group("/server")
-	servers.GET("", ListServers)
-	servers.GET("/:hash", GetServer)
-	servers.GET("/:hash/client", GetServerClients)
-	servers.POST("", CreateServer)
-	servers.DELETE("/:hash", DeleteServer)
+	servers.GET("", deprecate("/api/v1/listeners"), ListServers)
+	servers.GET("/:hash", deprecate("/api/v1/listeners/{id}"), GetServer)
+	servers.GET("/:hash/client", deprecate("/api/v1/listeners/{id}/sessions"), GetServerClients)
+	servers.POST("", deprecate("/api/v1/listeners"), CreateServer)
+	servers.DELETE("/:hash", deprecate("/api/v1/listeners/{id}"), DeleteServer)
 
 	clients := g.Group("/client")
-	clients.GET("", ListClients)
-	clients.GET("/:hash", GetClient)
-	clients.GET("/:hash/upgrade/:target", UpgradeClient)
-	clients.DELETE("/:hash", DeleteClient)
-	clients.POST("/:hash", ExecClient)
+	clients.GET("", deprecate("/api/v1/sessions"), ListClients)
+	clients.GET("/:hash", deprecate("/api/v1/sessions/{id}"), GetClient)
+	clients.GET("/:hash/upgrade/:target", deprecate("/api/v1/sessions/{id}/upgrade"), UpgradeClient)
+	clients.DELETE("/:hash", deprecate("/api/v1/sessions/{id}"), DeleteClient)
+	clients.POST("/:hash", deprecate("/api/v1/sessions/{id}/exec"), ExecClient)
+}
+
+// deprecate adds RFC 8594 / 9745 deprecation signalling. Operators and
+// monitoring can notice the header without parsing bodies; Link points to
+// the v1 successor so clients can migrate without guessing.
+func deprecate(successor string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Deprecation", "true")
+		c.Header("Link", "<"+successor+`>; rel="successor-version"`)
+		c.Next()
+	}
 }
 
 type serversWithDistributor struct {

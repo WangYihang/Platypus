@@ -19,7 +19,12 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 	v1.Use(auth.Middleware())
 	{
 		// Sessions
+		v1.GET("/sessions", ListSessionsV1)
+		v1.GET("/sessions/:id", GetSessionV1)
+		v1.DELETE("/sessions/:id", DeleteSessionV1)
 		v1.PATCH("/sessions/:id", PatchSession)
+		v1.POST("/sessions/:id/exec", ExecSessionV1)
+		v1.POST("/sessions/:id/upgrade", UpgradeSessionV1)
 		v1.POST("/sessions/:id/gather", GatherSession)
 		v1.POST("/sessions/dispatch", DispatchCommand)
 

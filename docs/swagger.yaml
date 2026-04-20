@@ -117,6 +117,18 @@ definitions:
       error:
         type: string
     type: object
+  internal_api.execRequest:
+    properties:
+      command:
+        type: string
+    required:
+    - command
+    type: object
+  internal_api.execResponse:
+    properties:
+      output:
+        type: string
+    type: object
   internal_api.legacyAck:
     properties:
       msg:
@@ -199,6 +211,12 @@ definitions:
           $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
         type: object
     type: object
+  internal_api.sessionsListResponse:
+    properties:
+      sessions:
+        items: {}
+        type: array
+    type: object
   internal_api.sizeResponse:
     properties:
       size:
@@ -244,6 +262,13 @@ definitions:
         items:
           $ref: '#/definitions/internal_api.tunnelInfoEntry'
         type: array
+    type: object
+  internal_api.upgradeRequest:
+    properties:
+      listener_id:
+        type: string
+    required:
+    - listener_id
     type: object
   internal_api.wsTicketResponse:
     properties:
@@ -608,7 +633,72 @@ paths:
       summary: Render RaaS one-liner
       tags:
       - raas
+  /api/v1/sessions:
+    get:
+      description: Returns every connected session (plain TCP + encrypted Termite)
+        as a flat array. Replaces the legacy /api/client, which stays available but
+        now sends Deprecation headers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.sessionsListResponse'
+      security:
+      - BearerAuth: []
+      summary: List sessions
+      tags:
+      - sessions
   /api/v1/sessions/{id}:
+    delete:
+      description: Disconnects the session with the given hash. Returns 204 on success,
+        404 if no such session. Replaces the legacy DELETE /api/client/{hash}.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete session
+      tags:
+      - sessions
+    get:
+      description: Looks up a single session by hash (plain TCP or Termite). Replaces
+        the legacy /api/client/{hash}.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: bare TCPClient or TermiteClient JSON
+          schema:
+            $ref: '#/definitions/internal_api.legacyClientEntry'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get session
+      tags:
+      - sessions
     patch:
       consumes:
       - application/json
@@ -643,6 +733,49 @@ paths:
       security:
       - BearerAuth: []
       summary: Patch session
+      tags:
+      - sessions
+  /api/v1/sessions/{id}/exec:
+    post:
+      consumes:
+      - application/json
+      description: Executes one shell command and returns its stdout. Plain TCP sessions
+        in PTY mode are refused (409); switch to non-PTY or use the WebSocket terminal.
+        Replaces the legacy form-encoded POST /api/client/{hash}.
+      parameters:
+      - description: Session hash
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Shell command
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.execRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.execResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Execute command on session
       tags:
       - sessions
   /api/v1/sessions/{id}/files:
@@ -879,6 +1012,46 @@ paths:
       summary: Create tunnel
       tags:
       - tunnels
+  /api/v1/sessions/{id}/upgrade:
+    post:
+      consumes:
+      - application/json
+      description: Compiles a Termite agent for the session's architecture and pushes
+        it over the existing plain reverse shell, where it reconnects to the target
+        encrypted listener. Progress is broadcast on /notify; this endpoint returns
+        202 as soon as the upgrade is scheduled. Replaces the legacy GET /api/client/{hash}/upgrade/{target}.
+      parameters:
+      - description: Source session hash (plain TCP client)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Target encrypted listener hash
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.upgradeRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api.ackResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upgrade session to Termite
+      tags:
+      - sessions
   /api/v1/sessions/dispatch:
     post:
       consumes:
