@@ -28,7 +28,7 @@ type createTunnelRequest struct {
 // @Security    BearerAuth
 // @Param       id   path      string              true "Session hash (Termite only)"
 // @Param       body body      createTunnelRequest true "Mode + addresses"
-// @Success     200  {object}  map[string]any
+// @Success     200  {object}  ackResponse
 // @Failure     400  {object}  errorResponse
 // @Failure     404  {object}  errorResponse
 // @Failure     409  {object}  errorResponse
@@ -93,7 +93,7 @@ type tunnelInfoEntry struct {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       id  path   string  true "Session hash"
-// @Success     200 {object} map[string]any "status + tunnels:[]tunnelInfoEntry"
+// @Success     200 {object} tunnelsResponse
 // @Router      /api/v1/sessions/{id}/tunnels [get]
 func ListTunnels(c *gin.Context) {
 	hash := c.Param("id")

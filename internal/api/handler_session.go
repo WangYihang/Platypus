@@ -51,7 +51,7 @@ type errorResponse struct {
 // @Security    BearerAuth
 // @Param       id   path      string              true  "Session hash"
 // @Param       body body      patchSessionRequest true  "Fields to patch (any subset)"
-// @Success     200  {object}  map[string]any      "status + updated session"
+// @Success     200  {object}  legacyClientEntry "status + updated session"
 // @Failure     400  {object}  errorResponse
 // @Failure     404  {object}  errorResponse
 // @Router      /api/v1/sessions/{id} [patch]
@@ -106,7 +106,7 @@ func PatchSession(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       id   path      string  true "Session hash"
-// @Success     200  {object}  map[string]any
+// @Success     200  {object}  legacyClientEntry
 // @Failure     404  {object}  errorResponse
 // @Router      /api/v1/sessions/{id}/gather [post]
 func GatherSession(c *gin.Context) {

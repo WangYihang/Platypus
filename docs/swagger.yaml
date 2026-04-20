@@ -1,5 +1,71 @@
 basePath: /
 definitions:
+  github_com_WangYihang_Platypus_internal_core.Distributor:
+    properties:
+      host:
+        type: string
+      interfaces:
+        items:
+          type: string
+        type: array
+      port:
+        type: integer
+      route:
+        additionalProperties:
+          type: string
+        type: object
+      url:
+        type: string
+    type: object
+  github_com_WangYihang_Platypus_internal_core.TCPServer:
+    properties:
+      clients:
+        additionalProperties:
+          type: object
+        type: object
+      disable_history:
+        type: boolean
+      encrypted:
+        type: boolean
+      group_dispatch:
+        type: boolean
+      hash:
+        type: string
+      host:
+        type: string
+      interfaces:
+        items:
+          type: string
+        type: array
+      port:
+        type: integer
+      public_ip:
+        type: string
+      shell_path:
+        type: string
+      termite_clients:
+        additionalProperties:
+          type: object
+        type: object
+      timestamp:
+        type: string
+    type: object
+  internal_api.ackResponse:
+    properties:
+      msg:
+        type: string
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.bytesWrittenResponse:
+    properties:
+      bytes_written:
+        type: integer
+      status:
+        example: true
+        type: boolean
+    type: object
   internal_api.createTunnelRequest:
     properties:
       dst_address:
@@ -51,11 +117,94 @@ definitions:
       error:
         type: string
     type: object
+  internal_api.legacyAck:
+    properties:
+      msg:
+        type: string
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.legacyClientEntry:
+    properties:
+      msg: {}
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.legacyClientMap:
+    properties:
+      msg:
+        additionalProperties: true
+        type: object
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.legacyError:
+    properties:
+      msg:
+        type: string
+      status:
+        example: false
+        type: boolean
+    type: object
+  internal_api.legacyServer:
+    properties:
+      msg:
+        $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.legacyServerList:
+    properties:
+      msg:
+        $ref: '#/definitions/internal_api.serversWithDistributor'
+      status:
+        example: true
+        type: boolean
+    type: object
   internal_api.patchSessionRequest:
     properties:
       alias:
         type: string
       group_dispatch:
+        type: boolean
+    type: object
+  internal_api.raasLanguagesResponse:
+    properties:
+      languages:
+        items:
+          type: string
+        type: array
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.raasOnelinerResponse:
+    properties:
+      oneliner:
+        type: string
+      status:
+        example: true
+        type: boolean
+    type: object
+  internal_api.serversWithDistributor:
+    properties:
+      distributor:
+        $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.Distributor'
+      servers:
+        additionalProperties:
+          $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
+        type: object
+    type: object
+  internal_api.sizeResponse:
+    properties:
+      size:
+        type: integer
+      status:
+        example: true
         type: boolean
     type: object
   internal_api.tokenError:
@@ -77,6 +226,25 @@ definitions:
       token:
         type: string
     type: object
+  internal_api.tunnelInfoEntry:
+    properties:
+      address:
+        description: src→dst for pull/push, single addr for socks5
+        type: string
+      type:
+        description: '"pull", "push", or "socks5"'
+        type: string
+    type: object
+  internal_api.tunnelsResponse:
+    properties:
+      status:
+        example: true
+        type: boolean
+      tunnels:
+        items:
+          $ref: '#/definitions/internal_api.tunnelInfoEntry'
+        type: array
+    type: object
 info:
   contact: {}
   description: |-
@@ -95,8 +263,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyClientMap'
       security:
       - BearerAuth: []
       summary: List all sessions
@@ -116,13 +283,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyAck'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Delete session
@@ -141,13 +306,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyClientEntry'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Get session
@@ -176,13 +339,19 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyAck'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.legacyError'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Execute command
@@ -211,13 +380,15 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyAck'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api.legacyError'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Upgrade to Termite
@@ -232,8 +403,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyServerList'
       security:
       - BearerAuth: []
       summary: List listeners
@@ -265,13 +435,15 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyServer'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Create listener
@@ -291,13 +463,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyAck'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Delete listener
@@ -316,13 +486,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyServer'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: Get listener
@@ -342,13 +510,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyClientMap'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyError'
       security:
       - BearerAuth: []
       summary: List sessions on a listener
@@ -393,10 +559,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: status + languages:[]string
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.raasLanguagesResponse'
       security:
       - BearerAuth: []
       summary: List RaaS languages
@@ -426,10 +591,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: status + oneliner
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.raasOnelinerResponse'
         "400":
           description: Bad Request
           schema:
@@ -462,8 +626,7 @@ paths:
         "200":
           description: status + updated session
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyClientEntry'
         "400":
           description: Bad Request
           schema:
@@ -517,6 +680,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
       security:
       - BearerAuth: []
       summary: Read file
@@ -553,16 +720,19 @@ paths:
       - application/json
       responses:
         "200":
-          description: status + bytes_written
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.bytesWrittenResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
       security:
@@ -589,16 +759,19 @@ paths:
       - application/json
       responses:
         "200":
-          description: status + size
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.sizeResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api.errorResponse'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
       security:
@@ -622,8 +795,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.legacyClientEntry'
         "404":
           description: Not Found
           schema:
@@ -635,8 +807,8 @@ paths:
       - sessions
   /api/v1/sessions/{id}/tunnels:
     get:
-      description: List every pull/push/SOCKS5 tunnel currently routed through this
-        session.
+      description: List every pull/push/SOCKS5 tunnel routed through this session.
+        Tunnels owned by other sessions are excluded.
       parameters:
       - description: Session hash
         in: path
@@ -647,10 +819,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: status + tunnels:[]tunnelInfoEntry
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.tunnelsResponse'
       security:
       - BearerAuth: []
       summary: List tunnels
@@ -681,8 +852,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_api.ackResponse'
         "400":
           description: Bad Request
           schema:

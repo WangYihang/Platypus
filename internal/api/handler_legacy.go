@@ -43,7 +43,7 @@ type serversWithDistributor struct {
 // @Tags        listeners
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string]any
+// @Success     200 {object} legacyServerList
 // @Router      /api/server [get]
 func ListServers(c *gin.Context) {
 	c.JSON(200, gin.H{
@@ -63,8 +63,8 @@ func ListServers(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       hash path     string true "Listener hash"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyServer
+// @Failure     404  {object} legacyError
 // @Router      /api/server/{hash} [get]
 func GetServer(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -88,8 +88,8 @@ func GetServer(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       hash path     string true "Listener hash"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyClientMap
+// @Failure     404  {object} legacyError
 // @Router      /api/server/{hash}/client [get]
 func GetServerClients(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -124,8 +124,9 @@ func GetServerClients(c *gin.Context) {
 // @Param       host      formData string  true  "Bind address (e.g. 0.0.0.0)"
 // @Param       port      formData integer true  "Port 1-65535"
 // @Param       encrypted formData boolean true  "true for Termite listener, false for plain reverse shell"
-// @Success     200       {object} map[string]any
-// @Failure     400       {object} map[string]any
+// @Success     200       {object} legacyServer
+// @Failure     400       {object} legacyError
+// @Failure     500       {object} legacyError
 // @Router      /api/server [post]
 func CreateServer(c *gin.Context) {
 	if !formExistOrAbort(c, []string{"host", "port", "encrypted"}) {
@@ -154,8 +155,8 @@ func CreateServer(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       hash path     string true "Listener hash"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyAck
+// @Failure     404  {object} legacyError
 // @Router      /api/server/{hash} [delete]
 func DeleteServer(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -180,7 +181,7 @@ func DeleteServer(c *gin.Context) {
 // @Tags        sessions
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string]any
+// @Success     200 {object} legacyClientMap
 // @Router      /api/client [get]
 func ListClients(c *gin.Context) {
 	clients := make(map[string]interface{})
@@ -203,8 +204,8 @@ func ListClients(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       hash path     string true "Session hash"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyClientEntry
+// @Failure     404  {object} legacyError
 // @Router      /api/client/{hash} [get]
 func GetClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -231,8 +232,9 @@ func GetClient(c *gin.Context) {
 // @Security    BearerAuth
 // @Param       hash   path     string true "Source session hash (plain TCP client)"
 // @Param       target path     string true "Destination listener hash (must be encrypted)"
-// @Success     200    {object} map[string]any
-// @Failure     404    {object} map[string]any
+// @Success     200    {object} legacyAck
+// @Failure     400    {object} legacyError
+// @Failure     404    {object} legacyError
 // @Router      /api/client/{hash}/upgrade/{target} [get]
 func UpgradeClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash", "target"}) {
@@ -264,8 +266,8 @@ func UpgradeClient(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       hash path     string true "Session hash"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyAck
+// @Failure     404  {object} legacyError
 // @Router      /api/client/{hash} [delete]
 func DeleteClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {
@@ -293,8 +295,10 @@ func DeleteClient(c *gin.Context) {
 // @Security    BearerAuth
 // @Param       hash path     string true  "Session hash"
 // @Param       cmd  formData string true  "Shell command"
-// @Success     200  {object} map[string]any
-// @Failure     404  {object} map[string]any
+// @Success     200  {object} legacyAck
+// @Failure     400  {object} legacyError
+// @Failure     404  {object} legacyError
+// @Failure     409  {object} legacyError
 // @Router      /api/client/{hash} [post]
 func ExecClient(c *gin.Context) {
 	if !paramsExistOrAbort(c, []string{"hash"}) {

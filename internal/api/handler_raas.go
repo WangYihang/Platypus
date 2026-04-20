@@ -16,7 +16,7 @@ import (
 // @Tags        raas
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string]any "status + languages:[]string"
+// @Success     200 {object} raasLanguagesResponse
 // @Router      /api/v1/raas/languages [get]
 func ListRaasLanguages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
@@ -35,7 +35,7 @@ func ListRaasLanguages(c *gin.Context) {
 // @Param       host path     string  true  "Target host (listener public IP or bind)"
 // @Param       port path     integer true  "Target port 1-65535"
 // @Param       lang query    string  false "Language key (bash|python|ruby|...); defaults to bash" default(bash)
-// @Success     200  {object} map[string]any "status + oneliner"
+// @Success     200  {object} raasOnelinerResponse
 // @Failure     400  {object} errorResponse
 // @Router      /api/v1/raas/oneliner [get]
 func RenderRaasOneliner(c *gin.Context) {

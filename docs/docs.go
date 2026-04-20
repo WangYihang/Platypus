@@ -34,8 +34,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyClientMap"
                         }
                     }
                 }
@@ -68,15 +67,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyClientEntry"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -118,15 +115,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyAck"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -157,15 +164,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyAck"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -206,15 +211,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyAck"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -239,8 +248,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyServerList"
                         }
                     }
                 }
@@ -289,15 +297,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyServer"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -330,15 +342,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyServer"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -369,15 +379,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyAck"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -410,15 +418,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyClientMap"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyError"
                         }
                     }
                 }
@@ -487,10 +493,9 @@ const docTemplate = `{
                 "summary": "List RaaS languages",
                 "responses": {
                     "200": {
-                        "description": "status + languages:[]string",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.raasLanguagesResponse"
                         }
                     }
                 }
@@ -536,10 +541,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "status + oneliner",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.raasOnelinerResponse"
                         }
                     },
                     "400": {
@@ -636,8 +640,7 @@ const docTemplate = `{
                     "200": {
                         "description": "status + updated session",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyClientEntry"
                         }
                     },
                     "400": {
@@ -718,6 +721,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_api.errorResponse"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
                     }
                 }
             },
@@ -772,10 +781,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "status + bytes_written",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.bytesWrittenResponse"
                         }
                     },
                     "400": {
@@ -786,6 +794,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/internal_api.errorResponse"
                         }
@@ -826,10 +840,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "status + size",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.sizeResponse"
                         }
                     },
                     "400": {
@@ -840,6 +853,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/internal_api.errorResponse"
                         }
@@ -875,8 +894,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.legacyClientEntry"
                         }
                     },
                     "404": {
@@ -895,7 +913,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "List every pull/push/SOCKS5 tunnel currently routed through this session.",
+                "description": "List every pull/push/SOCKS5 tunnel routed through this session. Tunnels owned by other sessions are excluded.",
                 "produces": [
                     "application/json"
                 ],
@@ -914,10 +932,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "status + tunnels:[]tunnelInfoEntry",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.tunnelsResponse"
                         }
                     }
                 }
@@ -961,8 +978,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_api.ackResponse"
                         }
                     },
                     "400": {
@@ -994,6 +1010,106 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "github_com_WangYihang_Platypus_internal_core.Distributor": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "interfaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "route": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_WangYihang_Platypus_internal_core.TCPServer": {
+            "type": "object",
+            "properties": {
+                "clients": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
+                "disable_history": {
+                    "type": "boolean"
+                },
+                "encrypted": {
+                    "type": "boolean"
+                },
+                "group_dispatch": {
+                    "type": "boolean"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "interfaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "public_ip": {
+                    "type": "string"
+                },
+                "shell_path": {
+                    "type": "string"
+                },
+                "termite_clients": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api.ackResponse": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.bytesWrittenResponse": {
+            "type": "object",
+            "properties": {
+                "bytes_written": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "internal_api.createTunnelRequest": {
             "type": "object",
             "required": [
@@ -1068,6 +1184,77 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api.legacyAck": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.legacyClientEntry": {
+            "type": "object",
+            "properties": {
+                "msg": {},
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.legacyClientMap": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.legacyError": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "internal_api.legacyServer": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.legacyServerList": {
+            "type": "object",
+            "properties": {
+                "msg": {
+                    "$ref": "#/definitions/internal_api.serversWithDistributor"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "internal_api.patchSessionRequest": {
             "type": "object",
             "properties": {
@@ -1076,6 +1263,59 @@ const docTemplate = `{
                 },
                 "group_dispatch": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_api.raasLanguagesResponse": {
+            "type": "object",
+            "properties": {
+                "languages": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.raasOnelinerResponse": {
+            "type": "object",
+            "properties": {
+                "oneliner": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_api.serversWithDistributor": {
+            "type": "object",
+            "properties": {
+                "distributor": {
+                    "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.Distributor"
+                },
+                "servers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
+                    }
+                }
+            }
+        },
+        "internal_api.sizeResponse": {
+            "type": "object",
+            "properties": {
+                "size": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -1104,6 +1344,34 @@ const docTemplate = `{
             "properties": {
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_api.tunnelInfoEntry": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "description": "src→dst for pull/push, single addr for socks5",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "\"pull\", \"push\", or \"socks5\"",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api.tunnelsResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "tunnels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api.tunnelInfoEntry"
+                    }
                 }
             }
         }

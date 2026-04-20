@@ -54,10 +54,10 @@ linters:
           - errcheck
       # Swag-only request/response mirror types live here; they're referenced
       # by //@Success/@Param doc comments that the `unused` linter can't see.
-      - path: internal/api/(handler_session|handler_tunnel|auth)\.go
+      - path: internal/api/(handler_session|handler_tunnel|auth|responses)\.go
         linters:
           - unused
-        text: "type .*(Request|Response|Result|Error|Entry) is unused"
+        text: "type .*(Request|Response|Result|Error|Entry|Ack|Server|ServerList|ClientMap|Languages|Oneliner) is unused"
 
 formatters:
   enable:

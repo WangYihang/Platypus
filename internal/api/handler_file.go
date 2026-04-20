@@ -19,9 +19,10 @@ import (
 // @Security    BearerAuth
 // @Param       id    path      string  true  "Session hash"
 // @Param       path  query     string  true  "Absolute path to the file"
-// @Success     200   {object}  map[string]any "status + size"
+// @Success     200   {object}  sizeResponse
 // @Failure     400   {object}  errorResponse
 // @Failure     404   {object}  errorResponse
+// @Failure     502   {object}  errorResponse
 // @Router      /api/v1/sessions/{id}/files/size [get]
 func GetFileSize(c *gin.Context) {
 	hash := c.Param("id")
@@ -68,6 +69,7 @@ func GetFileSize(c *gin.Context) {
 // @Success     200    {file}    binary
 // @Failure     400    {object}  errorResponse
 // @Failure     404    {object}  errorResponse
+// @Failure     502    {object}  errorResponse
 // @Router      /api/v1/sessions/{id}/files [get]
 func ReadFile(c *gin.Context) {
 	hash := c.Param("id")
@@ -120,9 +122,10 @@ func ReadFile(c *gin.Context) {
 // @Param       path   query     string  true   "Absolute path to write to"
 // @Param       append query     boolean false  "If true, appends to the file instead of truncating" default(false)
 // @Param       body   body      string  true   "Raw file bytes"
-// @Success     200    {object}  map[string]any "status + bytes_written"
+// @Success     200    {object}  bytesWrittenResponse
 // @Failure     400    {object}  errorResponse
 // @Failure     404    {object}  errorResponse
+// @Failure     502    {object}  errorResponse
 // @Router      /api/v1/sessions/{id}/files [post]
 func WriteFile(c *gin.Context) {
 	hash := c.Param("id")
