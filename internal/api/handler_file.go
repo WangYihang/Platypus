@@ -34,7 +34,7 @@ func GetFileSize(c *gin.Context) {
 	if client := core.FindTermiteClientByHash(hash); client != nil {
 		size, err := client.FileSize(path)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": false, "error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": true, "size": size})
@@ -44,7 +44,7 @@ func GetFileSize(c *gin.Context) {
 	if client := core.FindTCPClientByHash(hash); client != nil {
 		size, err := client.FileSize(path)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": false, "error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": true, "size": size})
@@ -88,7 +88,7 @@ func ReadFile(c *gin.Context) {
 			data, err = client.ReadFileEx(path, offset, size)
 		}
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": false, "error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		c.Data(http.StatusOK, "application/octet-stream", data)
@@ -98,7 +98,7 @@ func ReadFile(c *gin.Context) {
 	if client := core.FindTCPClientByHash(hash); client != nil {
 		content, err := client.ReadFileEx(path, int(offset), int(size))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": false, "error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		c.Data(http.StatusOK, "application/octet-stream", []byte(content))
@@ -147,7 +147,7 @@ func WriteFile(c *gin.Context) {
 			n, err = client.WriteFile(path, data)
 		}
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": false, "error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": true, "bytes_written": n})
