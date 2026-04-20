@@ -113,4 +113,7 @@ and add a fallback in a future iteration.
 - WebGL renderer for xterm (Wails WebView compatibility varies across
   platforms — using Canvas).
 - Zmodem file transfer.
-- OpenAPI-codegen client (waiting on swag annotations server-side).
+- OpenAPI-codegen desktop client. Server now ships Swagger at
+  `/swagger/index.html` (regenerated via `make swag`); switching the
+  desktop HTTP layer to `oapi-codegen` is ~300-500 lines of churn and
+  was deferred.
