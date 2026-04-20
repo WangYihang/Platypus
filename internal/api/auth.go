@@ -12,19 +12,33 @@ import (
 
 // Auth manages Bearer Token authentication for the API.
 type Auth struct {
-	mu     sync.RWMutex
-	tokens map[string]bool // valid tokens
-	secret string          // server secret for obtaining tokens
+	mu        sync.RWMutex
+	tokens    map[string]bool // valid tokens
+	secret    string          // server secret for obtaining tokens
+	wsTickets *wsTicketStore  // short-lived one-shot tickets for WS auth
 }
 
 // NewAuth creates an Auth instance with a random server secret.
 func NewAuth() *Auth {
 	secret := generateRandomHex(32)
 	a := &Auth{
-		tokens: make(map[string]bool),
-		secret: secret,
+		tokens:    make(map[string]bool),
+		secret:    secret,
+		wsTickets: newWSTicketStore(),
 	}
 	return a
+}
+
+// IssueWSTicket mints a short-lived, one-shot ticket for WebSocket auth.
+// Browsers can't set Bearer headers on a WS upgrade, so clients trade a
+// Bearer token for a ticket and pass ?ticket=<value> on the WS URL.
+func (a *Auth) IssueWSTicket() string {
+	return a.wsTickets.Issue()
+}
+
+// ConsumeWSTicket validates and consumes a ticket. Returns true on success.
+func (a *Auth) ConsumeWSTicket(t string) bool {
+	return a.wsTickets.Consume(t)
 }
 
 // GetSecret returns the server secret (printed at startup for operator).

@@ -245,6 +245,11 @@ definitions:
           $ref: '#/definitions/internal_api.tunnelInfoEntry'
         type: array
     type: object
+  internal_api.wsTicketResponse:
+    properties:
+      ticket:
+        type: string
+    type: object
 info:
   contact: {}
   description: |-
@@ -903,6 +908,23 @@ paths:
       summary: Dispatch command to flagged sessions
       tags:
       - sessions
+  /api/v1/ws/ticket:
+    post:
+      description: Mint a one-shot, short-lived ticket (60s TTL) for WebSocket auth.
+        Browsers pass this as ?ticket= on the WS URL because they can't set Bearer
+        headers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.wsTicketResponse'
+      security:
+      - BearerAuth: []
+      summary: Issue WebSocket ticket
+      tags:
+      - auth
 securityDefinitions:
   BearerAuth:
     description: Value should be "Bearer <token>". Fetch a token via POST /api/v1/auth/token

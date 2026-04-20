@@ -399,8 +399,11 @@ function wsURL(path: string): string {
 
 export async function OpenTerminal(sessionHash: string): Promise<string> {
     const termID = `t${++termSeq}`;
+    // Browsers can't set Bearer headers on a WS upgrade, so trade the
+    // token for a one-shot ticket first.
+    const { ticket } = await apiJSON<{ ticket: string }>("/api/v1/ws/ticket", { method: "POST" });
     const ws = new WebSocket(
-        wsURL("/ws/" + encodeURIComponent(sessionHash)) + "?token=" + encodeURIComponent(getToken()),
+        wsURL("/ws/" + encodeURIComponent(sessionHash)) + "?ticket=" + encodeURIComponent(ticket),
         ["tty"],
     );
     ws.binaryType = "arraybuffer";

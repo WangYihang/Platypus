@@ -1007,6 +1007,31 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/ws/ticket": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mint a one-shot, short-lived ticket (60s TTL) for WebSocket auth. Browsers pass this as ?ticket= on the WS URL because they can't set Bearer headers.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Issue WebSocket ticket",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.wsTicketResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1372,6 +1397,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/internal_api.tunnelInfoEntry"
                     }
+                }
+            }
+        },
+        "internal_api.wsTicketResponse": {
+            "type": "object",
+            "properties": {
+                "ticket": {
+                    "type": "string"
                 }
             }
         }

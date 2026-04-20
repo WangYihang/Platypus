@@ -15,18 +15,20 @@ import (
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
-// RegisterWebSocketRoutes wires up /notify and /ws/:hash WebSocket endpoints.
-// Auth on these is currently delegated to the originating client (token in URL
-// or out-of-band); migrating to header-based auth is tracked in the modernization plan.
-func RegisterWebSocketRoutes(engine *gin.Engine) {
+// RegisterWebSocketRoutes wires up /notify and /ws/:hash WebSocket endpoints
+// behind Bearer-or-Ticket auth. Callers that can set HTTP headers (the Go
+// desktop client) send Authorization: Bearer <token>; browsers — which can't
+// set arbitrary WS upgrade headers — trade a Bearer token for a short-lived
+// ticket at /api/v1/ws/ticket and pass it as ?ticket=<value> here.
+func RegisterWebSocketRoutes(engine *gin.Engine, auth *Auth) {
 	notify := newNotifyWebSocket()
-	engine.GET("/notify", func(c *gin.Context) {
+	engine.GET("/notify", wsAuthMiddleware(auth), func(c *gin.Context) {
 		notify.HandleRequest(c.Writer, c.Request)
 	})
 	core.Ctx.NotifyWebSocket = notify
 
 	tty := newTTYWebSocket()
-	engine.GET("/ws/:hash", func(c *gin.Context) {
+	engine.GET("/ws/:hash", wsAuthMiddleware(auth), func(c *gin.Context) {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
@@ -44,6 +46,29 @@ func RegisterWebSocketRoutes(engine *gin.Engine) {
 		}
 		tty.HandleRequest(c.Writer, c.Request)
 	})
+}
+
+// wsAuthMiddleware gates a WebSocket route on either a Bearer header OR a
+// valid one-shot ticket in the ?ticket= query. Both paths 401 on failure so
+// a WS upgrade is never attempted for unauthenticated clients.
+func wsAuthMiddleware(auth *Auth) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Bearer header path (native clients that can set headers).
+		if h := c.GetHeader("Authorization"); h != "" {
+			if parts := strings.SplitN(h, " ", 2); len(parts) == 2 &&
+				strings.EqualFold(parts[0], "bearer") &&
+				auth.ValidateToken(parts[1]) {
+				c.Next()
+				return
+			}
+		}
+		// Ticket path (browsers).
+		if tk := c.Query("ticket"); tk != "" && auth.ConsumeWSTicket(tk) {
+			c.Next()
+			return
+		}
+		c.AbortWithStatusJSON(401, gin.H{"error": "websocket auth required (Bearer header or ?ticket=)"})
+	}
 }
 
 func newNotifyWebSocket() *melody.Melody {

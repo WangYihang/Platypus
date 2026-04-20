@@ -81,7 +81,16 @@ func (a *App) OpenTerminal(sessionHash string) (string, error) {
 	}
 
 	id := uuid.NewString()
-	wsURL := terminalWSURL(profile.URL, sessionHash)
+
+	// Trade our Bearer token for a one-shot WS ticket. The TTY WebSocket
+	// route is now Bearer-or-Ticket gated, and nhooyr.io/websocket's Dial
+	// doesn't expose a header-setting hook the way Notifier does, so we
+	// ride the query-string path alongside browser clients.
+	ticket, err := c.FetchWSTicket(context.Background())
+	if err != nil {
+		return "", fmt.Errorf("fetch ws ticket: %w", err)
+	}
+	wsURL := terminalWSURL(profile.URL, sessionHash) + "?ticket=" + ticket
 
 	h := &wailsTerminalHandler{id: id, app: a}
 	term, err := api.DialTerminal(context.Background(), wsURL, h)

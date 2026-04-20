@@ -21,6 +21,9 @@ func startConnectableServer(t *testing.T, wsBehaviour func(ctx context.Context, 
 	mux.HandleFunc("/api/v1/auth/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"token":"tok"}`))
 	})
+	mux.HandleFunc("/api/v1/ws/ticket", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"ticket":"test-ticket"}`))
+	})
 	mux.HandleFunc("/notify", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	})

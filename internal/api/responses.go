@@ -88,3 +88,8 @@ type raasOnelinerResponse struct {
 	Status   bool   `json:"status" example:"true"`
 	Oneliner string `json:"oneliner"`
 }
+
+// wsTicketResponse is the shape of POST /api/v1/ws/ticket.
+type wsTicketResponse struct {
+	Ticket string `json:"ticket"`
+}

@@ -37,5 +37,25 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 		// of internal/utils/raas/templates/.
 		v1.GET("/raas/languages", ListRaasLanguages)
 		v1.GET("/raas/oneliner", RenderRaasOneliner)
+
+		// WebSocket ticket issue — trades the Bearer token for a one-shot
+		// short-lived ticket that browsers can pass via ?ticket= when
+		// upgrading /ws/:hash or /notify.
+		v1.POST("/ws/ticket", IssueWSTicket(auth))
+	}
+}
+
+// IssueWSTicket handles POST /api/v1/ws/ticket.
+//
+// @Summary     Issue WebSocket ticket
+// @Description Mint a one-shot, short-lived ticket (60s TTL) for WebSocket auth. Browsers pass this as ?ticket= on the WS URL because they can't set Bearer headers.
+// @Tags        auth
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} wsTicketResponse
+// @Router      /api/v1/ws/ticket [post]
+func IssueWSTicket(auth *Auth) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(200, gin.H{"ticket": auth.IssueWSTicket()})
 	}
 }

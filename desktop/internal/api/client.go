@@ -81,6 +81,26 @@ func (c *Client) PostRaw(ctx context.Context, path, contentType string, body []b
 	return c.do(ctx, http.MethodPost, path, nil, contentType, body)
 }
 
+// FetchWSTicket trades the current Bearer token for a one-shot, 60s-TTL
+// WebSocket ticket. Attach it as ?ticket=<value> to the /ws/:hash or
+// /notify URL — the server's WS auth middleware consumes the ticket there.
+func (c *Client) FetchWSTicket(ctx context.Context) (string, error) {
+	resp, err := c.Post(ctx, "/api/v1/ws/ticket", nil)
+	if err != nil {
+		return "", fmt.Errorf("ws ticket: %w", err)
+	}
+	var parsed struct {
+		Ticket string `json:"ticket"`
+	}
+	if err := json.Unmarshal(resp, &parsed); err != nil {
+		return "", fmt.Errorf("decode ticket: %w", err)
+	}
+	if parsed.Ticket == "" {
+		return "", errors.New("server returned empty ticket")
+	}
+	return parsed.Ticket, nil
+}
+
 // FetchToken exchanges a server secret for a bearer token via
 // POST /api/v1/auth/token. On success, c.Token is updated.
 func (c *Client) FetchToken(ctx context.Context, secret string) error {

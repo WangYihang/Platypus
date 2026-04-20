@@ -145,7 +145,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		rest := api.CreateRESTfulAPIServer()
 
 		auth := api.NewAuth()
-		api.RegisterWebSocketRoutes(rest)
+		api.RegisterWebSocketRoutes(rest, auth)
 		api.RegisterLegacyRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
 		api.RegisterSwaggerRoutes(rest)
