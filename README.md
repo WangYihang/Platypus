@@ -1,67 +1,74 @@
 # Platypus
 
-[![Travis-CI](https://travis-ci.org/WangYihang/Platypus.svg)](https://travis-ci.org/WangYihang/Platypus)
 [![GitHub stars](https://img.shields.io/github/stars/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus/stargazers)
 [![GitHub license](https://img.shields.io/github/license/WangYihang/Platypus.svg)](https://github.com/WangYihang/Platypus)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/wangyihang/platypus/total)](https://github.com/WangYihang/Platypus/releases)
 [![Sponsors](https://opencollective.com/platypus/tiers/badge.svg)](https://opencollective.com/platypus)
 
-A modern multiple reverse shell sessions/clients manager via terminal written in go
+A modern multiple reverse shell sessions/clients manager via terminal written in Go.
+
+## Architecture
+
+Platypus ships as three independent binaries:
+
+| Binary | Role |
+|---|---|
+| `platypus-server` | Daemon. Runs reverse-shell listeners, manages sessions, exposes REST + WebSocket API. |
+| `platypus-admin`  | CLI client. Talks to `platypus-server` over HTTP; useful for scripting and CI. |
+| `platypus-agent`  | Encrypted controlled-end (formerly "termite"). Connects back to a server over TLS + protobuf. |
+
+The server is purely an API — there is no embedded web UI. A standalone desktop app (Wails) is on the roadmap; until then, use `platypus-admin` or call the REST API directly.
 
 ## Features
 
-- [x] Multiple service listening port
-- [x] Multiple client connections
-- [x] [RESTful API](./docs/RESTful.md)
-- [x] [Python SDK](https://github.com/WangYihang/Platypus-Python)
-- [x] [Reverse shell as a service](/docs/RaaS.md) (Pop a reverse shell in multiple languages without remembering idle commands)
-- [x] Download/Upload file with progress bar
-- [x] Full interactive shell
-  - [x] Using vim gracefully in reverse shell
-  - [x] Using CTRL+C and CTRL+Z in reverse shell
-- [x] Start servers automatically
-- [x] Port forwarding
-- [x] Initialize from configuration file
-- [x] Web UI
+- Multiple listening ports / multiple concurrent reverse-shell sessions
+- Bearer-token-authenticated [REST API](./docs/RESTful.md)
+- [Python SDK](https://github.com/WangYihang/Platypus-Python)
+- [Reverse shell as a service](/docs/RaaS.md) (10 language templates, no need to memorize one-liners)
+- File download/upload with progress
+- Full interactive shell (vim, Ctrl-C/Z work as expected)
+- Port forwarding (push, pull, dynamic SOCKS5)
+- Encrypted agent channel (TLS + protobuf)
+- Auto-start listeners from `config.yml`
+- Graceful shutdown (drains connections on SIGINT/SIGTERM within 30s)
 
 ## Documents
 
 * [Chinese | 中文文档](https://platypus-reverse-shell.vercel.app/)
 
-## Get Start
+## Quick start
 
-> There are multiple ways to run this tool, feel free to choose one of the following method.
+### Build from source
 
-### Install requirements for running (Optional)
-
-```
-sudo apt install upx
-```
-
-### Run Platypus from source code
+Requires Go 1.24+ and `protoc` (only if you regenerate protobuf code).
 
 ```bash
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
-sudo apt install -y make curl
-make install_dependency
-make release
+make build              # → ./build/{platypus-server,platypus-admin,platypus-agent}
 ```
 
-### Run Platypus from docker-compose
+Other useful targets: `make test`, `make lint`, `make snapshot` (cross-platform via goreleaser), `make help`.
+
+### Install from release binaries
+
+Download the appropriate archive for your OS/arch from the [Releases page](https://github.com/WangYihang/Platypus/releases), extract, and run.
+
+### Run with Docker
 
 ```bash
-docker-compose up -d
-# Method 1: enter the cli of platypus
-docker-compose exec app tmux a -t platypus
-# Method 2: enter the web ui of platypus
-firefox http://127.0.0.1:7331/
+docker build -t platypus-server .
+docker run --rm -p 7331:7331 -p 13337:13337 -v $(pwd)/config.yml:/config.yml platypus-server
 ```
 
-### Run Platypus from release binaries
+### Run
 
-1. Download `Platypus` prebuild binary from [HERE](https://github.com/WangYihang/Platypus/releases)
-2. Run the downloaded executable file
+```bash
+./build/platypus-server                # foreground; Ctrl-C for graceful shutdown
+./build/platypus-admin --secret <S>    # connect to server via secret → bearer token
+```
+
+For production, run the server under `systemd` rather than backgrounding it manually.
 
 ## Usage
 
@@ -127,25 +134,7 @@ Now, suppose that the victim is attacked by the attacker and a reverse shell com
 
 > Notice, the RaaS feature ensure that the reverse shell process is running in background and ignore the hangup signal.
 
-## Get start with Web UI
-
-### Manage listening port
-
-![](https://platypus-reverse-shell.vercel.app/images/webui/add.gif)
-
-### Wait for client connection
-
-![](https://platypus-reverse-shell.vercel.app/images/webui/wait.gif)
-
-### Popup an interactive shell
-
-![](https://platypus-reverse-shell.vercel.app/images/webui/shell.gif)
-
-### Upgrade a reverse shell to an encrypted channel (Termite)
-
-![](https://platypus-reverse-shell.vercel.app/images/webui/upgrade.gif)
-
-## Get start with cli
+## Get start with the admin CLI
 
 ### List all victims
 
