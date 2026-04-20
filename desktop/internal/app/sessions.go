@@ -15,13 +15,6 @@ type listClientsResponse struct {
 	Msg    map[string]json.RawMessage `json:"msg"`
 }
 
-// rawSession captures the fields the legacy /api/client endpoint returns.
-// We probe the optional `version` field to decide if it's a TermiteClient.
-type rawSession struct {
-	api.Session
-	probeVersion *string `json:"version,omitempty"`
-}
-
 // ListSessions returns every session (TCPClient + TermiteClient) attached
 // to any listener. Backed by GET /api/client.
 func (a *App) ListSessions() ([]api.Session, error) {
