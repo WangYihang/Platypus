@@ -170,17 +170,42 @@ const (
 	opcodeResizeTerminal = '1'
 	opcodePause          = '2'
 	opcodeResume         = '3'
-	opcodeJSONData       = '{'
 )
+
+// ttyAction is the high-level intent of a TTY WebSocket frame.
+type ttyAction int
+
+const (
+	ttyActionUnknown ttyAction = iota
+	ttyActionInput
+	ttyActionResize
+	ttyActionIgnore // recognized but intentionally dropped (pause/resume)
+)
+
+// classifyTTYOpcode maps the leading opcode byte to its action. The '{'
+// opcode used by older ttyd clients is deliberately not handled: it collides
+// with JSON written to stdin by shell pipelines, which caused silent byte
+// loss. Resize requests must use opcode '1' with a JSON body.
+func classifyTTYOpcode(b byte) ttyAction {
+	switch b {
+	case opcodeInput:
+		return ttyActionInput
+	case opcodeResizeTerminal:
+		return ttyActionResize
+	case opcodePause, opcodeResume:
+		return ttyActionIgnore
+	}
+	return ttyActionUnknown
+}
 
 func handleTCPClientMessage(current *core.TCPClient, msg []byte) {
 	if !current.GetInteractive() {
 		return
 	}
-	switch msg[0] {
-	case opcodeInput:
+	switch classifyTTYOpcode(msg[0]) {
+	case ttyActionInput:
 		current.Write(msg[1:])
-	case opcodeResizeTerminal, opcodePause, opcodeResume, opcodeJSONData:
+	case ttyActionResize, ttyActionIgnore:
 		// Raw reverse shells don't support resize / pause / resume.
 	default:
 		fmt.Println("Invalid message: ", string(msg))
@@ -196,8 +221,8 @@ func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteC
 	key := keyVal.(string)
 	body := msg[1:]
 
-	switch msg[0] {
-	case opcodeInput:
+	switch classifyTTYOpcode(msg[0]) {
+	case ttyActionInput:
 		err := currentTermite.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_Stdio{
 				Stdio: &agentpb.StdioData{Key: key, Data: body},
@@ -206,7 +231,7 @@ func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteC
 		if err != nil {
 			log.Error("Network error: %s", err)
 		}
-	case opcodeResizeTerminal:
+	case ttyActionResize:
 		var ws core.WindowSize
 		json.Unmarshal(body, &ws)
 		err := currentTermite.Send(&agentpb.Envelope{
@@ -217,18 +242,7 @@ func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteC
 		if err != nil {
 			log.Error("Network error: %s", err)
 		}
-	case opcodeJSONData:
-		var ws core.WindowSize
-		json.Unmarshal(msg, &ws)
-		err := currentTermite.Send(&agentpb.Envelope{
-			Payload: &agentpb.Envelope_WindowSize{
-				WindowSize: &agentpb.WindowSizeUpdate{Key: key, Columns: int32(ws.Columns), Rows: int32(ws.Rows)},
-			},
-		})
-		if err != nil {
-			log.Error("Network error: %s", err)
-		}
-	case opcodePause, opcodeResume:
+	case ttyActionIgnore:
 		// TODO: support zmodem pause/resume
 	default:
 		fmt.Println("Invalid message: ", string(msg))
