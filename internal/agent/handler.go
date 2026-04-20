@@ -1,12 +1,14 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"runtime"
 	"syscall"
 	"time"
@@ -16,8 +18,8 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 	"github.com/creack/pty"
+	"github.com/creativeprojects/go-selfupdate"
 	"github.com/phayes/freeport"
-	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	socks5 "github.com/things-go/go-socks5"
 )
 
@@ -524,7 +526,9 @@ func handleUpdate(c *Client, req *agentpb.UpdateRequest) {
 	log.Info("New filename: %s", exe)
 	log.Info("New version v%s is available, upgrading...", req.Version)
 	url := fmt.Sprintf("%s/termite/%s", req.DistributorUrl, c.Service)
-	if err := selfupdate.UpdateTo(url, exe); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := selfupdate.UpdateTo(ctx, url, path.Base(url), exe); err != nil {
 		log.Error("Error occurred while updating binary: %s", err)
 		return
 	}
