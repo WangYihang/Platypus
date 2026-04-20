@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/api"
@@ -10,54 +16,112 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
-var cfg config.Config
-var v = viper.New()
-
-func init() {
-	// Configure Viper
-	v.SetConfigName("config")
-	v.SetConfigType("yml")
-	v.AddConfigPath(".")
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Error("Config file not found")
-		} else {
-			log.Error("Failed to read config file: %v", err)
-		}
-		return
-	}
-	if err := v.Unmarshal(&cfg); err != nil {
-		log.Error("Failed to unmarshal config: %v", err)
-		return
-	}
-}
+const shutdownTimeout = 30 * time.Second
 
 func main() {
+	cfg, configFile, err := loadConfig()
+	if err != nil {
+		log.Error("config: %v", err)
+		os.Exit(1)
+	}
 
-	// Display platypus information
 	log.Success("Platypus %s is starting...", update.Version)
-	log.Success("Using configuration file: %s", v.ConfigFileUsed())
+	log.Success("Using configuration file: %s", configFile)
 
-	// Create App and set as global Ctx
-	core.Ctx = app.New(&cfg)
+	core.Ctx = app.New(cfg)
 	core.CreateContext()
 
-	// Detect new version
 	if cfg.Update {
 		update.ConfirmAndSelfUpdate()
 	}
 
-	// Init distributor server from config file
-	rh := cfg.Distributor.Host
-	rp := cfg.Distributor.Port
-	distributor := core.CreateDistributorServer(rh, rp, cfg.Distributor.Url)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	go distributor.Run(fmt.Sprintf("%s:%d", rh, rp))
+	servers := startHTTPServers(cfg)
 
-	// Init RESTful Server from config file
+	for _, s := range cfg.Servers {
+		listener := core.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
+		if listener != nil {
+			time.Sleep(0x100 * time.Millisecond)
+			go (*listener).Run()
+		}
+	}
+
+	log.Success("Server is running. Use platypus-admin or API to manage. (Ctrl-C to stop)")
+
+	<-ctx.Done()
+	log.Info("Shutdown signal received, draining connections...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error("server shutdown: %v", err)
+		}
+	}
+	log.Success("Server stopped cleanly")
+}
+
+func loadConfig() (*config.Config, string, error) {
+	v := viper.New()
+	v.SetConfigName("config")
+	v.SetConfigType("yml")
+	v.AddConfigPath(".")
+
+	if err := v.ReadInConfig(); err != nil {
+		return nil, "", fmt.Errorf("read config: %w", err)
+	}
+
+	var cfg config.Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, v.ConfigFileUsed(), fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	if err := validator.New().Struct(&cfg); err != nil {
+		return nil, v.ConfigFileUsed(), formatValidationError(err)
+	}
+
+	return &cfg, v.ConfigFileUsed(), nil
+}
+
+func formatValidationError(err error) error {
+	var ve validator.ValidationErrors
+	if !errors.As(err, &ve) {
+		return err
+	}
+	msg := "config validation failed:"
+	for _, fe := range ve {
+		msg += fmt.Sprintf("\n  - %s: %s (got %v)", fe.Namespace(), fe.Tag(), fe.Value())
+	}
+	return errors.New(msg)
+}
+
+func startHTTPServers(cfg *config.Config) []*http.Server {
+	var servers []*http.Server
+
+	dh := cfg.Distributor.Host
+	dp := cfg.Distributor.Port
+	distributor := core.CreateDistributorServer(dh, dp, cfg.Distributor.Url)
+	distributorSrv := &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", dh, dp),
+		Handler:           distributor,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	servers = append(servers, distributorSrv)
+
+	go func() {
+		if err := distributorSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("distributor: %v", err)
+		}
+	}()
+	log.Success("Distributor at: http://%s:%d/", dh, dp)
+
 	if cfg.RESTful.Enable {
 		rh := cfg.RESTful.Host
 		rp := cfg.RESTful.Port
@@ -71,22 +135,21 @@ func main() {
 		log.Success("API secret: %s", auth.GetSecret())
 		log.Success("  Obtain token: curl -X POST http://%s:%d/api/v1/auth/token -d '{\"secret\":\"%s\"}'", rh, rp, auth.GetSecret())
 
-		go rest.Run(fmt.Sprintf("%s:%d", rh, rp))
+		restSrv := &http.Server{
+			Addr:              fmt.Sprintf("%s:%d", rh, rp),
+			Handler:           rest,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		servers = append(servers, restSrv)
+
+		go func() {
+			if err := restSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("rest: %v", err)
+			}
+		}()
 		log.Success("RESTful API at: http://%s:%d/api/v1/", rh, rp)
 		core.Ctx.RESTful = rest
 	}
 
-	// Init servers from config file
-	for _, s := range cfg.Servers {
-		server := core.CreateTCPServer(s.Host, uint16(s.Port), s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
-		if server != nil {
-			// avoid terminal being disrupted
-			time.Sleep(0x100 * time.Millisecond)
-			go (*server).Run()
-		}
-	}
-
-	// Block forever — server runs as daemon, managed via API
-	log.Success("Server is running. Use platypus-admin or API to manage.")
-	select {}
+	return servers
 }
