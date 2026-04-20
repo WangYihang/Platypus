@@ -1,0 +1,6 @@
+build/bin
+node_modules
+frontend/dist
+frontend/wailsjs
+# go build output when invoked from desktop/
+/desktop

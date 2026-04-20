@@ -28,6 +28,12 @@ go.work.sum
 build/
 dist/
 
+# Wails desktop — un-ignore project scaffold under desktop/build/
+# (global build/ rule above would otherwise hide platform configs).
+# Desktop-specific build/bin, node_modules, frontend/dist live in desktop/.gitignore.
+!desktop/build/
+!desktop/build/**
+
 # Config file
 config.yml
 config-v*.yml
