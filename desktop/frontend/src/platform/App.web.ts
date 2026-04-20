@@ -3,7 +3,7 @@
 // that talks to platypus-server directly. The server's CORS config is `*`
 // (see internal/api/rest.go) so cross-origin fetch + WebSocket work.
 
-import type { api, app, profile } from "./models.web";
+import type { api, app, profile } from "../../wailsjs/go/models";
 import { emitEvent } from "./runtime.web";
 
 // ---------- localStorage-backed auth state ------------------------------

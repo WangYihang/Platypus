@@ -2,7 +2,13 @@ build/bin
 node_modules
 frontend/dist
 frontend/dist-web
-frontend/wailsjs
+# Wails regenerates these on `wails generate module` — App.js/runtime.* are
+# desktop-only runtime plumbing, leave them ignored. go/models.ts stays
+# tracked so the web build (which doesn't run wails) has the TS type
+# definitions for api.Session / api.Listener / etc. without a hand-written
+# copy drifting out of sync.
+frontend/wailsjs/go/app
+frontend/wailsjs/runtime
 # wails frontend-deps cache marker
 frontend/package.json.md5
 # go build output when invoked from desktop/

@@ -16,14 +16,15 @@ import path from "path";
 // from "../../wailsjs/go/app/App" etc. The alias below is the whole trick.
 export default defineConfig(({ mode }) => {
     const isWeb = mode === "web";
+    // wailsjs/go/models is committed (it's pure type definitions auto-
+    // generated from the Go structs), so both build modes resolve to the
+    // same file. Only App and runtime need a web-mode swap.
     const platformAliases = isWeb
         ? {
               "../wailsjs/go/app/App": path.resolve(__dirname, "src/platform/App.web.ts"),
               "../../wailsjs/go/app/App": path.resolve(__dirname, "src/platform/App.web.ts"),
               "../wailsjs/runtime/runtime": path.resolve(__dirname, "src/platform/runtime.web.ts"),
               "../../wailsjs/runtime/runtime": path.resolve(__dirname, "src/platform/runtime.web.ts"),
-              "../wailsjs/go/models": path.resolve(__dirname, "src/platform/models.web.ts"),
-              "../../wailsjs/go/models": path.resolve(__dirname, "src/platform/models.web.ts"),
           }
         : {};
 
