@@ -23,11 +23,12 @@ type Session struct {
 	Python3           string            `json:"python3"`
 	Timestamp         time.Time         `json:"timestamp"`
 	GroupDispatch     bool              `json:"group_dispatch"`
-	Encrypted         bool              `json:"-"` // set by ListSessions based on which map it came from
 
-	// Tag is a UI-friendly synthetic field set by ListSessions to "termite"
-	// or "shell" so the frontend doesn't have to look at Encrypted.
-	Tag string `json:"-"`
+	// Encrypted and Tag are synthetic fields ListSessions sets based on
+	// which server-side map (Clients vs TermiteClients) the entry came
+	// from. They're serialised so the frontend can display + filter.
+	Encrypted bool   `json:"encrypted"`
+	Tag       string `json:"tag"` // "shell" or "termite"
 }
 
 // Listener is the desktop's view of a TCPServer entry from /api/server.

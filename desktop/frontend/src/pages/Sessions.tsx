@@ -7,6 +7,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { ListSessions } from "../../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import type { api } from "../../wailsjs/go/models";
+import UpgradeModal from "./UpgradeModal";
 
 dayjs.extend(relativeTime);
 
@@ -19,6 +20,7 @@ interface Props {
 export default function Sessions({ onOpenTerminal }: Props) {
     const [sessions, setSessions] = useState<api.Session[]>([]);
     const [loading, setLoading] = useState(false);
+    const [upgradeFor, setUpgradeFor] = useState<string>("");
     const [messageApi, contextHolder] = message.useMessage();
 
     const refresh = useCallback(async () => {
@@ -50,7 +52,7 @@ export default function Sessions({ onOpenTerminal }: Props) {
     const columns: ColumnsType<api.Session> = [
         {
             title: "Type",
-            dataIndex: "Tag",
+            dataIndex: "tag",
             key: "tag",
             width: 100,
             render: (tag: string) => (
@@ -94,11 +96,18 @@ export default function Sessions({ onOpenTerminal }: Props) {
         {
             title: "",
             key: "open",
-            width: 120,
+            width: 220,
             render: (_, s) => (
-                <Button type="link" onClick={() => onOpenTerminal(s)}>
-                    Open Terminal
-                </Button>
+                <Space>
+                    <Button type="link" onClick={() => onOpenTerminal(s)}>
+                        Open Terminal
+                    </Button>
+                    {s.tag === "shell" && (
+                        <Button type="link" onClick={() => setUpgradeFor(s.hash)}>
+                            Upgrade
+                        </Button>
+                    )}
+                </Space>
             ),
         },
     ];
@@ -130,6 +139,12 @@ export default function Sessions({ onOpenTerminal }: Props) {
                     size="middle"
                 />
             )}
+
+            <UpgradeModal
+                open={!!upgradeFor}
+                sessionHash={upgradeFor}
+                onClose={() => setUpgradeFor("")}
+            />
         </div>
     );
 }
