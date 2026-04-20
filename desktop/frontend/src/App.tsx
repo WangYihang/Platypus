@@ -3,6 +3,7 @@ import { Layout, Spin, Tabs, Typography, Button, Space, Tag } from "antd";
 
 import Connect from "./pages/Connect";
 import Sessions from "./pages/Sessions";
+import Listeners from "./pages/Listeners";
 import Terminal from "./pages/Terminal";
 import { ConnectionStatus, Disconnect } from "../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
@@ -77,6 +78,12 @@ function App() {
             label: "Sessions",
             closable: false,
             children: <Sessions onOpenTerminal={openTerminal} />,
+        },
+        {
+            key: "listeners",
+            label: "Listeners",
+            closable: false,
+            children: <Listeners />,
         },
         ...tabs.map((t) => ({
             key: t.key,
