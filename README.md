@@ -61,6 +61,17 @@ make desktop-build      # → desktop/build/bin/platypus-desktop
 make desktop-dev        # hot-reload dev mode
 ```
 
+### Or: use the standalone web UI (no install)
+
+For quick feature verification without building a native app — same pages, same features (minus real-time event push), runs in any browser:
+
+```bash
+make web-ui             # → desktop/frontend/dist-web/ (static bundle)
+make web-ui-serve       # preview at http://localhost:8080
+```
+
+`dist-web/` is fully static; drop it on GitHub Pages / S3 / nginx. Point it at any `platypus-server` via the login form.
+
 Full notes in [`desktop/README.md`](./desktop/README.md).
 
 ### Install from release binaries

