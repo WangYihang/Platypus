@@ -299,7 +299,9 @@ export async function DownloadFile(
     const total = await FileSize(sessionHash, remotePath);
     if (total === 0) throw new Error("remote file is empty or unreadable");
 
-    const parts: Uint8Array[] = [];
+    // BlobPart[] (not Uint8Array[]) so TS 6+ accepts SharedArrayBuffer-
+    // backed byte arrays when passing to new Blob(...).
+    const parts: BlobPart[] = [];
     for (let off = 0; off < total; off += CHUNK_SIZE) {
         const want = Math.min(CHUNK_SIZE, total - off);
         const q = new URLSearchParams({
