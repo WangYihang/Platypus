@@ -1,51 +1,60 @@
-all: release
+GO         ?= go
+LDFLAGS    := -s -w
+BUILD_DIR  := build
+BINS       := platypus-server platypus-admin platypus-agent
+PROTO_SRC  := proto/agent/v1/agent.proto
+PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
-build: build_platypus
+.PHONY: all build proto test lint fmt vet tidy clean release snapshot help
 
-install_dependency:
-	sudo apt update
-	# Nodejs
-	node --version || (curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash && bash -c "source ${HOME}/.nvm/nvm.sh && nvm install 22 && npm install -g yarn")
-	# Golang
-	axel --version || sudo apt install -y axel
-	unar --version || sudo apt install -y unar
-	git --version || sudo apt install -y git
-	go version || (sudo axel https://go.dev/dl/go1.24.0.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz)
-	go env -w GO111MODULE=on
-	# upx
-	sudo apt install -y upx
+all: build
 
-prepare:
-	bash -c "[[ -d build ]] || mkdir build"
+help:
+	@echo "Targets:"
+	@echo "  build      Build all three binaries to ./$(BUILD_DIR)/"
+	@echo "  proto      Regenerate protobuf code"
+	@echo "  test       Run tests with race detector"
+	@echo "  lint       Run golangci-lint"
+	@echo "  fmt        Format Go source"
+	@echo "  vet        Run go vet"
+	@echo "  tidy       Run go mod tidy"
+	@echo "  snapshot   Build cross-platform snapshot via goreleaser"
+	@echo "  release    Cut a release via goreleaser (requires tag + GITHUB_TOKEN)"
+	@echo "  clean      Remove build artifacts"
 
-build_frontend: prepare
-	echo "Building frontend"
-	cd web/frontend && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && NODE_OPTIONS='--max-old-space-size=1024' yarn build"
-	echo "Building ttyd"
-	cd web/ttyd && bash -c "source ${HOME}/.nvm/nvm.sh && yarn install && NODE_OPTIONS='--max-old-space-size=1024' yarn build"
+$(PROTO_OUT): $(PROTO_SRC)
+	protoc --go_out=pkg/proto/agent/v1 --go_opt=paths=source_relative $(PROTO_SRC)
 
-proto:
-	protoc --go_out=pkg/proto/agent/v1 --go_opt=paths=source_relative proto/agent/v1/agent.proto
+proto: $(PROTO_OUT)
 
-build_platypus: prepare
-	echo "Building platypus-server"
-	go build -ldflags="-s -w " -trimpath -o ./build/platypus-server ./cmd/platypus-server
-	echo "Building platypus-admin"
-	go build -ldflags="-s -w " -trimpath -o ./build/platypus-admin ./cmd/platypus-admin
-	echo "Building platypus-agent"
-	go build -ldflags="-s -w " -trimpath -o ./build/platypus-agent ./cmd/platypus-agent
+build: proto
+	@mkdir -p $(BUILD_DIR)
+	@for b in $(BINS); do \
+	  echo "→ $$b"; \
+	  $(GO) build -ldflags="$(LDFLAGS)" -trimpath \
+	    -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
+	done
 
-release: install_dependency build_frontend
-	# Linux
-	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus-server_linux_amd64 ./cmd/platypus-server
-	env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus-server_linux_arm64 ./cmd/platypus-server
-	# MacOS
-	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus-server_darwin_amd64 ./cmd/platypus-server
-	env GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w " -trimpath -o ./build/platypus-server_darwin_arm64 ./cmd/platypus-server
-	# Windows
-	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w " -trimpath -o ./build/platypus-server_windows_amd64.exe ./cmd/platypus-server
+test:
+	$(GO) test -race -count=1 -timeout=120s ./...
+
+lint:
+	golangci-lint run ./...
+
+fmt:
+	$(GO) fmt ./...
+
+vet:
+	$(GO) vet ./...
+
+tidy:
+	$(GO) mod tidy
+
+snapshot:
+	goreleaser build --snapshot --clean
+
+release:
+	goreleaser release --clean
 
 clean:
-	rm -rf build
-	rm -rf web/frontend/build
-	rm -rf web/ttyd/build
+	rm -rf $(BUILD_DIR) dist

@@ -23,6 +23,9 @@ go.work.sum
 
 # env file
 .env
+
+# Build artifacts
+build/
 dist/
 
 # Config file
