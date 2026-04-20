@@ -9,15 +9,16 @@ A modern multiple reverse shell sessions/clients manager via terminal written in
 
 ## Architecture
 
-Platypus ships as three independent binaries:
+Platypus ships as three backend binaries plus a standalone desktop client:
 
 | Binary | Role |
 |---|---|
-| `platypus-server` | Daemon. Runs reverse-shell listeners, manages sessions, exposes REST + WebSocket API. |
-| `platypus-admin`  | CLI client. Talks to `platypus-server` over HTTP; useful for scripting and CI. |
-| `platypus-agent`  | Encrypted controlled-end (formerly "termite"). Connects back to a server over TLS + protobuf. |
+| `platypus-server`  | Daemon. Runs reverse-shell listeners, manages sessions, exposes REST + WebSocket API. |
+| `platypus-admin`   | CLI client. Talks to `platypus-server` over HTTP; useful for scripting and CI. |
+| `platypus-agent`   | Encrypted controlled-end (formerly "termite"). Connects back to a server over TLS + protobuf. |
+| `platypus-desktop` | Native (Wails v2) desktop GUI. Connect to any reachable server with URL + secret; tabbed UI for sessions, terminals, listeners, files, tunnels. See [`desktop/`](./desktop/). |
 
-The server is purely an API — there is no embedded web UI. A standalone desktop app (Wails) is on the roadmap; until then, use `platypus-admin` or call the REST API directly.
+The server is purely an API — no embedded web UI. Multiple desktops can connect to the same server simultaneously.
 
 ## Features
 
@@ -49,6 +50,18 @@ make build              # → ./build/{platypus-server,platypus-admin,platypus-a
 ```
 
 Other useful targets: `make test`, `make lint`, `make snapshot` (cross-platform via goreleaser), `make help`.
+
+### Build the desktop app
+
+Requires Node 22+, Wails CLI dependencies (`wails doctor`), and the platform's WebView libraries (webkit2gtk-4.1 on Linux, WebView2 on Windows, WKWebView on macOS).
+
+```bash
+make desktop-deps       # one-time: install Wails CLI + npm packages
+make desktop-build      # → desktop/build/bin/platypus-desktop
+make desktop-dev        # hot-reload dev mode
+```
+
+Full notes in [`desktop/README.md`](./desktop/README.md).
 
 ### Install from release binaries
 
