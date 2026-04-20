@@ -78,7 +78,7 @@ func GetServer(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such server")
+	abortWithLegacyError(c, 404, "No such server")
 }
 
 // GetServerClients lists every TCP/Termite client attached to a listener.
@@ -110,7 +110,7 @@ func GetServerClients(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such server")
+	abortWithLegacyError(c, 404, "No such server")
 }
 
 // CreateServer starts a new TCP listener.
@@ -133,17 +133,13 @@ func CreateServer(c *gin.Context) {
 	}
 	port, err := strconv.Atoi(c.PostForm("port"))
 	if err != nil || port <= 0 || port > 65535 {
-		panicRESTfully(c, "Invalid port number")
+		abortWithLegacyError(c, 400, "Invalid port number")
 		return
 	}
 	encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
 	server := core.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
 	if server == nil {
-		c.JSON(200, gin.H{
-			"status": false,
-			"msg":    fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port),
-		})
-		c.Abort()
+		abortWithLegacyError(c, 500, fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port))
 		return
 	}
 	go (*server).Run()
@@ -174,7 +170,7 @@ func DeleteServer(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such server")
+	abortWithLegacyError(c, 404, "No such server")
 }
 
 // ListClients returns every connected client across every listener.
@@ -222,7 +218,7 @@ func GetClient(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such client")
+	abortWithLegacyError(c, 404, "No such client")
 }
 
 // UpgradeClient asks the server to compile + push a Termite agent to the
@@ -245,12 +241,12 @@ func UpgradeClient(c *gin.Context) {
 	hash := c.Param("hash")
 	target := c.Param("target")
 	if target == "" {
-		panicRESTfully(c, "Invalid server hash")
+		abortWithLegacyError(c, 400, "Invalid server hash")
 		return
 	}
 	client := core.FindTCPClientByHash(hash)
 	if client == nil {
-		panicRESTfully(c, "No such client")
+		abortWithLegacyError(c, 404, "No such client")
 		return
 	}
 	go client.UpgradeToTermite(target)
@@ -284,7 +280,7 @@ func DeleteClient(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such client")
+	abortWithLegacyError(c, 404, "No such client")
 }
 
 // ExecClient executes a command on a TCP or Termite client and returns the output.
@@ -312,13 +308,10 @@ func ExecClient(c *gin.Context) {
 	for _, server := range core.GetServers() {
 		if client, exist := server.Clients[hash]; exist {
 			if client.GetPtyEstablished() {
-				c.JSON(200, gin.H{
-					"status": false,
-					"msg":    "The client is under PTY mode, please exit pty mode before execute command on it",
-				})
-			} else {
-				c.JSON(200, gin.H{"status": true, "msg": client.SystemToken(cmd)})
+				abortWithLegacyError(c, 409, "The client is under PTY mode, please exit pty mode before execute command on it")
+				return
 			}
+			c.JSON(200, gin.H{"status": true, "msg": client.SystemToken(cmd)})
 			c.Abort()
 			return
 		}
@@ -328,5 +321,5 @@ func ExecClient(c *gin.Context) {
 			return
 		}
 	}
-	panicRESTfully(c, "No such client")
+	abortWithLegacyError(c, 404, "No such client")
 }

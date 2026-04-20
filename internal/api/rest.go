@@ -12,7 +12,7 @@ import (
 func formExistOrAbort(c *gin.Context, params []string) bool {
 	for _, param := range params {
 		if c.PostForm(param) == "" {
-			return panicRESTfully(c, fmt.Sprintf("%s is required", param))
+			return abortWithLegacyError(c, 400, fmt.Sprintf("%s is required", param))
 		}
 	}
 	return true
@@ -21,14 +21,18 @@ func formExistOrAbort(c *gin.Context, params []string) bool {
 func paramsExistOrAbort(c *gin.Context, params []string) bool {
 	for _, param := range params {
 		if c.Param(param) == "" {
-			return panicRESTfully(c, fmt.Sprintf("%s is required", param))
+			return abortWithLegacyError(c, 400, fmt.Sprintf("%s is required", param))
 		}
 	}
 	return true
 }
 
-func panicRESTfully(c *gin.Context, msg string) bool {
-	c.JSON(200, gin.H{
+// abortWithLegacyError emits the {status:false, msg} envelope at the given
+// HTTP status code and aborts the gin handler chain. The legacy envelope is
+// kept for client compatibility; only the status code is corrected so that
+// generic HTTP tooling (curl -f, retry middleware, monitors) sees the error.
+func abortWithLegacyError(c *gin.Context, status int, msg string) bool {
+	c.JSON(status, gin.H{
 		"status": false,
 		"msg":    msg,
 	})

@@ -33,7 +33,7 @@ func RegisterWebSocketRoutes(engine *gin.Engine) {
 		client := core.FindTCPClientByHash(c.Param("hash"))
 		termiteClient := core.FindTermiteClientByHash(c.Param("hash"))
 		if client == nil && termiteClient == nil {
-			panicRESTfully(c, "client is not found")
+			abortWithLegacyError(c, 404, "client is not found")
 			return
 		}
 		if client != nil {
