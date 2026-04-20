@@ -48,6 +48,10 @@ func RegisterWebSocketRoutes(engine *gin.Engine) {
 
 func newNotifyWebSocket() *melody.Melody {
 	m := melody.New()
+	// Events are small JSON blobs, but pin the cap explicitly so we don't
+	// silently sit on melody's 512-byte default. Ping/pong defaults (54s/60s)
+	// are kept so dead connections behind firewalls get reaped.
+	m.Config.MaxMessageSize = 64 * 1024
 	m.HandleConnect(func(s *melody.Session) {
 		log.Info("Notify client connected from: %s", s.Request.RemoteAddr)
 	})
@@ -63,6 +67,10 @@ func newNotifyWebSocket() *melody.Melody {
 func newTTYWebSocket() *melody.Melody {
 	tty := melody.New()
 	tty.Upgrader.Subprotocols = []string{"tty"}
+	// melody's 512-byte default would sever a terminal session the moment a
+	// user pasted a modest line. 1 MiB matches what xterm.js sends in one
+	// frame for typical paste sizes; ping/pong defaults handle idle reaping.
+	tty.Config.MaxMessageSize = 1 << 20
 
 	tty.HandleConnect(func(s *melody.Session) {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
