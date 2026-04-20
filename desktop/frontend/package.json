@@ -15,12 +15,12 @@
     "@xterm/xterm": "^6.0.0",
     "antd": "^6.3.6",
     "dayjs": "^1.11.20",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
-    "@types/react": "^18.0.17",
-    "@types/react-dom": "^18.0.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.9"
