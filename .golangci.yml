@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - gosec
+    - unconvert
+    - misspell
+    - revive
+  exclusions:
+    paths:
+      - pkg/proto
+      - pkg/dependencies
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+      - linters:
+          - gosec
+        text: "G404"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/WangYihang/Platypus
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

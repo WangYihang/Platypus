@@ -9,31 +9,33 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.24']
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
+          cache: true
 
       - name: Build
         run: go build ./cmd/...
 
       - name: Test
-        run: |
-          go test -race -count=1 -timeout=60s \
-            ./internal/api/ \
-            ./internal/protocol/ \
-            ./internal/session/ \
-            ./internal/listener/ \
-            ./internal/app/ \
-            ./internal/agent/ \
-            ./internal/utils/crypto/ \
-            ./internal/utils/hash/ \
-            ./internal/utils/str/ \
-            ./internal/utils/os/
+        run: go test -race -count=1 -timeout=120s ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
