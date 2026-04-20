@@ -88,7 +88,7 @@ type tunnelInfoEntry struct {
 // ListTunnels returns the active tunnels for a session.
 //
 // @Summary     List tunnels
-// @Description List every pull/push/SOCKS5 tunnel currently routed through this session.
+// @Description List every pull/push/SOCKS5 tunnel routed through this session. Tunnels owned by other sessions are excluded.
 // @Tags        tunnels
 // @Produce     json
 // @Security    BearerAuth
@@ -96,21 +96,49 @@ type tunnelInfoEntry struct {
 // @Success     200 {object} map[string]any "status + tunnels:[]tunnelInfoEntry"
 // @Router      /api/v1/sessions/{id}/tunnels [get]
 func ListTunnels(c *gin.Context) {
+	hash := c.Param("id")
 	type tunnelInfo struct {
 		Type    string `json:"type"`
 		Address string `json:"address"`
 	}
 
 	var tunnels []tunnelInfo
+	ownsPushSrc := map[string]bool{}
+
 	for addr, tc := range core.Ctx.PullTunnelConfig {
+		if !tunnelOwnedBy(tc.Termite, hash) {
+			continue
+		}
 		tunnels = append(tunnels, tunnelInfo{Type: "pull", Address: addr + " → " + tc.Address})
 	}
 	for addr, tc := range core.Ctx.PushTunnelConfig {
+		if !tunnelOwnedBy(tc.Termite, hash) {
+			continue
+		}
 		tunnels = append(tunnels, tunnelInfo{Type: "push", Address: tc.Address + " → " + addr})
+		ownsPushSrc[tc.Address] = true
 	}
+	// SOCKS5 entries are only stored for "internet" mode, which also creates a
+	// push tunnel. Surface the SOCKS5 row only for push sources this session
+	// owns — avoids leaking other sessions' SOCKS5 endpoints.
 	for addr := range core.Ctx.Socks5Servers {
+		if !ownsPushSrc[addr] {
+			continue
+		}
 		tunnels = append(tunnels, tunnelInfo{Type: "socks5", Address: addr})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": true, "tunnels": tunnels})
+}
+
+// tunnelOwnedBy reports whether a tunnel config's Termite owner matches the
+// given session hash. Returns false if the owner is nil or of an unexpected
+// type — defensive because PullTunnelConfig.Termite is an untyped interface{}
+// due to the core↔app circular-import workaround.
+func tunnelOwnedBy(owner interface{}, hash string) bool {
+	t, ok := owner.(*core.TermiteClient)
+	if !ok || t == nil {
+		return false
+	}
+	return t.Hash == hash
 }
