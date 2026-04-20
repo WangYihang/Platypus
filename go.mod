@@ -16,12 +16,9 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/rhysd/go-github-selfupdate v1.2.3
-	github.com/sevlyar/go-daemon v0.1.6
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.20.0
 	github.com/vbauerster/mpb/v6 v6.0.4
-	go.uber.org/fx v1.23.0
-	go.uber.org/zap v1.27.0
 	golang.org/x/mod v0.29.0
 	golang.org/x/term v0.37.0
 	google.golang.org/protobuf v1.36.11
@@ -51,7 +48,6 @@ require (
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -75,7 +71,6 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/ulikunitz/xz v0.5.14 // indirect
 	go.mongodb.org/mongo-driver v1.17.3 // indirect
-	go.uber.org/dig v1.18.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.15.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
