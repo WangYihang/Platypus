@@ -34,9 +34,7 @@ interface Props {
 }
 
 // TunnelsTab is the per-session tunnel manager embedded in HostView.
-// Extracted from the legacy pages/Tunnels.tsx with the session-picker
-// dropdown removed — sessionHash now flows in as a prop from the
-// HostView chip row.
+// sessionHash flows in as a prop from the HostView chip row.
 export default function TunnelsTab({ sessionHash }: Props) {
     const [tunnels, setTunnels] = useState<api.TunnelInfo[]>([]);
     const [modalOpen, setModalOpen] = useState(false);
