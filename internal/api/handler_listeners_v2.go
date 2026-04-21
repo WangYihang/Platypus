@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -90,6 +91,12 @@ func (h *ListenersV2Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist listener"})
 		return
 	}
+	core.BroadcastNotify(core.EventListenerCreated, map[string]any{
+		"project_id":  row.ProjectID,
+		"listener_id": row.ID,
+		"host":        row.Host,
+		"port":        row.Port,
+	})
 	c.JSON(http.StatusCreated, toListenerV2Response(row))
 }
 
@@ -133,6 +140,10 @@ func (h *ListenersV2Handler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete listener"})
 		return
 	}
+	core.BroadcastNotify(core.EventListenerDeleted, map[string]any{
+		"project_id":  pid,
+		"listener_id": id,
+	})
 	c.Status(http.StatusNoContent)
 }
 
