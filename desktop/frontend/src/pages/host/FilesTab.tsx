@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { Alert, Button, Form, Input, Space, Statistic, Typography, message } from "antd";
+import { Button, Form, Input, Space, message } from "antd";
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 
+import Card from "../../components/Card";
+import DataList from "../../components/DataList";
+import Mono from "../../components/Mono";
 import {
     DownloadFile,
     FileSize,
@@ -10,22 +13,18 @@ import {
     UploadFile,
 } from "../../../wailsjs/go/app/App";
 import { basename, humanize } from "../../lib/format";
-import { palette } from "../../layout/theme";
+import { palette, space } from "../../layout/theme";
 
 interface Props {
     sessionHash: string;
 }
 
 // FilesTab is the per-session file-transfer panel embedded in HostView.
-// Unlike the legacy pages/Files.tsx which carried its own session-picker
-// <Select>, this variant takes `sessionHash` as a prop — the picker now
-// lives in the HostView's parent (chip row above the sub-tabs).
-//
-// Implementation re-uses the Wails bindings that already support both
-// desktop (native file dialogs) and web (HTMLInputElement-based) modes
-// via the platform shim in src/platform/App.web.ts.
+// Path-based for now (no directory listing): the user types an exact
+// remote path, then Get Size / Download / Upload act on it.
 export default function FilesTab({ sessionHash }: Props) {
     const [size, setSize] = useState<number | null>(null);
+    const [lastPath, setLastPath] = useState<string | null>(null);
     const [busy, setBusy] = useState<string>("");
     const [form] = Form.useForm<{ remotePath: string }>();
     const [messageApi, contextHolder] = message.useMessage();
@@ -34,7 +33,9 @@ export default function FilesTab({ sessionHash }: Props) {
         const v = await form.validateFields();
         setBusy("size");
         try {
-            setSize(await FileSize(sessionHash, v.remotePath));
+            const n = await FileSize(sessionHash, v.remotePath);
+            setSize(n);
+            setLastPath(v.remotePath);
         } catch (err) {
             messageApi.error(`size: ${String(err)}`);
             setSize(null);
@@ -74,53 +75,62 @@ export default function FilesTab({ sessionHash }: Props) {
     }
 
     return (
-        <div>
+        <div style={{ maxWidth: 720, display: "flex", flexDirection: "column", gap: space[4] }}>
             {contextHolder}
-            <Alert
-                type="info"
-                showIcon
-                message="Path-based for now (no directory listing)"
-                description="Provide an exact remote path, then Get Size / Download / Upload."
-                style={{ marginBottom: 12 }}
-            />
 
-            <Form form={form} layout="vertical" style={{ maxWidth: 720 }}>
-                <Form.Item
-                    name="remotePath"
-                    label="Remote path"
-                    rules={[{ required: true }]}
+            <Card header="Transfer">
+                <p
+                    style={{
+                        margin: `0 0 ${space[4]}px`,
+                        color: palette.textSecondary,
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                    }}
                 >
-                    <Input placeholder="/etc/hostname" autoFocus />
-                </Form.Item>
-                <Space>
-                    <Button onClick={refreshSize} loading={busy === "size"}>
-                        Get size
-                    </Button>
-                    <Button
-                        icon={<DownloadOutlined />}
-                        onClick={download}
-                        loading={busy === "download"}
+                    Path-based for now — provide an exact remote path, then Get Size /
+                    Download / Upload.
+                </p>
+                <Form form={form} layout="vertical">
+                    <Form.Item
+                        name="remotePath"
+                        label="Remote path"
+                        rules={[{ required: true }]}
                     >
-                        Download
-                    </Button>
-                    <Button
-                        icon={<UploadOutlined />}
-                        onClick={upload}
-                        loading={busy === "upload"}
-                        type="primary"
-                    >
-                        Upload
-                    </Button>
-                </Space>
-            </Form>
+                        <Input placeholder="/etc/hostname" autoFocus />
+                    </Form.Item>
+                    <Space size={space[2]}>
+                        <Button onClick={refreshSize} loading={busy === "size"}>
+                            Get size
+                        </Button>
+                        <Button
+                            icon={<DownloadOutlined />}
+                            onClick={download}
+                            loading={busy === "download"}
+                        >
+                            Download
+                        </Button>
+                        <Button
+                            icon={<UploadOutlined />}
+                            onClick={upload}
+                            loading={busy === "upload"}
+                            type="primary"
+                        >
+                            Upload
+                        </Button>
+                    </Space>
+                </Form>
+            </Card>
 
-            {size !== null && (
-                <div style={{ marginTop: 16 }}>
-                    <Statistic title="Size" value={`${size} bytes`} />
-                    <Typography.Text style={{ color: palette.textSecondary }}>
-                        ≈ {humanize(size)}
-                    </Typography.Text>
-                </div>
+            {size !== null && lastPath && (
+                <Card header="Size">
+                    <DataList
+                        items={[
+                            { label: "path", value: <Mono>{lastPath}</Mono> },
+                            { label: "bytes", value: <Mono>{size}</Mono> },
+                            { label: "human", value: humanize(size) },
+                        ]}
+                    />
+                </Card>
             )}
         </div>
     );
