@@ -77,18 +77,6 @@ type tunnelsResponse struct {
 	Tunnels []tunnelInfoEntry `json:"tunnels"`
 }
 
-// raasLanguagesResponse is the shape of GET /api/v1/raas/languages.
-type raasLanguagesResponse struct {
-	Status    bool     `json:"status" example:"true"`
-	Languages []string `json:"languages"`
-}
-
-// raasOnelinerResponse is the shape of GET /api/v1/raas/oneliner.
-type raasOnelinerResponse struct {
-	Status   bool   `json:"status" example:"true"`
-	Oneliner string `json:"oneliner"`
-}
-
 // wsTicketResponse is the shape of POST /api/v1/ws/ticket.
 type wsTicketResponse struct {
 	Ticket string `json:"ticket"`

@@ -21,7 +21,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	"github.com/WangYihang/Platypus/internal/utils/network"
-	"github.com/WangYihang/Platypus/internal/utils/raas"
 	"github.com/WangYihang/Platypus/internal/utils/str"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
@@ -156,50 +155,7 @@ func (s *TCPServer) Handle(conn net.Conn) {
 	} else {
 		client := CreateTCPClient(conn, s)
 		log.Info("A new income connection from %s", client.conn.RemoteAddr())
-		// Reverse shell as a service
-		buffer := make([]byte, 4)
-		client.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-		client.readLock.Lock()
-		n, err := client.conn.Read(buffer)
-		client.readLock.Unlock()
-		client.conn.SetReadDeadline(time.Time{})
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.Debug("Not requesting for service")
-			} else {
-				client.Close()
-			}
-		}
-		if string(buffer[:n]) == "GET " {
-			requestURI := client.ReadUntilClean(" ")
-			// Read HTTP Version
-			client.ReadUntilClean("\r\n")
-			httpHost := fmt.Sprintf("%s:%d", s.Host, s.Port)
-			for {
-				var line = client.ReadUntilClean("\r\n")
-				// End of headers
-				if line == "" {
-					log.Debug("All header read")
-					break
-				}
-				delimiter := ":"
-				index := strings.Index(line, delimiter)
-				headerKey := line[:index]
-				headerValue := strings.Trim(line[index+len(delimiter):], " ")
-				if headerKey == "Host" {
-					httpHost = headerValue
-				}
-			}
-			command := fmt.Sprintf("%s\n", raas.URI2Command(requestURI, httpHost))
-			client.Write([]byte("HTTP/1.0 200 OK\r\n"))
-			client.Write([]byte(fmt.Sprintf("Content-Length: %d\r\n", len(command))))
-			client.Write([]byte("\r\n"))
-			client.Write([]byte(command))
-			client.Close()
-			log.Info("A RaaS request from %s served", client.conn.RemoteAddr().String())
-		} else {
-			s.AddTCPClient(client)
-		}
+		s.AddTCPClient(client)
 	}
 }
 

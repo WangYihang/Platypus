@@ -41,3 +41,21 @@ func TestCORSAllowsWildcardOrigin(t *testing.T) {
 		t.Fatalf("Access-Control-Allow-Origin: expected %q, got %q", "*", got)
 	}
 }
+
+// TestRaasEndpointsRemoved locks in the removal of the reverse-shell
+// one-liner generator. RaaS was a reverse-shell-as-a-service feature that
+// doesn't belong in a host-management tool.
+func TestRaasEndpointsRemoved(t *testing.T) {
+	engine := CreateRESTfulAPIServer()
+	auth := NewAuth()
+	RegisterV1Routes(engine, auth)
+
+	for _, path := range []string{"/api/v1/raas/languages", "/api/v1/raas/oneliner"} {
+		req, _ := http.NewRequest("GET", path, nil)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("GET %s: got %d, want 404", path, w.Code)
+		}
+	}
+}

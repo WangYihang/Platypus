@@ -57,7 +57,7 @@ linters:
       - path: internal/api/(handler_session|handler_tunnel|auth|responses)\.go
         linters:
           - unused
-        text: "type .*(Request|Response|Result|Error|Entry|Ack|Server|ServerList|ClientMap|Languages|Oneliner) is unused"
+        text: "type .*(Request|Response|Result|Error|Entry|Ack|Server|ServerList|ClientMap) is unused"
 
 formatters:
   enable:

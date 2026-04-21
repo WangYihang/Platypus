@@ -44,12 +44,6 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 		v1.GET("/sessions/:id/tunnels", ListTunnels)
 		v1.POST("/sessions/:id/tunnels", CreateTunnel)
 
-		// RaaS — single source of truth for the one-liner templates. Desktop
-		// and web clients call these rather than shipping their own copies
-		// of internal/utils/raas/templates/.
-		v1.GET("/raas/languages", ListRaasLanguages)
-		v1.GET("/raas/oneliner", RenderRaasOneliner)
-
 		// WebSocket ticket issue — trades the Bearer token for a one-shot
 		// short-lived ticket that browsers can pass via ?ticket= when
 		// upgrading /ws/:hash or /notify.

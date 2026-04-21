@@ -158,27 +158,6 @@ export async function DeleteListener(hash: string): Promise<void> {
     await apiFetch("/api/v1/listeners/" + encodeURIComponent(hash), { method: "DELETE" });
 }
 
-// ---------- RaaS (server is the single source of truth) ----------------
-// Both calls hit /api/v1/raas/* — the 10 templates live at
-// internal/utils/raas/templates/*.tpl on the server side and nowhere else.
-
-export async function AvailableRaasLanguages(): Promise<string[]> {
-    const resp = await apiJSON<{ languages?: string[] }>("/api/v1/raas/languages");
-    return (resp.languages || []).slice().sort();
-}
-
-export async function GenerateRaasOneliner(
-    listenerHostPort: string,
-    lang: string,
-): Promise<string> {
-    const i = listenerHostPort.lastIndexOf(":");
-    const host = i >= 0 ? listenerHostPort.slice(0, i) : listenerHostPort;
-    const port = i >= 0 ? listenerHostPort.slice(i + 1) : "13337";
-    const q = new URLSearchParams({ host, port, lang });
-    const resp = await apiJSON<{ oneliner?: string }>(`/api/v1/raas/oneliner?${q}`);
-    return resp.oneliner || "";
-}
-
 // ---------- Upgrade -----------------------------------------------------
 
 export async function UpgradeToTermite(plainHash: string, targetListenerHash: string): Promise<void> {

@@ -7,8 +7,6 @@ import {
     InputNumber,
     message,
     Modal,
-    Popover,
-    Select,
     Space,
     Switch,
     Table,
@@ -18,15 +16,13 @@ import {
 import type { ColumnsType } from "antd/es/table";
 
 import {
-    AvailableRaasLanguages,
     CreateListener,
     DeleteListener,
-    GenerateRaasOneliner,
     ListListeners,
 } from "../../wailsjs/go/app/App";
 import type { api } from "../../wailsjs/go/models";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 interface AddForm {
     host: string;
@@ -38,7 +34,6 @@ export default function Listeners() {
     const [items, setItems] = useState<api.Listener[]>([]);
     const [loading, setLoading] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
-    const [langs, setLangs] = useState<string[]>([]);
     const [form] = Form.useForm<AddForm>();
     const [messageApi, contextHolder] = message.useMessage();
 
@@ -55,7 +50,6 @@ export default function Listeners() {
 
     useEffect(() => {
         refresh();
-        AvailableRaasLanguages().then(setLangs);
     }, [refresh]);
 
     async function handleAdd(v: AddForm) {
@@ -111,11 +105,6 @@ export default function Listeners() {
             render: (n: number) => <Tag color={n > 0 ? "green" : undefined}>{n}</Tag>,
         },
         {
-            title: "RaaS oneliner",
-            key: "raas",
-            render: (_, l) => <RaasPopover listener={l} languages={langs} />,
-        },
-        {
             title: "",
             key: "actions",
             width: 80,
@@ -145,7 +134,7 @@ export default function Listeners() {
             </Space>
 
             {items.length === 0 ? (
-                <Alert type="info" showIcon message="No listeners running. Create one to start accepting reverse shells." />
+                <Alert type="info" showIcon message="No listeners running. Create one to start accepting agent connections." />
             ) : (
                 <Table rowKey="hash" columns={columns} dataSource={items} pagination={false} size="middle" />
             )}
@@ -184,62 +173,3 @@ export default function Listeners() {
     );
 }
 
-function RaasPopover({ listener, languages }: { listener: api.Listener; languages: string[] }) {
-    const [lang, setLang] = useState("bash");
-    const [oneliner, setOneliner] = useState("");
-    const [messageApi, contextHolder] = message.useMessage();
-
-    async function regenerate(l: string) {
-        const endpoint = `${listener.public_ip || listener.host}:${listener.port}`;
-        setOneliner(await GenerateRaasOneliner(endpoint, l));
-    }
-
-    useEffect(() => {
-        regenerate(lang);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lang, listener.public_ip, listener.host, listener.port]);
-
-    async function copy() {
-        try {
-            await navigator.clipboard.writeText(oneliner);
-            messageApi.success("Copied");
-        } catch {
-            messageApi.error("Copy failed");
-        }
-    }
-
-    const content = (
-        <div style={{ width: 480 }}>
-            {contextHolder}
-            <Space style={{ marginBottom: 8 }}>
-                <Select
-                    size="small"
-                    value={lang}
-                    onChange={setLang}
-                    options={languages.map((l) => ({ label: l, value: l }))}
-                    style={{ width: 120 }}
-                />
-                <Button size="small" onClick={copy}>
-                    Copy
-                </Button>
-            </Space>
-            <Paragraph
-                code
-                style={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-all",
-                    maxHeight: 200,
-                    overflow: "auto",
-                }}
-            >
-                {oneliner || "—"}
-            </Paragraph>
-        </div>
-    );
-
-    return (
-        <Popover content={content} trigger="click" placement="bottomLeft">
-            <Button type="link">Show</Button>
-        </Popover>
-    );
-}
