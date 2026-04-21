@@ -10,11 +10,39 @@ import {
     SendTerminalInput,
 } from "../../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
+import { palette } from "../layout/theme";
 
 interface Props {
     sessionHash: string;
     onClose?: () => void;
 }
+
+// xterm theme aligned with Vercel neutral palette: pure-black background
+// matches the page surface so the terminal blends into HostView's
+// terminal tab instead of looking like an embedded gray box.
+const xtermTheme = {
+    background: palette.main,           // #000
+    foreground: palette.textPrimary,    // #fafafa
+    cursor: palette.textPrimary,
+    cursorAccent: palette.main,
+    selectionBackground: "#404040",
+    black: "#000000",
+    red: "#ff5c57",
+    green: palette.successDot,
+    yellow: "#f3f99d",
+    blue: "#57c7ff",
+    magenta: "#ff6ac1",
+    cyan: "#9aedfe",
+    white: "#f1f1f0",
+    brightBlack: "#686868",
+    brightRed: "#ff5c57",
+    brightGreen: palette.successDot,
+    brightYellow: "#f3f99d",
+    brightBlue: "#57c7ff",
+    brightMagenta: "#ff6ac1",
+    brightCyan: "#9aedfe",
+    brightWhite: "#ffffff",
+};
 
 // One <Terminal> per open session tab. Owns the xterm instance and the
 // underlying termID returned from OpenTerminal; reroutes Wails events to
@@ -29,9 +57,11 @@ export default function Terminal({ sessionHash, onClose }: Props) {
         if (!containerRef.current) return;
 
         const xterm = new Xterm({
-            fontFamily: "Menlo, Consolas, 'Liberation Mono', monospace",
+            fontFamily:
+                'var(--font-geist-mono), Menlo, Consolas, "Liberation Mono", monospace',
             fontSize: 13,
-            theme: { background: "#1e1e1e", foreground: "#d4d4d4" },
+            lineHeight: 1.2,
+            theme: xtermTheme,
             cursorBlink: true,
         });
         const fit = new FitAddon();
@@ -101,7 +131,7 @@ export default function Terminal({ sessionHash, onClose }: Props) {
     return (
         <div
             ref={containerRef}
-            style={{ height: "100%", width: "100%", background: "#1e1e1e" }}
+            style={{ height: "100%", width: "100%", background: palette.main }}
         />
     );
 }

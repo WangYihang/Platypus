@@ -125,4 +125,3 @@ func ExecSessionV1(c *gin.Context) {
 	}
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
-

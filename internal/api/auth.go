@@ -96,15 +96,15 @@ func (a *Auth) TokenEndpoint() gin.HandlerFunc {
 			Secret string `json:"secret"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			c.JSON(http.StatusBadRequest, tokenError{Error: "invalid request"})
 			return
 		}
 		if req.Secret != a.secret {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid secret"})
+			c.JSON(http.StatusUnauthorized, tokenError{Error: "invalid secret"})
 			return
 		}
 		token := a.CreateToken()
-		c.JSON(http.StatusOK, gin.H{"token": token})
+		c.JSON(http.StatusOK, tokenResponse{Token: token})
 	}
 }
 
