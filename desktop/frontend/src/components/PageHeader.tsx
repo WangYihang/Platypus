@@ -1,56 +1,49 @@
 import { ReactNode } from "react";
 
-import { font, layout, palette, space } from "./theme";
+import { font, palette, space } from "../layout/theme";
 
 interface Props {
     title: ReactNode;
     subtitle?: ReactNode;
     actions?: ReactNode;
     // Optional sub-tab bar rendered directly under the title row, sharing
-    // the same header surface. The hairline below the row only renders
-    // when no tabs slot is provided — when tabs ARE provided, the Antd
-    // Tabs ink bar provides the visual separator.
+    // the same header surface. When set, the bottom hairline is suppressed
+    // so the Antd underline tab ink-bar serves as the divider.
     tabs?: ReactNode;
 }
 
-// MainHeader is the page-identity strip at the top of every main-panel
-// view. Title + subtitle on the left, actions on the right. Optional
-// tabs slot lets pages (HostView) stack a Vercel-style underline tab
-// row directly under the title without breaking the surface.
-export default function MainHeader({ title, subtitle, actions, tabs }: Props) {
+// PageHeader is the page-identity strip at the top of every main-panel
+// view. Bigger than Round 1's MainHeader (28/600 title, 14 subtitle,
+// 32px padding) — this is the "大气" promise: every page reads as a
+// proper destination, not a panel inside a chrome box.
+export default function PageHeader({ title, subtitle, actions, tabs }: Props) {
     return (
         <header
             style={{
                 background: palette.main,
                 borderBottom: tabs ? "none" : `1px solid ${palette.border}`,
+                padding: `0 ${space[8]}px`,
             }}
         >
             <div
                 style={{
-                    height: layout.mainHeaderHeight,
-                    minHeight: layout.mainHeaderHeight,
-                    padding: `0 ${space[6]}px`,
+                    minHeight: 80,
+                    paddingTop: space[5],
+                    paddingBottom: tabs ? space[3] : space[5],
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     gap: space[4],
                 }}
             >
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        flex: 1,
-                        minWidth: 0,
-                        gap: 2,
-                    }}
-                >
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                     <div
                         style={{
                             color: palette.textPrimary,
                             fontFamily: font.sans,
                             fontWeight: 600,
-                            fontSize: 18,
-                            lineHeight: 1.25,
+                            fontSize: 28,
+                            lineHeight: 1.15,
+                            letterSpacing: -0.3,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -62,8 +55,8 @@ export default function MainHeader({ title, subtitle, actions, tabs }: Props) {
                         <div
                             style={{
                                 color: palette.textSecondary,
-                                fontSize: 13,
-                                lineHeight: 1.3,
+                                fontSize: 14,
+                                lineHeight: 1.4,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
@@ -79,15 +72,14 @@ export default function MainHeader({ title, subtitle, actions, tabs }: Props) {
                             display: "flex",
                             alignItems: "center",
                             gap: space[2],
+                            flexShrink: 0,
                         }}
                     >
                         {actions}
                     </div>
                 )}
             </div>
-            {tabs && (
-                <div style={{ padding: `0 ${space[6]}px` }}>{tabs}</div>
-            )}
+            {tabs}
         </header>
     );
 }

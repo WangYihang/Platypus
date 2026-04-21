@@ -9,7 +9,7 @@ import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import StatusDot from "../components/StatusDot";
 import StatusPill from "../components/StatusPill";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { palette, space } from "../layout/theme";
 import { Host, Listener, SessionRow, getHost, listHostSessions, listListeners } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
@@ -140,7 +140,7 @@ export default function HostView({ projectID, hostID }: Props) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <MainHeader
+            <PageHeader
                 title={
                     <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
                         <StatusDot status={online ? "online" : "offline"} />

@@ -16,7 +16,7 @@ import type { ColumnsType } from "antd/es/table";
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import StatusPill from "../../components/StatusPill";
-import MainHeader from "../../layout/MainHeader";
+import PageHeader from "../../components/PageHeader";
 import { space } from "../../layout/theme";
 import { UserRow, createUser, deleteUser, listUsers, updateUser } from "../../lib/api";
 
@@ -157,7 +157,7 @@ export default function AdminUsers() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {contextHolder}
-            <MainHeader
+            <PageHeader
                 title="Users"
                 subtitle="Manage who can log in and what they can do"
                 actions={

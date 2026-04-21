@@ -19,7 +19,7 @@ import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import StatusPill from "../components/StatusPill";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { space } from "../layout/theme";
 import { Listener, createListener, deleteListener, listListeners } from "../lib/api";
 import { fromNow } from "../lib/time";
@@ -100,7 +100,7 @@ export default function ListenerView({
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {contextHolder}
-            <MainHeader
+            <PageHeader
                 title={
                     selected ? (
                         <Mono size={16}>{`${selected.host}:${selected.port}`}</Mono>

@@ -4,7 +4,7 @@ import { TeamOutlined } from "@ant-design/icons";
 
 import Card from "../components/Card";
 import MetricCard from "../components/MetricCard";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { palette, space } from "../layout/theme";
 import { Host, Listener, Project, listHosts, listListeners } from "../lib/api";
 import { isOnline } from "../lib/time";
@@ -49,7 +49,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <MainHeader
+            <PageHeader
                 title={project.name}
                 subtitle={`${project.slug} · overview`}
                 actions={

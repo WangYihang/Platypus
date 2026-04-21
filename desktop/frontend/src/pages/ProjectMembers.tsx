@@ -15,7 +15,7 @@ import type { ColumnsType } from "antd/es/table";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import StatusPill from "../components/StatusPill";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { palette, space } from "../layout/theme";
 import {
     Project,
@@ -165,7 +165,7 @@ export default function ProjectMembers({ project }: Props) {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {contextHolder}
-            <MainHeader
+            <PageHeader
                 title={`${project.name} · members`}
                 subtitle={`${members?.length ?? 0} member(s)`}
                 actions={

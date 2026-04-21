@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { useShell } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import { Project } from "../lib/api";
@@ -26,7 +26,7 @@ export default function ProjectsLanding() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <MainHeader
+            <PageHeader
                 title="Projects"
                 subtitle="Pick a project to inspect its hosts, listeners, and dispatch"
             />

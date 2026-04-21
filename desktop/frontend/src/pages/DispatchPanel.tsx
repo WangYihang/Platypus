@@ -15,7 +15,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import StatusPill from "../components/StatusPill";
-import MainHeader from "../layout/MainHeader";
+import PageHeader from "../components/PageHeader";
 import { font, palette, space } from "../layout/theme";
 import { DispatchResult, dispatchCommand } from "../lib/api";
 
@@ -84,7 +84,7 @@ export default function DispatchPanel({ projectID, projectName }: Props) {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {contextHolder}
-            <MainHeader
+            <PageHeader
                 title="Dispatch"
                 subtitle={`Run a command on every flagged live session in ${projectName}`}
             />
