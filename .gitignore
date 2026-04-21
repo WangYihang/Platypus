@@ -54,3 +54,9 @@ tmp/
 # Playwright
 .playwright-mcp/
 /*.png
+# Playwright e2e
+desktop/frontend/e2e/node_modules/
+desktop/frontend/e2e/test-results/
+desktop/frontend/e2e/playwright-report/
+desktop/frontend/e2e/.playwright/
+

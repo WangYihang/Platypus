@@ -7,7 +7,7 @@ PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
 .PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
-        web-ui web-ui-serve
+        web-ui web-ui-serve e2e e2e-deps screenshots
 
 all: build
 
@@ -34,6 +34,11 @@ help:
 	@echo "Standalone web UI (no server embed):"
 	@echo "  web-ui           Build browser bundle to desktop/frontend/dist-web/"
 	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:7777"
+	@echo ""
+	@echo "End-to-end tests + screenshot gallery:"
+	@echo "  e2e-deps         Install Playwright + browsers under desktop/frontend/e2e/"
+	@echo "  e2e              Run the full Playwright suite (boots backend + vite, writes docs/screenshots/)"
+	@echo "  screenshots      Alias for e2e — run the suite and rebuild docs/screenshots/README.md"
 
 $(PROTO_OUT): $(PROTO_SRC)
 	protoc \
@@ -121,6 +126,21 @@ desktop-test:
 
 web-ui:
 	cd desktop/frontend && npm install && npm run build:web
+
+# ---------- End-to-end tests + screenshot gallery ----------
+#
+# `e2e` boots a fresh backend (temp SQLite + bootstrap) and the vite dev
+# server, runs every spec in desktop/frontend/e2e/specs/, writes
+# screenshots into docs/screenshots/, and rebuilds the gallery README.
+# Backend binary must already be built (`make build`).
+
+e2e-deps:
+	cd desktop/frontend/e2e && npm install && npx playwright install chromium
+
+e2e: build e2e-deps
+	cd desktop/frontend/e2e && npm run e2e
+
+screenshots: e2e
 
 # Tiny preview so you can `make web-ui-serve` and browse
 # http://localhost:7777 without needing nginx/caddy. Picks python3 → python → busybox.

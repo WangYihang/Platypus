@@ -38,6 +38,18 @@ export default function Card({
         <div
             className={cls}
             onClick={onClick}
+            role={interactive && onClick ? "button" : undefined}
+            tabIndex={interactive && onClick ? 0 : undefined}
+            onKeyDown={
+                interactive && onClick
+                    ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onClick();
+                          }
+                      }
+                    : undefined
+            }
             style={{
                 background: palette.surface,
                 border: `1px solid ${palette.border}`,

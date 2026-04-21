@@ -11,6 +11,15 @@ over TLS + protobuf; from the server you get an interactive shell, file
 management, and network tunnelling on every managed host — through one
 central control plane.
 
+## Screenshots
+
+A Vercel-style flat-nav UI with a project dashboard, a host/listener/session
+browser, a multi-host dispatch console, and an admin user manager. See the
+full gallery at [`docs/screenshots/`](docs/screenshots/README.md). Re-run
+`make screenshots` to regenerate them from the live app.
+
+[![Project overview dashboard](docs/screenshots/04-project-overview.png)](docs/screenshots/README.md)
+
 ## Architecture
 
 Platypus ships as three backend binaries plus a standalone desktop client:

@@ -1,0 +1,18 @@
+{
+    "name": "platypus-e2e",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "e2e": "playwright test && tsx scripts/build-gallery.ts",
+        "e2e:headed": "playwright test --headed --workers=1",
+        "e2e:ui": "playwright test --ui",
+        "screenshots": "playwright test && tsx scripts/build-gallery.ts"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.49.0",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.19.0",
+        "yaml": "^2.6.0"
+    }
+}
