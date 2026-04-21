@@ -7,12 +7,15 @@ import { palette } from "./theme";
 import ProjectSection from "./ProjectSection";
 
 // Selection describes what the main panel should render. "overview"
-// shows a project's counts; everything else zooms into an entity.
+// shows a project's counts; "admin-users" is the global-admin settings
+// surface accessed from the profile rail; everything else zooms into
+// a project-scoped entity.
 export type Selection =
     | { kind: "overview"; projectId: string }
     | { kind: "listener"; projectId: string; listenerId: string }
     | { kind: "host"; projectId: string; hostId: string }
-    | { kind: "dispatch"; projectId: string };
+    | { kind: "dispatch"; projectId: string }
+    | { kind: "admin-users" };
 
 interface Props {
     selection: Selection | null;

@@ -7,6 +7,7 @@ import Sidebar, { Selection } from "../layout/Sidebar";
 import { palette } from "../layout/theme";
 import { Project, listProjects } from "../lib/api";
 import { getSession, getSessionUser, onSessionChange } from "../lib/auth";
+import AdminUsers from "./admin/AdminUsers";
 import DispatchPanel from "./DispatchPanel";
 import HostView from "./HostView";
 import ListenerView from "./ListenerView";
@@ -53,7 +54,16 @@ export default function Workspace({ onLoggedOut }: Props) {
     return (
         <AppShell
             profileRail={
-                <ProfileRail user={user} serverURL={serverURL} onLoggedOut={onLoggedOut} />
+                <ProfileRail
+                    user={user}
+                    serverURL={serverURL}
+                    onLoggedOut={onLoggedOut}
+                    onOpenAdmin={
+                        user.role === "admin"
+                            ? () => setSelection({ kind: "admin-users" })
+                            : undefined
+                    }
+                />
             }
             sidebar={<Sidebar selection={selection} onSelect={setSelection} />}
             main={<MainPanel selection={selection} projects={projectsByID} onSelect={setSelection} />}
@@ -72,6 +82,9 @@ function MainPanel({
 }) {
     if (!selection) {
         return <EmptyState />;
+    }
+    if (selection.kind === "admin-users") {
+        return <AdminUsers />;
     }
     const project = projects[selection.projectId];
     if (!project) {

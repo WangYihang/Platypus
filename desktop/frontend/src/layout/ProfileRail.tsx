@@ -1,5 +1,5 @@
 import { Avatar, Popover, Tooltip } from "antd";
-import { LogoutOutlined, UserOutlined } from "@ant-design/icons";
+import { LogoutOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
 
 import { SessionUser, logout } from "../lib/auth";
 import { layout, palette } from "./theme";
@@ -16,9 +16,12 @@ interface Props {
     user: SessionUser;
     serverURL: string;
     onLoggedOut: () => void;
+    // onOpenAdmin is supplied only when the logged-in user has global
+    // admin role; presence drives whether the settings icon renders.
+    onOpenAdmin?: () => void;
 }
 
-export default function ProfileRail({ user, serverURL, onLoggedOut }: Props) {
+export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
 
     async function handleLogout() {
@@ -27,28 +30,23 @@ export default function ProfileRail({ user, serverURL, onLoggedOut }: Props) {
     }
 
     const popoverContent = (
-        <div style={{ minWidth: 200 }}>
-            <div style={{ marginBottom: 8 }}>
+        <div style={{ minWidth: 220 }}>
+            <div style={{ marginBottom: 12 }}>
                 <div style={{ fontWeight: 600 }}>{user.username}</div>
                 <div style={{ color: palette.textSecondary, fontSize: 12 }}>
                     {roleLabel(user.role)} · {new URL(serverURL).host}
                 </div>
             </div>
+            {onOpenAdmin && (
+                <button type="button" onClick={onOpenAdmin} style={popoverButtonStyle}>
+                    <SettingOutlined />
+                    <span>Manage users</span>
+                </button>
+            )}
             <button
                 type="button"
                 onClick={handleLogout}
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    width: "100%",
-                    padding: "8px 12px",
-                    border: `1px solid ${palette.border}`,
-                    background: "transparent",
-                    color: palette.textPrimary,
-                    cursor: "pointer",
-                    borderRadius: 4,
-                }}
+                style={{ ...popoverButtonStyle, marginTop: 8 }}
             >
                 <LogoutOutlined />
                 <span>Log out</span>
@@ -86,6 +84,19 @@ export default function ProfileRail({ user, serverURL, onLoggedOut }: Props) {
         </div>
     );
 }
+
+const popoverButtonStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    padding: "8px 12px",
+    border: `1px solid ${palette.border}`,
+    background: "transparent",
+    color: palette.textPrimary,
+    cursor: "pointer",
+    borderRadius: 4,
+};
 
 function roleLabel(role: SessionUser["role"]): string {
     switch (role) {
