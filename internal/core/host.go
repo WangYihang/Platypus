@@ -84,6 +84,14 @@ func UpsertHostForAgent(ctx context.Context, c *AgentClient) {
 	}
 	c.HostID = host.ID
 	c.ProjectID = host.ProjectID
+
+	// Fan out to /notify subscribers so the UI doesn't have to poll.
+	BroadcastNotify(EventHostSeen, map[string]any{
+		"project_id":           host.ProjectID,
+		"host_id":              host.ID,
+		"hostname":             host.Hostname,
+		"fingerprint_fallback": host.FingerprintFallback,
+	})
 }
 
 func resolveProjectID(ctx context.Context, s *TCPServer) (string, error) {
@@ -161,7 +169,13 @@ func PersistSessionForAgent(ctx context.Context, c *AgentClient) {
 	})
 	if err != nil {
 		log.Warn("Session persistence failed: %s", err)
+		return
 	}
+	BroadcastNotify(EventSessionOpened, map[string]any{
+		"project_id": c.ProjectID,
+		"host_id":    c.HostID,
+		"session_id": c.Hash,
+	})
 }
 
 // MarkSessionDisconnected stamps disconnected_at on the session row.
@@ -173,5 +187,14 @@ func MarkSessionDisconnected(ctx context.Context, c *AgentClient) {
 	}
 	if err := Ctx.Storage.Sessions().MarkDisconnected(ctx, c.Hash); err != nil {
 		log.Warn("MarkDisconnected(%s) failed: %s", c.Hash, err)
+	}
+	// Emit even if the repo call failed — the session is still gone
+	// from runtime, and the UI will refetch on receiving the event.
+	if c.ProjectID != "" && c.HostID != "" {
+		BroadcastNotify(EventSessionClosed, map[string]any{
+			"project_id": c.ProjectID,
+			"host_id":    c.HostID,
+			"session_id": c.Hash,
+		})
 	}
 }
