@@ -29,11 +29,11 @@ type execResponse struct {
 	Output string `json:"output"`
 }
 
-// collectAllSessions returns every Termite agent session across every listener.
+// collectAllSessions returns every agent session across every listener.
 func collectAllSessions() []interface{} {
 	out := []interface{}{}
 	for _, server := range core.GetServers() {
-		for _, c := range server.TermiteClients {
+		for _, c := range server.AgentClients {
 			out = append(out, c)
 		}
 	}
@@ -43,7 +43,7 @@ func collectAllSessions() []interface{} {
 // ListSessionsV1 returns every connected session as a flat list.
 //
 // @Summary     List sessions
-// @Description Returns every connected session (plain TCP + encrypted Termite) as a flat array. Replaces the legacy /api/client, which stays available but now sends Deprecation headers.
+// @Description Returns every connected agent session as a flat array.
 // @Tags        sessions
 // @Produce     json
 // @Security    BearerAuth
@@ -56,17 +56,17 @@ func ListSessionsV1(c *gin.Context) {
 // GetSessionV1 returns one session by hash.
 //
 // @Summary     Get session
-// @Description Looks up a single session by hash (plain TCP or Termite). Replaces the legacy /api/client/{hash}.
+// @Description Looks up a single agent session by hash.
 // @Tags        sessions
 // @Produce     json
 // @Security    BearerAuth
 // @Param       id  path      string  true "Session hash"
-// @Success     200 {object}  sessionEntry "bare TermiteClient JSON"
+// @Success     200 {object}  sessionEntry "bare AgentClient JSON"
 // @Failure     404 {object}  errorResponse
 // @Router      /api/v1/sessions/{id} [get]
 func GetSessionV1(c *gin.Context) {
 	hash := c.Param("id")
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		c.JSON(http.StatusOK, client)
 		return
 	}
@@ -87,8 +87,8 @@ func GetSessionV1(c *gin.Context) {
 func DeleteSessionV1(c *gin.Context) {
 	hash := c.Param("id")
 	for _, server := range core.GetServers() {
-		if client, ok := server.TermiteClients[hash]; ok {
-			core.DeleteTermiteClient(client)
+		if client, ok := server.AgentClients[hash]; ok {
+			core.DeleteAgentClient(client)
 			c.Status(http.StatusNoContent)
 			return
 		}
@@ -118,7 +118,7 @@ func ExecSessionV1(c *gin.Context) {
 		return
 	}
 	for _, server := range core.GetServers() {
-		if client, ok := server.TermiteClients[hash]; ok {
+		if client, ok := server.AgentClients[hash]; ok {
 			c.JSON(http.StatusOK, execResponse{Output: client.System(req.Command)})
 			return
 		}

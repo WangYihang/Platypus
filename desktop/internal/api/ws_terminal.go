@@ -103,8 +103,7 @@ func (t *Terminal) Write(data []byte) error {
 	return t.send(opcodeInput, data)
 }
 
-// Resize notifies the remote PTY of new window dimensions. Only TermiteClient
-// sessions honor this; plain reverse shells ignore it (server-side).
+// Resize notifies the remote PTY of new window dimensions.
 func (t *Terminal) Resize(cols, rows int) error {
 	payload, err := json.Marshal(struct {
 		Columns int `json:"Columns"`

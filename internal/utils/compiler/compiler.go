@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,16 +14,10 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/str"
 )
 
-func Compile(target string) bool {
-	log.Success("Start building: %s", target)
-	output, err := exec.Command("go", "build", "-o", target, "termite.go").Output()
-	if err != nil {
-		log.Error("Build failed: %s", err)
-		return false
-	}
-	log.Success("Build (%s) success: %s", target, output)
-	return true
-}
+// connectBackPlaceholder is the 255-byte slot baked into the prebuilt agent
+// binary. Rewriting it in-place lets a single compiled binary address any
+// connect-back target without recompiling.
+const connectBackPlaceholder = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx"
 
 func Compress(target string) bool {
 	upx, err := exec.LookPath("upx")
@@ -43,30 +36,11 @@ func Compress(target string) bool {
 	return true
 }
 
-func BuildTermiteFromSourceCode(targetFilename string, targetAddress string) error {
-	content, err := os.ReadFile("termite.go")
-	if err != nil {
-		log.Error("Can not read termite.go: %s", err)
-		return errors.New("can not read termite.go")
-	}
-	contentString := string(content)
-	contentString = strings.ReplaceAll(contentString, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx", targetAddress)
-	err = os.WriteFile("termite.go", []byte(contentString), 0644)
-	if err != nil {
-		log.Error("Can not write termite.go: %s", err)
-		return errors.New("can not write termite.go")
-	}
-
-	// Compile termite binary
-	if !Compile(targetFilename) {
-		log.Error("Can not compile termite.go: %s", err)
-		return errors.New("can not compile termite.go")
-	}
-	return nil
-}
-
+// BuildTermiteFromPrebuildAssets takes a prebuilt agent binary and patches
+// the connect-back-address placeholder in place. The name is kept for the
+// embed-time contract — the file on disk under build/termite/ is still the
+// canonical source for the asset.
 func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string) error {
-	// Step 1: Generating Termite from Assets
 	assetFilepath := "build/termite/termite_linux_amd64"
 	content, err := os.ReadFile(assetFilepath)
 	if err != nil {
@@ -74,25 +48,16 @@ func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string)
 		return err
 	}
 
-	// Step 2: Generating the placeholder
-	placeHolder := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:xxxxx"
-	replacement := make([]byte, len(placeHolder))
-
-	for i := 0; i < len(placeHolder); i++ {
+	replacement := make([]byte, len(connectBackPlaceholder))
+	for i := 0; i < len(connectBackPlaceholder); i++ {
 		replacement[i] = 0x20
 	}
+	copy(replacement, targetAddress)
 
-	for i := 0; i < len(targetAddress); i++ {
-		replacement[i] = targetAddress[i]
-	}
+	log.Success("Replacing placeholder with: `%s`", strings.TrimSpace(string(replacement)))
+	content = bytes.Replace(content, []byte(connectBackPlaceholder), replacement, 1)
 
-	// Step 3: Replacing the placeholder
-	log.Success("Replacing `%s` to: `%s`", placeHolder, replacement)
-	content = bytes.Replace(content, []byte(placeHolder), replacement, 1)
-
-	// Step 4: Create binary file
-	err = os.WriteFile(targetFilename, content, 0755)
-	if err != nil {
+	if err := os.WriteFile(targetFilename, content, 0755); err != nil {
 		log.Error("Failed to write file: %s", targetFilename)
 		return err
 	}
@@ -104,12 +69,11 @@ func GenerateDirFilename() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	var fileanme string
+	var filename string
 	if runtime.GOOS == "windows" {
-		fileanme = fmt.Sprintf("%d-%s-termite.exe", time.Now().UnixNano(), str.RandomString(0x10))
+		filename = fmt.Sprintf("%d-%s-agent.exe", time.Now().UnixNano(), str.RandomString(0x10))
 	} else {
-		fileanme = fmt.Sprintf("%d-%s-termite", time.Now().UnixNano(), str.RandomString(0x10))
+		filename = fmt.Sprintf("%d-%s-agent", time.Now().UnixNano(), str.RandomString(0x10))
 	}
-	filepath := filepath.Join(dir, fileanme)
-	return dir, filepath, nil
+	return dir, filepath.Join(dir, filename), nil
 }

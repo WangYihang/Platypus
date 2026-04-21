@@ -13,8 +13,8 @@ import (
 
 const listListenersV1Fixture = `{
   "listeners": [
-    {"hash":"h1","host":"0.0.0.0","port":13337,"public_ip":"1.2.3.4","interfaces":["eth0"],"termite_clients":{"c1":{}}},
-    {"hash":"h2","host":"0.0.0.0","port":13338,"public_ip":"1.2.3.4","interfaces":["eth0"],"termite_clients":{"c2":{},"c3":{}}}
+    {"hash":"h1","host":"0.0.0.0","port":13337,"public_ip":"1.2.3.4","interfaces":["eth0"],"agent_clients":{"c1":{}}},
+    {"hash":"h2","host":"0.0.0.0","port":13338,"public_ip":"1.2.3.4","interfaces":["eth0"],"agent_clients":{"c2":{},"c3":{}}}
   ]
 }`
 

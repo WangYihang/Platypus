@@ -6,7 +6,7 @@ package api
 // collapse to useless `object` schemas in the OpenAPI spec.
 
 // sessionEntry wraps a single session in the {status, msg} envelope used by
-// PATCH, GET, and POST /sessions/:id/gather. Msg is the raw TermiteClient.
+// PATCH, GET, and POST /sessions/:id/gather. Msg is the raw AgentClient.
 type sessionEntry struct {
 	Status bool        `json:"status" example:"true"`
 	Msg    interface{} `json:"msg"`

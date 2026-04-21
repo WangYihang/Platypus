@@ -32,7 +32,7 @@ func GetFileSize(c *gin.Context) {
 		return
 	}
 
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		size, err := client.FileSize(path)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
@@ -71,7 +71,7 @@ func ReadFile(c *gin.Context) {
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	size, _ := strconv.ParseInt(c.DefaultQuery("size", "0"), 10, 64)
 
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		var data []byte
 		var err error
 		if size == 0 {
@@ -93,12 +93,12 @@ func ReadFile(c *gin.Context) {
 // WriteFile uploads raw bytes to a remote file.
 //
 // @Summary     Write file
-// @Description Upload bytes to a remote path. Use append=true to chunk large uploads. Only Termite sessions support file upload.
+// @Description Upload bytes to a remote path. Use append=true to chunk large uploads.
 // @Tags        files
 // @Accept      application/octet-stream
 // @Produce     json
 // @Security    BearerAuth
-// @Param       id     path      string  true   "Session hash (must be a Termite session)"
+// @Param       id     path      string  true   "Session hash"
 // @Param       path   query     string  true   "Absolute path to write to"
 // @Param       append query     boolean false  "If true, appends to the file instead of truncating" default(false)
 // @Param       body   body      string  true   "Raw file bytes"
@@ -122,7 +122,7 @@ func WriteFile(c *gin.Context) {
 		return
 	}
 
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		var n int
 		if appendMode {
 			n, err = client.WriteFileEx(path, data)

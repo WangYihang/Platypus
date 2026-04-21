@@ -3,7 +3,7 @@ package api
 import "time"
 
 // Session is the desktop's view of a connected agent. It mirrors the
-// JSON-serialised fields of internal/core/termite.go (TermiteClient) on
+// JSON-serialised fields of internal/core/agent.go (AgentClient) on
 // the server side.
 type Session struct {
 	Hash              string            `json:"hash"`
@@ -32,7 +32,7 @@ type Listener struct {
 	ShellPath      string    `json:"shell_path"`
 	Timestamp      time.Time `json:"timestamp"`
 	Interfaces     []string  `json:"interfaces"`
-	NumSessions    int       `json:"-"` // computed by ListListeners from TermiteClients
+	NumSessions    int       `json:"-"` // computed by ListListeners from AgentClients
 }
 
 // TunnelInfo mirrors what the server's GET /api/v1/sessions/:id/tunnels

@@ -31,12 +31,12 @@ func RegisterWebSocketRoutes(engine *gin.Engine, auth *Auth) {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
-		termiteClient := core.FindTermiteClientByHash(c.Param("hash"))
-		if termiteClient == nil {
+		agentClient := core.FindAgentClientByHash(c.Param("hash"))
+		if agentClient == nil {
 			abortWithError(c, 404, "client is not found")
 			return
 		}
-		log.Success("Trying to pop up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
+		log.Success("Opening websocket shell for: %s", agentClient.OnelineDesc())
 		tty.HandleRequest(c.Writer, c.Request)
 	})
 }
@@ -92,25 +92,25 @@ func newTTYWebSocket() *melody.Melody {
 
 	tty.HandleConnect(func(s *melody.Session) {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
-		if currentTermite := core.FindTermiteClientByHash(hash); currentTermite != nil {
-			handleTermiteClientConnect(s, currentTermite)
+		if currentAgent := core.FindAgentClientByHash(hash); currentAgent != nil {
+			handleAgentClientConnect(s, currentAgent)
 			return
 		}
 	})
 
 	tty.HandleMessageBinary(func(s *melody.Session, msg []byte) {
-		if termiteValue, exists := s.Get("termiteClient"); exists {
-			handleTermiteClientMessage(s, termiteValue.(*core.TermiteClient), msg)
+		if agentValue, exists := s.Get("agentClient"); exists {
+			handleAgentClientMessage(s, agentValue.(*core.AgentClient), msg)
 		}
 	})
 
 	tty.HandleDisconnect(func(s *melody.Session) {
-		if termiteValue, exists := s.Get("termiteClient"); exists {
-			currentTermite := termiteValue.(*core.TermiteClient)
+		if agentValue, exists := s.Get("agentClient"); exists {
+			currentAgent := agentValue.(*core.AgentClient)
 			if key, exists := s.Get("key"); exists {
-				currentTermite.RequestTerminate(key.(string))
+				currentAgent.RequestTerminate(key.(string))
 			} else {
-				log.Error("missing process key on termite ws disconnect")
+				log.Error("missing process key on agent ws disconnect")
 			}
 		}
 	})
@@ -118,19 +118,19 @@ func newTTYWebSocket() *melody.Melody {
 	return tty
 }
 
-func handleTermiteClientConnect(s *melody.Session, currentTermite *core.TermiteClient) {
-	log.Info("Encrypted websocket connected: %s", currentTermite.OnelineDesc())
-	s.Set("termiteClient", currentTermite)
+func handleAgentClientConnect(s *melody.Session, currentAgent *core.AgentClient) {
+	log.Info("Agent websocket connected: %s", currentAgent.OnelineDesc())
+	s.Set("agentClient", currentAgent)
 
 	// SET_WINDOW_TITLE '1'
-	s.WriteBinary([]byte("1" + currentTermite.GetShellPath() + " (ubuntu)"))
+	s.WriteBinary([]byte("1" + currentAgent.GetShellPath() + " (ubuntu)"))
 	// SET_PREFERENCES '2'
 	s.WriteBinary([]byte("2" + "{ }"))
 
 	key := str.RandomString(0x10)
 	s.Set("key", key)
 
-	currentTermite.RequestStartProcess(currentTermite.GetShellPath(), 0, 0, key)
+	currentAgent.RequestStartProcess(currentAgent.GetShellPath(), 0, 0, key)
 
 	process := core.Process{
 		Pid:           -2,
@@ -139,7 +139,7 @@ func handleTermiteClientConnect(s *melody.Session, currentTermite *core.TermiteC
 		State:         core.StartRequested,
 		WebSocket:     s,
 	}
-	currentTermite.AddProcess(key, &process)
+	currentAgent.AddProcess(key, &process)
 }
 
 // TTY opcodes (mirrors ttyd protocol)
@@ -176,7 +176,7 @@ func classifyTTYOpcode(b byte) ttyAction {
 	return ttyActionUnknown
 }
 
-func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteClient, msg []byte) {
+func handleAgentClientMessage(s *melody.Session, currentAgent *core.AgentClient, msg []byte) {
 	keyVal, exists := s.Get("key")
 	if !exists {
 		log.Error("Process has not been started")
@@ -187,7 +187,7 @@ func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteC
 
 	switch classifyTTYOpcode(msg[0]) {
 	case ttyActionInput:
-		err := currentTermite.Send(&agentpb.Envelope{
+		err := currentAgent.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_Stdio{
 				Stdio: &agentpb.StdioData{Key: key, Data: body},
 			},
@@ -198,7 +198,7 @@ func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteC
 	case ttyActionResize:
 		var ws core.WindowSize
 		json.Unmarshal(body, &ws)
-		err := currentTermite.Send(&agentpb.Envelope{
+		err := currentAgent.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_WindowSize{
 				WindowSize: &agentpb.WindowSizeUpdate{Key: key, Columns: int32(ws.Columns), Rows: int32(ws.Rows)},
 			},

@@ -17,7 +17,7 @@ import (
 // All tests here exercise paths that don't require a live agent connection
 // (missing query params, unknown session). The agent-error → 502 path is
 // covered by manual review because mocking the underlying net.Conn for a
-// TermiteClient would require interface refactoring out of scope here.
+// AgentClient would require interface refactoring out of scope here.
 func setupFileRouter(t *testing.T) (*gin.Engine, string) {
 	t.Helper()
 	core.Ctx = app.New(nil)

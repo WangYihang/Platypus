@@ -7,7 +7,7 @@ import (
 
 func TestProcessMapSetAndGet(t *testing.T) {
 	pm := NewProcessMap()
-	p := &TermiteProcess{}
+	p := &AgentProcess{}
 	pm.Set("key1", p)
 
 	got, ok := pm.Get("key1")
@@ -21,7 +21,7 @@ func TestProcessMapSetAndGet(t *testing.T) {
 
 func TestProcessMapDelete(t *testing.T) {
 	pm := NewProcessMap()
-	pm.Set("key1", &TermiteProcess{})
+	pm.Set("key1", &AgentProcess{})
 	pm.Delete("key1")
 
 	if _, ok := pm.Get("key1"); ok {
@@ -38,7 +38,7 @@ func TestProcessMapConcurrentAccess(t *testing.T) {
 		key := string(rune('a' + i%26))
 		go func() {
 			defer wg.Done()
-			pm.Set(key, &TermiteProcess{})
+			pm.Set(key, &AgentProcess{})
 		}()
 		go func() {
 			defer wg.Done()

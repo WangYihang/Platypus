@@ -20,27 +20,27 @@ import (
 
 // PullTunnelConfig represents a local-to-remote port forwarding configuration.
 type PullTunnelConfig struct {
-	Termite interface{} // *core.TermiteClient (avoids circular import)
+	Agent   interface{} // *core.AgentClient (avoids circular import)
 	Address string
 	Server  *net.Listener
 }
 
 // PullTunnelInstance represents an active pull tunnel connection.
 type PullTunnelInstance struct {
-	Termite interface{} // *core.TermiteClient
-	Conn    *net.Conn
+	Agent interface{} // *core.AgentClient
+	Conn  *net.Conn
 }
 
 // PushTunnelConfig represents a remote-to-local port forwarding configuration.
 type PushTunnelConfig struct {
-	Termite interface{} // *core.TermiteClient
+	Agent   interface{} // *core.AgentClient
 	Address string
 }
 
 // PushTunnelInstance represents an active push tunnel connection.
 type PushTunnelInstance struct {
-	Termite interface{} // *core.TermiteClient
-	Conn    *net.Conn
+	Agent interface{} // *core.AgentClient
+	Conn  *net.Conn
 }
 
 // App is the top-level application container.
@@ -50,7 +50,7 @@ type App struct {
 	Listeners *listener.Manager
 
 	// Current session state
-	CurrentTermite interface{} // *core.TermiteClient
+	CurrentAgent interface{} // *core.AgentClient
 
 	// Server registry (keyed by hash)
 	Servers map[string]interface{} // map[string]*core.TCPServer
@@ -109,7 +109,7 @@ func (a *App) FindSession(clue string) session.Session {
 
 // SetCurrentSession sets the current interactive session.
 func (a *App) SetCurrentSession(s session.Session) {
-	a.CurrentTermite = nil
+	a.CurrentAgent = nil
 }
 
 // AllSessions returns all sessions from all listeners.

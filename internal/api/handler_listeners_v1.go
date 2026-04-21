@@ -122,7 +122,7 @@ func DeleteListenerV1(c *gin.Context) {
 // ListenerSessionsV1 lists every session attached to a listener.
 //
 // @Summary     List sessions on a listener
-// @Description Returns every TCP + Termite session that entered through this listener. Replaces the legacy /api/server/{hash}/client.
+// @Description Returns every agent session that entered through this listener.
 // @Tags        listeners
 // @Produce     json
 // @Security    BearerAuth
@@ -137,7 +137,7 @@ func ListenerSessionsV1(c *gin.Context) {
 			continue
 		}
 		sessions := []interface{}{}
-		for _, cl := range srv.TermiteClients {
+		for _, cl := range srv.AgentClients {
 			sessions = append(sessions, cl)
 		}
 		c.JSON(http.StatusOK, sessionsListResponse{Sessions: sessions})

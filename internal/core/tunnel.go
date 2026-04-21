@@ -11,13 +11,13 @@ import (
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
-func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {
+func AddPushTunnelConfig(agent *AgentClient, localAddress string, remoteAddress string) {
 	log.Info("Mapping local (%s) to remote (%s)", localAddress, remoteAddress)
 
-	termite.LockAtom()
-	defer termite.UnlockAtom()
+	agent.LockAtom()
+	defer agent.UnlockAtom()
 
-	err := termite.Send(&agentpb.Envelope{
+	err := agent.Send(&agentpb.Envelope{
 		Payload: &agentpb.Envelope_TunnelCreateRequest{
 			TunnelCreateRequest: &agentpb.TunnelCreateRequest{
 				Address: remoteAddress,
@@ -30,13 +30,13 @@ func AddPushTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 		log.Error("%s", err.Error())
 	} else {
 		Ctx.PushTunnelConfig[remoteAddress] = app.PushTunnelConfig{
-			Termite: termite,
+			Agent:   agent,
 			Address: localAddress,
 		}
 	}
 }
 
-func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddress string) {
+func AddPullTunnelConfig(agent *AgentClient, localAddress string, remoteAddress string) {
 	log.Info("Mapping remote (%s) to local (%s)", remoteAddress, localAddress)
 	tunnel, err := net.Listen("tcp", localAddress)
 	if err != nil {
@@ -44,7 +44,7 @@ func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 		return
 	}
 	Ctx.PullTunnelConfig[localAddress] = app.PullTunnelConfig{
-		Termite: termite,
+		Agent:   agent,
 		Address: remoteAddress,
 		Server:  &tunnel,
 	}
@@ -53,7 +53,7 @@ func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 		for {
 			conn, _ := tunnel.Accept()
 			token := str.RandomString(0x10)
-			err := termite.Send(&agentpb.Envelope{
+			err := agent.Send(&agentpb.Envelope{
 				Payload: &agentpb.Envelope_TunnelConnectRequest{
 					TunnelConnectRequest: &agentpb.TunnelConnectRequest{
 						TunnelId: token,
@@ -63,19 +63,19 @@ func AddPullTunnelConfig(termite *TermiteClient, localAddress string, remoteAddr
 			})
 			if err == nil {
 				Ctx.PullTunnelInstance[token] = app.PullTunnelInstance{
-					Conn:    &conn,
-					Termite: termite,
+					Conn:  &conn,
+					Agent: agent,
 				}
 			}
 		}
 	}()
 }
 
-func WriteTunnel(termite *TermiteClient, token string, data []byte) {
-	termite.LockAtom()
-	defer termite.UnlockAtom()
+func WriteTunnel(agent *AgentClient, token string, data []byte) {
+	agent.LockAtom()
+	defer agent.UnlockAtom()
 
-	err := termite.Send(&agentpb.Envelope{
+	err := agent.Send(&agentpb.Envelope{
 		Payload: &agentpb.Envelope_TunnelData{
 			TunnelData: &agentpb.TunnelData{
 				TunnelId: token,

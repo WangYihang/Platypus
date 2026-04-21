@@ -33,19 +33,19 @@ func TestListTunnelsScopedToSession(t *testing.T) {
 
 	// Seed two sessions worth of tunnels.
 	core.Ctx.PullTunnelConfig["127.0.0.1:1001"] = app.PullTunnelConfig{
-		Termite: &core.TermiteClient{Hash: "sessionA"},
+		Agent: &core.AgentClient{Hash: "sessionA"},
 		Address: "remote-a:80",
 	}
 	core.Ctx.PullTunnelConfig["127.0.0.1:1002"] = app.PullTunnelConfig{
-		Termite: &core.TermiteClient{Hash: "sessionB"},
+		Agent: &core.AgentClient{Hash: "sessionB"},
 		Address: "remote-b:80",
 	}
 	core.Ctx.PushTunnelConfig["remote-a:22"] = app.PushTunnelConfig{
-		Termite: &core.TermiteClient{Hash: "sessionA"},
+		Agent: &core.AgentClient{Hash: "sessionA"},
 		Address: "127.0.0.1:2001",
 	}
 	core.Ctx.PushTunnelConfig["remote-b:22"] = app.PushTunnelConfig{
-		Termite: &core.TermiteClient{Hash: "sessionB"},
+		Agent: &core.AgentClient{Hash: "sessionB"},
 		Address: "127.0.0.1:2002",
 	}
 
@@ -77,7 +77,7 @@ func TestListTunnelsScopedToSession(t *testing.T) {
 func TestListTunnelsEmptyForUnknownSession(t *testing.T) {
 	r, tok := setupTunnelRouter(t)
 	core.Ctx.PullTunnelConfig["127.0.0.1:1001"] = app.PullTunnelConfig{
-		Termite: &core.TermiteClient{Hash: "sessionA"},
+		Agent: &core.AgentClient{Hash: "sessionA"},
 		Address: "remote:80",
 	}
 

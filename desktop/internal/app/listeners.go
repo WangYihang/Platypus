@@ -14,7 +14,7 @@ import (
 type listListenersV1Response struct {
 	Listeners []struct {
 		api.Listener
-		TermiteClients map[string]any `json:"termite_clients"`
+		AgentClients map[string]any `json:"agent_clients"`
 	} `json:"listeners"`
 }
 
@@ -36,7 +36,7 @@ func (a *App) ListListeners() ([]api.Listener, error) {
 	out := make([]api.Listener, 0, len(resp.Listeners))
 	for _, s := range resp.Listeners {
 		l := s.Listener
-		l.NumSessions = len(s.TermiteClients)
+		l.NumSessions = len(s.AgentClients)
 		out = append(out, l)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Hash < out[j].Hash })

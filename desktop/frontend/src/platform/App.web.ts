@@ -130,7 +130,7 @@ export async function ListListeners(): Promise<api.Listener[]> {
     const resp = await apiJSON<{ listeners: any[] }>("/api/v1/listeners");
     return (resp.listeners || []).map((s: any) => {
         const l = { ...s } as api.Listener & { NumSessions: number };
-        l.NumSessions = s.termite_clients ? Object.keys(s.termite_clients).length : 0;
+        l.NumSessions = s.agent_clients ? Object.keys(s.agent_clients).length : 0;
         return l;
     });
 }

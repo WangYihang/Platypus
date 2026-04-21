@@ -71,7 +71,7 @@ func PatchSession(c *gin.Context) {
 		return
 	}
 
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		if req.Alias != nil {
 			client.Alias = *req.Alias
 		}
@@ -99,7 +99,7 @@ func PatchSession(c *gin.Context) {
 func GatherSession(c *gin.Context) {
 	hash := c.Param("id")
 
-	if client := core.FindTermiteClientByHash(hash); client != nil {
+	if client := core.FindAgentClientByHash(hash); client != nil {
 		client.GatherClientInfo(client.GetHashFormat())
 		c.JSON(http.StatusOK, gin.H{"status": true, "msg": client})
 		return
@@ -142,7 +142,7 @@ func DispatchCommand(c *gin.Context) {
 
 	var results []result
 	for _, s := range core.GetServers() {
-		for _, client := range s.GetAllTermiteClients() {
+		for _, client := range s.GetAllAgentClients() {
 			if client.GroupDispatch {
 				ch := make(chan string, 1)
 				go func() { ch <- client.System(req.Command) }()

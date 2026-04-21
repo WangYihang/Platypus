@@ -18,15 +18,15 @@ type createTunnelRequest struct {
 	DstAddress string `json:"dst_address"`
 }
 
-// CreateTunnel opens a tunnel through an encrypted session.
+// CreateTunnel opens a tunnel through an agent session.
 //
 // @Summary     Create tunnel
-// @Description Open a tunnel on a Termite session. Modes: pull (agent binds dst, forwards to src), push (operator binds src, agent dials dst), dynamic (agent runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies to dst).
+// @Description Open a tunnel on an agent session. Modes: pull (agent binds dst, forwards to src), push (operator binds src, agent dials dst), dynamic (agent runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies to dst).
 // @Tags        tunnels
 // @Accept      json
 // @Produce     json
 // @Security    BearerAuth
-// @Param       id   path      string              true "Session hash (Termite only)"
+// @Param       id   path      string              true "Session hash"
 // @Param       body body      createTunnelRequest true "Mode + addresses"
 // @Success     200  {object}  ackResponse
 // @Failure     400  {object}  errorResponse
@@ -47,9 +47,9 @@ func CreateTunnel(c *gin.Context) {
 		return
 	}
 
-	client := core.FindTermiteClientByHash(hash)
+	client := core.FindAgentClientByHash(hash)
 	if client == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "termite session not found (tunnels require encrypted client)"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "agent session not found"})
 		return
 	}
 
@@ -106,13 +106,13 @@ func ListTunnels(c *gin.Context) {
 	ownsPushSrc := map[string]bool{}
 
 	for addr, tc := range core.Ctx.PullTunnelConfig {
-		if !tunnelOwnedBy(tc.Termite, hash) {
+		if !tunnelOwnedBy(tc.Agent, hash) {
 			continue
 		}
 		tunnels = append(tunnels, tunnelInfo{Type: "pull", Address: addr + " → " + tc.Address})
 	}
 	for addr, tc := range core.Ctx.PushTunnelConfig {
-		if !tunnelOwnedBy(tc.Termite, hash) {
+		if !tunnelOwnedBy(tc.Agent, hash) {
 			continue
 		}
 		tunnels = append(tunnels, tunnelInfo{Type: "push", Address: tc.Address + " → " + addr})
@@ -131,12 +131,12 @@ func ListTunnels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": true, "tunnels": tunnels})
 }
 
-// tunnelOwnedBy reports whether a tunnel config's Termite owner matches the
+// tunnelOwnedBy reports whether a tunnel config's Agent owner matches the
 // given session hash. Returns false if the owner is nil or of an unexpected
-// type — defensive because PullTunnelConfig.Termite is an untyped interface{}
+// type — defensive because PullTunnelConfig.Agent is an untyped interface{}
 // due to the core↔app circular-import workaround.
 func tunnelOwnedBy(owner interface{}, hash string) bool {
-	t, ok := owner.(*core.TermiteClient)
+	t, ok := owner.(*core.AgentClient)
 	if !ok || t == nil {
 		return false
 	}

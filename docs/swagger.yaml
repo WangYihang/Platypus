@@ -2,6 +2,10 @@ basePath: /
 definitions:
   github_com_WangYihang_Platypus_internal_core.TCPServer:
     properties:
+      agent_clients:
+        additionalProperties:
+          type: object
+        type: object
       disable_history:
         type: boolean
       group_dispatch:
@@ -20,10 +24,6 @@ definitions:
         type: string
       shell_path:
         type: string
-      termite_clients:
-        additionalProperties:
-          type: object
-        type: object
       timestamp:
         type: string
     type: object
@@ -330,8 +330,7 @@ paths:
       - listeners
   /api/v1/listeners/{id}/sessions:
     get:
-      description: Returns every TCP + Termite session that entered through this listener.
-        Replaces the legacy /api/server/{hash}/client.
+      description: Returns every agent session that entered through this listener.
       parameters:
       - description: Listener hash
         in: path
@@ -356,9 +355,7 @@ paths:
       - listeners
   /api/v1/sessions:
     get:
-      description: Returns every connected session (plain TCP + encrypted Termite)
-        as a flat array. Replaces the legacy /api/client, which stays available but
-        now sends Deprecation headers.
+      description: Returns every connected agent session as a flat array.
       produces:
       - application/json
       responses:
@@ -396,8 +393,7 @@ paths:
       tags:
       - sessions
     get:
-      description: Looks up a single session by hash (plain TCP or Termite). Replaces
-        the legacy /api/client/{hash}.
+      description: Looks up a single agent session by hash.
       parameters:
       - description: Session hash
         in: path
@@ -408,7 +404,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: bare TermiteClient JSON
+          description: bare AgentClient JSON
           schema:
             $ref: '#/definitions/internal_api.sessionEntry'
         "404":
@@ -547,9 +543,8 @@ paths:
       consumes:
       - application/octet-stream
       description: Upload bytes to a remote path. Use append=true to chunk large uploads.
-        Only Termite sessions support file upload.
       parameters:
-      - description: Session hash (must be a Termite session)
+      - description: Session hash
         in: path
         name: id
         required: true
@@ -684,12 +679,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Open a tunnel on a Termite session. Modes: pull (agent binds dst,
+      description: 'Open a tunnel on an agent session. Modes: pull (agent binds dst,
         forwards to src), push (operator binds src, agent dials dst), dynamic (agent
         runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies
         to dst).'
       parameters:
-      - description: Session hash (Termite only)
+      - description: Session hash
         in: path
         name: id
         required: true

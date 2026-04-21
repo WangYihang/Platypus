@@ -37,9 +37,9 @@ func Signal() {
 					Shutdown()
 				}
 			case syscall.SIGWINCH:
-				if Ctx.CurrentTermite != nil {
+				if Ctx.CurrentAgent != nil {
 					columns, rows, _ := term.GetSize(0)
-					Ctx.CurrentTermite.(*TermiteClient).NotifyPlatypusWindowSize(columns, rows)
+					Ctx.CurrentAgent.(*AgentClient).NotifyPlatypusWindowSize(columns, rows)
 				}
 			}
 		}

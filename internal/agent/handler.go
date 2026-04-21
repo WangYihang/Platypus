@@ -114,7 +114,7 @@ func handleProcessStart(c *Client, state *State, reqID string, req *agentpb.Proc
 
 	ws := pty.Winsize{Rows: uint16(req.WindowRows), Cols: uint16(req.WindowColumns)}
 	ptmx, _ := pty.StartWithSize(process, &ws)
-	state.Processes.Set(req.Key, &TermiteProcess{WindowSize: &ws, Ptmx: ptmx, Process: process})
+	state.Processes.Set(req.Key, &AgentProcess{WindowSize: &ws, Ptmx: ptmx, Process: process})
 	log.Success("Process started: %d", process.Process.Pid)
 	defer func() { _ = ptmx.Close() }()
 
@@ -526,7 +526,7 @@ func handleUpdate(c *Client, req *agentpb.UpdateRequest) {
 	exe := file.Name()
 	log.Info("New filename: %s", exe)
 	log.Info("New version v%s is available, upgrading...", req.Version)
-	url := fmt.Sprintf("%s/termite/%s", req.DistributorUrl, c.Service)
+	url := fmt.Sprintf("%s/agent/%s", req.DistributorUrl, c.Service)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	if err := selfupdate.UpdateTo(ctx, url, path.Base(url), exe); err != nil {

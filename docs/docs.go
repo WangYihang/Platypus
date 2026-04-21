@@ -217,7 +217,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns every TCP + Termite session that entered through this listener. Replaces the legacy /api/server/{hash}/client.",
+                "description": "Returns every agent session that entered through this listener.",
                 "produces": [
                     "application/json"
                 ],
@@ -257,7 +257,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns every connected session (plain TCP + encrypted Termite) as a flat array. Replaces the legacy /api/client, which stays available but now sends Deprecation headers.",
+                "description": "Returns every connected agent session as a flat array.",
                 "produces": [
                     "application/json"
                 ],
@@ -327,7 +327,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Looks up a single session by hash (plain TCP or Termite). Replaces the legacy /api/client/{hash}.",
+                "description": "Looks up a single agent session by hash.",
                 "produces": [
                     "application/json"
                 ],
@@ -346,7 +346,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "bare TermiteClient JSON",
+                        "description": "bare AgentClient JSON",
                         "schema": {
                             "$ref": "#/definitions/internal_api.sessionEntry"
                         }
@@ -587,7 +587,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload bytes to a remote path. Use append=true to chunk large uploads. Only Termite sessions support file upload.",
+                "description": "Upload bytes to a remote path. Use append=true to chunk large uploads.",
                 "consumes": [
                     "application/octet-stream"
                 ],
@@ -601,7 +601,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Session hash (must be a Termite session)",
+                        "description": "Session hash",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -796,7 +796,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Open a tunnel on a Termite session. Modes: pull (agent binds dst, forwards to src), push (operator binds src, agent dials dst), dynamic (agent runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies to dst).",
+                "description": "Open a tunnel on an agent session. Modes: pull (agent binds dst, forwards to src), push (operator binds src, agent dials dst), dynamic (agent runs a SOCKS5 server), internet (server runs SOCKS5 at src, agent proxies to dst).",
                 "consumes": [
                     "application/json"
                 ],
@@ -810,7 +810,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Session hash (Termite only)",
+                        "description": "Session hash",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -889,6 +889,12 @@ const docTemplate = `{
         "github_com_WangYihang_Platypus_internal_core.TCPServer": {
             "type": "object",
             "properties": {
+                "agent_clients": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
                 "disable_history": {
                     "type": "boolean"
                 },
@@ -915,12 +921,6 @@ const docTemplate = `{
                 },
                 "shell_path": {
                     "type": "string"
-                },
-                "termite_clients": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "object"
-                    }
                 },
                 "timestamp": {
                     "type": "string"
