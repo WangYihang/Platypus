@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
@@ -45,8 +46,13 @@ type TCPServer struct {
 	DisableHistory bool                        `json:"disable_history"`
 	PublicIP       string                      `json:"public_ip"`
 	ShellPath      string                      `json:"shell_path"`
-	hashFormat     string                      `json:"-"`
-	stopped        chan struct{}               `json:"-"`
+	// ProjectID is the id of the storage.Project this listener is scoped
+	// to. Empty for listeners created via the pre-redesign config path —
+	// the agent-handshake code falls back to the "default" project slug
+	// in that case. P5 makes this field non-empty at construction time.
+	ProjectID  string        `json:"project_id"`
+	hashFormat string        `json:"-"`
+	stopped    chan struct{} `json:"-"`
 }
 
 func (s *TCPServer) GetHash() string { return s.Hash }
@@ -139,6 +145,10 @@ func (s *TCPServer) Handle(conn net.Conn) {
 	log.Info("Gathering information from client...")
 	if client.GatherClientInfo(s.hashFormat) {
 		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
+		// Persist / merge the host row before the session is exposed to
+		// listeners, so anything that looks up c.HostID right after
+		// AddAgentClient sees a populated value.
+		UpsertHostForAgent(context.Background(), client)
 		s.AddAgentClient(client)
 	} else {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())

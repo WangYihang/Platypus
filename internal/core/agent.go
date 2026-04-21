@@ -67,6 +67,10 @@ type AgentClient struct {
 	// to a hash of hostname + sorted MACs for host aggregation in that case.
 	MachineID string `json:"machine_id"`
 	Hostname  string `json:"hostname"`
+	// HostID + ProjectID are stamped by UpsertHostForAgent on successful
+	// handshake, pointing at the storage.Host row this session belongs to.
+	HostID    string `json:"host_id"`
+	ProjectID string `json:"project_id"`
 	server            *TCPServer           `json:"-"`
 	codec             *protocol.ProtoCodec `json:"-"`
 	atomLock          *sync.Mutex          `json:"-"`
