@@ -191,8 +191,8 @@ export default function ProjectMembers({ project }: Props) {
                     </Space>
                 }
             />
-            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
-                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+                <div>
                     {error && <Alert type="error" message={error} style={{ marginBottom: space[4] }} />}
                     {!canAdd && (
                         <p

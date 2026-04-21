@@ -88,11 +88,9 @@ export default function DispatchPanel({ projectID, projectName }: Props) {
                 title="Dispatch"
                 subtitle={`Run a command on every flagged live session in ${projectName}`}
             />
-            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
+            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 <div
                     style={{
-                        maxWidth: 1200,
-                        margin: "0 auto",
                         display: "flex",
                         flexDirection: "column",
                         gap: space[4],

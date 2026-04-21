@@ -11,9 +11,9 @@ import HostsPage from "./pages/HostsPage";
 import HostViewRoute from "./routes/HostViewRoute";
 import ListenersPage from "./pages/ListenersPage";
 import ListenerDetailPage from "./pages/ListenerDetailPage";
+import SessionsPage from "./pages/SessionsPage";
 import DispatchRoute from "./routes/DispatchRoute";
 import MembersRoute from "./routes/MembersRoute";
-import PlaceholderRoute from "./routes/PlaceholderRoute";
 import AdminUsers from "./pages/admin/AdminUsers";
 
 // Top-level route table. The new flat-nav IA — every project-scoped
@@ -61,15 +61,7 @@ export const router = createBrowserRouter([
                     { path: "hosts/:hostId/:tab", element: <HostViewRoute /> },
                     { path: "listeners", element: <ListenersPage /> },
                     { path: "listeners/:listenerId", element: <ListenerDetailPage /> },
-                    {
-                        path: "sessions",
-                        element: (
-                            <PlaceholderRoute
-                                title="Sessions page coming next"
-                                description="Step 8 builds the cross-host live + historical sessions list."
-                            />
-                        ),
-                    },
+                    { path: "sessions", element: <SessionsPage /> },
                     { path: "dispatch", element: <DispatchRoute /> },
                     { path: "members", element: <MembersRoute /> },
                 ],
