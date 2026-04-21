@@ -14,13 +14,12 @@ import (
 type listListenersV1Response struct {
 	Listeners []struct {
 		api.Listener
-		Clients        map[string]any `json:"clients"`
 		TermiteClients map[string]any `json:"termite_clients"`
 	} `json:"listeners"`
 }
 
 // ListListeners returns every TCPServer registered on the server, with a
-// computed NumSessions = #plain + #termite clients.
+// computed NumSessions = #agents dialled in.
 func (a *App) ListListeners() ([]api.Listener, error) {
 	c, err := a.client()
 	if err != nil {
@@ -37,24 +36,22 @@ func (a *App) ListListeners() ([]api.Listener, error) {
 	out := make([]api.Listener, 0, len(resp.Listeners))
 	for _, s := range resp.Listeners {
 		l := s.Listener
-		l.NumSessions = len(s.Clients) + len(s.TermiteClients)
+		l.NumSessions = len(s.TermiteClients)
 		out = append(out, l)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Hash < out[j].Hash })
 	return out, nil
 }
 
-// CreateListener spawns a new reverse-shell listener on the server via the
-// JSON-native POST /api/v1/listeners.
-func (a *App) CreateListener(host string, port int, encrypted bool) error {
+// CreateListener opens a new TLS ingress on the server.
+func (a *App) CreateListener(host string, port int) error {
 	c, err := a.client()
 	if err != nil {
 		return err
 	}
 	_, err = c.Post(context.Background(), "/api/v1/listeners", map[string]any{
-		"host":      host,
-		"port":      port,
-		"encrypted": encrypted,
+		"host": host,
+		"port": port,
 	})
 	return err
 }

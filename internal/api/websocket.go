@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/olahol/melody.v1"
@@ -32,18 +31,12 @@ func RegisterWebSocketRoutes(engine *gin.Engine, auth *Auth) {
 		if !paramsExistOrAbort(c, []string{"hash"}) {
 			return
 		}
-		client := core.FindTCPClientByHash(c.Param("hash"))
 		termiteClient := core.FindTermiteClientByHash(c.Param("hash"))
-		if client == nil && termiteClient == nil {
+		if termiteClient == nil {
 			abortWithLegacyError(c, 404, "client is not found")
 			return
 		}
-		if client != nil {
-			log.Success("Trying to poping up websocket shell for: %s", client.OnelineDesc())
-		}
-		if termiteClient != nil {
-			log.Success("Trying to poping up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
-		}
+		log.Success("Trying to pop up encrypted websocket shell for: %s", termiteClient.OnelineDesc())
 		tty.HandleRequest(c.Writer, c.Request)
 	})
 }
@@ -99,14 +92,6 @@ func newTTYWebSocket() *melody.Melody {
 
 	tty.HandleConnect(func(s *melody.Session) {
 		hash := strings.Split(s.Request.URL.Path, "/")[2]
-
-		// Reverse-shell client (raw TCP)
-		if current := core.FindTCPClientByHash(hash); current != nil {
-			handleTCPClientConnect(s, current)
-			return
-		}
-
-		// Termite client (protobuf, encrypted)
 		if currentTermite := core.FindTermiteClientByHash(hash); currentTermite != nil {
 			handleTermiteClientConnect(s, currentTermite)
 			return
@@ -114,23 +99,12 @@ func newTTYWebSocket() *melody.Melody {
 	})
 
 	tty.HandleMessageBinary(func(s *melody.Session, msg []byte) {
-		if value, exists := s.Get("client"); exists {
-			handleTCPClientMessage(value.(*core.TCPClient), msg)
-			return
-		}
 		if termiteValue, exists := s.Get("termiteClient"); exists {
 			handleTermiteClientMessage(s, termiteValue.(*core.TermiteClient), msg)
 		}
 	})
 
 	tty.HandleDisconnect(func(s *melody.Session) {
-		if value, exists := s.Get("client"); exists {
-			current := value.(*core.TCPClient)
-			log.Success("Closing websocket shell for: %s", current.OnelineDesc())
-			current.SetInteractive(false)
-			current.GetInteractingLock().Unlock()
-			return
-		}
 		if termiteValue, exists := s.Get("termiteClient"); exists {
 			currentTermite := termiteValue.(*core.TermiteClient)
 			if key, exists := s.Get("key"); exists {
@@ -142,35 +116,6 @@ func newTTYWebSocket() *melody.Melody {
 	})
 
 	return tty
-}
-
-func handleTCPClientConnect(s *melody.Session, current *core.TCPClient) {
-	s.Set("client", current)
-	current.GetInteractingLock().Lock()
-	current.SetInteractive(true)
-
-	// Make sure PTY is up in case CLI is also interacting
-	current.EstablishPTY()
-	// SET_WINDOW_TITLE '1'
-	s.WriteBinary([]byte("1" + current.GetShellPath() + " (ubuntu)"))
-	// SET_PREFERENCES '2'
-	s.WriteBinary([]byte("2" + "{ }"))
-
-	// Trigger initial OUTPUT
-	current.Write([]byte("\n"))
-
-	go func() {
-		for current != nil && !s.IsClosed() {
-			current.GetConn().SetReadDeadline(time.Time{})
-			msg := make([]byte, 0x100)
-			n, err := current.ReadConnLock(msg)
-			if err != nil {
-				log.Error("Read from socket failed: %s", err)
-				return
-			}
-			s.WriteBinary([]byte("0" + string(msg[0:n])))
-		}
-	}()
 }
 
 func handleTermiteClientConnect(s *melody.Session, currentTermite *core.TermiteClient) {
@@ -229,20 +174,6 @@ func classifyTTYOpcode(b byte) ttyAction {
 		return ttyActionIgnore
 	}
 	return ttyActionUnknown
-}
-
-func handleTCPClientMessage(current *core.TCPClient, msg []byte) {
-	if !current.GetInteractive() {
-		return
-	}
-	switch classifyTTYOpcode(msg[0]) {
-	case ttyActionInput:
-		current.Write(msg[1:])
-	case ttyActionResize, ttyActionIgnore:
-		// Raw reverse shells don't support resize / pause / resume.
-	default:
-		fmt.Println("Invalid message: ", string(msg))
-	}
 }
 
 func handleTermiteClientMessage(s *melody.Session, currentTermite *core.TermiteClient, msg []byte) {

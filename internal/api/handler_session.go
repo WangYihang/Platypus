@@ -71,19 +71,6 @@ func PatchSession(c *gin.Context) {
 		return
 	}
 
-	// Try TCPClient
-	if client := core.FindTCPClientByHash(hash); client != nil {
-		if req.Alias != nil {
-			client.Alias = *req.Alias
-		}
-		if req.GroupDispatch != nil {
-			client.GroupDispatch = *req.GroupDispatch
-		}
-		c.JSON(http.StatusOK, gin.H{"status": true, "msg": client})
-		return
-	}
-
-	// Try TermiteClient
 	if client := core.FindTermiteClientByHash(hash); client != nil {
 		if req.Alias != nil {
 			client.Alias = *req.Alias
@@ -111,12 +98,6 @@ func PatchSession(c *gin.Context) {
 // @Router      /api/v1/sessions/{id}/gather [post]
 func GatherSession(c *gin.Context) {
 	hash := c.Param("id")
-
-	if client := core.FindTCPClientByHash(hash); client != nil {
-		client.GatherClientInfo(client.GetHashFormat())
-		c.JSON(http.StatusOK, gin.H{"status": true, "msg": client})
-		return
-	}
 
 	if client := core.FindTermiteClientByHash(hash); client != nil {
 		client.GatherClientInfo(client.GetHashFormat())
@@ -161,12 +142,6 @@ func DispatchCommand(c *gin.Context) {
 
 	var results []result
 	for _, s := range core.GetServers() {
-		for _, client := range s.GetAllTCPClients() {
-			if client.GroupDispatch {
-				output := client.SystemToken(req.Command)
-				results = append(results, result{SessionHash: client.Hash, Output: output})
-			}
-		}
 		for _, client := range s.GetAllTermiteClients() {
 			if client.GroupDispatch {
 				ch := make(chan string, 1)

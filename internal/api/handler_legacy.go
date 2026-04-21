@@ -111,9 +111,6 @@ func GetServerClients(c *gin.Context) {
 	for _, server := range core.GetServers() {
 		if server.Hash == hash {
 			clients := make(map[string]interface{})
-			for k, v := range server.Clients {
-				clients[k] = v
-			}
 			for k, v := range server.TermiteClients {
 				clients[k] = v
 			}
@@ -125,23 +122,22 @@ func GetServerClients(c *gin.Context) {
 	abortWithLegacyError(c, 404, "No such server")
 }
 
-// CreateServer starts a new TCP listener.
+// CreateServer starts a new TLS ingress listener.
 //
 // @Summary     Create listener
-// @Description Opens a new reverse-shell listener. Submit as application/x-www-form-urlencoded.
+// @Description Opens a new TLS listener for agent connections.
 // @Tags        listeners
 // @Accept      application/x-www-form-urlencoded
 // @Produce     json
 // @Security    BearerAuth
 // @Param       host      formData string  true  "Bind address (e.g. 0.0.0.0)"
 // @Param       port      formData integer true  "Port 1-65535"
-// @Param       encrypted formData boolean true  "true for Termite listener, false for plain reverse shell"
 // @Success     200       {object} legacyServer
 // @Failure     400       {object} legacyError
 // @Failure     500       {object} legacyError
 // @Router      /api/server [post]
 func CreateServer(c *gin.Context) {
-	if !formExistOrAbort(c, []string{"host", "port", "encrypted"}) {
+	if !formExistOrAbort(c, []string{"host", "port"}) {
 		return
 	}
 	port, err := strconv.Atoi(c.PostForm("port"))
@@ -149,8 +145,7 @@ func CreateServer(c *gin.Context) {
 		abortWithLegacyError(c, 400, "Invalid port number")
 		return
 	}
-	encrypted, _ := strconv.ParseBool(c.PostForm("encrypted"))
-	server := core.CreateTCPServer(c.PostForm("host"), uint16(port), "", encrypted, true, "", "")
+	server := core.CreateTCPServer(c.PostForm("host"), uint16(port), "", true, "", "")
 	if server == nil {
 		abortWithLegacyError(c, 500, fmt.Sprintf("The server (%s:%d) start failed", c.PostForm("host"), port))
 		return
@@ -198,9 +193,6 @@ func DeleteServer(c *gin.Context) {
 func ListClients(c *gin.Context) {
 	clients := make(map[string]interface{})
 	for _, server := range core.GetServers() {
-		for k, v := range server.Clients {
-			clients[k] = v
-		}
 		for k, v := range server.TermiteClients {
 			clients[k] = v
 		}
@@ -225,7 +217,7 @@ func GetClient(c *gin.Context) {
 	}
 	hash := c.Param("hash")
 	for _, server := range core.GetServers() {
-		if client, exist := server.Clients[hash]; exist {
+		if client, exist := server.TermiteClients[hash]; exist {
 			c.JSON(200, gin.H{"status": true, "msg": client})
 			c.Abort()
 			return
@@ -250,8 +242,8 @@ func DeleteClient(c *gin.Context) {
 	}
 	hash := c.Param("hash")
 	for _, server := range core.GetServers() {
-		if client, exist := server.Clients[hash]; exist {
-			core.DeleteTCPClient(client)
+		if client, exist := server.TermiteClients[hash]; exist {
+			core.DeleteTermiteClient(client)
 			c.JSON(200, gin.H{"status": true})
 			c.Abort()
 			return
@@ -285,15 +277,6 @@ func ExecClient(c *gin.Context) {
 	hash := c.Param("hash")
 	cmd := c.PostForm("cmd")
 	for _, server := range core.GetServers() {
-		if client, exist := server.Clients[hash]; exist {
-			if client.GetPtyEstablished() {
-				abortWithLegacyError(c, 409, "The client is under PTY mode, please exit pty mode before execute command on it")
-				return
-			}
-			c.JSON(200, gin.H{"status": true, "msg": client.SystemToken(cmd)})
-			c.Abort()
-			return
-		}
 		if client, exist := server.TermiteClients[hash]; exist {
 			c.JSON(200, gin.H{"status": true, "msg": client.System(cmd)})
 			c.Abort()

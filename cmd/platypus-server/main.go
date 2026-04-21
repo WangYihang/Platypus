@@ -62,7 +62,7 @@ func main() {
 	servers := startHTTPServers(cfg)
 
 	for _, s := range cfg.Servers {
-		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.Encrypted, s.DisableHistory, s.PublicIP, s.ShellPath)
+		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.DisableHistory, s.PublicIP, s.ShellPath)
 		if listener != nil {
 			time.Sleep(0x100 * time.Millisecond)
 			go (*listener).Run()

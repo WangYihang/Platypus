@@ -1,12 +1,11 @@
 package listener
 
-// Listener represents a network listener that accepts reverse shell connections.
+// Listener represents a TLS ingress that accepts agent connections.
 type Listener interface {
 	// Identity
 	GetHash() string
 	GetHost() string
 	GetPort() uint16
-	IsEncrypted() bool
 
 	// Display
 	FullDesc() string

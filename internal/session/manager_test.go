@@ -13,7 +13,6 @@ import (
 type mockSession struct {
 	hash          string
 	alias         string
-	encrypted     bool
 	host          string
 	port          uint16
 	user          string
@@ -25,7 +24,6 @@ type mockSession struct {
 func (m *mockSession) GetHash() string                    { return m.hash }
 func (m *mockSession) GetAlias() string                   { return m.alias }
 func (m *mockSession) SetAlias(a string)                  { m.alias = a }
-func (m *mockSession) IsEncrypted() bool                  { return m.encrypted }
 func (m *mockSession) GetHost() string                    { return m.host }
 func (m *mockSession) GetPort() uint16                    { return m.port }
 func (m *mockSession) GetConn() net.Conn                  { return nil }

@@ -23,36 +23,6 @@ func CreateContext() {
 
 // --- Helper functions that operate on Ctx for backward compatibility ---
 
-func FindTCPClientByHash(hash string) *TCPClient {
-	if hash == "" {
-		return nil
-	}
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		for _, client := range server.GetAllTCPClients() {
-			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
-				return client
-			}
-		}
-	}
-	return nil
-}
-
-func FindTCPClientByAlias(alias string) *TCPClient {
-	if alias == "" {
-		return nil
-	}
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		for _, client := range server.GetAllTCPClients() {
-			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
-				return client
-			}
-		}
-	}
-	return nil
-}
-
 func FindTermiteClientByHash(hash string) *TermiteClient {
 	if hash == "" {
 		return nil
@@ -94,13 +64,6 @@ func FindServerByHash(hash string) *TCPServer {
 		}
 	}
 	return nil
-}
-
-func DeleteTCPClient(c *TCPClient) {
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		server.DeleteTCPClient(c)
-	}
 }
 
 func DeleteTermiteClient(c *TermiteClient) {

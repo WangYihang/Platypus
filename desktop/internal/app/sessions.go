@@ -14,8 +14,8 @@ type listSessionsV1Response struct {
 	Sessions []json.RawMessage `json:"sessions"`
 }
 
-// ListSessions returns every session (TCPClient + TermiteClient) attached
-// to any listener. Backed by GET /api/v1/sessions.
+// ListSessions returns every agent session attached to any listener.
+// Backed by GET /api/v1/sessions.
 func (a *App) ListSessions() ([]api.Session, error) {
 	c, err := a.client()
 	if err != nil {
@@ -35,16 +35,6 @@ func (a *App) ListSessions() ([]api.Session, error) {
 		var s api.Session
 		if err := json.Unmarshal(raw, &s); err != nil {
 			continue
-		}
-		// TermiteClient has a "version" field; TCPClient does not.
-		var probe map[string]any
-		_ = json.Unmarshal(raw, &probe)
-		if _, hasVersion := probe["version"]; hasVersion {
-			s.Encrypted = true
-			s.Tag = "termite"
-		} else {
-			s.Encrypted = false
-			s.Tag = "shell"
 		}
 		out = append(out, s)
 	}

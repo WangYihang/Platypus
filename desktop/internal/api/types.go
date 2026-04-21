@@ -2,14 +2,9 @@ package api
 
 import "time"
 
-// Session is the desktop's view of a connected reverse-shell or termite
-// client. It's the union of the JSON-serialised fields from
-// internal/core/client.go (TCPClient) and internal/core/termite.go
-// (TermiteClient) on the server side.
-//
-// Encrypted distinguishes the two:
-//   - false → plain reverse shell (TCPClient)
-//   - true  → encrypted termite (TermiteClient)
+// Session is the desktop's view of a connected agent. It mirrors the
+// JSON-serialised fields of internal/core/termite.go (TermiteClient) on
+// the server side.
 type Session struct {
 	Hash              string            `json:"hash"`
 	Host              string            `json:"host"`
@@ -17,26 +12,19 @@ type Session struct {
 	Alias             string            `json:"alias"`
 	User              string            `json:"user"`
 	OS                string            `json:"os"`
-	Version           string            `json:"version,omitempty"` // termite only
+	Version           string            `json:"version,omitempty"`
 	NetworkInterfaces map[string]string `json:"network_interfaces"`
 	Python2           string            `json:"python2"`
 	Python3           string            `json:"python3"`
 	Timestamp         time.Time         `json:"timestamp"`
 	GroupDispatch     bool              `json:"group_dispatch"`
-
-	// Encrypted and Tag are synthetic fields ListSessions sets based on
-	// which server-side map (Clients vs TermiteClients) the entry came
-	// from. They're serialised so the frontend can display + filter.
-	Encrypted bool   `json:"encrypted"`
-	Tag       string `json:"tag"` // "shell" or "termite"
 }
 
-// Listener is the desktop's view of a TCPServer entry from /api/server.
+// Listener is the desktop's view of a TCPServer entry.
 type Listener struct {
 	Hash           string    `json:"hash"`
 	Host           string    `json:"host"`
 	Port           uint16    `json:"port"`
-	Encrypted      bool      `json:"encrypted"`
 	HashFormat     string    `json:"-"`
 	GroupDispatch  bool      `json:"group_dispatch"`
 	DisableHistory bool      `json:"disable_history"`
@@ -44,7 +32,7 @@ type Listener struct {
 	ShellPath      string    `json:"shell_path"`
 	Timestamp      time.Time `json:"timestamp"`
 	Interfaces     []string  `json:"interfaces"`
-	NumSessions    int       `json:"-"` // computed by ListListeners from Clients+TermiteClients
+	NumSessions    int       `json:"-"` // computed by ListListeners from TermiteClients
 }
 
 // TunnelInfo mirrors what the server's GET /api/v1/sessions/:id/tunnels

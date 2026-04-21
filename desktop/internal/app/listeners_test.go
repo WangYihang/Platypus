@@ -13,8 +13,8 @@ import (
 
 const listListenersV1Fixture = `{
   "listeners": [
-    {"hash":"h1","host":"0.0.0.0","port":13337,"encrypted":false,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{"c1":{}},"termite_clients":{}},
-    {"hash":"h2","host":"0.0.0.0","port":13338,"encrypted":true,"public_ip":"1.2.3.4","interfaces":["eth0"],"clients":{},"termite_clients":{"c2":{},"c3":{}}}
+    {"hash":"h1","host":"0.0.0.0","port":13337,"public_ip":"1.2.3.4","interfaces":["eth0"],"termite_clients":{"c1":{}}},
+    {"hash":"h2","host":"0.0.0.0","port":13338,"public_ip":"1.2.3.4","interfaces":["eth0"],"termite_clients":{"c2":{},"c3":{}}}
   ]
 }`
 
@@ -73,10 +73,10 @@ func TestApp_ListListeners(t *testing.T) {
 	byHash := map[string]int{got[0].Hash: 0, got[1].Hash: 1}
 	h1 := got[byHash["h1"]]
 	h2 := got[byHash["h2"]]
-	if h1.Encrypted || h1.NumSessions != 1 {
+	if h1.NumSessions != 1 {
 		t.Errorf("h1 = %+v", h1)
 	}
-	if !h2.Encrypted || h2.NumSessions != 2 {
+	if h2.NumSessions != 2 {
 		t.Errorf("h2 = %+v", h2)
 	}
 }
@@ -104,18 +104,17 @@ func TestApp_CreateListener_PostsJSON(t *testing.T) {
 	defer srv.Close()
 
 	a := freshConnectedApp(t, srv.URL)
-	if err := a.CreateListener("0.0.0.0", 4444, true); err != nil {
+	if err := a.CreateListener("0.0.0.0", 4444); err != nil {
 		t.Fatalf("CreateListener: %v", err)
 	}
 	var decoded struct {
-		Host      string `json:"host"`
-		Port      int    `json:"port"`
-		Encrypted bool   `json:"encrypted"`
+		Host string `json:"host"`
+		Port int    `json:"port"`
 	}
 	if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
 		t.Fatalf("decode body: %v — raw: %q", err, bodyBytes)
 	}
-	if decoded.Host != "0.0.0.0" || decoded.Port != 4444 || !decoded.Encrypted {
+	if decoded.Host != "0.0.0.0" || decoded.Port != 4444 {
 		t.Errorf("body = %+v", decoded)
 	}
 }

@@ -81,15 +81,6 @@ export default function Sessions({ onOpenTerminal }: Props) {
     );
 
     const columns: ColumnsType<api.Session> = [
-        {
-            title: "Type",
-            dataIndex: "tag",
-            key: "tag",
-            width: 100,
-            render: (tag: string) => (
-                <Tag color={tag === "termite" ? "blue" : "default"}>{tag || "shell"}</Tag>
-            ),
-        },
         { title: "Host", key: "host", render: (_, s) => `${s.host}:${s.port}` },
         {
             title: "Alias",

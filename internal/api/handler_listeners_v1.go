@@ -20,9 +20,8 @@ type listenersListResponse struct {
 
 // createListenerRequest is the JSON body for POST /api/v1/listeners.
 type createListenerRequest struct {
-	Host      string `json:"host" binding:"required"`
-	Port      int    `json:"port" binding:"required"`
-	Encrypted bool   `json:"encrypted"`
+	Host string `json:"host" binding:"required"`
+	Port int    `json:"port" binding:"required"`
 }
 
 // ListListenersV1 returns every configured TCP listener as a flat array.
@@ -68,12 +67,12 @@ func GetListenerV1(c *gin.Context) {
 // POST /api/server with a JSON request.
 //
 // @Summary     Create listener
-// @Description Opens a reverse-shell listener. encrypted=true yields a TLS+proto Termite listener; false yields a plain raw-TCP shell listener.
+// @Description Opens a TLS ingress port where managed-host agents dial in.
 // @Tags        listeners
 // @Accept      json
 // @Produce     json
 // @Security    BearerAuth
-// @Param       body body     createListenerRequest true "Bind address and encryption mode"
+// @Param       body body     createListenerRequest true "Bind address"
 // @Success     201  {object} core.TCPServer
 // @Failure     400  {object} errorResponse
 // @Failure     500  {object} errorResponse
@@ -88,7 +87,7 @@ func CreateListenerV1(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "port must be 1-65535"})
 		return
 	}
-	srv := core.CreateTCPServer(req.Host, uint16(req.Port), "", req.Encrypted, true, "", "")
+	srv := core.CreateTCPServer(req.Host, uint16(req.Port), "", true, "", "")
 	if srv == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start listener"})
 		return
@@ -138,9 +137,6 @@ func ListenerSessionsV1(c *gin.Context) {
 			continue
 		}
 		sessions := []interface{}{}
-		for _, cl := range srv.Clients {
-			sessions = append(sessions, cl)
-		}
 		for _, cl := range srv.TermiteClients {
 			sessions = append(sessions, cl)
 		}

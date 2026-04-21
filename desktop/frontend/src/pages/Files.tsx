@@ -107,7 +107,7 @@ export default function Files() {
                         showSearch
                         placeholder="Select session"
                         options={sessions.map((s) => ({
-                            label: `${s.tag === "termite" ? "🔒" : "🐚"} ${s.alias || s.hash.slice(0, 12)} (${s.host}:${s.port})`,
+                            label: `${s.alias || s.hash.slice(0, 12)} (${s.host}:${s.port})`,
                             value: s.hash,
                         }))}
                     />

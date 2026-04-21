@@ -50,7 +50,6 @@ type App struct {
 	Listeners *listener.Manager
 
 	// Current session state
-	Current        interface{} // *core.TCPClient (avoids circular import)
 	CurrentTermite interface{} // *core.TermiteClient
 
 	// Server registry (keyed by hash)
@@ -110,7 +109,6 @@ func (a *App) FindSession(clue string) session.Session {
 
 // SetCurrentSession sets the current interactive session.
 func (a *App) SetCurrentSession(s session.Session) {
-	a.Current = nil
 	a.CurrentTermite = nil
 }
 

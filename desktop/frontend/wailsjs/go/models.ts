@@ -1,14 +1,14 @@
 export namespace api {
-	
+
 	export class DispatchResult {
 	    session_hash: string;
 	    output: string;
 	    error?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DispatchResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.session_hash = source["session_hash"];
@@ -20,7 +20,6 @@ export namespace api {
 	    hash: string;
 	    host: string;
 	    port: number;
-	    encrypted: boolean;
 	    group_dispatch: boolean;
 	    disable_history: boolean;
 	    public_ip: string;
@@ -28,17 +27,16 @@ export namespace api {
 	    // Go type: time
 	    timestamp: any;
 	    interfaces: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Listener(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.hash = source["hash"];
 	        this.host = source["host"];
 	        this.port = source["port"];
-	        this.encrypted = source["encrypted"];
 	        this.group_dispatch = source["group_dispatch"];
 	        this.disable_history = source["disable_history"];
 	        this.public_ip = source["public_ip"];
@@ -46,7 +44,7 @@ export namespace api {
 	        this.timestamp = this.convertValues(source["timestamp"], null);
 	        this.interfaces = source["interfaces"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -79,13 +77,11 @@ export namespace api {
 	    // Go type: time
 	    timestamp: any;
 	    group_dispatch: boolean;
-	    encrypted: boolean;
-	    tag: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.hash = source["hash"];
@@ -100,10 +96,8 @@ export namespace api {
 	        this.python3 = source["python3"];
 	        this.timestamp = this.convertValues(source["timestamp"], null);
 	        this.group_dispatch = source["group_dispatch"];
-	        this.encrypted = source["encrypted"];
-	        this.tag = source["tag"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -125,11 +119,11 @@ export namespace api {
 	export class TunnelInfo {
 	    type: string;
 	    address: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TunnelInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -140,16 +134,16 @@ export namespace api {
 }
 
 export namespace app {
-	
+
 	export class ConnectionStatus {
 	    connected: boolean;
 	    profileName: string;
 	    url: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConnectionStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.connected = source["connected"];
@@ -161,15 +155,15 @@ export namespace app {
 }
 
 export namespace profile {
-	
+
 	export class Profile {
 	    name: string;
 	    url: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -178,4 +172,3 @@ export namespace profile {
 	}
 
 }
-

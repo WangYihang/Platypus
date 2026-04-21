@@ -7,13 +7,12 @@ import (
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 )
 
-// Session represents a reverse shell session, either plain TCP or encrypted Termite.
+// Session represents a connected agent managed by the server.
 type Session interface {
 	// Identity
 	GetHash() string
 	GetAlias() string
 	SetAlias(alias string)
-	IsEncrypted() bool
 
 	// Connection info
 	GetHost() string

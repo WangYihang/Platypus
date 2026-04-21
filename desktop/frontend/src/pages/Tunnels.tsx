@@ -50,11 +50,9 @@ export default function Tunnels() {
 
     const loadSessions = useCallback(async () => {
         const s = await ListSessions();
-        // Tunnels only work on termite sessions.
-        const termites = s.filter((x) => x.tag === "termite");
-        setSessions(termites);
-        if (!activeSession && termites.length > 0) {
-            setActiveSession(termites[0].hash);
+        setSessions(s);
+        if (!activeSession && s.length > 0) {
+            setActiveSession(s[0].hash);
         }
     }, [activeSession]);
 

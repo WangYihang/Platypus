@@ -8,7 +8,6 @@ import {
     message,
     Modal,
     Space,
-    Switch,
     Table,
     Tag,
     Typography,
@@ -27,7 +26,6 @@ const { Title, Text } = Typography;
 interface AddForm {
     host: string;
     port: number;
-    encrypted: boolean;
 }
 
 export default function Listeners() {
@@ -54,7 +52,7 @@ export default function Listeners() {
 
     async function handleAdd(v: AddForm) {
         try {
-            await CreateListener(v.host, v.port, v.encrypted);
+            await CreateListener(v.host, v.port);
             messageApi.success(`Listener on ${v.host}:${v.port} created`);
             setModalOpen(false);
             form.resetFields();
@@ -85,12 +83,7 @@ export default function Listeners() {
         {
             title: "Endpoint",
             key: "endpoint",
-            render: (_, l) => (
-                <Space>
-                    <Text>{`${l.host}:${l.port}`}</Text>
-                    {l.encrypted && <Tag color="blue">termite</Tag>}
-                </Space>
-            ),
+            render: (_, l) => <Text>{`${l.host}:${l.port}`}</Text>,
         },
         {
             title: "Public IP",
@@ -150,7 +143,7 @@ export default function Listeners() {
                 <Form
                     form={form}
                     layout="vertical"
-                    initialValues={{ host: "0.0.0.0", port: 13337, encrypted: false }}
+                    initialValues={{ host: "0.0.0.0", port: 13337 }}
                     onFinish={handleAdd}
                 >
                     <Form.Item name="host" label="Host" rules={[{ required: true }]}>
@@ -159,17 +152,8 @@ export default function Listeners() {
                     <Form.Item name="port" label="Port" rules={[{ required: true }]}>
                         <InputNumber min={1} max={65535} style={{ width: "100%" }} />
                     </Form.Item>
-                    <Form.Item
-                        name="encrypted"
-                        label="Encrypted (Termite)"
-                        valuePropName="checked"
-                        extra="Use the Termite protocol (TLS + protobuf). Otherwise plain TCP reverse shell."
-                    >
-                        <Switch />
-                    </Form.Item>
                 </Form>
             </Modal>
         </div>
     );
 }
-

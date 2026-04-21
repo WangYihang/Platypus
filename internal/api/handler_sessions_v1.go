@@ -29,14 +29,10 @@ type execResponse struct {
 	Output string `json:"output"`
 }
 
-// collectAllSessions returns every TCP and Termite client across every
-// listener. Mirrors the legacy ListClients loop but returns a slice.
+// collectAllSessions returns every Termite agent session across every listener.
 func collectAllSessions() []interface{} {
 	out := []interface{}{}
 	for _, server := range core.GetServers() {
-		for _, c := range server.Clients {
-			out = append(out, c)
-		}
 		for _, c := range server.TermiteClients {
 			out = append(out, c)
 		}
@@ -70,10 +66,6 @@ func ListSessionsV1(c *gin.Context) {
 // @Router      /api/v1/sessions/{id} [get]
 func GetSessionV1(c *gin.Context) {
 	hash := c.Param("id")
-	if client := core.FindTCPClientByHash(hash); client != nil {
-		c.JSON(http.StatusOK, client)
-		return
-	}
 	if client := core.FindTermiteClientByHash(hash); client != nil {
 		c.JSON(http.StatusOK, client)
 		return
@@ -95,11 +87,6 @@ func GetSessionV1(c *gin.Context) {
 func DeleteSessionV1(c *gin.Context) {
 	hash := c.Param("id")
 	for _, server := range core.GetServers() {
-		if client, ok := server.Clients[hash]; ok {
-			core.DeleteTCPClient(client)
-			c.Status(http.StatusNoContent)
-			return
-		}
 		if client, ok := server.TermiteClients[hash]; ok {
 			core.DeleteTermiteClient(client)
 			c.Status(http.StatusNoContent)
@@ -112,7 +99,7 @@ func DeleteSessionV1(c *gin.Context) {
 // ExecSessionV1 runs a shell command on a session and returns its output.
 //
 // @Summary     Execute command on session
-// @Description Executes one shell command and returns its stdout. Plain TCP sessions in PTY mode are refused (409); switch to non-PTY or use the WebSocket terminal. Replaces the legacy form-encoded POST /api/client/{hash}.
+// @Description Executes one shell command on a connected agent and returns its stdout.
 // @Tags        sessions
 // @Accept      json
 // @Produce     json
@@ -122,7 +109,6 @@ func DeleteSessionV1(c *gin.Context) {
 // @Success     200  {object}  execResponse
 // @Failure     400  {object}  errorResponse
 // @Failure     404  {object}  errorResponse
-// @Failure     409  {object}  errorResponse
 // @Router      /api/v1/sessions/{id}/exec [post]
 func ExecSessionV1(c *gin.Context) {
 	hash := c.Param("id")
@@ -132,14 +118,6 @@ func ExecSessionV1(c *gin.Context) {
 		return
 	}
 	for _, server := range core.GetServers() {
-		if client, ok := server.Clients[hash]; ok {
-			if client.GetPtyEstablished() {
-				c.JSON(http.StatusConflict, gin.H{"error": "session is under PTY mode; use WebSocket terminal or exit PTY first"})
-				return
-			}
-			c.JSON(http.StatusOK, execResponse{Output: client.SystemToken(req.Command)})
-			return
-		}
 		if client, ok := server.TermiteClients[hash]; ok {
 			c.JSON(http.StatusOK, execResponse{Output: client.System(req.Command)})
 			return

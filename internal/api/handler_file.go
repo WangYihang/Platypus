@@ -42,16 +42,6 @@ func GetFileSize(c *gin.Context) {
 		return
 	}
 
-	if client := core.FindTCPClientByHash(hash); client != nil {
-		size, err := client.FileSize(path)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": true, "size": size})
-		return
-	}
-
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
@@ -94,16 +84,6 @@ func ReadFile(c *gin.Context) {
 			return
 		}
 		c.Data(http.StatusOK, "application/octet-stream", data)
-		return
-	}
-
-	if client := core.FindTCPClientByHash(hash); client != nil {
-		content, err := client.ReadFileEx(path, int(offset), int(size))
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-			return
-		}
-		c.Data(http.StatusOK, "application/octet-stream", []byte(content))
 		return
 	}
 
@@ -157,5 +137,5 @@ func WriteFile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "session not found (file upload requires Termite client)"})
+	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }

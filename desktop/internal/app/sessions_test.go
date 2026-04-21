@@ -9,11 +9,11 @@ import (
 	keyring "github.com/zalando/go-keyring"
 )
 
-// fixture: response from GET /api/v1/sessions containing one TCPClient and one TermiteClient.
+// fixture: response from GET /api/v1/sessions containing two agent sessions.
 const clientListResponse = `{
   "sessions": [
-    {"hash":"h-tcp","host":"1.2.3.4","port":3344,"alias":"t1","user":"root","os":"Linux","group_dispatch":false,"timestamp":"2026-04-20T10:00:00Z"},
-    {"hash":"h-termite","host":"5.6.7.8","port":4455,"alias":"t2","user":"victim","os":"Linux","version":"1.5.1","group_dispatch":true,"timestamp":"2026-04-20T10:01:00Z"}
+    {"hash":"h-alpha","host":"1.2.3.4","port":3344,"alias":"t1","user":"root","os":"Linux","version":"1.5.0","group_dispatch":false,"timestamp":"2026-04-20T10:00:00Z"},
+    {"hash":"h-beta","host":"5.6.7.8","port":4455,"alias":"t2","user":"admin","os":"Linux","version":"1.5.1","group_dispatch":true,"timestamp":"2026-04-20T10:01:00Z"}
   ]
 }`
 
@@ -53,23 +53,17 @@ func TestApp_ListSessions_ParsesAndReturnsSlice(t *testing.T) {
 	}
 	// Sort by hash so test is stable.
 	byHash := map[string]int{got[0].Hash: 0, got[1].Hash: 1}
-	tcp := got[byHash["h-tcp"]]
-	term := got[byHash["h-termite"]]
+	alpha := got[byHash["h-alpha"]]
+	beta := got[byHash["h-beta"]]
 
-	if tcp.Encrypted {
-		t.Error("h-tcp should be unencrypted")
+	if alpha.Version != "1.5.0" {
+		t.Errorf("alpha Version = %q", alpha.Version)
 	}
-	if !term.Encrypted {
-		t.Error("h-termite should be encrypted")
+	if beta.Version != "1.5.1" {
+		t.Errorf("beta Version = %q", beta.Version)
 	}
-	if tcp.Tag != "shell" {
-		t.Errorf("h-tcp Tag = %q, want shell", tcp.Tag)
-	}
-	if term.Tag != "termite" {
-		t.Errorf("h-termite Tag = %q, want termite", term.Tag)
-	}
-	if term.Version != "1.5.1" {
-		t.Errorf("Version = %q", term.Version)
+	if beta.User != "admin" {
+		t.Errorf("beta User = %q", beta.User)
 	}
 }
 
