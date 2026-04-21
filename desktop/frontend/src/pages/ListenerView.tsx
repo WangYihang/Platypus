@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
     Alert,
     Button,
-    Descriptions,
     Form,
     Input,
     InputNumber,
@@ -10,26 +9,36 @@ import {
     Modal,
     Space,
     Spin,
+    Table,
 } from "antd";
 import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
 
+import Card from "../components/Card";
+import DataList from "../components/DataList";
+import EmptyState from "../components/EmptyState";
+import Mono from "../components/Mono";
+import StatusPill from "../components/StatusPill";
 import MainHeader from "../layout/MainHeader";
-import { palette } from "../layout/theme";
+import { space } from "../layout/theme";
 import { Listener, createListener, deleteListener, listListeners } from "../lib/api";
 import { fromNow } from "../lib/time";
 
 interface Props {
     projectID: string;
-    listenerID?: string; // optional — when null we show the project's listener list
+    listenerID?: string;
     onSelectListener?: (id: string) => void;
 }
 
-// ListenerView handles both the per-listener detail page and the list
-// view (when no specific id is selected). The latter is reachable from
-// the "overview" path if someone wants a full-width table instead of
-// the sidebar rows; for now the sidebar also links straight to a
-// specific listener id.
-export default function ListenerView({ projectID, listenerID, onSelectListener }: Props) {
+// ListenerView handles both the per-listener detail view and the list
+// view (when no specific id is selected). Same chrome (header + actions)
+// either way; the body switches between a detail card and a Vercel-style
+// dense table.
+export default function ListenerView({
+    projectID,
+    listenerID,
+    onSelectListener,
+}: Props) {
     const [listeners, setListeners] = useState<Listener[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -67,7 +76,7 @@ export default function ListenerView({ projectID, listenerID, onSelectListener }
         }
     }
 
-    async function handleDelete(l: Listener) {
+    function handleDelete(l: Listener) {
         Modal.confirm({
             title: `Stop listener ${l.host}:${l.port}?`,
             content:
@@ -93,15 +102,19 @@ export default function ListenerView({ projectID, listenerID, onSelectListener }
             {contextHolder}
             <MainHeader
                 title={
-                    selected ? `${selected.host}:${selected.port}` : "Listeners"
+                    selected ? (
+                        <Mono size={16}>{`${selected.host}:${selected.port}`}</Mono>
+                    ) : (
+                        "Listeners"
+                    )
                 }
                 subtitle={
                     selected
-                        ? `listener · ${fromNow(selected.created_at)} ago`
+                        ? `listener · created ${fromNow(selected.created_at)}`
                         : `${listeners?.length ?? 0} total`
                 }
                 actions={
-                    <Space>
+                    <Space size={space[2]}>
                         <Button
                             size="small"
                             icon={<ReloadOutlined />}
@@ -121,18 +134,32 @@ export default function ListenerView({ projectID, listenerID, onSelectListener }
                     </Space>
                 }
             />
-            <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-                {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
-                {!listeners && (
-                    <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-                        <Spin />
-                    </div>
-                )}
-                {selected ? (
-                    <ListenerDetail listener={selected} onDelete={() => handleDelete(selected)} />
-                ) : (
-                    listeners && <ListenerTable listeners={listeners} onPick={onSelectListener} onDelete={handleDelete} />
-                )}
+            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
+                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+                    {error && (
+                        <Alert type="error" message={error} style={{ marginBottom: space[4] }} />
+                    )}
+                    {!listeners && (
+                        <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+                            <Spin />
+                        </div>
+                    )}
+                    {selected ? (
+                        <ListenerDetail
+                            listener={selected}
+                            onDelete={() => handleDelete(selected)}
+                        />
+                    ) : (
+                        listeners && (
+                            <ListenerTable
+                                listeners={listeners}
+                                onPick={onSelectListener}
+                                onDelete={handleDelete}
+                                onNew={() => setCreateOpen(true)}
+                            />
+                        )
+                    )}
+                </div>
             </div>
 
             <Modal
@@ -168,32 +195,33 @@ function ListenerDetail({
     onDelete: () => void;
 }) {
     return (
-        <>
-            <Descriptions
-                size="small"
-                column={1}
-                bordered
-                styles={{ label: { width: 180, color: palette.textSecondary } }}
-            >
-                <Descriptions.Item label="host:port">
-                    {listener.host}:{listener.port}
-                </Descriptions.Item>
-                <Descriptions.Item label="public ip">
-                    {listener.public_ip || "—"}
-                </Descriptions.Item>
-                <Descriptions.Item label="shell">
-                    {listener.shell_path || "default"}
-                </Descriptions.Item>
-                <Descriptions.Item label="created">
-                    {fromNow(listener.created_at)}
-                </Descriptions.Item>
-            </Descriptions>
-            <div style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: space[4], maxWidth: 720 }}>
+            <Card header="Listener">
+                <DataList
+                    items={[
+                        {
+                            label: "host:port",
+                            value: <Mono>{`${listener.host}:${listener.port}`}</Mono>,
+                        },
+                        {
+                            label: "public ip",
+                            value: listener.public_ip ? <Mono>{listener.public_ip}</Mono> : "—",
+                        },
+                        { label: "shell", value: <Mono>{listener.shell_path || "default"}</Mono> },
+                        { label: "created", value: fromNow(listener.created_at) },
+                        {
+                            label: "status",
+                            value: <StatusPill tone="success">listening</StatusPill>,
+                        },
+                    ]}
+                />
+            </Card>
+            <div>
                 <Button danger icon={<DeleteOutlined />} onClick={onDelete}>
                     Stop this listener
                 </Button>
             </div>
-        </>
+        </div>
     );
 }
 
@@ -201,64 +229,90 @@ function ListenerTable({
     listeners,
     onPick,
     onDelete,
+    onNew,
 }: {
     listeners: Listener[];
     onPick?: (id: string) => void;
     onDelete: (l: Listener) => void;
+    onNew: () => void;
 }) {
     if (listeners.length === 0) {
         return (
-            <Alert
-                type="info"
-                showIcon
-                message="No listeners yet. Click New listener to create one."
+            <EmptyState
+                title="No listeners yet"
+                description="Create a listener to start accepting agent connections."
+                action={
+                    <Button type="primary" icon={<PlusOutlined />} onClick={onNew}>
+                        New listener
+                    </Button>
+                }
             />
         );
     }
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listeners.map((l) => (
-                <div
-                    key={l.id}
+
+    const columns: ColumnsType<Listener> = [
+        {
+            title: "Endpoint",
+            dataIndex: "id",
+            render: (_, l) => (
+                <button
+                    type="button"
+                    onClick={() => onPick?.(l.id)}
                     style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 14px",
-                        background: palette.sidebar,
-                        border: `1px solid ${palette.border}`,
-                        borderRadius: 6,
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        cursor: onPick ? "pointer" : "default",
+                        textAlign: "left",
+                        color: "inherit",
                     }}
                 >
-                    <button
-                        type="button"
-                        onClick={() => onPick?.(l.id)}
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            color: palette.textPrimary,
-                            cursor: onPick ? "pointer" : "default",
-                            padding: 0,
-                            fontSize: 14,
-                        }}
-                    >
-                        {l.host}:{l.port}
-                    </button>
-                    <Space>
-                        <span style={{ color: palette.textSecondary, fontSize: 12 }}>
-                            {fromNow(l.created_at)}
-                        </span>
-                        <Button
-                            size="small"
-                            danger
-                            type="link"
-                            onClick={() => onDelete(l)}
-                        >
-                            Stop
-                        </Button>
-                    </Space>
-                </div>
-            ))}
-        </div>
+                    <Mono size={13}>{`${l.host}:${l.port}`}</Mono>
+                </button>
+            ),
+        },
+        {
+            title: "Public IP",
+            dataIndex: "public_ip",
+            render: (v?: string) => (v ? <Mono>{v}</Mono> : "—"),
+        },
+        {
+            title: "Created",
+            dataIndex: "created_at",
+            render: (v: string) => fromNow(v),
+            width: 160,
+        },
+        {
+            title: "Status",
+            render: () => <StatusPill tone="success">listening</StatusPill>,
+            width: 120,
+        },
+        {
+            title: "",
+            width: 80,
+            render: (_, l) => (
+                <Button
+                    size="small"
+                    danger
+                    type="link"
+                    onClick={() => onDelete(l)}
+                >
+                    Stop
+                </Button>
+            ),
+        },
+    ];
+
+    return (
+        <Card padding={0}>
+            <Table
+                rowKey="id"
+                columns={columns}
+                dataSource={listeners}
+                pagination={false}
+                size="small"
+                bordered={false}
+            />
+        </Card>
     );
 }
