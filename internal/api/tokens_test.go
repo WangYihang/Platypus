@@ -74,14 +74,23 @@ func TestTokenIssuer_ExpiredAccess(t *testing.T) {
 	}
 }
 
-func TestTokenIssuer_RejectsTampered(t *testing.T) {
-	issuer := testIssuer(t)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: "u1", Role: user.RoleAdmin})
-
-	// Flip the last character of the signature; the altered token must fail.
-	bad := tok[:len(tok)-1] + string(tok[len(tok)-1]^0x01)
-	if _, err := issuer.ParseAccess(bad); err == nil {
-		t.Fatal("expected ParseAccess to reject a tampered token")
+func TestTokenIssuer_RejectsDifferentKey(t *testing.T) {
+	// A token minted with one key must not verify under a different one.
+	// (Tried "flip one signature byte" first; HS256's base64url last-char
+	// semantics made that probabilistic — reissuing with a distinct key is
+	// deterministic and exercises the same signature-verification path.)
+	ours := testIssuer(t)
+	theirs, err := NewTokenIssuer("other-access", "other-refresh",
+		5*time.Minute, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewTokenIssuer: %v", err)
+	}
+	tok, err := theirs.IssueAccess(AccessClaims{UserID: "u1", Role: user.RoleAdmin})
+	if err != nil {
+		t.Fatalf("IssueAccess: %v", err)
+	}
+	if _, err := ours.ParseAccess(tok); err == nil {
+		t.Fatal("ParseAccess accepted a token signed by a different key")
 	}
 }
 

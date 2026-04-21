@@ -1,0 +1,233 @@
+package api
+
+import (
+	"crypto/subtle"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"github.com/WangYihang/Platypus/internal/storage"
+	"github.com/WangYihang/Platypus/internal/user"
+)
+
+// AuthHandler wires the login / refresh / logout / bootstrap endpoints. It
+// holds everything it needs as plain fields — no global state — so each test
+// can instantiate an isolated handler against an in-memory DB.
+type AuthHandler struct {
+	db              *storage.DB
+	tokens          *TokenIssuer
+	bootstrapSecret string
+}
+
+func NewAuthHandler(db *storage.DB, tokens *TokenIssuer, bootstrapSecret string) *AuthHandler {
+	return &AuthHandler{db: db, tokens: tokens, bootstrapSecret: bootstrapSecret}
+}
+
+type bootstrapRequest struct {
+	Secret   string `json:"secret" binding:"required"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type loginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+type userBody struct {
+	ID       string    `json:"id"`
+	Username string    `json:"username"`
+	Role     user.Role `json:"role"`
+}
+
+type tokenPair struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	User         *userBody `json:"user,omitempty"`
+}
+
+// Bootstrap is the one-shot "set up the first admin" flow. It succeeds only
+// when the users table is empty AND the caller presents the server's
+// bootstrap secret. After the first admin exists this endpoint is dead
+// weight; subsequent calls return 409.
+func (h *AuthHandler) Bootstrap(c *gin.Context) {
+	var req bootstrapRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	n, err := h.db.Users().Count(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "count users"})
+		return
+	}
+	if n > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "already bootstrapped"})
+		return
+	}
+	// subtle.ConstantTimeCompare keeps the bootstrap window slightly harder
+	// to time-side-channel, though the single-shot nature already limits
+	// exploitation.
+	if subtle.ConstantTimeCompare([]byte(req.Secret), []byte(h.bootstrapSecret)) != 1 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid secret"})
+		return
+	}
+
+	hashed, err := user.HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	u := &user.User{
+		ID:           uuid.NewString(),
+		Username:     req.Username,
+		PasswordHash: hashed,
+		Role:         user.RoleAdmin,
+		CreatedAt:    time.Now().UTC(),
+	}
+	if err := h.db.Users().Create(ctx, u); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "create user"})
+		return
+	}
+	h.issueTokensTo(c, u)
+}
+
+// Login authenticates by username + password and returns a fresh token pair.
+// On invalid credentials we always return 401 with the same body so
+// attackers can't distinguish "wrong username" from "wrong password".
+func (h *AuthHandler) Login(c *gin.Context) {
+	var req loginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	u, err := h.db.Users().GetByUsername(ctx, req.Username)
+	if errors.Is(err, storage.ErrNotFound) {
+		unauthorized(c)
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
+		return
+	}
+	if !user.VerifyPassword(u.PasswordHash, req.Password) {
+		unauthorized(c)
+		return
+	}
+	if err := h.db.Users().TouchLastLogin(ctx, u.ID); err != nil {
+		// Non-fatal — the login itself still succeeded.
+		_ = err
+	}
+	h.issueTokensTo(c, u)
+}
+
+// Refresh exchanges a valid, non-revoked refresh token for a new pair and
+// revokes the old refresh_tokens row. Strict rotation: one refresh token is
+// single-use so a leaked token is only useful for one follow-up refresh.
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	claims, err := h.tokens.ParseRefresh(req.RefreshToken)
+	if err != nil {
+		unauthorized(c)
+		return
+	}
+
+	ctx := c.Request.Context()
+	rt, err := h.db.RefreshTokens().Get(ctx, claims.TokenID)
+	if err != nil || rt.RevokedAt != nil || time.Now().After(rt.ExpiresAt) {
+		unauthorized(c)
+		return
+	}
+	u, err := h.db.Users().GetByID(ctx, rt.UserID)
+	if err != nil {
+		unauthorized(c)
+		return
+	}
+
+	// Rotate: revoke the old row, issue a fresh pair.
+	if err := h.db.RefreshTokens().Revoke(ctx, rt.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "revoke old refresh"})
+		return
+	}
+	h.issueTokensTo(c, u)
+}
+
+// Logout revokes a single refresh token. Returns 204 even if the token is
+// already revoked or unknown — logging out "harder than necessary" is not
+// an error.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	claims, err := h.tokens.ParseRefresh(req.RefreshToken)
+	if err != nil {
+		// Unparseable token → nothing to revoke, but a client's "please
+		// invalidate this" request still succeeds semantically.
+		c.Status(http.StatusNoContent)
+		return
+	}
+	_ = h.db.RefreshTokens().Revoke(c.Request.Context(), claims.TokenID)
+	c.Status(http.StatusNoContent)
+}
+
+// issueTokensTo is the common tail of Login / Refresh / Bootstrap: mint a
+// new access + refresh pair, persist the refresh row, and return the pair.
+func (h *AuthHandler) issueTokensTo(c *gin.Context, u *user.User) {
+	access, err := h.tokens.IssueAccess(AccessClaims{
+		UserID:   u.ID,
+		Username: u.Username,
+		Role:     u.Role,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue access"})
+		return
+	}
+	tokenID := uuid.NewString()
+	refresh, err := h.tokens.IssueRefresh(RefreshClaims{
+		UserID:  u.ID,
+		TokenID: tokenID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue refresh"})
+		return
+	}
+	rt := &storage.RefreshToken{
+		ID:        tokenID,
+		UserID:    u.ID,
+		ExpiresAt: time.Now().Add(h.tokens.refreshTTL).UTC(),
+	}
+	if err := h.db.RefreshTokens().Create(c.Request.Context(), rt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist refresh"})
+		return
+	}
+	c.JSON(http.StatusOK, tokenPair{
+		AccessToken:  access,
+		RefreshToken: refresh,
+		User: &userBody{
+			ID:       u.ID,
+			Username: u.Username,
+			Role:     u.Role,
+		},
+	})
+}
+
+func unauthorized(c *gin.Context) {
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+}
