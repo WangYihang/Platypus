@@ -143,6 +143,25 @@ export async function refresh(): Promise<boolean> {
     }
 }
 
+// changePassword hits PATCH /auth/password. On success the server has
+// already revoked every refresh_tokens row for this user, so we also
+// drop the local session — callers should re-render into the login
+// page. authFetch's 401-refresh retry would otherwise silently restore
+// the cleared state.
+export async function changePassword(
+    oldPassword: string,
+    newPassword: string,
+): Promise<void> {
+    await authFetch("/api/v1/auth/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    });
+    session = null;
+    persistRefresh();
+    notify();
+}
+
 export async function logout(): Promise<void> {
     if (!session) return;
     const url = session.serverURL + "/api/v1/auth/logout";

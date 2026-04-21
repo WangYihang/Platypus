@@ -1,7 +1,8 @@
-import { Avatar, Popover, Tooltip } from "antd";
-import { LogoutOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
+import { useState } from "react";
+import { Avatar, Button, Form, Input, Modal, Popover, Tooltip, message } from "antd";
+import { KeyOutlined, LogoutOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
 
-import { SessionUser, logout } from "../lib/auth";
+import { SessionUser, changePassword, logout } from "../lib/auth";
 import { layout, palette } from "./theme";
 
 // ProfileRail is the leftmost 56px strip. In the final design it will
@@ -23,10 +24,34 @@ interface Props {
 
 export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
+    const [pwOpen, setPwOpen] = useState(false);
+    const [pwForm] = Form.useForm<{ old_password: string; new_password: string; confirm: string }>();
+    const [pwBusy, setPwBusy] = useState(false);
+    const [messageApi, contextHolder] = message.useMessage();
 
     async function handleLogout() {
         await logout();
         onLoggedOut();
+    }
+
+    async function handlePasswordChange() {
+        const v = await pwForm.validateFields();
+        setPwBusy(true);
+        try {
+            await changePassword(v.old_password, v.new_password);
+            messageApi.success("Password updated — please log in again");
+            setPwOpen(false);
+            pwForm.resetFields();
+            // lib/auth already cleared the session; session-change
+            // subscribers (WebShell) will re-render into the login page
+            // automatically, but we call onLoggedOut for symmetry with
+            // the logout path.
+            onLoggedOut();
+        } catch (e) {
+            messageApi.error(`change password: ${String(e)}`);
+        } finally {
+            setPwBusy(false);
+        }
     }
 
     const popoverContent = (
@@ -43,6 +68,14 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                     <span>Manage users</span>
                 </button>
             )}
+            <button
+                type="button"
+                onClick={() => setPwOpen(true)}
+                style={{ ...popoverButtonStyle, marginTop: 8 }}
+            >
+                <KeyOutlined />
+                <span>Change password</span>
+            </button>
             <button
                 type="button"
                 onClick={handleLogout}
@@ -66,6 +99,7 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                 gap: 12,
             }}
         >
+            {contextHolder}
             <div style={{ flex: 1 }} />
             <Popover content={popoverContent} placement="rightBottom" trigger="click">
                 <Tooltip title={user.username} placement="right">
@@ -81,6 +115,73 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                     </Avatar>
                 </Tooltip>
             </Popover>
+
+            <Modal
+                title="Change password"
+                open={pwOpen}
+                onCancel={() => {
+                    setPwOpen(false);
+                    pwForm.resetFields();
+                }}
+                footer={[
+                    <Button
+                        key="cancel"
+                        onClick={() => {
+                            setPwOpen(false);
+                            pwForm.resetFields();
+                        }}
+                    >
+                        Cancel
+                    </Button>,
+                    <Button
+                        key="submit"
+                        type="primary"
+                        loading={pwBusy}
+                        onClick={handlePasswordChange}
+                    >
+                        Update password
+                    </Button>,
+                ]}
+                destroyOnHidden
+            >
+                <Form form={pwForm} layout="vertical">
+                    <Form.Item
+                        name="old_password"
+                        label="Current password"
+                        rules={[{ required: true }]}
+                    >
+                        <Input.Password autoFocus />
+                    </Form.Item>
+                    <Form.Item
+                        name="new_password"
+                        label="New password"
+                        rules={[
+                            { required: true, min: 8, message: "Min 8 chars" },
+                        ]}
+                        extra="Changing your password will sign you out of all other sessions."
+                    >
+                        <Input.Password />
+                    </Form.Item>
+                    <Form.Item
+                        name="confirm"
+                        label="Confirm new password"
+                        dependencies={["new_password"]}
+                        rules={[
+                            { required: true },
+                            ({ getFieldValue }) => ({
+                                validator(_, v) {
+                                    if (!v || v === getFieldValue("new_password")) {
+                                        return Promise.resolve();
+                                    }
+                                    return Promise.reject(new Error("passwords do not match"));
+                                },
+                            }),
+                        ]}
+                    >
+                        <Input.Password />
+                    </Form.Item>
+                </Form>
+            </Modal>
         </div>
     );
 }
