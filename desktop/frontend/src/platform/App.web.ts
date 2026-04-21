@@ -2,97 +2,29 @@
 // from that path is re-exported here with a REST/WebSocket implementation
 // that talks to platypus-server directly. The server's CORS config is `*`
 // (see internal/api/rest.go) so cross-origin fetch + WebSocket work.
+//
+// Auth comes from lib/auth — the JWT session set up by Login.tsx. The
+// in-memory access token there is the source of truth; this shim does
+// NOT manage its own token store any more (it used to, back when the
+// server only spoke the legacy single-secret /auth/token flow).
 
-import type { api, app, profile } from "../../wailsjs/go/models";
+import type { api } from "../../wailsjs/go/models";
+import { authFetch, authJSON, getSession } from "../lib/auth";
 import { emitEvent } from "./runtime.web";
-
-// ---------- localStorage-backed auth state ------------------------------
-
-const LS_URL = "platypus.url";
-const LS_TOKEN = "platypus.token";
-const LS_PROFILE = "platypus.profile_name";
-
-function getServerURL(): string {
-    return (localStorage.getItem(LS_URL) || "").replace(/\/+$/, "");
-}
-function getToken(): string {
-    return localStorage.getItem(LS_TOKEN) || "";
-}
-function requireToken(): string {
-    const t = getToken();
-    if (!t) throw new Error("not connected — log in first");
-    return t;
-}
-
-// webLogin is called by WebLogin.tsx; not part of the Wails App surface.
-export async function webLogin(url: string, secret: string): Promise<void> {
-    const clean = url.replace(/\/+$/, "");
-    const r = await fetch(clean + "/api/v1/auth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
-    });
-    if (!r.ok) throw new Error(`auth (${r.status}): ${await r.text()}`);
-    const j = (await r.json()) as { token?: string };
-    if (!j.token) throw new Error("server returned empty token");
-    localStorage.setItem(LS_URL, clean);
-    localStorage.setItem(LS_TOKEN, j.token);
-    localStorage.setItem(LS_PROFILE, new URL(clean).host);
-}
 
 // ---------- HTTP helpers ------------------------------------------------
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const url = getServerURL() + path;
-    const headers = new Headers(init.headers);
-    headers.set("Authorization", "Bearer " + requireToken());
-    const r = await fetch(url, { ...init, headers });
-    if (r.status === 401) {
-        localStorage.removeItem(LS_TOKEN);
-        window.location.reload();
-    }
-    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
-    return r;
+    return authFetch(path, init);
 }
 async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
-    const r = await apiFetch(path, init);
-    return r.json();
+    return authJSON<T>(path, init);
 }
 
-// ---------- Profiles / connection ---------------------------------------
-// In web mode there's exactly one "profile" — whatever WebLogin saved.
-// The Connect page from desktop isn't mounted; WebShell routes to WebLogin
-// on first load, then App.tsx once a token is present.
-
-export async function ListProfiles(): Promise<profile.Profile[]> {
-    const url = localStorage.getItem(LS_URL);
-    const name = localStorage.getItem(LS_PROFILE);
-    if (!url || !name) return [];
-    return [{ name, url } as profile.Profile];
-}
-export async function AddProfile(_n: string, url: string, secret: string): Promise<void> {
-    return webLogin(url, secret);
-}
-export async function RemoveProfile(_name: string): Promise<void> {
-    localStorage.removeItem(LS_URL);
-    localStorage.removeItem(LS_TOKEN);
-    localStorage.removeItem(LS_PROFILE);
-}
-export async function Connect(_name: string): Promise<void> {
-    // WebLogin does the token exchange; if a token is already cached, nothing to do.
-    if (!getToken()) throw new Error("no saved credentials — use WebLogin first");
-}
-export async function Disconnect(): Promise<void> {
-    localStorage.removeItem(LS_TOKEN);
-    // Reload so WebShell re-renders the login page.
-    setTimeout(() => window.location.reload(), 50);
-}
-export async function ConnectionStatus(): Promise<app.ConnectionStatus> {
-    return {
-        connected: !!getToken(),
-        profileName: localStorage.getItem(LS_PROFILE) || "",
-        url: localStorage.getItem(LS_URL) || "",
-    } as app.ConnectionStatus;
+function getServerURL(): string {
+    const s = getSession();
+    if (!s) throw new Error("not connected — log in first");
+    return s.serverURL;
 }
 
 // ---------- Sessions ----------------------------------------------------
