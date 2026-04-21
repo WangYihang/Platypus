@@ -96,16 +96,38 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
             }}
         >
             {contextHolder}
+            <Tooltip title="Platypus" placement="right">
+                <div
+                    aria-label="Platypus"
+                    style={{
+                        width: 32,
+                        height: 32,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: palette.textPrimary,
+                        color: palette.accentFg,
+                        borderRadius: 8,
+                        fontWeight: 700,
+                        fontSize: 16,
+                        letterSpacing: -0.5,
+                    }}
+                >
+                    P
+                </div>
+            </Tooltip>
             <div style={{ flex: 1 }} />
             <Popover content={popoverContent} placement="rightBottom" trigger="click">
                 <Tooltip title={user.username} placement="right">
                     <Avatar
+                        size={36}
                         style={{
                             backgroundColor: palette.surfaceHover,
                             color: palette.textPrimary,
                             cursor: "pointer",
                             fontWeight: 600,
-                            border: `1px solid ${palette.border}`,
+                            border: `1px solid ${palette.borderStrong}`,
+                            fontSize: 13,
                         }}
                         icon={initials ? undefined : <UserOutlined />}
                     >

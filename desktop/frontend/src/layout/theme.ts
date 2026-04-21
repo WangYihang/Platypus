@@ -6,20 +6,23 @@
 import type { ThemeConfig } from "antd";
 
 // --- Palette ---------------------------------------------------------
-// Pure neutral grays. Two surface tiers only: main (#000) and surface
-// (#0a0a0a). Borders carry the structure; no shadows.
+// Vercel-style neutral grays. Three visible surface tiers — main (the
+// content background, slightly lighter than rail/sidebar so the focus
+// area pops forward) and surface (cards on top of main). Rail + sidebar
+// share a darker background so the chrome reads as separate from the
+// content. Borders carry the structure; no shadows.
 export const palette = {
-    // Region backgrounds (kept as fields so AppShell / legacy callers stay valid).
-    rail: "#000000",
+    // Region backgrounds.
+    rail: "#0a0a0a",
     sidebar: "#0a0a0a",
-    main: "#000000",
+    main: "#111111",
     detailRail: "#0a0a0a",
 
     // Surfaces & borders.
-    surface: "#0a0a0a",
-    surfaceHover: "#171717",
-    border: "#262626",
-    borderStrong: "#404040",
+    surface: "#1a1a1a",
+    surfaceHover: "#262626",
+    border: "#2e2e2e",
+    borderStrong: "#525252",
 
     // Text.
     textPrimary: "#fafafa",

@@ -25,7 +25,7 @@
 html,
 body {
     margin: 0;
-    background-color: #000;
+    background-color: #0a0a0a;
     color: #fafafa;
     font-family: var(--font-geist-sans);
 }
@@ -47,7 +47,7 @@ body {
     cursor: pointer;
 }
 .pl-card--interactive:hover {
-    border-color: #404040;
+    border-color: #525252;
 }
 
 .pl-popover-btn {
@@ -66,7 +66,7 @@ body {
     transition: background 120ms ease;
 }
 .pl-popover-btn:hover {
-    background: #171717;
+    background: #262626;
 }
 .pl-popover-btn + .pl-popover-btn {
     margin-top: 2px;

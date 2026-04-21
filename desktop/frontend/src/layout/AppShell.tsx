@@ -33,7 +33,9 @@ export default function AppShell({ profileRail, sidebar, main, detail }: Props) 
                 overflow: "hidden",
             }}
         >
-            <section style={regionStyle(palette.rail)}>{profileRail}</section>
+            <section style={regionStyle(palette.rail, { borderRight: true })}>
+                {profileRail}
+            </section>
             <section style={regionStyle(palette.sidebar, { borderRight: true })}>
                 {sidebar}
             </section>
