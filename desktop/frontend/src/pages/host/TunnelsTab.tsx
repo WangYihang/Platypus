@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
     Button,
-    Card,
     Form,
     Input,
     Modal,
     Select,
     Space,
     Table,
-    Tag,
-    Typography,
     message,
 } from "antd";
+import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
+import Card from "../../components/Card";
+import EmptyState from "../../components/EmptyState";
+import Mono from "../../components/Mono";
+import StatusPill from "../../components/StatusPill";
 import { CreateTunnel, ListTunnels } from "../../../wailsjs/go/app/App";
 import type { api } from "../../../wailsjs/go/models";
-
-const { Title, Text } = Typography;
+import { palette, space } from "../../layout/theme";
 
 type Mode = "pull" | "push" | "dynamic" | "internet";
 
@@ -76,34 +76,69 @@ export default function TunnelsTab({ sessionHash }: Props) {
             dataIndex: "type",
             key: "type",
             width: 120,
-            render: (t: string) => <Tag color="blue">{t}</Tag>,
+            render: (t: string) => <StatusPill tone="info">{t}</StatusPill>,
         },
-        { title: "Address", dataIndex: "address", key: "addr" },
+        {
+            title: "Address",
+            dataIndex: "address",
+            key: "addr",
+            render: (a: string) => <Mono>{a}</Mono>,
+        },
     ];
 
     return (
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
             {contextHolder}
-            <Space style={{ marginBottom: 12, width: "100%", justifyContent: "space-between" }}>
-                <Title level={5} style={{ margin: 0 }}>
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                }}
+            >
+                <h3
+                    style={{
+                        margin: 0,
+                        color: palette.textPrimary,
+                        fontSize: 14,
+                        fontWeight: 600,
+                    }}
+                >
                     Active tunnels
-                </Title>
-                <Space>
-                    <Button onClick={refresh}>Refresh</Button>
-                    <Button type="primary" onClick={() => setModalOpen(true)}>
+                </h3>
+                <Space size={space[2]}>
+                    <Button icon={<ReloadOutlined />} size="small" onClick={refresh}>
+                        Refresh
+                    </Button>
+                    <Button
+                        icon={<PlusOutlined />}
+                        size="small"
+                        type="primary"
+                        onClick={() => setModalOpen(true)}
+                    >
                         New tunnel
                     </Button>
                 </Space>
-            </Space>
+            </div>
 
-            <Table
-                rowKey={(r) => `${r.type}:${r.address}`}
-                columns={columns}
-                dataSource={tunnels}
-                pagination={false}
-                size="middle"
-                locale={{ emptyText: "No active tunnels for this session." }}
-            />
+            <Card padding={0}>
+                <Table
+                    rowKey={(r) => `${r.type}:${r.address}`}
+                    columns={columns}
+                    dataSource={tunnels}
+                    pagination={false}
+                    size="small"
+                    bordered={false}
+                    locale={{
+                        emptyText: (
+                            <EmptyState
+                                title="No active tunnels"
+                                description="Open a tunnel on this session via New tunnel."
+                            />
+                        ),
+                    }}
+                />
+            </Card>
 
             <Modal
                 title="New tunnel"
@@ -131,9 +166,16 @@ export default function TunnelsTab({ sessionHash }: Props) {
                         {() => {
                             const mode = form.getFieldValue("mode") as Mode;
                             return (
-                                <Card size="small" style={{ marginBottom: 12 }}>
-                                    <Text type="secondary">{MODE_DESC[mode]}</Text>
-                                </Card>
+                                <p
+                                    style={{
+                                        margin: `0 0 ${space[4]}px`,
+                                        color: palette.textSecondary,
+                                        fontSize: 12,
+                                        lineHeight: 1.5,
+                                    }}
+                                >
+                                    {MODE_DESC[mode]}
+                                </p>
                             );
                         }}
                     </Form.Item>
@@ -153,15 +195,6 @@ export default function TunnelsTab({ sessionHash }: Props) {
                     </Form.Item>
                 </Form>
             </Modal>
-
-            {tunnels.length === 0 && (
-                <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginTop: 16 }}
-                    message="No tunnels yet — use New tunnel to open one on this session."
-                />
-            )}
         </div>
     );
 }
