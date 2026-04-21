@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { Input, Spin } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, Form, Input, Modal, Spin, message } from "antd";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 
-import { Host, Listener, Project, listHosts, listListeners, listProjects } from "../lib/api";
+import {
+    Host,
+    Listener,
+    Project,
+    createProject,
+    listHosts,
+    listListeners,
+    listProjects,
+} from "../lib/api";
+import { getSessionUser } from "../lib/auth";
 import { palette } from "./theme";
 import ProjectSection from "./ProjectSection";
 
@@ -37,28 +46,66 @@ export default function Sidebar({ selection, onSelect }: Props) {
     const [projects, setProjects] = useState<ProjectData[] | null>(null);
     const [query, setQuery] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [createForm] = Form.useForm<{ name: string; slug: string }>();
+    const [messageApi, contextHolder] = message.useMessage();
+    const searchRef = useRef<HTMLInputElement | null>(null);
+
+    const user = getSessionUser();
+    const canCreateProject = user?.role === "admin";
+
+    const loadProjects = useCallback(async () => {
+        try {
+            const list = await listProjects();
+            const data = await Promise.all(
+                list.map(async (p) => ({
+                    project: p,
+                    listeners: await listListeners(p.id),
+                    hosts: await listHosts(p.id),
+                })),
+            );
+            setProjects(data);
+            setError(null);
+        } catch (err) {
+            setError(String(err));
+        }
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            try {
-                const list = await listProjects();
-                const data = await Promise.all(
-                    list.map(async (p) => ({
-                        project: p,
-                        listeners: await listListeners(p.id),
-                        hosts: await listHosts(p.id),
-                    })),
-                );
-                if (!cancelled) setProjects(data);
-            } catch (err) {
-                if (!cancelled) setError(String(err));
-            }
+            if (!cancelled) await loadProjects();
         })();
         return () => {
             cancelled = true;
         };
+    }, [loadProjects]);
+
+    // Cmd/Ctrl+K focuses the search input so operators running a large
+    // fleet can jump to a host without reaching for the mouse.
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+                e.preventDefault();
+                searchRef.current?.focus();
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
     }, []);
+
+    async function handleCreateProject() {
+        const v = await createForm.validateFields();
+        try {
+            await createProject(v.name, v.slug);
+            messageApi.success(`Created project ${v.slug}`);
+            setCreateOpen(false);
+            createForm.resetFields();
+            await loadProjects();
+        } catch (e) {
+            messageApi.error(`create: ${String(e)}`);
+        }
+    }
 
     // Filter: case-insensitive prefix on hostname/alias/host:port/slug.
     // We filter at the Sidebar level so ProjectSection doesn't have to
@@ -82,6 +129,7 @@ export default function Sidebar({ selection, onSelect }: Props) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            {contextHolder}
             <div
                 style={{
                     padding: "12px 12px 8px",
@@ -89,7 +137,10 @@ export default function Sidebar({ selection, onSelect }: Props) {
                 }}
             >
                 <Input
-                    placeholder="Search hosts, listeners…"
+                    ref={(el: { input: HTMLInputElement | null } | null) => {
+                        searchRef.current = el?.input ?? null;
+                    }}
+                    placeholder="Search hosts, listeners…  (⌘K)"
                     prefix={<SearchOutlined style={{ color: palette.textSecondary }} />}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -107,7 +158,7 @@ export default function Sidebar({ selection, onSelect }: Props) {
                         <Spin />
                     </div>
                 )}
-                {filtered?.length === 0 && (
+                {filtered?.length === 0 && !canCreateProject && (
                     <div
                         style={{
                             padding: 16,
@@ -128,7 +179,53 @@ export default function Sidebar({ selection, onSelect }: Props) {
                         onSelect={onSelect}
                     />
                 ))}
+                {canCreateProject && (
+                    <div style={{ padding: "12px 12px 16px" }}>
+                        <Button
+                            block
+                            icon={<PlusOutlined />}
+                            onClick={() => setCreateOpen(true)}
+                            size="small"
+                        >
+                            New project
+                        </Button>
+                    </div>
+                )}
             </div>
+
+            <Modal
+                title="New project"
+                open={createOpen}
+                onOk={handleCreateProject}
+                onCancel={() => setCreateOpen(false)}
+                okText="Create"
+                destroyOnHidden
+            >
+                <Form form={createForm} layout="vertical">
+                    <Form.Item
+                        name="name"
+                        label="Project name"
+                        rules={[{ required: true }]}
+                        extra="Human-friendly — shown in the sidebar header."
+                    >
+                        <Input autoFocus placeholder="Production" />
+                    </Form.Item>
+                    <Form.Item
+                        name="slug"
+                        label="Slug"
+                        rules={[
+                            { required: true },
+                            {
+                                pattern: /^[a-z0-9][a-z0-9_-]{0,62}$/,
+                                message: "a-z, 0-9, _ and - only; must start alphanumeric",
+                            },
+                        ]}
+                        extra="URL-safe id, unique across projects. Becomes /projects/<slug> in the API."
+                    >
+                        <Input placeholder="prod" />
+                    </Form.Item>
+                </Form>
+            </Modal>
         </div>
     );
 }
