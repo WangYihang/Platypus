@@ -196,12 +196,14 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
 		usersH := api.NewUsersHandler(db)
 		projectsH := api.NewProjectsHandler(db)
+		hostsH := api.NewHostsHandler(db)
 		rbac := api.NewRBACWithStorage(tokens, db)
 
 		api.RegisterWebSocketRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
 		api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
 		api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
+		api.RegisterV1HostsRoutes(rest, hostsH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.Success("API bootstrap secret: %s", auth.GetSecret())
