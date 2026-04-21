@@ -39,3 +39,13 @@ body {
     height: 100vh;
     text-align: center;
 }
+
+.pl-card {
+    transition: border-color 120ms ease;
+}
+.pl-card--interactive {
+    cursor: pointer;
+}
+.pl-card--interactive:hover {
+    border-color: #404040;
+}
