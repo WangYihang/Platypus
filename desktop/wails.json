@@ -3,8 +3,8 @@
   "name": "platypus-desktop",
   "outputfilename": "desktop",
   "frontend:install": "npm install",
-  "frontend:build": "npm run build",
-  "frontend:dev:watcher": "npm run dev",
+  "frontend:build": "npm run build:desktop",
+  "frontend:dev:watcher": "npm run dev:desktop",
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "Yihang Wang",

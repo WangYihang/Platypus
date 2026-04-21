@@ -47,7 +47,7 @@ export default defineConfig({
     webServer: {
         // Frontend only. Backend is launched by globalSetup so we can
         // capture stdout for the bootstrap secret.
-        command: `npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort`,
+        command: `npm run dev:web -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort`,
         cwd: FRONTEND_DIR,
         url: baseURL,
         timeout: 60_000,

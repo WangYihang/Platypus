@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev:web": "vite --mode web",
+    "dev:desktop": "vite",
     "build:web": "tsc && vite build --mode web",
+    "build:desktop": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
