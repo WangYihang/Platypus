@@ -36,8 +36,8 @@ help:
 	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:7777"
 	@echo ""
 	@echo "End-to-end tests + screenshot gallery:"
-	@echo "  e2e-deps         Install Playwright + browsers under desktop/frontend/e2e/"
-	@echo "  e2e              Run the full Playwright suite (boots backend + vite, writes docs/screenshots/)"
+	@echo "  e2e-deps         Install Playwright + browsers under e2e/"
+	@echo "  e2e              Run the full Playwright suite (boots backend + agent + vite, writes docs/screenshots/)"
 	@echo "  screenshots      Alias for e2e — run the suite and rebuild docs/screenshots/README.md"
 
 $(PROTO_OUT): $(PROTO_SRC)
@@ -129,16 +129,17 @@ web-ui:
 
 # ---------- End-to-end tests + screenshot gallery ----------
 #
-# `e2e` boots a fresh backend (temp SQLite + bootstrap) and the vite dev
-# server, runs every spec in desktop/frontend/e2e/specs/, writes
-# screenshots into docs/screenshots/, and rebuilds the gallery README.
-# Backend binary must already be built (`make build`).
+# `e2e` boots a fresh backend (temp SQLite + bootstrap), spawns one
+# baseline platypus-agent against the seeded listener, starts the vite
+# dev server, runs every spec in e2e/specs/, writes screenshots into
+# docs/screenshots/, and rebuilds the gallery README. Both server and
+# agent binaries must already be built (`make build`).
 
 e2e-deps:
-	cd desktop/frontend/e2e && npm install && npx playwright install chromium
+	cd e2e && npm install && npx playwright install chromium
 
 e2e: build e2e-deps
-	cd desktop/frontend/e2e && npm run e2e
+	cd e2e && npm run e2e
 
 screenshots: e2e
 

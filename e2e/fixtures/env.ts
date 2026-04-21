@@ -10,11 +10,13 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
+// __dirname here resolves to <repo>/e2e/fixtures/, so two levels up is repo root.
+export const REPO_ROOT = path.resolve(__dirname, "..", "..");
 export const FRONTEND_DIR = path.resolve(REPO_ROOT, "desktop", "frontend");
-export const E2E_DIR = path.resolve(FRONTEND_DIR, "e2e");
+export const E2E_DIR = path.resolve(REPO_ROOT, "e2e");
 export const SCREENSHOT_DIR = path.resolve(REPO_ROOT, "docs", "screenshots");
 export const SERVER_BINARY = path.resolve(REPO_ROOT, "build", "platypus-server");
+export const AGENT_BINARY = path.resolve(REPO_ROOT, "build", "platypus-agent");
 
 export const BACKEND_HOST = "127.0.0.1";
 export const BACKEND_PORT = 7331;
