@@ -13,6 +13,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,6 +30,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 
@@ -119,6 +122,17 @@ func formatValidationError(err error) error {
 	return errors.New(msg)
 }
 
+// mustRandomHex generates a random hex string of the given byte length.
+// Panics if the OS entropy source fails — at that point the server can't
+// safely do any crypto at all, so a loud crash is the right response.
+func mustRandomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Errorf("crypto/rand: %w", err))
+	}
+	return hex.EncodeToString(b)
+}
+
 func startHTTPServers(cfg *config.Config) []*http.Server {
 	var servers []*http.Server
 
@@ -144,14 +158,56 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		rp := cfg.RESTful.Port
 		rest := api.CreateRESTfulAPIServer()
 
+		// Open the persistent store used by users, projects, hosts, etc.
+		// If it fails at startup there's nothing useful the server can do,
+		// so bail loudly.
+		dbFile := cfg.RESTful.DBFileOrDefault()
+		db, err := storage.Open(dbFile)
+		if err != nil {
+			log.Error("open database %q: %v", dbFile, err)
+			os.Exit(1)
+		}
+		core.Ctx.Storage = db
+		log.Success("Storage: %s", dbFile)
+
+		accessKey := cfg.RESTful.JWTAccessKey
+		if accessKey == "" {
+			accessKey = mustRandomHex(32)
+			log.Info("No JWTAccessKey configured — generated a random one. Set RESTful.JWTAccessKey to keep tokens valid across restarts.")
+		}
+		refreshKey := cfg.RESTful.JWTRefreshKey
+		if refreshKey == "" {
+			refreshKey = mustRandomHex(32)
+			log.Info("No JWTRefreshKey configured — generated a random one. Set RESTful.JWTRefreshKey to keep refresh tokens valid across restarts.")
+		}
+		accessTTL := time.Duration(cfg.RESTful.AccessTTLOrDefault()) * time.Second
+		refreshTTL := time.Duration(cfg.RESTful.RefreshTTLOrDefault()) * time.Second
+		tokens, err := api.NewTokenIssuer(accessKey, refreshKey, accessTTL, refreshTTL)
+		if err != nil {
+			log.Error("token issuer: %v", err)
+			os.Exit(1)
+		}
+
+		// Legacy Auth (shared secret + WS tickets) still guards the
+		// existing v1 routes. RBAC + new auth handlers layer on top and
+		// gate the new /auth/* + /users/* routes introduced by the
+		// redesign.
 		auth := api.NewAuth()
+		authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
+		usersH := api.NewUsersHandler(db)
+		rbac := api.NewRBAC(tokens)
+
 		api.RegisterWebSocketRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
+		api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
-		log.Success("API secret: %s", auth.GetSecret())
-		log.Success("  Obtain token: curl -X POST http://%s:%d/api/v1/auth/token -d '{\"secret\":\"%s\"}'", rh, rp, auth.GetSecret())
-		log.Success("  API docs:     http://%s:%d/swagger/index.html", rh, rp)
+		log.Success("API bootstrap secret: %s", auth.GetSecret())
+		log.Success("  First-time setup: POST http://%s:%d/api/v1/auth/bootstrap", rh, rp)
+		log.Success("                    {\"secret\":\"%s\",\"username\":\"admin\",\"password\":\"...\"}", auth.GetSecret())
+		log.Success("  Regular login:    POST http://%s:%d/api/v1/auth/login", rh, rp)
+		log.Success("  (legacy compat):  POST http://%s:%d/api/v1/auth/token", rh, rp)
+		log.Success("  API docs:         http://%s:%d/swagger/index.html", rh, rp)
 
 		restSrv := &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", rh, rp),

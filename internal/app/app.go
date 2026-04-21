@@ -14,6 +14,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/session"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/ui"
 )
@@ -77,6 +78,11 @@ type App struct {
 
 	// REST
 	RESTful *gin.Engine
+
+	// Storage holds the SQLite-backed persistence layer for users,
+	// projects, hosts, and sessions. Nil when the RESTful subsystem is
+	// disabled in config (older deployments that never wanted HTTP).
+	Storage *storage.DB
 }
 
 // New creates a new App with initialized managers.
