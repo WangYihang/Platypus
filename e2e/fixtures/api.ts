@@ -98,6 +98,84 @@ export async function listProjects(
     return Array.isArray(j) ? j : j.projects || [];
 }
 
+export interface SessionResp {
+    id: string;
+    project_id: string;
+    listener_id: string;
+    host_id: string;
+    user?: string;
+    remote_addr?: string;
+    group_dispatch: boolean;
+    connected_at: string;
+    disconnected_at?: string;
+}
+
+export async function listProjectSessions(
+    backendURL: string,
+    token: string,
+    projectID: string,
+    opts: { live?: boolean } = {},
+): Promise<SessionResp[]> {
+    const q = new URLSearchParams();
+    if (opts.live !== undefined) q.set("live", String(opts.live));
+    const url = `${backendURL}/api/v1/projects/${projectID}/sessions${q.toString() ? `?${q}` : ""}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`list project sessions → ${r.status}: ${await r.text()}`);
+    const j = (await r.json()) as { sessions?: SessionResp[] };
+    return j.sessions || [];
+}
+
+// waitForSessions polls the per-project sessions endpoint until at least
+// `min` live sessions are present. Used by globalSetup to confirm the
+// baseline agent has registered before any spec runs.
+export async function waitForSessions(
+    backendURL: string,
+    token: string,
+    projectID: string,
+    min: number,
+    timeoutMs = 15_000,
+): Promise<SessionResp[]> {
+    const deadline = Date.now() + timeoutMs;
+    let last: SessionResp[] = [];
+    while (Date.now() < deadline) {
+        try {
+            last = await listProjectSessions(backendURL, token, projectID, { live: true });
+            if (last.length >= min) return last;
+        } catch {
+            /* swallow until deadline */
+        }
+        await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(
+        `expected ≥${min} live session(s) in project ${projectID} within ${timeoutMs}ms (saw ${last.length})`,
+    );
+}
+
+// flagSessionForDispatch toggles the session's group_dispatch flag via
+// the legacy v1 PATCH endpoint (the same one App.web.ts:39 SetGroupDispatch
+// calls). Used by the dispatch-live spec to opt the baseline session in.
+export async function flagSessionForDispatch(
+    backendURL: string,
+    token: string,
+    sessionHash: string,
+    enabled: boolean,
+): Promise<void> {
+    const r = await fetch(
+        `${backendURL}/api/v1/sessions/${encodeURIComponent(sessionHash)}`,
+        {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ group_dispatch: enabled }),
+        },
+    );
+    if (!r.ok) {
+        throw new Error(`flag session → ${r.status}: ${await r.text()}`);
+    }
+}
+
 // waitForBackend polls the login endpoint until it returns 401 (rather
 // than connection-refused). 401 is the success signal — the server is
 // up and reachable, just declining our empty body.
