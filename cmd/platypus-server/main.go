@@ -190,16 +190,18 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 
 		// Legacy Auth (shared secret + WS tickets) still guards the
 		// existing v1 routes. RBAC + new auth handlers layer on top and
-		// gate the new /auth/* + /users/* routes introduced by the
-		// redesign.
+		// gate the new /auth/* + /users/* + /projects/* routes
+		// introduced by the redesign.
 		auth := api.NewAuth()
 		authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
 		usersH := api.NewUsersHandler(db)
-		rbac := api.NewRBAC(tokens)
+		projectsH := api.NewProjectsHandler(db)
+		rbac := api.NewRBACWithStorage(tokens, db)
 
 		api.RegisterWebSocketRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
 		api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
+		api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.Success("API bootstrap secret: %s", auth.GetSecret())

@@ -98,6 +98,18 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create user"})
 		return
 	}
+	// Seed a "default" project so the legacy listener flows (which know
+	// nothing about projects) still have somewhere to write. Only attempt
+	// when no project exists yet — idempotent if someone renamed the seed.
+	if _, err := h.db.Projects().GetBySlug(ctx, "default"); errors.Is(err, storage.ErrNotFound) {
+		_ = h.db.Projects().Create(ctx, &storage.Project{
+			ID:        uuid.NewString(),
+			Name:      "Default",
+			Slug:      "default",
+			CreatedAt: time.Now().UTC(),
+			CreatedBy: u.ID,
+		})
+	}
 	h.issueTokensTo(c, u)
 }
 
