@@ -49,3 +49,4 @@ tmp/
 
 # SQLite
 *.sqlite3
+*.db
