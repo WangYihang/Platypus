@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Layout, Spin, Tabs, Typography, Button, Space, Tag } from "antd";
+import { ConfigProvider, Layout, Spin, Tabs, Typography, Button, Space, Tag } from "antd";
 
 import Connect from "./pages/Connect";
 import Sessions from "./pages/Sessions";
@@ -7,6 +7,7 @@ import Listeners from "./pages/Listeners";
 import Files from "./pages/Files";
 import Tunnels from "./pages/Tunnels";
 import Terminal from "./pages/Terminal";
+import { antTheme } from "./layout/theme";
 import { ConnectionStatus, Disconnect } from "../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 import type { api, app } from "../wailsjs/go/models";
@@ -65,13 +66,19 @@ function App() {
 
     if (status === null) {
         return (
-            <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-                <Spin size="large" />
-            </div>
+            <ConfigProvider theme={antTheme}>
+                <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
+                    <Spin size="large" />
+                </div>
+            </ConfigProvider>
         );
     }
     if (!status.connected) {
-        return <Connect />;
+        return (
+            <ConfigProvider theme={antTheme}>
+                <Connect />
+            </ConfigProvider>
+        );
     }
 
     const items = [
@@ -110,41 +117,43 @@ function App() {
     ];
 
     return (
-        <Layout style={{ minHeight: "100vh" }}>
-            <Header
-                style={{
-                    background: "#1f1f1f",
-                    padding: "0 24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                }}
-            >
-                <Title level={3} style={{ color: "#fff", margin: 0 }}>
-                    Platypus Desktop
-                </Title>
-                <Space>
-                    <Tag color="green">{status.profileName}</Tag>
-                    <Text style={{ color: "#999" }}>{status.url}</Text>
-                    <Button size="small" onClick={() => Disconnect()}>
-                        Disconnect
-                    </Button>
-                </Space>
-            </Header>
-            <Content style={{ padding: 16, height: "calc(100vh - 64px)" }}>
-                <Tabs
-                    type="editable-card"
-                    hideAdd
-                    activeKey={activeKey}
-                    onChange={setActiveKey}
-                    onEdit={(key, action) => {
-                        if (action === "remove") closeTab(key as string);
+        <ConfigProvider theme={antTheme}>
+            <Layout style={{ minHeight: "100vh" }}>
+                <Header
+                    style={{
+                        background: "#1f1f1f",
+                        padding: "0 24px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
                     }}
-                    items={items}
-                    style={{ height: "100%" }}
-                />
-            </Content>
-        </Layout>
+                >
+                    <Title level={3} style={{ color: "#fff", margin: 0 }}>
+                        Platypus Desktop
+                    </Title>
+                    <Space>
+                        <Tag color="green">{status.profileName}</Tag>
+                        <Text style={{ color: "#999" }}>{status.url}</Text>
+                        <Button size="small" onClick={() => Disconnect()}>
+                            Disconnect
+                        </Button>
+                    </Space>
+                </Header>
+                <Content style={{ padding: 16, height: "calc(100vh - 64px)" }}>
+                    <Tabs
+                        type="editable-card"
+                        hideAdd
+                        activeKey={activeKey}
+                        onChange={setActiveKey}
+                        onEdit={(key, action) => {
+                            if (action === "remove") closeTab(key as string);
+                        }}
+                        items={items}
+                        style={{ height: "100%" }}
+                    />
+                </Content>
+            </Layout>
+        </ConfigProvider>
     );
 }
 
