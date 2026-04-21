@@ -12,6 +12,12 @@ import {
     listProjects,
 } from "../lib/api";
 import { getSessionUser } from "../lib/auth";
+import {
+    HostSeenPayload,
+    ListenerEventPayload,
+    NotifyEvent,
+    onNotify,
+} from "../lib/notify";
 import { palette } from "./theme";
 import ProjectSection from "./ProjectSection";
 
@@ -72,6 +78,30 @@ export default function Sidebar({ selection, onSelect }: Props) {
         }
     }, []);
 
+    // reloadProject refetches the listener + host lists for a single
+    // project and replaces that project's entry in-place. Used by the
+    // event subscribers so incoming host.seen / listener.* events
+    // don't trigger a full sidebar reload.
+    const reloadProject = useCallback(async (projectID: string) => {
+        try {
+            const [ls, hs] = await Promise.all([
+                listListeners(projectID),
+                listHosts(projectID),
+            ]);
+            setProjects((prev) =>
+                prev
+                    ? prev.map((p) =>
+                          p.project.id === projectID
+                              ? { project: p.project, listeners: ls, hosts: hs }
+                              : p,
+                      )
+                    : prev,
+            );
+        } catch {
+            // ignore — next full reload will catch up
+        }
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -81,6 +111,29 @@ export default function Sidebar({ selection, onSelect }: Props) {
             cancelled = true;
         };
     }, [loadProjects]);
+
+    // Subscribe to lifecycle events so host / listener changes appear
+    // without a manual refresh. Each handler calls reloadProject for
+    // the affected project rather than re-running the full project list
+    // — keeps the invalidation scope minimal.
+    useEffect(() => {
+        const offs: Array<() => void> = [];
+        offs.push(
+            onNotify(NotifyEvent.HostSeen, (data) => {
+                const p = data as HostSeenPayload;
+                if (p?.project_id) void reloadProject(p.project_id);
+            }),
+        );
+        for (const evt of [NotifyEvent.ListenerCreated, NotifyEvent.ListenerDeleted]) {
+            offs.push(
+                onNotify(evt, (data) => {
+                    const p = data as ListenerEventPayload;
+                    if (p?.project_id) void reloadProject(p.project_id);
+                }),
+            );
+        }
+        return () => offs.forEach((off) => off());
+    }, [reloadProject]);
 
     // Cmd/Ctrl+K focuses the search input so operators running a large
     // fleet can jump to a host without reaching for the mouse.
