@@ -1,25 +1,53 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ConfigProvider, Spin } from "antd";
 
-import App from "./App";
-import WebLogin from "./pages/WebLogin";
+import Login from "./pages/Login";
+import Workspace from "./pages/Workspace";
+import { antTheme } from "./layout/theme";
+import { getSession, onSessionChange, refresh } from "./lib/auth";
 
-const TOKEN_KEY = "platypus.token";
-
-function hasToken(): boolean {
-    return !!localStorage.getItem(TOKEN_KEY);
-}
-
-// WebShell is the web-mode root. It gates on localStorage — no token →
-// <WebLogin>, token present → <App>, which already handles the tabbed
-// session UI and calls ConnectionStatus() to see the cached credentials.
+// WebShell is the web-mode root. Gates on the new JWT session from
+// lib/auth (access token in memory, refresh token in localStorage):
+//
+//  - No session      → <Login> — user signs in or bootstraps.
+//  - Session present → <Workspace> — Slack-style sidebar UI.
+//
+// On first mount we try refresh() to rehydrate a session from a
+// persisted refresh token (browser reload, app relaunch). Until that
+// finishes we show a spinner so the UI doesn't flash the login card.
 export default function WebShell() {
-    const [loggedIn, setLoggedIn] = useState(hasToken());
+    const [ready, setReady] = useState(false);
+    const [hasSession, setHasSession] = useState(false);
 
-    // WebLogin calls this after webLogin() succeeds.
-    const onLoggedIn = useCallback(() => setLoggedIn(true), []);
+    useEffect(() => {
+        (async () => {
+            const ok = await refresh();
+            setHasSession(ok);
+            setReady(true);
+        })();
+    }, []);
 
-    if (!loggedIn) {
-        return <WebLogin onLoggedIn={onLoggedIn} />;
+    useEffect(() =>
+        onSessionChange(() => {
+            setHasSession(!!getSession());
+        }),
+    []);
+
+    const handleLoggedIn = useCallback(() => setHasSession(true), []);
+    const handleLoggedOut = useCallback(() => setHasSession(false), []);
+
+    let body: React.ReactNode;
+    if (!ready) {
+        body = (
+            <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
+                <Spin size="large" />
+            </div>
+        );
+    } else if (!hasSession) {
+        body = <Login onLoggedIn={handleLoggedIn} />;
+    } else {
+        body = <Workspace onLoggedOut={handleLoggedOut} />;
     }
-    return <App />;
+
+    return <ConfigProvider theme={antTheme}>{body}</ConfigProvider>;
 }
