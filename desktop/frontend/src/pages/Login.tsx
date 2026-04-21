@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, Input, message, Space, Tabs, Typography } from "antd";
+import { useState } from "react";
+import { Button, Form, Input, message, Tabs } from "antd";
 
+import Card from "../components/Card";
 import { bootstrap, login } from "../lib/auth";
-import { palette } from "../layout/theme";
-
-const { Title, Text, Paragraph } = Typography;
+import { font, palette, space } from "../layout/theme";
 
 interface LoginFormValues {
     url: string;
@@ -24,30 +23,19 @@ interface Props {
     initialURL?: string;
 }
 
-// Login is the post-connect gate for both web and desktop modes. Users
-// either log in with username+password (normal flow) or bootstrap the
-// first admin using the server secret printed at startup (one-shot
-// setup).
-//
-// Chose a tabbed view over a separate setup route because admins type
-// the bootstrap secret once ever — they shouldn't have to remember a
-// special URL for it.
+// Login is the auth gate for both web and desktop modes. Two flows in
+// one card via a tab control: standard username+password login, and
+// the one-shot bootstrap flow that creates the first admin from the
+// API secret printed on server startup.
 export default function Login({ onLoggedIn, initialURL }: Props) {
     const [busy, setBusy] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
 
-    // Default URL guess: the existing connection (desktop) or the current
-    // origin with the server's typical port (web).
     const defaultURL =
         initialURL ||
         (typeof window !== "undefined"
             ? window.location.origin.replace(/:\d+$/, ":7331")
             : "");
-
-    useEffect(() => {
-        // Put cursor on username if a URL is already known.
-        // noop — focus handled by autoFocus attribute below.
-    }, []);
 
     async function doLogin(v: LoginFormValues) {
         setBusy(true);
@@ -81,31 +69,41 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: 24,
+                padding: space[6],
                 background: palette.main,
                 color: palette.textPrimary,
             }}
         >
             {contextHolder}
-            <Card
-                style={{
-                    width: 440,
-                    maxWidth: "100%",
-                    background: palette.sidebar,
-                    border: `1px solid ${palette.border}`,
-                }}
-                styles={{ body: { padding: 24 } }}
-            >
-                <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                    <div>
-                        <Title level={3} style={{ margin: 0, color: palette.textPrimary }}>
-                            Platypus
-                        </Title>
-                        <Text style={{ color: palette.textSecondary }}>
-                            Log in to your server or bootstrap the first admin.
-                        </Text>
-                    </div>
+            <div style={{ width: 440, maxWidth: "100%" }}>
+                <div style={{ marginBottom: space[6], textAlign: "left" }}>
+                    <h1
+                        style={{
+                            margin: 0,
+                            color: palette.textPrimary,
+                            fontFamily: font.sans,
+                            fontWeight: 600,
+                            fontSize: 28,
+                            lineHeight: 1.2,
+                            letterSpacing: -0.2,
+                        }}
+                    >
+                        Platypus
+                    </h1>
+                    <p
+                        style={{
+                            margin: `${space[2]}px 0 0`,
+                            color: palette.textSecondary,
+                            fontSize: 14,
+                            lineHeight: 1.5,
+                        }}
+                    >
+                        Log in to your server, or bootstrap the first admin from the
+                        startup secret.
+                    </p>
+                </div>
 
+                <Card padding={6}>
                     <Tabs
                         defaultActiveKey="login"
                         items={[
@@ -162,19 +160,21 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                                         initialValues={{ url: defaultURL, username: "admin" }}
                                         onFinish={doBootstrap}
                                     >
-                                        <Alert
-                                            type="info"
-                                            showIcon
-                                            message="One-shot admin setup"
-                                            description={
-                                                <Paragraph style={{ margin: 0 }}>
-                                                    Use the <Text code>API bootstrap secret</Text>{" "}
-                                                    printed on server startup. After the first
-                                                    admin exists this tab stops working.
-                                                </Paragraph>
-                                            }
-                                            style={{ marginBottom: 16 }}
-                                        />
+                                        <p
+                                            style={{
+                                                margin: `0 0 ${space[4]}px`,
+                                                color: palette.textSecondary,
+                                                fontSize: 13,
+                                                lineHeight: 1.5,
+                                            }}
+                                        >
+                                            Use the{" "}
+                                            <span style={{ fontFamily: font.mono, fontSize: 12 }}>
+                                                API bootstrap secret
+                                            </span>{" "}
+                                            printed on server startup. After the first admin
+                                            exists this tab stops working.
+                                        </p>
                                         <Form.Item
                                             name="url"
                                             label="Server URL"
@@ -218,8 +218,8 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                             },
                         ]}
                     />
-                </Space>
-            </Card>
+                </Card>
+            </div>
         </div>
     );
 }
