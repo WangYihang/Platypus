@@ -62,6 +62,45 @@ func (r *SessionRepo) ListLiveForProject(ctx context.Context, projectID string) 
 		projectID)
 }
 
+// SessionListOpts narrows ListForProject. Zero-value (all fields nil/0)
+// returns every session for the project, newest first.
+type SessionListOpts struct {
+	// Live, if non-nil, filters to live (true) or closed-only (false)
+	// sessions. Skipped when nil.
+	Live *bool
+	// Since, if non-nil, restricts to sessions whose connected_at is at
+	// or after the given timestamp. Used by the dashboard for "last 24h"
+	// time-series.
+	Since *time.Time
+	// Limit caps the result count; 0 means unbounded.
+	Limit int
+}
+
+// ListForProject returns sessions in the project, newest first, with
+// optional live + since + limit filters. Powers the SessionsPage list
+// view and the dashboard time-series chart.
+func (r *SessionRepo) ListForProject(ctx context.Context, projectID string, opts SessionListOpts) ([]*Session, error) {
+	where := `WHERE project_id = ?`
+	args := []any{projectID}
+	if opts.Live != nil {
+		if *opts.Live {
+			where += ` AND disconnected_at IS NULL`
+		} else {
+			where += ` AND disconnected_at IS NOT NULL`
+		}
+	}
+	if opts.Since != nil {
+		where += ` AND connected_at >= ?`
+		args = append(args, opts.Since.UTC())
+	}
+	where += ` ORDER BY connected_at DESC`
+	if opts.Limit > 0 {
+		where += ` LIMIT ?`
+		args = append(args, opts.Limit)
+	}
+	return r.queryMany(ctx, where, args...)
+}
+
 // MarkDisconnected stamps disconnected_at on the row if it's currently
 // NULL. Idempotent — a second call is a no-op.
 func (r *SessionRepo) MarkDisconnected(ctx context.Context, id string) error {

@@ -109,6 +109,58 @@ func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
 	}
 }
 
+func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
+	r, db, issuer := sessionsV2TestSetup(t)
+	ctx := context.Background()
+	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
+	proj := seedProjectForAPITest(t, db, "prod", admin)
+
+	// One closed session 2 days ago; one live now.
+	host, lis, _ := seedSessionRow(t, db, proj, "live-now", false)
+	_ = db.Sessions().Insert(ctx, &storage.Session{
+		ID: "old-closed", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ConnectedAt: time.Now().UTC().Add(-48 * time.Hour),
+	})
+	_ = db.Sessions().MarkDisconnected(ctx, "old-closed")
+
+	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+
+	// No filter → both rows.
+	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/sessions", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("base status=%d body=%s", w.Code, w.Body.String())
+	}
+	var all struct{ Sessions []sessionResponse `json:"sessions"` }
+	_ = json.NewDecoder(w.Body).Decode(&all)
+	if len(all.Sessions) != 2 {
+		t.Fatalf("expected 2 sessions; got %d", len(all.Sessions))
+	}
+
+	// live=true → just the live one.
+	w = probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/sessions?live=true", tok, nil)
+	var liveOnly struct{ Sessions []sessionResponse `json:"sessions"` }
+	_ = json.NewDecoder(w.Body).Decode(&liveOnly)
+	if len(liveOnly.Sessions) != 1 || liveOnly.Sessions[0].ID != "live-now" {
+		t.Fatalf("live filter: %+v", liveOnly.Sessions)
+	}
+
+	// since=24h ago → drops the 48h-old row.
+	since := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	w = probeReqWithPath(r, "GET",
+		"/api/v1/projects/"+proj.ID+"/sessions?since="+since, tok, nil)
+	var recent struct{ Sessions []sessionResponse `json:"sessions"` }
+	_ = json.NewDecoder(w.Body).Decode(&recent)
+	if len(recent.Sessions) != 1 || recent.Sessions[0].ID != "live-now" {
+		t.Fatalf("since filter: %+v", recent.Sessions)
+	}
+
+	// Bogus live value → 400.
+	w = probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/sessions?live=maybe", tok, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad live value status=%d; want 400", w.Code)
+	}
+}
+
 func TestSessionsV2_Dispatch_NoLiveSessions_EmptyResults(t *testing.T) {
 	r, db, issuer := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)

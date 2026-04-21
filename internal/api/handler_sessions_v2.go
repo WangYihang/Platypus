@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -138,10 +139,69 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"count": len(results), "results": results})
 }
 
+// ListForProject handles GET /projects/:pid/sessions. Returns sessions
+// across the whole project, newest first, with optional filters:
+//
+//	?live=true    only currently-connected sessions
+//	?live=false   only closed sessions
+//	?since=ISO    only sessions whose connected_at is >= the timestamp
+//	?limit=N      cap results at N rows (after sorting)
+//
+// Backs SessionsPage and the dashboard time-series chart.
+func (h *SessionsV2Handler) ListForProject(c *gin.Context) {
+	opts := storage.SessionListOpts{}
+
+	if v, ok := c.GetQuery("live"); ok {
+		switch v {
+		case "true", "1":
+			t := true
+			opts.Live = &t
+		case "false", "0":
+			f := false
+			opts.Live = &f
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "live must be true or false"})
+			return
+		}
+	}
+	if v, ok := c.GetQuery("since"); ok {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "since must be RFC3339"})
+			return
+		}
+		opts.Since = &t
+	}
+	if v, ok := c.GetQuery("limit"); ok {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err != nil || n < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
+			return
+		}
+		opts.Limit = n
+	}
+
+	sessions, err := h.db.Sessions().ListForProject(c.Request.Context(), c.Param("pid"), opts)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list sessions"})
+		return
+	}
+	out := make([]sessionResponse, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, toSessionResponse(s))
+	}
+	c.JSON(http.StatusOK, gin.H{"sessions": out})
+}
+
 // RegisterV1ProjectSessionsRoutes mounts the per-project session routes.
 // Host listings are viewer-level; dispatch requires operator because it
 // runs code on remote machines.
 func RegisterV1ProjectSessionsRoutes(engine *gin.Engine, h *SessionsV2Handler, rbac *RBAC) {
+	engine.GET("/api/v1/projects/:pid/sessions",
+		rbac.RequireAuth(),
+		rbac.RequireProjectRole("pid", user.RoleViewer),
+		h.ListForProject,
+	)
 	engine.GET("/api/v1/projects/:pid/hosts/:hid/sessions",
 		rbac.RequireAuth(),
 		rbac.RequireProjectRole("pid", user.RoleViewer),

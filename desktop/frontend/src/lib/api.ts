@@ -124,6 +124,28 @@ export async function listHostSessions(pid: string, hid: string): Promise<Sessio
     return j.sessions;
 }
 
+// listProjectSessions returns sessions across the whole project, newest
+// first. Powers SessionsPage and the dashboard time-series chart.
+export interface SessionListOpts {
+    live?: boolean;
+    since?: Date;
+    limit?: number;
+}
+
+export async function listProjectSessions(
+    pid: string,
+    opts: SessionListOpts = {},
+): Promise<SessionRow[]> {
+    const params = new URLSearchParams();
+    if (opts.live !== undefined) params.set("live", String(opts.live));
+    if (opts.since) params.set("since", opts.since.toISOString());
+    if (opts.limit && opts.limit > 0) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    const path = `/api/v1/projects/${pid}/sessions${qs ? "?" + qs : ""}`;
+    const j = await authJSON<{ sessions: SessionRow[] }>(path);
+    return j.sessions;
+}
+
 // --- Listeners -------------------------------------------------------
 
 export async function listListeners(pid: string): Promise<Listener[]> {

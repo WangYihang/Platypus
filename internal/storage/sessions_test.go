@@ -107,6 +107,96 @@ func TestSessions_ListLiveForProject(t *testing.T) {
 	}
 }
 
+// ListForProject is the project-wide query that backs the dashboard
+// time-series and the SessionsPage. Verifies all three optional filters
+// (Live, Since, Limit) do what their names say.
+func TestSessions_ListForProject(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	proj, lis, host := seedSessionDeps(t, db)
+
+	// Three sessions: one closed two days ago, one live an hour ago, one
+	// live ten minutes ago. The 2-day-old one should fall out of a "since
+	// 24h" filter; the closed one should fall out of a Live=true filter.
+	now := time.Now().UTC()
+	insert := func(id string, connected time.Time, alive bool) {
+		t.Helper()
+		if err := db.Sessions().Insert(ctx, &storage.Session{
+			ID: id, ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+			ConnectedAt: connected,
+		}); err != nil {
+			t.Fatalf("Insert %s: %v", id, err)
+		}
+		if !alive {
+			if err := db.Sessions().MarkDisconnected(ctx, id); err != nil {
+				t.Fatalf("MarkDisconnected %s: %v", id, err)
+			}
+		}
+	}
+	insert("old-closed", now.Add(-48*time.Hour), false)
+	insert("recent-live", now.Add(-1*time.Hour), true)
+	insert("newest-live", now.Add(-10*time.Minute), true)
+
+	// No filters: all three rows, newest first.
+	all, err := db.Sessions().ListForProject(ctx, proj.ID, storage.SessionListOpts{})
+	if err != nil {
+		t.Fatalf("ListForProject: %v", err)
+	}
+	if len(all) != 3 ||
+		all[0].ID != "newest-live" ||
+		all[1].ID != "recent-live" ||
+		all[2].ID != "old-closed" {
+		t.Fatalf("expected newest first; got %+v", ids(all))
+	}
+
+	// Live=true drops the closed one.
+	live := true
+	liveOnly, err := db.Sessions().ListForProject(ctx, proj.ID, storage.SessionListOpts{Live: &live})
+	if err != nil {
+		t.Fatalf("ListForProject live: %v", err)
+	}
+	if len(liveOnly) != 2 || liveOnly[0].ID != "newest-live" || liveOnly[1].ID != "recent-live" {
+		t.Fatalf("live filter: %+v", ids(liveOnly))
+	}
+
+	// Live=false keeps only the closed one.
+	closed := false
+	closedOnly, err := db.Sessions().ListForProject(ctx, proj.ID, storage.SessionListOpts{Live: &closed})
+	if err != nil {
+		t.Fatalf("ListForProject closed: %v", err)
+	}
+	if len(closedOnly) != 1 || closedOnly[0].ID != "old-closed" {
+		t.Fatalf("closed filter: %+v", ids(closedOnly))
+	}
+
+	// Since 24h cutoff drops the 2-day-old row.
+	since := now.Add(-24 * time.Hour)
+	recent, err := db.Sessions().ListForProject(ctx, proj.ID, storage.SessionListOpts{Since: &since})
+	if err != nil {
+		t.Fatalf("ListForProject since: %v", err)
+	}
+	if len(recent) != 2 {
+		t.Fatalf("since filter: %+v", ids(recent))
+	}
+
+	// Limit=1 only returns the newest.
+	one, err := db.Sessions().ListForProject(ctx, proj.ID, storage.SessionListOpts{Limit: 1})
+	if err != nil {
+		t.Fatalf("ListForProject limit: %v", err)
+	}
+	if len(one) != 1 || one[0].ID != "newest-live" {
+		t.Fatalf("limit filter: %+v", ids(one))
+	}
+}
+
+func ids(ss []*storage.Session) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = s.ID
+	}
+	return out
+}
+
 // Insert enforces the alias + group_dispatch + user fields make their way
 // to the DB so the hosts/sessions view can render them without a second
 // lookup.
