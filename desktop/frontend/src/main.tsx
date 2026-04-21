@@ -1,20 +1,19 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
-import App from "./App";
 import WebShell from "./WebShell";
 
-// vite builds with --mode web set import.meta.env.MODE = "web". In that
-// mode the wailsjs-path aliases point at the fetch-based platform shim
-// (see vite.config.ts) and the root component is WebShell, which gates
-// on localStorage before handing off to the tabbed App.
-const Root = import.meta.env.MODE === "web" ? WebShell : App;
-
+// Both desktop (Wails) and web builds render WebShell. WebShell handles
+// JWT auth (Login → Workspace) over HTTP; the Wails build is just a
+// packaging shell around the same UI. The legacy Wails-binding tabs
+// (Sessions/Listeners/Files/Tunnels/Connect) were removed; if profile
+// management is reintroduced for desktop it should live inside
+// ProfileRail, not as a separate pre-shell.
 const container = document.getElementById("root");
 const root = createRoot(container!);
 
 root.render(
     <React.StrictMode>
-        <Root />
+        <WebShell />
     </React.StrictMode>
 );
