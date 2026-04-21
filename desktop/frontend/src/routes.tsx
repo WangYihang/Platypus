@@ -7,6 +7,7 @@ import ProjectShell from "./layout/ProjectShell";
 import LoginRoute from "./routes/LoginRoute";
 import ProjectsLanding from "./pages/ProjectsLanding";
 import ProjectOverviewRoute from "./routes/ProjectOverviewRoute";
+import HostsPage from "./pages/HostsPage";
 import HostViewRoute from "./routes/HostViewRoute";
 import ListenerViewRoute from "./routes/ListenerViewRoute";
 import DispatchRoute from "./routes/DispatchRoute";
@@ -51,15 +52,7 @@ export const router = createBrowserRouter([
                 children: [
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: <ProjectOverviewRoute /> },
-                    {
-                        path: "hosts",
-                        element: (
-                            <PlaceholderRoute
-                                title="Hosts page coming next"
-                                description="Step 6 builds the cross-host list. For now drill into hosts via the legacy Workspace if you have any."
-                            />
-                        ),
-                    },
+                    { path: "hosts", element: <HostsPage /> },
                     {
                         path: "hosts/:hostId",
                         element: <Navigate to="terminal" replace />,

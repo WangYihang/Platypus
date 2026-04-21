@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Spin, Table, Tabs } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
+import { useNavigate, useParams } from "react-router-dom";
 
 import Card from "../components/Card";
 import DataList from "../components/DataList";
@@ -10,6 +11,7 @@ import Mono from "../components/Mono";
 import StatusDot from "../components/StatusDot";
 import StatusPill from "../components/StatusPill";
 import PageHeader from "../components/PageHeader";
+import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import { Host, Listener, SessionRow, getHost, listHostSessions, listListeners } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
@@ -22,6 +24,9 @@ interface Props {
     projectID: string;
     hostID: string;
 }
+
+const TABS = ["terminal", "files", "tunnels", "sessions", "info"] as const;
+type TabKey = typeof TABS[number];
 
 // HostView is the main-panel view when a Host is selected in the
 // sidebar. Five tabs (Terminal, Files, Tunnels, Sessions, Info) live
@@ -38,7 +43,15 @@ export default function HostView({ projectID, hostID }: Props) {
     // "my session just disappeared, fall back to the next live one"
     // effect runs once rather than in each tab.
     const [pickedSessionID, setPickedSessionID] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<string>("terminal");
+
+    const project = useCurrentProject();
+    const navigate = useNavigate();
+    const { tab: tabParam } = useParams<{ tab?: string }>();
+    const activeTab: TabKey = (TABS as readonly string[]).includes(tabParam ?? "")
+        ? (tabParam as TabKey)
+        : "terminal";
+    const setActiveTab = (key: string) =>
+        navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
 
     const refresh = useCallback(async () => {
         setLoading(true);
