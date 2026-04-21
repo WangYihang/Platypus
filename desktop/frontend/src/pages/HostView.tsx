@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Descriptions, Spin, Table, Tabs, Tag } from "antd";
+import { Alert, Button, Spin, Table, Tabs } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
+import Card from "../components/Card";
+import DataList from "../components/DataList";
+import EmptyState from "../components/EmptyState";
+import Mono from "../components/Mono";
+import StatusDot from "../components/StatusDot";
+import StatusPill from "../components/StatusPill";
 import MainHeader from "../layout/MainHeader";
-import { palette } from "../layout/theme";
+import { palette, space } from "../layout/theme";
 import { Host, Listener, SessionRow, getHost, listHostSessions, listListeners } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
@@ -18,16 +24,9 @@ interface Props {
 }
 
 // HostView is the main-panel view when a Host is selected in the
-// sidebar. In the final design this hosts sub-tabs for Terminal,
-// Files, Tunnels, Sessions, Info. Terminal/Files/Tunnels require
-// runtime session integration (xterm WebSocket, file dialogs) that
-// depends on either Wails bindings or the web platform shim — both
-// of which are wired up for specific session hashes.
-//
-// This first cut implements the read-only tabs: Info (metadata about
-// the host) and Sessions (live + historical connection table).
-// Terminal integration follows in a later pass so the live accept
-// path can be exercised end-to-end.
+// sidebar. Five tabs (Terminal, Files, Tunnels, Sessions, Info) live
+// under the page header — Vercel-style underline tab bar shares the
+// header surface so the page reads as one stacked unit.
 export default function HostView({ projectID, hostID }: Props) {
     const [host, setHost] = useState<Host | null>(null);
     const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -39,6 +38,7 @@ export default function HostView({ projectID, hostID }: Props) {
     // "my session just disappeared, fall back to the next live one"
     // effect runs once rather than in each tab.
     const [pickedSessionID, setPickedSessionID] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<string>("terminal");
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -65,9 +65,6 @@ export default function HostView({ projectID, hostID }: Props) {
         refresh();
     }, [refresh]);
 
-    // Only refetch sessions on session events — host metadata doesn't
-    // change mid-session. A lightweight reload instead of the full
-    // refresh above so presence / last_seen don't flicker.
     const refetchSessions = useCallback(async () => {
         try {
             setSessions(await listHostSessions(projectID, hostID));
@@ -93,11 +90,6 @@ export default function HostView({ projectID, hostID }: Props) {
         return () => offs.forEach((off) => off());
     }, [projectID, hostID, refetchSessions]);
 
-    // Keep pickedSessionID pointing at a currently-live session. Runs
-    // after every sessions refetch (open / close) to cover:
-    //   - initial render (pick the first live session)
-    //   - previously-picked session just closed (move to the next)
-    //   - all sessions gone (null it out; empty states take over)
     useEffect(() => {
         const live = sessions.filter((s) => !s.disconnected_at);
         if (live.length === 0) {
@@ -118,36 +110,52 @@ export default function HostView({ projectID, hostID }: Props) {
     }
     if (error && !host) {
         return (
-            <div style={{ padding: 20 }}>
+            <div style={{ padding: space[5] }}>
                 <Alert type="error" message={error} />
             </div>
         );
     }
     if (!host) return null;
 
-    const primary = host.primary_alias || host.hostname || host.machine_id?.slice(0, 8) || "unknown";
+    const primary =
+        host.primary_alias || host.hostname || host.machine_id?.slice(0, 8) || "unknown";
     const online = isOnline(host.last_seen_at);
     const liveSessions = sessions.filter((s) => !s.disconnected_at);
     const liveCount = liveSessions.length;
+
+    const tabBar = (
+        <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            tabBarStyle={{ margin: 0, borderBottom: `1px solid ${palette.border}` }}
+            items={[
+                { key: "terminal", label: "Terminal" },
+                { key: "files", label: "Files" },
+                { key: "tunnels", label: "Tunnels" },
+                { key: "sessions", label: `Sessions (${sessions.length})` },
+                { key: "info", label: "Info" },
+            ]}
+        />
+    );
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <MainHeader
                 title={
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span
-                            style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: "50%",
-                                background: online ? palette.success : palette.textSecondary,
-                                opacity: online ? 1 : 0.5,
-                            }}
-                        />
+                    <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+                        <StatusDot status={online ? "online" : "offline"} />
                         <span>{primary}</span>
                     </span>
                 }
-                subtitle={`${liveCount} active session(s) · ${host.os || "unknown OS"}${host.fingerprint_fallback ? " · fp-fallback" : ""}`}
+                subtitle={
+                    <span>
+                        <Mono size={12} color={palette.textSecondary}>
+                            {liveCount}
+                        </Mono>{" "}
+                        active · {host.os || "unknown OS"}
+                        {host.fingerprint_fallback && " · fp-fallback"}
+                    </span>
+                }
                 actions={
                     <Button
                         icon={<ReloadOutlined />}
@@ -158,63 +166,42 @@ export default function HostView({ projectID, hostID }: Props) {
                         Refresh
                     </Button>
                 }
+                tabs={tabBar}
             />
-            <div style={{ flex: 1, overflow: "hidden", padding: 20, paddingBottom: 0 }}>
-                <Tabs
-                    defaultActiveKey="terminal"
-                    style={{ height: "100%" }}
-                    // forceRender keeps every panel mounted after its
-                    // first visit, so switching tabs preserves xterm
-                    // scrollback and Files/Tunnels form state. The
-                    // trade-off is a slightly heavier DOM tree — fine
-                    // at the fleet sizes this targets.
-                    items={[
-                        {
-                            key: "terminal",
-                            label: "Terminal",
-                            forceRender: true,
-                            children: (
-                                <TerminalTab
-                                    liveSessions={liveSessions}
-                                    picked={pickedSessionID}
-                                    onPick={setPickedSessionID}
-                                />
-                            ),
-                        },
-                        {
-                            key: "files",
-                            label: "Files",
-                            forceRender: true,
-                            children: pickedSessionID ? (
-                                <FilesTab sessionHash={pickedSessionID} />
-                            ) : (
-                                <NoLiveSessionNote />
-                            ),
-                        },
-                        {
-                            key: "tunnels",
-                            label: "Tunnels",
-                            forceRender: true,
-                            children: pickedSessionID ? (
-                                <TunnelsTab sessionHash={pickedSessionID} />
-                            ) : (
-                                <NoLiveSessionNote />
-                            ),
-                        },
-                        {
-                            key: "sessions",
-                            label: `Sessions (${sessions.length})`,
-                            children: (
-                                <SessionsPanel sessions={sessions} listenersMap={listenersMap} />
-                            ),
-                        },
-                        {
-                            key: "info",
-                            label: "Info",
-                            children: <InfoPanel host={host} />,
-                        },
-                    ]}
-                />
+            <div
+                style={{
+                    flex: 1,
+                    overflow: "auto",
+                    padding: space[6],
+                }}
+            >
+                <div style={{ display: activeTab === "terminal" ? "block" : "none", height: "100%" }}>
+                    <TerminalTab
+                        liveSessions={liveSessions}
+                        picked={pickedSessionID}
+                        onPick={setPickedSessionID}
+                    />
+                </div>
+                <div style={{ display: activeTab === "files" ? "block" : "none" }}>
+                    {pickedSessionID ? (
+                        <FilesTab sessionHash={pickedSessionID} />
+                    ) : (
+                        <NoLiveSessionNote />
+                    )}
+                </div>
+                <div style={{ display: activeTab === "tunnels" ? "block" : "none" }}>
+                    {pickedSessionID ? (
+                        <TunnelsTab sessionHash={pickedSessionID} />
+                    ) : (
+                        <NoLiveSessionNote />
+                    )}
+                </div>
+                <div style={{ display: activeTab === "sessions" ? "block" : "none" }}>
+                    <SessionsPanel sessions={sessions} listenersMap={listenersMap} />
+                </div>
+                <div style={{ display: activeTab === "info" ? "block" : "none" }}>
+                    <InfoPanel host={host} />
+                </div>
             </div>
         </div>
     );
@@ -222,49 +209,40 @@ export default function HostView({ projectID, hostID }: Props) {
 
 function NoLiveSessionNote() {
     return (
-        <div style={{ padding: 32 }}>
-            <Alert
-                type="info"
-                showIcon
-                message="No live session for this host"
-                description="Start or reconnect an agent to use this tab."
-            />
-        </div>
+        <EmptyState
+            title="No live session"
+            description="Start or reconnect an agent to use this tab."
+        />
     );
 }
 
 function InfoPanel({ host }: { host: Host }) {
     return (
-        <Descriptions
-            size="small"
-            column={1}
-            bordered
-            styles={{ label: { width: 180, color: palette.textSecondary } }}
-        >
-            <Descriptions.Item label="hostname">{host.hostname || "—"}</Descriptions.Item>
-            <Descriptions.Item label="primary alias">
-                {host.primary_alias || "—"}
-            </Descriptions.Item>
-            <Descriptions.Item label="OS">{host.os || "—"}</Descriptions.Item>
-            <Descriptions.Item label="machine_id">
-                {host.machine_id ? (
-                    <code style={{ color: palette.textPrimary }}>{host.machine_id}</code>
-                ) : (
-                    <Tag color="warning">fingerprint fallback</Tag>
-                )}
-            </Descriptions.Item>
-            <Descriptions.Item label="fingerprint">
-                <code style={{ color: palette.textSecondary, fontSize: 11 }}>
-                    {host.fingerprint}
-                </code>
-            </Descriptions.Item>
-            <Descriptions.Item label="first seen">
-                {fromNow(host.first_seen_at)}
-            </Descriptions.Item>
-            <Descriptions.Item label="last seen">
-                {fromNow(host.last_seen_at)}
-            </Descriptions.Item>
-        </Descriptions>
+        <div style={{ maxWidth: 720 }}>
+            <Card header="Host info" padding={5}>
+                <DataList
+                    items={[
+                        { label: "hostname", value: host.hostname || "—" },
+                        { label: "primary alias", value: host.primary_alias || "—" },
+                        { label: "OS", value: host.os || "—" },
+                        {
+                            label: "machine_id",
+                            value: host.machine_id ? (
+                                <Mono>{host.machine_id}</Mono>
+                            ) : (
+                                <StatusPill tone="warning">fingerprint fallback</StatusPill>
+                            ),
+                        },
+                        {
+                            label: "fingerprint",
+                            value: <Mono size={11}>{host.fingerprint}</Mono>,
+                        },
+                        { label: "first seen", value: fromNow(host.first_seen_at) },
+                        { label: "last seen", value: fromNow(host.last_seen_at) },
+                    ]}
+                />
+            </Card>
+        </div>
     );
 }
 
@@ -279,9 +257,7 @@ function SessionsPanel({
         {
             title: "Session",
             dataIndex: "id",
-            render: (v: string) => (
-                <code style={{ fontSize: 11 }}>{v.slice(0, 16)}…</code>
-            ),
+            render: (v: string) => <Mono>{v.slice(0, 16)}…</Mono>,
             width: 180,
         },
         {
@@ -289,18 +265,27 @@ function SessionsPanel({
             dataIndex: "listener_id",
             render: (id: string) => {
                 const l = listenersMap[id];
-                return l ? `${l.host}:${l.port}` : <code style={{ fontSize: 11 }}>{id.slice(0, 8)}…</code>;
+                return l ? <Mono>{`${l.host}:${l.port}`}</Mono> : <Mono>{id.slice(0, 8)}…</Mono>;
             },
         },
         {
             title: "User",
             dataIndex: "user",
-            render: (v?: string) => (v ? <Tag color={v === "root" ? "red" : undefined}>{v}</Tag> : "—"),
+            render: (v?: string) =>
+                v ? (
+                    v === "root" ? (
+                        <StatusPill tone="danger">root</StatusPill>
+                    ) : (
+                        <Mono>{v}</Mono>
+                    )
+                ) : (
+                    "—"
+                ),
         },
         {
             title: "Remote",
             dataIndex: "remote_addr",
-            render: (v?: string) => v || "—",
+            render: (v?: string) => (v ? <Mono>{v}</Mono> : "—"),
         },
         {
             title: "Connected",
@@ -312,21 +297,31 @@ function SessionsPanel({
             title: "Status",
             render: (_, r) =>
                 r.disconnected_at ? (
-                    <Tag>{`closed ${fromNow(r.disconnected_at)}`}</Tag>
+                    <StatusPill tone="neutral">{`closed ${fromNow(r.disconnected_at)}`}</StatusPill>
                 ) : (
-                    <Tag color="success">live</Tag>
+                    <StatusPill tone="success">live</StatusPill>
                 ),
             width: 180,
         },
     ];
     return (
-        <Table
-            rowKey="id"
-            size="small"
-            columns={columns}
-            dataSource={sessions}
-            pagination={{ pageSize: 20 }}
-            locale={{ emptyText: "No sessions yet for this host." }}
-        />
+        <Card padding={0}>
+            <Table
+                rowKey="id"
+                size="small"
+                bordered={false}
+                columns={columns}
+                dataSource={sessions}
+                pagination={{ pageSize: 20, showSizeChanger: false }}
+                locale={{
+                    emptyText: (
+                        <EmptyState
+                            title="No sessions"
+                            description="No connections recorded for this host yet."
+                        />
+                    ),
+                }}
+            />
+        </Card>
     );
 }
