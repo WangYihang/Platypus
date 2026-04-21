@@ -6,6 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import MainHeader from "../layout/MainHeader";
 import { palette } from "../layout/theme";
 import { Host, Listener, SessionRow, getHost, listHostSessions, listListeners } from "../lib/api";
+import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
 
 interface Props {
@@ -55,6 +56,34 @@ export default function HostView({ projectID, hostID }: Props) {
     useEffect(() => {
         refresh();
     }, [refresh]);
+
+    // Only refetch sessions on session events — host metadata doesn't
+    // change mid-session. A lightweight reload instead of the full
+    // refresh above so presence / last_seen don't flicker.
+    const refetchSessions = useCallback(async () => {
+        try {
+            setSessions(await listHostSessions(projectID, hostID));
+        } catch {
+            // ignored; the next explicit refresh will recover
+        }
+    }, [projectID, hostID]);
+
+    useEffect(() => {
+        const matches = (p: SessionEventPayload) =>
+            p?.host_id === hostID && p?.project_id === projectID;
+        const offs: Array<() => void> = [];
+        offs.push(
+            onNotify(NotifyEvent.SessionOpened, (data) => {
+                if (matches(data as SessionEventPayload)) void refetchSessions();
+            }),
+        );
+        offs.push(
+            onNotify(NotifyEvent.SessionClosed, (data) => {
+                if (matches(data as SessionEventPayload)) void refetchSessions();
+            }),
+        );
+        return () => offs.forEach((off) => off());
+    }, [projectID, hostID, refetchSessions]);
 
     if (loading && !host) {
         return (
