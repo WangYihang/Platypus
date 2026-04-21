@@ -49,3 +49,25 @@ body {
 .pl-card--interactive:hover {
     border-color: #404040;
 }
+
+.pl-popover-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    color: #fafafa;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: left;
+    transition: background 120ms ease;
+}
+.pl-popover-btn:hover {
+    background: #171717;
+}
+.pl-popover-btn + .pl-popover-btn {
+    margin-top: 2px;
+}

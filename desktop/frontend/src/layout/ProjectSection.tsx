@@ -2,7 +2,7 @@ import { useState } from "react";
 import { CaretDownOutlined, CaretRightOutlined, ThunderboltOutlined } from "@ant-design/icons";
 
 import { Host, Listener, Project } from "../lib/api";
-import { palette } from "./theme";
+import { palette, space } from "./theme";
 import type { Selection } from "./Sidebar";
 import ListenerRow from "./ListenerRow";
 import HostRow from "./HostRow";
@@ -15,11 +15,10 @@ interface Props {
     onSelect: (s: Selection) => void;
 }
 
-// ProjectSection is a Slack-workspace-shaped block: project header,
-// then a LISTENERS sub-section and a HOSTS sub-section, then a Dispatch
-// row as the per-project action. Both sub-sections are independently
-// collapsible so an operator with a huge fleet can hide the host list
-// without losing the listener view.
+// ProjectSection is one project block: project header, then a LISTENERS
+// sub-section and a HOSTS sub-section, then a Dispatch row. Both
+// sub-sections are independently collapsible so an operator with a huge
+// fleet can hide the host list without losing the listener view.
 export default function ProjectSection({
     project,
     listeners,
@@ -31,16 +30,19 @@ export default function ProjectSection({
     const [listenersOpen, setListenersOpen] = useState(true);
     const [hostsOpen, setHostsOpen] = useState(true);
 
+    const dispatchSelected =
+        selection?.kind === "dispatch" && selection.projectId === project.id;
+
     return (
-        <div style={{ padding: "0 8px 12px" }}>
+        <div style={{ padding: `0 ${space[2]}px ${space[3]}px` }}>
             <header
                 style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
-                    padding: "6px 4px",
+                    padding: `${space[2]}px 4px`,
                     cursor: "pointer",
-                    color: palette.textSecondary,
+                    color: palette.textMuted,
                     textTransform: "uppercase",
                     fontSize: 11,
                     fontWeight: 600,
@@ -49,7 +51,7 @@ export default function ProjectSection({
                 onClick={() => setOpen((v) => !v)}
             >
                 {open ? <CaretDownOutlined /> : <CaretRightOutlined />}
-                <span>PROJECT: {project.slug}</span>
+                <span>{project.slug}</span>
                 <button
                     type="button"
                     aria-label={`Overview of ${project.slug}`}
@@ -61,7 +63,7 @@ export default function ProjectSection({
                         marginLeft: "auto",
                         background: "transparent",
                         border: "none",
-                        color: palette.textSecondary,
+                        color: palette.textMuted,
                         cursor: "pointer",
                         fontSize: 11,
                         textTransform: "none",
@@ -143,18 +145,24 @@ export default function ProjectSection({
                         style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 8,
-                            padding: "6px 12px 6px 24px",
-                            color:
-                                selection?.kind === "dispatch" &&
-                                selection.projectId === project.id
-                                    ? palette.accent
-                                    : palette.textSecondary,
+                            gap: space[2],
+                            padding: `${space[2]}px ${space[3]}px ${space[2]}px 24px`,
+                            color: dispatchSelected
+                                ? palette.textPrimary
+                                : palette.textSecondary,
+                            background: dispatchSelected
+                                ? palette.surfaceHover
+                                : "transparent",
+                            borderLeft: dispatchSelected
+                                ? `2px solid ${palette.textPrimary}`
+                                : "2px solid transparent",
                             cursor: "pointer",
                             fontSize: 13,
                         }}
                     >
-                        <ThunderboltOutlined />
+                        <ThunderboltOutlined
+                            style={{ color: palette.textMuted, fontSize: 12 }}
+                        />
                         <span>Dispatch</span>
                     </div>
                 </>
@@ -180,8 +188,8 @@ function SubHeader({
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                padding: "6px 12px 6px 16px",
-                color: palette.textSecondary,
+                padding: `${space[2]}px ${space[3]}px ${space[2]}px 16px`,
+                color: palette.textMuted,
                 fontSize: 11,
                 fontWeight: 600,
                 letterSpacing: 0.5,
@@ -192,7 +200,15 @@ function SubHeader({
         >
             {open ? <CaretDownOutlined /> : <CaretRightOutlined />}
             <span>{label}</span>
-            <span style={{ marginLeft: "auto", fontWeight: 400 }}>{count}</span>
+            <span
+                style={{
+                    marginLeft: "auto",
+                    fontWeight: 400,
+                    color: palette.textMuted,
+                }}
+            >
+                {count}
+            </span>
         </div>
     );
 }
@@ -204,9 +220,8 @@ function Muted({ children, indent }: { children: React.ReactNode; indent: number
                 paddingLeft: indent,
                 paddingTop: 2,
                 paddingBottom: 6,
-                color: palette.textSecondary,
+                color: palette.textMuted,
                 fontSize: 12,
-                fontStyle: "italic",
             }}
         >
             {children}

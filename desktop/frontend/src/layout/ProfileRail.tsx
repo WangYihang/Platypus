@@ -3,12 +3,11 @@ import { Avatar, Button, Form, Input, Modal, Popover, Tooltip, message } from "a
 import { KeyOutlined, LogoutOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
 
 import { SessionUser, changePassword, logout } from "../lib/auth";
-import { layout, palette } from "./theme";
+import { layout, palette, space } from "./theme";
 
-// ProfileRail is the leftmost 56px strip. In the final design it will
-// host per-server profile avatars (Slack's workspace switcher analogue);
-// for now the only inhabitant is the currently-logged-in user's avatar,
-// pinned at the bottom with a popover menu for log out.
+// ProfileRail is the leftmost 56px strip. Hosts the currently-logged-in
+// user's avatar pinned at the bottom with a popover menu (manage users,
+// change password, log out).
 //
 // The component receives `user` directly rather than reading from the
 // session module so tests can render it in isolation.
@@ -25,7 +24,11 @@ interface Props {
 export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
     const [pwOpen, setPwOpen] = useState(false);
-    const [pwForm] = Form.useForm<{ old_password: string; new_password: string; confirm: string }>();
+    const [pwForm] = Form.useForm<{
+        old_password: string;
+        new_password: string;
+        confirm: string;
+    }>();
     const [pwBusy, setPwBusy] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
 
@@ -42,10 +45,6 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
             messageApi.success("Password updated — please log in again");
             setPwOpen(false);
             pwForm.resetFields();
-            // lib/auth already cleared the session; session-change
-            // subscribers (WebShell) will re-render into the login page
-            // automatically, but we call onLoggedOut for symmetry with
-            // the logout path.
             onLoggedOut();
         } catch (e) {
             messageApi.error(`change password: ${String(e)}`);
@@ -56,34 +55,31 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
 
     const popoverContent = (
         <div style={{ minWidth: 220 }}>
-            <div style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 600 }}>{user.username}</div>
-                <div style={{ color: palette.textSecondary, fontSize: 12 }}>
+            <div
+                style={{
+                    marginBottom: space[3],
+                    paddingBottom: space[3],
+                    borderBottom: `1px solid ${palette.border}`,
+                }}
+            >
+                <div style={{ fontWeight: 600, color: palette.textPrimary, fontSize: 13 }}>
+                    {user.username}
+                </div>
+                <div style={{ color: palette.textMuted, fontSize: 12 }}>
                     {roleLabel(user.role)} · {new URL(serverURL).host}
                 </div>
             </div>
             {onOpenAdmin && (
-                <button type="button" onClick={onOpenAdmin} style={popoverButtonStyle}>
-                    <SettingOutlined />
-                    <span>Manage users</span>
-                </button>
+                <PopoverButton onClick={onOpenAdmin} icon={<SettingOutlined />}>
+                    Manage users
+                </PopoverButton>
             )}
-            <button
-                type="button"
-                onClick={() => setPwOpen(true)}
-                style={{ ...popoverButtonStyle, marginTop: 8 }}
-            >
-                <KeyOutlined />
-                <span>Change password</span>
-            </button>
-            <button
-                type="button"
-                onClick={handleLogout}
-                style={{ ...popoverButtonStyle, marginTop: 8 }}
-            >
-                <LogoutOutlined />
-                <span>Log out</span>
-            </button>
+            <PopoverButton onClick={() => setPwOpen(true)} icon={<KeyOutlined />}>
+                Change password
+            </PopoverButton>
+            <PopoverButton onClick={handleLogout} icon={<LogoutOutlined />}>
+                Log out
+            </PopoverButton>
         </div>
     );
 
@@ -95,8 +91,8 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                padding: "16px 0",
-                gap: 12,
+                padding: `${space[4]}px 0`,
+                gap: space[3],
             }}
         >
             {contextHolder}
@@ -105,9 +101,11 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                 <Tooltip title={user.username} placement="right">
                     <Avatar
                         style={{
-                            backgroundColor: palette.accent,
+                            backgroundColor: palette.surfaceHover,
+                            color: palette.textPrimary,
                             cursor: "pointer",
                             fontWeight: 600,
+                            border: `1px solid ${palette.border}`,
                         }}
                         icon={initials ? undefined : <UserOutlined />}
                     >
@@ -155,9 +153,7 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
                     <Form.Item
                         name="new_password"
                         label="New password"
-                        rules={[
-                            { required: true, min: 8, message: "Min 8 chars" },
-                        ]}
+                        rules={[{ required: true, min: 8, message: "Min 8 chars" }]}
                         extra="Changing your password will sign you out of all other sessions."
                     >
                         <Input.Password />
@@ -186,18 +182,22 @@ export default function ProfileRail({ user, serverURL, onLoggedOut, onOpenAdmin 
     );
 }
 
-const popoverButtonStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    width: "100%",
-    padding: "8px 12px",
-    border: `1px solid ${palette.border}`,
-    background: "transparent",
-    color: palette.textPrimary,
-    cursor: "pointer",
-    borderRadius: 4,
-};
+function PopoverButton({
+    children,
+    icon,
+    onClick,
+}: {
+    children: React.ReactNode;
+    icon: React.ReactNode;
+    onClick: () => void;
+}) {
+    return (
+        <button type="button" onClick={onClick} className="pl-popover-btn">
+            {icon}
+            <span>{children}</span>
+        </button>
+    );
+}
 
 function roleLabel(role: SessionUser["role"]): string {
     switch (role) {

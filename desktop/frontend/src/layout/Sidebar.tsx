@@ -18,7 +18,7 @@ import {
     NotifyEvent,
     onNotify,
 } from "../lib/notify";
-import { palette } from "./theme";
+import { palette, space } from "./theme";
 import ProjectSection from "./ProjectSection";
 
 // Selection describes what the main panel should render. "overview"
@@ -186,7 +186,7 @@ export default function Sidebar({ selection, onSelect }: Props) {
             {contextHolder}
             <div
                 style={{
-                    padding: "12px 12px 8px",
+                    padding: `${space[3]}px ${space[3]}px ${space[2]}px`,
                     borderBottom: `1px solid ${palette.border}`,
                 }}
             >
@@ -195,7 +195,7 @@ export default function Sidebar({ selection, onSelect }: Props) {
                         searchRef.current = el?.input ?? null;
                     }}
                     placeholder="Search hosts, listeners…  (⌘K)"
-                    prefix={<SearchOutlined style={{ color: palette.textSecondary }} />}
+                    prefix={<SearchOutlined style={{ color: palette.textMuted }} />}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     size="middle"
