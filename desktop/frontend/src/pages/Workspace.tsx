@@ -82,7 +82,7 @@ function MainPanel({
     onSelect: (s: Selection) => void;
 }) {
     if (!selection) {
-        return <EmptyState />;
+        return <WorkspaceEmpty />;
     }
     if (selection.kind === "admin-users") {
         return <AdminUsers />;
@@ -90,7 +90,7 @@ function MainPanel({
     const project = projects[selection.projectId];
     if (!project) {
         // Project still loading or was deleted — show a minimal stub.
-        return <EmptyState message="Loading project…" />;
+        return <WorkspaceEmpty message="Loading project…" />;
     }
 
     switch (selection.kind) {
@@ -126,7 +126,7 @@ function MainPanel({
     }
 }
 
-function EmptyState({ message }: { message?: string }) {
+function WorkspaceEmpty({ message }: { message?: string }) {
     return (
         <div
             style={{
