@@ -9,7 +9,8 @@ import ProjectsLanding from "./pages/ProjectsLanding";
 import ProjectOverviewRoute from "./routes/ProjectOverviewRoute";
 import HostsPage from "./pages/HostsPage";
 import HostViewRoute from "./routes/HostViewRoute";
-import ListenerViewRoute from "./routes/ListenerViewRoute";
+import ListenersPage from "./pages/ListenersPage";
+import ListenerDetailPage from "./pages/ListenerDetailPage";
 import DispatchRoute from "./routes/DispatchRoute";
 import MembersRoute from "./routes/MembersRoute";
 import PlaceholderRoute from "./routes/PlaceholderRoute";
@@ -58,8 +59,8 @@ export const router = createBrowserRouter([
                         element: <Navigate to="terminal" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: <HostViewRoute /> },
-                    { path: "listeners", element: <ListenerViewRoute /> },
-                    { path: "listeners/:listenerId", element: <ListenerViewRoute /> },
+                    { path: "listeners", element: <ListenersPage /> },
+                    { path: "listeners/:listenerId", element: <ListenerDetailPage /> },
                     {
                         path: "sessions",
                         element: (
