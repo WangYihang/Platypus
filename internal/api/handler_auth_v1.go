@@ -179,6 +179,63 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	h.issueTokensTo(c, u)
 }
 
+// ChangePassword lets the currently-authenticated user rotate their own
+// password without admin intervention. On success every outstanding
+// refresh token for the user is revoked (matches the admin-reset
+// semantics), forcing other live sessions to re-login.
+//
+// Must be mounted behind RequireAuth; without that the body's
+// old_password check is the only gate and anyone with a dictionary
+// could brute-force via this endpoint.
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	claims, ok := ClaimsFromContext(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"old_password" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.NewPassword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_password must not be empty"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	u, err := h.db.Users().GetByID(ctx, claims.UserID)
+	if err != nil {
+		// User deleted mid-session — their access token is technically
+		// still valid until it expires, but we shouldn't honour it for
+		// state-changing ops.
+		unauthorized(c)
+		return
+	}
+	if !user.VerifyPassword(u.PasswordHash, req.OldPassword) {
+		unauthorized(c)
+		return
+	}
+
+	hashed, err := user.HashPassword(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.db.Users().UpdatePasswordHash(ctx, u.ID, hashed); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update password"})
+		return
+	}
+	// Best-effort — if revocation errors, the password change still
+	// succeeded and the next refresh will fail anyway once the TTL ends.
+	_ = h.db.RefreshTokens().RevokeAllForUser(ctx, u.ID)
+	c.Status(http.StatusNoContent)
+}
+
 // Logout revokes a single refresh token. Returns 204 even if the token is
 // already revoked or unknown — logging out "harder than necessary" is not
 // an error.

@@ -19,6 +19,13 @@ func RegisterV1AuthRoutes(engine *gin.Engine, auth *AuthHandler, users *UsersHan
 	authGroup.POST("/refresh", auth.Refresh)
 	authGroup.POST("/logout", auth.Logout)
 
+	// Self-service password change requires the caller to already be
+	// authenticated — the handler's old_password check on top is a
+	// second line of defence, not the primary gate.
+	authedGroup := engine.Group("/api/v1/auth")
+	authedGroup.Use(rbac.RequireAuth())
+	authedGroup.PATCH("/password", auth.ChangePassword)
+
 	adminOnly := engine.Group("/api/v1/users")
 	adminOnly.Use(rbac.RequireAuth(), rbac.RequireGlobalRole(user.RoleAdmin))
 	{
