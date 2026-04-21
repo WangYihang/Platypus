@@ -8,25 +8,38 @@ import {
     Select,
     Space,
     Table,
-    Tag,
     message,
 } from "antd";
 import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
+import Card from "../../components/Card";
+import EmptyState from "../../components/EmptyState";
+import StatusPill from "../../components/StatusPill";
 import MainHeader from "../../layout/MainHeader";
+import { space } from "../../layout/theme";
 import { UserRow, createUser, deleteUser, listUsers, updateUser } from "../../lib/api";
 
+const ROLE_TONE: Record<UserRow["role"], "danger" | "info" | "neutral"> = {
+    admin: "danger",
+    operator: "info",
+    viewer: "neutral",
+};
+
 // AdminUsers is the /users admin surface: list / create / change-role /
-// change-password / delete. Everything below the header is one table
-// so admins can scan the whole roster without scrolling through cards.
+// change-password / delete. Single-table view so admins can scan the
+// whole roster without scrolling through cards.
 export default function AdminUsers() {
     const [users, setUsers] = useState<UserRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
-    const [pwOpen, setPwOpen] = useState<string | null>(null); // user id being reset
-    const [createForm] = Form.useForm<{ username: string; password: string; role: UserRow["role"] }>();
+    const [pwOpen, setPwOpen] = useState<string | null>(null);
+    const [createForm] = Form.useForm<{
+        username: string;
+        password: string;
+        role: UserRow["role"];
+    }>();
     const [pwForm] = Form.useForm<{ password: string }>();
     const [messageApi, contextHolder] = message.useMessage();
 
@@ -59,7 +72,7 @@ export default function AdminUsers() {
         }
     }
 
-    async function handleDelete(u: UserRow) {
+    function handleDelete(u: UserRow) {
         Modal.confirm({
             title: `Delete user ${u.username}?`,
             content: "Their refresh tokens are revoked and they can no longer log in.",
@@ -109,13 +122,12 @@ export default function AdminUsers() {
                 <Select
                     size="small"
                     value={role}
-                    style={{ minWidth: 120 }}
+                    style={{ minWidth: 130 }}
                     onChange={(v) => handleRoleChange(u, v)}
-                    options={[
-                        { label: <Tag color="red">admin</Tag>, value: "admin" },
-                        { label: <Tag color="blue">operator</Tag>, value: "operator" },
-                        { label: <Tag>viewer</Tag>, value: "viewer" },
-                    ]}
+                    options={(["admin", "operator", "viewer"] as UserRow["role"][]).map((r) => ({
+                        label: <StatusPill tone={ROLE_TONE[r]}>{r}</StatusPill>,
+                        value: r,
+                    }))}
                 />
             ),
             width: 180,
@@ -149,7 +161,7 @@ export default function AdminUsers() {
                 title="Users"
                 subtitle="Manage who can log in and what they can do"
                 actions={
-                    <Space>
+                    <Space size={space[2]}>
                         <Button
                             size="small"
                             icon={<ReloadOutlined />}
@@ -169,18 +181,39 @@ export default function AdminUsers() {
                     </Space>
                 }
             />
-            <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-                {error && (
-                    <Alert type="error" message={error} style={{ marginBottom: 16 }} />
-                )}
-                <Table
-                    rowKey="id"
-                    columns={columns}
-                    dataSource={users ?? []}
-                    loading={!users}
-                    pagination={false}
-                    size="small"
-                />
+            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
+                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+                    {error && (
+                        <Alert type="error" message={error} style={{ marginBottom: space[4] }} />
+                    )}
+                    {users && users.length === 0 ? (
+                        <EmptyState
+                            title="No users"
+                            description="Create the first user via New user."
+                            action={
+                                <Button
+                                    type="primary"
+                                    icon={<PlusOutlined />}
+                                    onClick={() => setCreateOpen(true)}
+                                >
+                                    New user
+                                </Button>
+                            }
+                        />
+                    ) : (
+                        <Card padding={0}>
+                            <Table
+                                rowKey="id"
+                                columns={columns}
+                                dataSource={users ?? []}
+                                loading={!users}
+                                pagination={false}
+                                size="small"
+                                bordered={false}
+                            />
+                        </Card>
+                    )}
+                </div>
             </div>
 
             <Modal
@@ -196,28 +229,25 @@ export default function AdminUsers() {
                     layout="vertical"
                     initialValues={{ role: "operator" }}
                 >
-                    <Form.Item
-                        name="username"
-                        label="Username"
-                        rules={[{ required: true }]}
-                    >
+                    <Form.Item name="username" label="Username" rules={[{ required: true }]}>
                         <Input autoFocus />
                     </Form.Item>
                     <Form.Item
                         name="password"
                         label="Initial password"
                         rules={[{ required: true, min: 8, message: "Min 8 chars" }]}
-                        extra="The user can change this after logging in (P12)."
+                        extra="The user can change this after logging in."
                     >
                         <Input.Password />
                     </Form.Item>
                     <Form.Item name="role" label="Role" rules={[{ required: true }]}>
                         <Select
-                            options={[
-                                { label: "admin", value: "admin" },
-                                { label: "operator", value: "operator" },
-                                { label: "viewer", value: "viewer" },
-                            ]}
+                            options={(["admin", "operator", "viewer"] as UserRow["role"][]).map(
+                                (r) => ({
+                                    label: <StatusPill tone={ROLE_TONE[r]}>{r}</StatusPill>,
+                                    value: r,
+                                }),
+                            )}
                         />
                     </Form.Item>
                 </Form>

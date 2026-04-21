@@ -7,14 +7,16 @@ import {
     Select,
     Space,
     Table,
-    Tag,
     message,
 } from "antd";
 import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
+import Card from "../components/Card";
+import EmptyState from "../components/EmptyState";
+import StatusPill from "../components/StatusPill";
 import MainHeader from "../layout/MainHeader";
-import { palette } from "../layout/theme";
+import { palette, space } from "../layout/theme";
 import {
     Project,
     ProjectMember,
@@ -30,12 +32,15 @@ interface Props {
     project: Project;
 }
 
+const ROLE_TONE: Record<ProjectMember["role"], "danger" | "info" | "neutral"> = {
+    admin: "danger",
+    operator: "info",
+    viewer: "neutral",
+};
+
 // ProjectMembers is the per-project ACL editor. Global admins can add
 // anyone; project-admins can change roles and remove members but not
-// add new ones — the backend's /users list is admin-only, so the
-// "pick a user" modal needs that permission. When a project-admin
-// without global admin opens this page they see the list and the
-// role/remove controls only.
+// add new ones — the backend's /users list is admin-only.
 export default function ProjectMembers({ project }: Props) {
     const [members, setMembers] = useState<ProjectMember[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -46,7 +51,7 @@ export default function ProjectMembers({ project }: Props) {
     const [messageApi, contextHolder] = message.useMessage();
 
     const me = getSessionUser();
-    const canAdd = me?.role === "admin"; // global admin can list users
+    const canAdd = me?.role === "admin";
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -90,8 +95,6 @@ export default function ProjectMembers({ project }: Props) {
 
     async function handleRoleChange(m: ProjectMember, role: ProjectMember["role"]) {
         try {
-            // AddMember is UPSERT on the server, so a role change is just
-            // another POST; no dedicated endpoint needed.
             await addProjectMember(project.id, m.user_id, role);
             messageApi.success(`${m.username} → ${role}`);
             refresh();
@@ -119,8 +122,6 @@ export default function ProjectMembers({ project }: Props) {
         });
     }
 
-    // Candidate list filters out anyone already in this project so the
-    // "add" modal doesn't surface noop choices.
     const existingIds = new Set(members?.map((m) => m.user_id));
     const availableCandidates = (candidates ?? []).filter((u) => !existingIds.has(u.id));
 
@@ -133,12 +134,12 @@ export default function ProjectMembers({ project }: Props) {
                 <Select
                     size="small"
                     value={role}
-                    style={{ minWidth: 120 }}
+                    style={{ minWidth: 130 }}
                     onChange={(v) => handleRoleChange(m, v)}
                     options={[
-                        { label: <Tag color="red">admin</Tag>, value: "admin" },
-                        { label: <Tag color="blue">operator</Tag>, value: "operator" },
-                        { label: <Tag>viewer</Tag>, value: "viewer" },
+                        { label: <StatusPill tone="danger">admin</StatusPill>, value: "admin" },
+                        { label: <StatusPill tone="info">operator</StatusPill>, value: "operator" },
+                        { label: <StatusPill tone="neutral">viewer</StatusPill>, value: "viewer" },
                     ]}
                 />
             ),
@@ -168,7 +169,7 @@ export default function ProjectMembers({ project }: Props) {
                 title={`${project.name} · members`}
                 subtitle={`${members?.length ?? 0} member(s)`}
                 actions={
-                    <Space>
+                    <Space size={space[2]}>
                         <Button
                             size="small"
                             icon={<ReloadOutlined />}
@@ -190,25 +191,45 @@ export default function ProjectMembers({ project }: Props) {
                     </Space>
                 }
             />
-            <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-                {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
-                {!canAdd && (
-                    <Alert
-                        type="info"
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                        message="Adding new members requires global admin."
-                        description="Ask a global admin to add the user, then you can adjust their project role from here."
-                    />
-                )}
-                <Table
-                    rowKey="user_id"
-                    columns={columns}
-                    dataSource={members ?? []}
-                    loading={!members}
-                    pagination={false}
-                    size="small"
-                />
+            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
+                <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+                    {error && <Alert type="error" message={error} style={{ marginBottom: space[4] }} />}
+                    {!canAdd && (
+                        <p
+                            style={{
+                                margin: `0 0 ${space[4]}px`,
+                                color: palette.textSecondary,
+                                fontSize: 13,
+                                lineHeight: 1.5,
+                            }}
+                        >
+                            Adding new members requires global admin. Ask one to add the user,
+                            then you can adjust their project role from this table.
+                        </p>
+                    )}
+                    {members && members.length === 0 ? (
+                        <EmptyState
+                            title="No members"
+                            description={
+                                canAdd
+                                    ? "Add a user to grant them access to this project."
+                                    : "Ask a global admin to add a user to this project."
+                            }
+                        />
+                    ) : (
+                        <Card padding={0}>
+                            <Table
+                                rowKey="user_id"
+                                columns={columns}
+                                dataSource={members ?? []}
+                                loading={!members}
+                                pagination={false}
+                                size="small"
+                                bordered={false}
+                            />
+                        </Card>
+                    )}
+                </div>
             </div>
 
             <Modal
@@ -239,28 +260,33 @@ export default function ProjectMembers({ project }: Props) {
                                 label: (
                                     <span style={{ color: palette.textPrimary }}>
                                         {u.username}{" "}
-                                        <span style={{ color: palette.textSecondary, fontSize: 11 }}>
+                                        <span
+                                            style={{
+                                                color: palette.textSecondary,
+                                                fontSize: 11,
+                                            }}
+                                        >
                                             ({u.role})
                                         </span>
                                     </span>
                                 ),
                                 value: u.id,
-                                label_text: u.username, // plain text for showSearch filter
+                                label_text: u.username,
                             }))}
                             filterOption={(input, opt) => {
-                                const lt = (opt as unknown as { label_text?: string })
-                                    .label_text;
+                                const lt = (opt as unknown as { label_text?: string }).label_text;
                                 return (lt ?? "").toLowerCase().includes(input.toLowerCase());
                             }}
                         />
                     </Form.Item>
                     <Form.Item name="role" label="Project role" rules={[{ required: true }]}>
                         <Select
-                            options={[
-                                { label: "admin", value: "admin" },
-                                { label: "operator", value: "operator" },
-                                { label: "viewer", value: "viewer" },
-                            ]}
+                            options={(["admin", "operator", "viewer"] as ProjectMember["role"][]).map(
+                                (r) => ({
+                                    label: <StatusPill tone={ROLE_TONE[r]}>{r}</StatusPill>,
+                                    value: r,
+                                }),
+                            )}
                         />
                     </Form.Item>
                 </Form>

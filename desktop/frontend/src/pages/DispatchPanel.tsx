@@ -1,20 +1,22 @@
 import { useState } from "react";
 import {
-    Alert,
     Button,
     Form,
     Input,
     InputNumber,
     Space,
     Table,
-    Tag,
     Typography,
     message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
+import Card from "../components/Card";
+import EmptyState from "../components/EmptyState";
+import Mono from "../components/Mono";
+import StatusPill from "../components/StatusPill";
 import MainHeader from "../layout/MainHeader";
-import { palette } from "../layout/theme";
+import { font, palette, space } from "../layout/theme";
 import { DispatchResult, dispatchCommand } from "../lib/api";
 
 interface Props {
@@ -23,9 +25,8 @@ interface Props {
 }
 
 // DispatchPanel is the in-line "run a command on every flagged live
-// session" view. Slack-like in placement: selecting Dispatch in the
-// sidebar opens it as the main-panel content, no modal. Results stay
-// visible so operators can compare runs without reopening a dialog.
+// session" view. Selecting Dispatch in the sidebar opens it as the
+// main-panel content (no modal) so results stay visible across runs.
 export default function DispatchPanel({ projectID, projectName }: Props) {
     const [form] = Form.useForm<{ command: string; timeout: number }>();
     const [busy, setBusy] = useState(false);
@@ -48,30 +49,33 @@ export default function DispatchPanel({ projectID, projectName }: Props) {
         {
             title: "Session",
             dataIndex: "session_hash",
-            render: (v: string) => <code style={{ fontSize: 11 }}>{v.slice(0, 16)}…</code>,
+            render: (v: string) => <Mono>{v.slice(0, 16)}…</Mono>,
             width: 180,
         },
         {
             title: "Host",
             dataIndex: "host_id",
-            render: (v: string) => <code style={{ fontSize: 11 }}>{v.slice(0, 8)}…</code>,
+            render: (v: string) => <Mono>{v.slice(0, 8)}…</Mono>,
             width: 120,
         },
         {
             title: "Output",
             render: (_, r) =>
                 r.error ? (
-                    <Tag color="red">{r.error}</Tag>
+                    <StatusPill tone="danger">{r.error}</StatusPill>
                 ) : (
                     <pre
                         style={{
                             margin: 0,
                             whiteSpace: "pre-wrap",
+                            fontFamily: font.mono,
                             fontSize: 12,
                             color: palette.textPrimary,
                         }}
                     >
-                        {r.output || <Typography.Text type="secondary">(empty)</Typography.Text>}
+                        {r.output || (
+                            <Typography.Text type="secondary">(empty)</Typography.Text>
+                        )}
                     </pre>
                 ),
         },
@@ -84,63 +88,92 @@ export default function DispatchPanel({ projectID, projectName }: Props) {
                 title="Dispatch"
                 subtitle={`Run a command on every flagged live session in ${projectName}`}
             />
-            <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-                <Alert
-                    type="info"
-                    showIcon
-                    message="Sessions are targeted by their group_dispatch flag"
-                    description="Flip a session's group_dispatch flag to include it in dispatches. The server only runs the command on sessions that are (a) currently live and (b) flagged."
-                    style={{ marginBottom: 16 }}
-                />
-                <Form
-                    form={form}
-                    layout="vertical"
-                    initialValues={{ command: "id", timeout: 3 }}
-                    onFinish={run}
-                    style={{ maxWidth: 720 }}
+            <div style={{ flex: 1, overflow: "auto", padding: space[6] }}>
+                <div
+                    style={{
+                        maxWidth: 1200,
+                        margin: "0 auto",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: space[4],
+                    }}
                 >
-                    <Form.Item
-                        name="command"
-                        label="Command"
-                        rules={[{ required: true, message: "command is required" }]}
-                    >
-                        <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} placeholder="id" />
-                    </Form.Item>
-                    <Form.Item
-                        name="timeout"
-                        label="Per-session timeout (seconds)"
-                        extra="Each session gets its own timeout — slow boxes don't block the rest."
-                    >
-                        <InputNumber min={1} max={120} />
-                    </Form.Item>
-                    <Space>
-                        <Button type="primary" onClick={run} loading={busy}>
-                            Run
-                        </Button>
-                        <Button onClick={() => setResults(null)} disabled={!results}>
-                            Clear results
-                        </Button>
-                    </Space>
-                </Form>
-
-                {results !== null && (
-                    <div style={{ marginTop: 24 }}>
-                        <Typography.Title
-                            level={5}
-                            style={{ color: palette.textPrimary, marginTop: 0 }}
+                    <Card header="Run command" style={{ maxWidth: 720 }}>
+                        <p
+                            style={{
+                                margin: `0 0 ${space[4]}px`,
+                                color: palette.textSecondary,
+                                fontSize: 13,
+                                lineHeight: 1.5,
+                            }}
                         >
-                            Results ({results.length})
-                        </Typography.Title>
-                        <Table
-                            rowKey="session_hash"
-                            columns={columns}
-                            dataSource={results}
-                            pagination={false}
-                            size="small"
-                            locale={{ emptyText: "No flagged live sessions." }}
-                        />
-                    </div>
-                )}
+                            Sessions are targeted by their{" "}
+                            <Mono>group_dispatch</Mono> flag. Flip a session's flag from its
+                            HostView Sessions tab to include it. Only sessions that are{" "}
+                            <em>live</em> and <em>flagged</em> will receive the command.
+                        </p>
+                        <Form
+                            form={form}
+                            layout="vertical"
+                            initialValues={{ command: "id", timeout: 3 }}
+                            onFinish={run}
+                        >
+                            <Form.Item
+                                name="command"
+                                label="Command"
+                                rules={[{ required: true, message: "command is required" }]}
+                            >
+                                <Input.TextArea
+                                    autoSize={{ minRows: 1, maxRows: 6 }}
+                                    placeholder="id"
+                                    style={{ fontFamily: font.mono }}
+                                />
+                            </Form.Item>
+                            <Form.Item
+                                name="timeout"
+                                label="Per-session timeout (seconds)"
+                                extra="Each session gets its own timeout — slow boxes don't block the rest."
+                            >
+                                <InputNumber min={1} max={120} />
+                            </Form.Item>
+                            <Space size={space[2]}>
+                                <Button type="primary" onClick={run} loading={busy}>
+                                    Run
+                                </Button>
+                                <Button onClick={() => setResults(null)} disabled={!results}>
+                                    Clear results
+                                </Button>
+                            </Space>
+                        </Form>
+                    </Card>
+
+                    {results !== null && (
+                        <Card
+                            header={
+                                <span>
+                                    Results <Mono color={palette.textSecondary}>({results.length})</Mono>
+                                </span>
+                            }
+                            padding={0}
+                        >
+                            {results.length === 0 ? (
+                                <EmptyState
+                                    title="No flagged live sessions"
+                                    description="Flip a session's group_dispatch flag from its host's Sessions tab to include it here."
+                                />
+                            ) : (
+                                <Table
+                                    rowKey="session_hash"
+                                    columns={columns}
+                                    dataSource={results}
+                                    pagination={false}
+                                    size="small"
+                                    bordered={false}
+                                />
+                            )}
+                        </Card>
+                    )}
+                </div>
             </div>
         </div>
     );
