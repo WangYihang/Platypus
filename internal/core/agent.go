@@ -62,6 +62,11 @@ type AgentClient struct {
 	TimeStamp         time.Time            `json:"timestamp"`
 	DisableHistory    bool                 `json:"disable_hisory"`
 	GroupDispatch     bool                 `json:"group_dispatch"`
+	// MachineID is the agent-reported stable id (see internal/agent/machine_id.go).
+	// Empty when the agent couldn't read a platform id; the server falls back
+	// to a hash of hostname + sorted MACs for host aggregation in that case.
+	MachineID string `json:"machine_id"`
+	Hostname  string `json:"hostname"`
 	server            *TCPServer           `json:"-"`
 	codec             *protocol.ProtoCodec `json:"-"`
 	atomLock          *sync.Mutex          `json:"-"`
@@ -177,6 +182,8 @@ func (c *AgentClient) GatherClientInfo(hashFormat string) bool {
 		}
 	}
 	c.NetworkInterfaces = info.NetworkInterfaces
+	c.MachineID = info.MachineId
+	c.Hostname = info.Hostname
 	c.Hash = c.makeHash(hashFormat)
 
 	if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {

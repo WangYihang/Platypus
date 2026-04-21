@@ -36,7 +36,11 @@ help:
 	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:8080"
 
 $(PROTO_OUT): $(PROTO_SRC)
-	protoc --go_out=pkg/proto/agent/v1 --go_opt=paths=source_relative $(PROTO_SRC)
+	protoc \
+	  --proto_path=proto/agent/v1 \
+	  --go_out=pkg/proto/agent/v1 \
+	  --go_opt=paths=source_relative \
+	  agent.proto
 
 proto: $(PROTO_OUT)
 

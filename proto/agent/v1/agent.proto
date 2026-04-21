@@ -69,6 +69,12 @@ message ClientInfoResponse {
   string              hostname            = 5;
   map<string, string> network_interfaces  = 6;
   repeated string     available_languages = 7; // e.g. ["python2", "python3", "perl"]
+  // Stable per-machine identifier, read once by the agent at startup.
+  // Linux: /etc/machine-id. macOS: IOPlatformUUID. Windows:
+  // HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid. Empty if the agent
+  // couldn't read one — the server then falls back to a hash of
+  // hostname + sorted MACs as a weaker host fingerprint.
+  string              machine_id          = 8;
 }
 
 message DuplicateClientNotice {}

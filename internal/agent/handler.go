@@ -201,6 +201,7 @@ func handleGetClientInfo(c *Client, reqID string) {
 				Hostname:           hostname,
 				NetworkInterfaces:  interfaces,
 				AvailableLanguages: languages,
+				MachineId:          MachineID(),
 			},
 		},
 	})

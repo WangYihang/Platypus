@@ -7,12 +7,11 @@
 package agentpb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -738,8 +737,14 @@ type ClientInfoResponse struct {
 	Hostname           string                 `protobuf:"bytes,5,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	NetworkInterfaces  map[string]string      `protobuf:"bytes,6,rep,name=network_interfaces,json=networkInterfaces,proto3" json:"network_interfaces,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	AvailableLanguages []string               `protobuf:"bytes,7,rep,name=available_languages,json=availableLanguages,proto3" json:"available_languages,omitempty"` // e.g. ["python2", "python3", "perl"]
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Stable per-machine identifier, read once by the agent at startup.
+	// Linux: /etc/machine-id. macOS: IOPlatformUUID. Windows:
+	// HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid. Empty if the agent
+	// couldn't read one — the server then falls back to a hash of
+	// hostname + sorted MACs as a weaker host fingerprint.
+	MachineId     string `protobuf:"bytes,8,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ClientInfoResponse) Reset() {
@@ -819,6 +824,13 @@ func (x *ClientInfoResponse) GetAvailableLanguages() []string {
 		return x.AvailableLanguages
 	}
 	return nil
+}
+
+func (x *ClientInfoResponse) GetMachineId() string {
+	if x != nil {
+		return x.MachineId
+	}
+	return ""
 }
 
 type DuplicateClientNotice struct {
@@ -2445,7 +2457,7 @@ const file_proto_agent_v1_agent_proto_rawDesc = "" +
 	"\x19socks5_destroyed_response\x186 \x01(\v2*.platypus.agent.v1.Socks5DestroyedResponseH\x00R\x17socks5DestroyedResponse\x12\\\n" +
 	"\x15socks5_destroy_failed\x187 \x01(\v2&.platypus.agent.v1.Socks5DestroyFailedH\x00R\x13socks5DestroyFailedB\t\n" +
 	"\apayload\"\x16\n" +
-	"\x14GetClientInfoRequest\"\xe6\x02\n" +
+	"\x14GetClientInfoRequest\"\x85\x03\n" +
 	"\x12ClientInfoResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x0e\n" +
 	"\x02os\x18\x02 \x01(\tR\x02os\x12\x12\n" +
@@ -2453,7 +2465,9 @@ const file_proto_agent_v1_agent_proto_rawDesc = "" +
 	"\x04user\x18\x04 \x01(\tR\x04user\x12\x1a\n" +
 	"\bhostname\x18\x05 \x01(\tR\bhostname\x12k\n" +
 	"\x12network_interfaces\x18\x06 \x03(\v2<.platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntryR\x11networkInterfaces\x12/\n" +
-	"\x13available_languages\x18\a \x03(\tR\x12availableLanguages\x1aD\n" +
+	"\x13available_languages\x18\a \x03(\tR\x12availableLanguages\x12\x1d\n" +
+	"\n" +
+	"machine_id\x18\b \x01(\tR\tmachineId\x1aD\n" +
 	"\x16NetworkInterfacesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x17\n" +
