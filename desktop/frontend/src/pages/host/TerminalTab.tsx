@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Empty, Tag } from "antd";
 
 import Terminal from "../Terminal";
@@ -9,6 +8,10 @@ interface Props {
     // Live (disconnected_at === null) sessions for the host. Parent
     // feeds this in from HostView's already-fetched sessions list.
     liveSessions: SessionRow[];
+    // Currently-picked session. Managed by HostView so the Files and
+    // Tunnels tabs see the same pick.
+    picked: string | null;
+    onPick: (sessionHash: string) => void;
 }
 
 // TerminalTab embeds the double-mode xterm (pages/Terminal.tsx) inside
@@ -17,25 +20,10 @@ interface Props {
 // user picks one via a chip row; the selected session drives the
 // xterm instance below.
 //
-// Parent re-renders this with a fresh liveSessions array when a session
-// opens or closes (driven by session.opened / session.closed events).
-// If the currently-picked session disappears, we fall back to the
-// first remaining one.
-export default function TerminalTab({ liveSessions }: Props) {
-    const [picked, setPicked] = useState<string | null>(null);
-
-    // Ensure `picked` always points at a live session — fall back to
-    // the first one if the previous pick just closed.
-    useEffect(() => {
-        if (liveSessions.length === 0) {
-            setPicked(null);
-            return;
-        }
-        if (!picked || !liveSessions.some((s) => s.id === picked)) {
-            setPicked(liveSessions[0].id);
-        }
-    }, [liveSessions, picked]);
-
+// The picked session lives one level up in HostView so Files / Tunnels
+// tabs operate on the same connection. Parent handles the "picked just
+// closed, pick the next one" fallback in a single useEffect.
+export default function TerminalTab({ liveSessions, picked, onPick }: Props) {
     if (liveSessions.length === 0) {
         return (
             <div style={{ padding: 32 }}>
@@ -67,7 +55,7 @@ export default function TerminalTab({ liveSessions }: Props) {
                                     fontSize: 12,
                                     borderRadius: 4,
                                 }}
-                                onClick={() => setPicked(s.id)}
+                                onClick={() => onPick(s.id)}
                             >
                                 <span
                                     style={{
