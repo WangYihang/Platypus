@@ -71,3 +71,28 @@ body {
 .pl-popover-btn + .pl-popover-btn {
     margin-top: 2px;
 }
+
+.pl-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    color: #a1a1a1;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 100ms ease, color 100ms ease;
+    user-select: none;
+}
+.pl-nav-link:hover {
+    background: #1a1a1a;
+    color: #fafafa;
+}
+.pl-nav-link--active {
+    background: #262626;
+    color: #fafafa;
+}
+.pl-nav-link + .pl-nav-link {
+    margin-top: 2px;
+}

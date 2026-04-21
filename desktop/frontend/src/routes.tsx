@@ -3,15 +3,24 @@ import { ConfigProvider } from "antd";
 
 import { antTheme } from "./layout/theme";
 import RequireAuth from "./layout/RequireAuth";
+import ProjectShell from "./layout/ProjectShell";
 import LoginRoute from "./routes/LoginRoute";
-import WorkspaceRoute from "./routes/WorkspaceRoute";
+import ProjectsLanding from "./pages/ProjectsLanding";
+import ProjectOverviewRoute from "./routes/ProjectOverviewRoute";
+import HostViewRoute from "./routes/HostViewRoute";
+import ListenerViewRoute from "./routes/ListenerViewRoute";
+import DispatchRoute from "./routes/DispatchRoute";
+import MembersRoute from "./routes/MembersRoute";
+import PlaceholderRoute from "./routes/PlaceholderRoute";
+import AdminUsers from "./pages/admin/AdminUsers";
 
-// Top-level route table. Round 2 lays the track here; subsequent steps
-// peel pages out of WorkspaceRoute into their own routes (HostsPage,
-// ListenersPage, SessionsPage, etc.) under a ProjectShell outlet.
+// Top-level route table. The new flat-nav IA — every project-scoped
+// view sits under /projects/:projectSlug/<page>, with shared sidebar
+// chrome rendered by <ProjectShell>.
 //
-// All non-login paths sit under <RequireAuth>, which gates on the JWT
-// session and redirects to /login if missing.
+// HostsPage / SessionsPage are placeholders in step 3; ListenerView
+// still serves both /listeners and /listeners/:listenerId via its
+// existing dual-mode component (step 7 splits it).
 export const router = createBrowserRouter([
     {
         path: "/login",
@@ -29,9 +38,50 @@ export const router = createBrowserRouter([
         ),
         children: [
             { path: "/", element: <Navigate to="/projects" replace /> },
-            // Catch-all for the workspace shell — Step 3 will replace this
-            // with a proper route tree (/projects, /projects/:slug/*, etc.).
-            { path: "*", element: <WorkspaceRoute /> },
+            {
+                element: <ProjectShell />,
+                children: [
+                    { path: "/projects", element: <ProjectsLanding /> },
+                    { path: "/admin/users", element: <AdminUsers /> },
+                ],
+            },
+            {
+                path: "/projects/:projectSlug",
+                element: <ProjectShell requireProject />,
+                children: [
+                    { index: true, element: <Navigate to="overview" replace /> },
+                    { path: "overview", element: <ProjectOverviewRoute /> },
+                    {
+                        path: "hosts",
+                        element: (
+                            <PlaceholderRoute
+                                title="Hosts page coming next"
+                                description="Step 6 builds the cross-host list. For now drill into hosts via the legacy Workspace if you have any."
+                            />
+                        ),
+                    },
+                    {
+                        path: "hosts/:hostId",
+                        element: <Navigate to="terminal" replace />,
+                    },
+                    { path: "hosts/:hostId/:tab", element: <HostViewRoute /> },
+                    { path: "listeners", element: <ListenerViewRoute /> },
+                    { path: "listeners/:listenerId", element: <ListenerViewRoute /> },
+                    {
+                        path: "sessions",
+                        element: (
+                            <PlaceholderRoute
+                                title="Sessions page coming next"
+                                description="Step 8 builds the cross-host live + historical sessions list."
+                            />
+                        ),
+                    },
+                    { path: "dispatch", element: <DispatchRoute /> },
+                    { path: "members", element: <MembersRoute /> },
+                ],
+            },
+            // Catch-all → projects landing.
+            { path: "*", element: <Navigate to="/projects" replace /> },
         ],
     },
 ]);
