@@ -145,10 +145,15 @@ func (s *TCPServer) Handle(conn net.Conn) {
 	log.Info("Gathering information from client...")
 	if client.GatherClientInfo(s.hashFormat) {
 		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
-		// Persist / merge the host row before the session is exposed to
-		// listeners, so anything that looks up c.HostID right after
-		// AddAgentClient sees a populated value.
-		UpsertHostForAgent(context.Background(), client)
+		ctx := context.Background()
+		// Persist / merge state in order: host (needs project), listener
+		// (FK target for session), then session row itself. Anything
+		// looking at the DB after AddAgentClient sees the full chain.
+		UpsertHostForAgent(ctx, client)
+		if err := EnsureListenerRow(ctx, s); err != nil {
+			log.Warn("EnsureListenerRow: %s", err)
+		}
+		PersistSessionForAgent(ctx, client)
 		s.AddAgentClient(client)
 	} else {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
@@ -551,6 +556,7 @@ func AgentMessageDispatcher(client *AgentClient) {
 
 func (s *TCPServer) DeleteAgentClient(client *AgentClient) {
 	delete(s.AgentClients, client.Hash)
+	MarkSessionDisconnected(context.Background(), client)
 	client.Close()
 }
 

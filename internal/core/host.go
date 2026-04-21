@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -97,4 +98,80 @@ func resolveProjectID(ctx context.Context, s *TCPServer) (string, error) {
 		return "", err
 	}
 	return p.ID, nil
+}
+
+// EnsureListenerRow makes sure the persistent listeners row exists for s
+// before any session persistence attempts to reference it. TCPServers
+// created through the legacy config path don't get a row at startup; we
+// upsert-on-first-use here so session inserts don't FK-fail.
+func EnsureListenerRow(ctx context.Context, s *TCPServer) error {
+	if Ctx == nil || Ctx.Storage == nil || s == nil {
+		return nil
+	}
+	if _, err := Ctx.Storage.Listeners().GetByID(ctx, s.Hash); err == nil {
+		return nil
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	projectID, err := resolveProjectID(ctx, s)
+	if err != nil {
+		return err
+	}
+	return Ctx.Storage.Listeners().Create(ctx, &storage.Listener{
+		ID:             s.Hash,
+		ProjectID:      projectID,
+		Host:           s.Host,
+		Port:           s.Port,
+		PublicIP:       s.PublicIP,
+		ShellPath:      s.ShellPath,
+		DisableHistory: s.DisableHistory,
+		GroupDispatch:  s.GroupDispatch,
+		CreatedAt:      s.TimeStamp.UTC(),
+	})
+}
+
+// PersistSessionForAgent writes the session row. Requires HostID +
+// ProjectID to already be populated (UpsertHostForAgent does this) and
+// the listener row to exist (EnsureListenerRow). Skips silently when
+// storage is absent.
+func PersistSessionForAgent(ctx context.Context, c *AgentClient) {
+	if Ctx == nil || Ctx.Storage == nil {
+		return
+	}
+	if c.HostID == "" || c.ProjectID == "" {
+		// Host upsert was skipped (no default project etc.) — no safe
+		// point to persist the session.
+		return
+	}
+	ifacesJSON, _ := json.Marshal(c.NetworkInterfaces)
+	err := Ctx.Storage.Sessions().Insert(ctx, &storage.Session{
+		ID:             c.Hash,
+		ProjectID:      c.ProjectID,
+		ListenerID:     c.server.Hash,
+		HostID:         c.HostID,
+		Alias:          c.Alias,
+		User:           c.User,
+		RemoteAddr:     c.conn.RemoteAddr().String(),
+		Version:        c.Version,
+		Python2:        c.Python2,
+		Python3:        c.Python3,
+		InterfacesJSON: string(ifacesJSON),
+		GroupDispatch:  c.GroupDispatch,
+		ConnectedAt:    c.TimeStamp.UTC(),
+	})
+	if err != nil {
+		log.Warn("Session persistence failed: %s", err)
+	}
+}
+
+// MarkSessionDisconnected stamps disconnected_at on the session row.
+// Called from DeleteAgentClient's disconnect path; idempotent so the
+// duplicate-client rejection path can also call it safely.
+func MarkSessionDisconnected(ctx context.Context, c *AgentClient) {
+	if Ctx == nil || Ctx.Storage == nil || c == nil || c.Hash == "" {
+		return
+	}
+	if err := Ctx.Storage.Sessions().MarkDisconnected(ctx, c.Hash); err != nil {
+		log.Warn("MarkDisconnected(%s) failed: %s", c.Hash, err)
+	}
 }
