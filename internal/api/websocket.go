@@ -33,7 +33,7 @@ func RegisterWebSocketRoutes(engine *gin.Engine, auth *Auth) {
 		}
 		termiteClient := core.FindTermiteClientByHash(c.Param("hash"))
 		if termiteClient == nil {
-			abortWithLegacyError(c, 404, "client is not found")
+			abortWithError(c, 404, "client is not found")
 			return
 		}
 		log.Success("Trying to pop up encrypted websocket shell for: %s", termiteClient.OnelineDesc())

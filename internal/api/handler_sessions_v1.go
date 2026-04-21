@@ -61,7 +61,7 @@ func ListSessionsV1(c *gin.Context) {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       id  path      string  true "Session hash"
-// @Success     200 {object}  legacyClientEntry "bare TCPClient or TermiteClient JSON"
+// @Success     200 {object}  sessionEntry "bare TermiteClient JSON"
 // @Failure     404 {object}  errorResponse
 // @Router      /api/v1/sessions/{id} [get]
 func GetSessionV1(c *gin.Context) {

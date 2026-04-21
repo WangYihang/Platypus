@@ -15,421 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/client": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns every session (plain + termite) across every listener. This is the main session-list endpoint used by the desktop UI.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "List all sessions",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientMap"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/client/{hash}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Get session",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Session hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientEntry"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Runs a single command on one session and returns its stdout. Submit cmd as form-encoded. Plain TCP sessions in PTY mode are refused; switch to non-PTY or use the WebSocket terminal instead.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Execute command",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Session hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Shell command",
-                        "name": "cmd",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyAck"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Delete session",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Session hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyAck"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/client/{hash}/upgrade/{target}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Compile a Termite agent matching the client's architecture, push it over the existing plain shell, and let it reconnect to the target encrypted listener. Progress is broadcast on /notify; this endpoint only acknowledges the request.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Upgrade to Termite",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Source session hash (plain TCP client)",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Destination listener hash (must be encrypted)",
-                        "name": "target",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyAck"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/server": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns every configured TCP listener plus the distributor snapshot.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "listeners"
-                ],
-                "summary": "List listeners",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyServerList"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Opens a new reverse-shell listener. Submit as application/x-www-form-urlencoded.",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "listeners"
-                ],
-                "summary": "Create listener",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bind address (e.g. 0.0.0.0)",
-                        "name": "host",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Port 1-65535",
-                        "name": "port",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "true for Termite listener, false for plain reverse shell",
-                        "name": "encrypted",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyServer"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/server/{hash}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "listeners"
-                ],
-                "summary": "Get listener",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Listener hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyServer"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "listeners"
-                ],
-                "summary": "Delete listener",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Listener hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyAck"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/server/{hash}/client": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "listeners"
-                ],
-                "summary": "List sessions on a listener",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Listener hash",
-                        "name": "hash",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientMap"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.legacyError"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/auth/token": {
             "post": {
                 "description": "Bootstraps a session. The returned token must be sent as ` + "`" + `Authorization: Bearer \u003ctoken\u003e` + "`" + ` on every other endpoint.",
@@ -506,7 +91,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Opens a reverse-shell listener. encrypted=true yields a TLS+proto Termite listener; false yields a plain raw-TCP shell listener.",
+                "description": "Opens a TLS ingress port where managed-host agents dial in.",
                 "consumes": [
                     "application/json"
                 ],
@@ -519,7 +104,7 @@ const docTemplate = `{
                 "summary": "Create listener",
                 "parameters": [
                     {
-                        "description": "Bind address and encryption mode",
+                        "description": "Bind address",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -665,85 +250,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/raas/languages": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the sorted list of one-liner languages the server can render. These map 1:1 with internal/utils/raas/templates/*.tpl.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "raas"
-                ],
-                "summary": "List RaaS languages",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.raasLanguagesResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/raas/oneliner": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the shell command victims should execute to connect back. Unknown languages fall back to bash so this endpoint never 404s on lang.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "raas"
-                ],
-                "summary": "Render RaaS one-liner",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Target host (listener public IP or bind)",
-                        "name": "host",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Target port 1-65535",
-                        "name": "port",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "default": "bash",
-                        "description": "Language key (bash|python|ruby|...); defaults to bash",
-                        "name": "lang",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.raasOnelinerResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.errorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/sessions": {
             "get": {
                 "security": [
@@ -840,9 +346,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "bare TCPClient or TermiteClient JSON",
+                        "description": "bare TermiteClient JSON",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientEntry"
+                            "$ref": "#/definitions/internal_api.sessionEntry"
                         }
                     },
                     "404": {
@@ -927,7 +433,7 @@ const docTemplate = `{
                     "200": {
                         "description": "status + updated session",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientEntry"
+                            "$ref": "#/definitions/internal_api.sessionEntry"
                         }
                     },
                     "400": {
@@ -952,7 +458,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Executes one shell command and returns its stdout. Plain TCP sessions in PTY mode are refused (409); switch to non-PTY or use the WebSocket terminal. Replaces the legacy form-encoded POST /api/client/{hash}.",
+                "description": "Executes one shell command on a connected agent and returns its stdout.",
                 "consumes": [
                     "application/json"
                 ],
@@ -996,12 +502,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.errorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/internal_api.errorResponse"
                         }
@@ -1245,7 +745,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.legacyClientEntry"
+                            "$ref": "#/definitions/internal_api.sessionEntry"
                         }
                     },
                     "404": {
@@ -1359,64 +859,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/sessions/{id}/upgrade": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Compiles a Termite agent for the session's architecture and pushes it over the existing plain reverse shell, where it reconnects to the target encrypted listener. Progress is broadcast on /notify; this endpoint returns 202 as soon as the upgrade is scheduled. Replaces the legacy GET /api/client/{hash}/upgrade/{target}.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Upgrade session to Termite",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Source session hash (plain TCP client)",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Target encrypted listener hash",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.upgradeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.ackResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.errorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.errorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/ws/ticket": {
             "post": {
                 "security": [
@@ -1444,45 +886,10 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_WangYihang_Platypus_internal_core.Distributor": {
-            "type": "object",
-            "properties": {
-                "host": {
-                    "type": "string"
-                },
-                "interfaces": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "route": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_WangYihang_Platypus_internal_core.TCPServer": {
             "type": "object",
             "properties": {
-                "clients": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "object"
-                    }
-                },
                 "disable_history": {
-                    "type": "boolean"
-                },
-                "encrypted": {
                     "type": "boolean"
                 },
                 "group_dispatch": {
@@ -1551,9 +958,6 @@ const docTemplate = `{
                 "port"
             ],
             "properties": {
-                "encrypted": {
-                    "type": "boolean"
-                },
                 "host": {
                     "type": "string"
                 },
@@ -1655,77 +1059,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api.legacyAck": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_api.legacyClientEntry": {
-            "type": "object",
-            "properties": {
-                "msg": {},
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_api.legacyClientMap": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_api.legacyError": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": false
-                }
-            }
-        },
-        "internal_api.legacyServer": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_api.legacyServerList": {
-            "type": "object",
-            "properties": {
-                "msg": {
-                    "$ref": "#/definitions/internal_api.serversWithDistributor"
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
         "internal_api.listenersListResponse": {
             "type": "object",
             "properties": {
@@ -1746,44 +1079,13 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api.raasLanguagesResponse": {
+        "internal_api.sessionEntry": {
             "type": "object",
             "properties": {
-                "languages": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
+                "msg": {},
                 "status": {
                     "type": "boolean",
                     "example": true
-                }
-            }
-        },
-        "internal_api.raasOnelinerResponse": {
-            "type": "object",
-            "properties": {
-                "oneliner": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_api.serversWithDistributor": {
-            "type": "object",
-            "properties": {
-                "distributor": {
-                    "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.Distributor"
-                },
-                "servers": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer"
-                    }
                 }
             }
         },
@@ -1861,17 +1163,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/internal_api.tunnelInfoEntry"
                     }
-                }
-            }
-        },
-        "internal_api.upgradeRequest": {
-            "type": "object",
-            "required": [
-                "listener_id"
-            ],
-            "properties": {
-                "listener_id": {
-                    "type": "string"
                 }
             }
         },

@@ -9,40 +9,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func formExistOrAbort(c *gin.Context, params []string) bool {
-	for _, param := range params {
-		if c.PostForm(param) == "" {
-			return abortWithLegacyError(c, 400, fmt.Sprintf("%s is required", param))
-		}
-	}
-	return true
-}
-
 func paramsExistOrAbort(c *gin.Context, params []string) bool {
 	for _, param := range params {
 		if c.Param(param) == "" {
-			return abortWithLegacyError(c, 400, fmt.Sprintf("%s is required", param))
+			return abortWithError(c, 400, fmt.Sprintf("%s is required", param))
 		}
 	}
 	return true
 }
 
-// abortWithLegacyError emits the {status:false, msg} envelope at the given
-// HTTP status code and aborts the gin handler chain. The legacy envelope is
-// kept for client compatibility; only the status code is corrected so that
-// generic HTTP tooling (curl -f, retry middleware, monitors) sees the error.
-func abortWithLegacyError(c *gin.Context, status int, msg string) bool {
-	c.JSON(status, gin.H{
-		"status": false,
-		"msg":    msg,
-	})
+// abortWithError emits {error: msg} at the given status and aborts the gin
+// handler chain. Used by middleware/utility paths that need to bail before
+// the normal handler body runs (e.g. websocket upgrade path parameter checks).
+func abortWithError(c *gin.Context, status int, msg string) bool {
+	c.JSON(status, gin.H{"error": msg})
 	c.Abort()
 	return false
 }
 
 // CreateRESTfulAPIServer assembles the bare gin engine with CORS middleware.
-// Routes are registered separately via RegisterWebSocketRoutes,
-// RegisterLegacyRoutes, and RegisterV1Routes — all wired up by the caller.
+// Routes are registered separately via RegisterWebSocketRoutes and
+// RegisterV1Routes — both wired up by the caller.
 func CreateRESTfulAPIServer() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.Discard

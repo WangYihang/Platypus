@@ -1,31 +1,8 @@
 basePath: /
 definitions:
-  github_com_WangYihang_Platypus_internal_core.Distributor:
-    properties:
-      host:
-        type: string
-      interfaces:
-        items:
-          type: string
-        type: array
-      port:
-        type: integer
-      route:
-        additionalProperties:
-          type: string
-        type: object
-      url:
-        type: string
-    type: object
   github_com_WangYihang_Platypus_internal_core.TCPServer:
     properties:
-      clients:
-        additionalProperties:
-          type: object
-        type: object
       disable_history:
-        type: boolean
-      encrypted:
         type: boolean
       group_dispatch:
         type: boolean
@@ -68,8 +45,6 @@ definitions:
     type: object
   internal_api.createListenerRequest:
     properties:
-      encrypted:
-        type: boolean
       host:
         type: string
       port:
@@ -141,54 +116,6 @@ definitions:
       output:
         type: string
     type: object
-  internal_api.legacyAck:
-    properties:
-      msg:
-        type: string
-      status:
-        example: true
-        type: boolean
-    type: object
-  internal_api.legacyClientEntry:
-    properties:
-      msg: {}
-      status:
-        example: true
-        type: boolean
-    type: object
-  internal_api.legacyClientMap:
-    properties:
-      msg:
-        additionalProperties: true
-        type: object
-      status:
-        example: true
-        type: boolean
-    type: object
-  internal_api.legacyError:
-    properties:
-      msg:
-        type: string
-      status:
-        example: false
-        type: boolean
-    type: object
-  internal_api.legacyServer:
-    properties:
-      msg:
-        $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
-      status:
-        example: true
-        type: boolean
-    type: object
-  internal_api.legacyServerList:
-    properties:
-      msg:
-        $ref: '#/definitions/internal_api.serversWithDistributor'
-      status:
-        example: true
-        type: boolean
-    type: object
   internal_api.listenersListResponse:
     properties:
       listeners:
@@ -202,32 +129,12 @@ definitions:
       group_dispatch:
         type: boolean
     type: object
-  internal_api.raasLanguagesResponse:
+  internal_api.sessionEntry:
     properties:
-      languages:
-        items:
-          type: string
-        type: array
+      msg: {}
       status:
         example: true
         type: boolean
-    type: object
-  internal_api.raasOnelinerResponse:
-    properties:
-      oneliner:
-        type: string
-      status:
-        example: true
-        type: boolean
-    type: object
-  internal_api.serversWithDistributor:
-    properties:
-      distributor:
-        $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.Distributor'
-      servers:
-        additionalProperties:
-          $ref: '#/definitions/github_com_WangYihang_Platypus_internal_core.TCPServer'
-        type: object
     type: object
   internal_api.sessionsListResponse:
     properties:
@@ -281,13 +188,6 @@ definitions:
           $ref: '#/definitions/internal_api.tunnelInfoEntry'
         type: array
     type: object
-  internal_api.upgradeRequest:
-    properties:
-      listener_id:
-        type: string
-    required:
-    - listener_id
-    type: object
   internal_api.wsTicketResponse:
     properties:
       ticket:
@@ -301,273 +201,6 @@ info:
   title: Platypus API
   version: "1.0"
 paths:
-  /api/client:
-    get:
-      description: Returns every session (plain + termite) across every listener.
-        This is the main session-list endpoint used by the desktop UI.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyClientMap'
-      security:
-      - BearerAuth: []
-      summary: List all sessions
-      tags:
-      - sessions
-  /api/client/{hash}:
-    delete:
-      parameters:
-      - description: Session hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyAck'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Delete session
-      tags:
-      - sessions
-    get:
-      parameters:
-      - description: Session hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyClientEntry'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Get session
-      tags:
-      - sessions
-    post:
-      consumes:
-      - application/x-www-form-urlencoded
-      description: Runs a single command on one session and returns its stdout. Submit
-        cmd as form-encoded. Plain TCP sessions in PTY mode are refused; switch to
-        non-PTY or use the WebSocket terminal instead.
-      parameters:
-      - description: Session hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      - description: Shell command
-        in: formData
-        name: cmd
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyAck'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Execute command
-      tags:
-      - sessions
-  /api/client/{hash}/upgrade/{target}:
-    get:
-      description: Compile a Termite agent matching the client's architecture, push
-        it over the existing plain shell, and let it reconnect to the target encrypted
-        listener. Progress is broadcast on /notify; this endpoint only acknowledges
-        the request.
-      parameters:
-      - description: Source session hash (plain TCP client)
-        in: path
-        name: hash
-        required: true
-        type: string
-      - description: Destination listener hash (must be encrypted)
-        in: path
-        name: target
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyAck'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Upgrade to Termite
-      tags:
-      - sessions
-  /api/server:
-    get:
-      description: Returns every configured TCP listener plus the distributor snapshot.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyServerList'
-      security:
-      - BearerAuth: []
-      summary: List listeners
-      tags:
-      - listeners
-    post:
-      consumes:
-      - application/x-www-form-urlencoded
-      description: Opens a new reverse-shell listener. Submit as application/x-www-form-urlencoded.
-      parameters:
-      - description: Bind address (e.g. 0.0.0.0)
-        in: formData
-        name: host
-        required: true
-        type: string
-      - description: Port 1-65535
-        in: formData
-        name: port
-        required: true
-        type: integer
-      - description: true for Termite listener, false for plain reverse shell
-        in: formData
-        name: encrypted
-        required: true
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyServer'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Create listener
-      tags:
-      - listeners
-  /api/server/{hash}:
-    delete:
-      parameters:
-      - description: Listener hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyAck'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Delete listener
-      tags:
-      - listeners
-    get:
-      parameters:
-      - description: Listener hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyServer'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: Get listener
-      tags:
-      - listeners
-  /api/server/{hash}/client:
-    get:
-      parameters:
-      - description: Listener hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.legacyClientMap'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.legacyError'
-      security:
-      - BearerAuth: []
-      summary: List sessions on a listener
-      tags:
-      - listeners
   /api/v1/auth/token:
     post:
       consumes:
@@ -619,10 +252,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Opens a reverse-shell listener. encrypted=true yields a TLS+proto
-        Termite listener; false yields a plain raw-TCP shell listener.
+      description: Opens a TLS ingress port where managed-host agents dial in.
       parameters:
-      - description: Bind address and encryption mode
+      - description: Bind address
         in: body
         name: body
         required: true
@@ -722,58 +354,6 @@ paths:
       summary: List sessions on a listener
       tags:
       - listeners
-  /api/v1/raas/languages:
-    get:
-      description: Returns the sorted list of one-liner languages the server can render.
-        These map 1:1 with internal/utils/raas/templates/*.tpl.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.raasLanguagesResponse'
-      security:
-      - BearerAuth: []
-      summary: List RaaS languages
-      tags:
-      - raas
-  /api/v1/raas/oneliner:
-    get:
-      description: Returns the shell command victims should execute to connect back.
-        Unknown languages fall back to bash so this endpoint never 404s on lang.
-      parameters:
-      - description: Target host (listener public IP or bind)
-        in: path
-        name: host
-        required: true
-        type: string
-      - description: Target port 1-65535
-        in: path
-        name: port
-        required: true
-        type: integer
-      - default: bash
-        description: Language key (bash|python|ruby|...); defaults to bash
-        in: query
-        name: lang
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_api.raasOnelinerResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api.errorResponse'
-      security:
-      - BearerAuth: []
-      summary: Render RaaS one-liner
-      tags:
-      - raas
   /api/v1/sessions:
     get:
       description: Returns every connected session (plain TCP + encrypted Termite)
@@ -828,9 +408,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: bare TCPClient or TermiteClient JSON
+          description: bare TermiteClient JSON
           schema:
-            $ref: '#/definitions/internal_api.legacyClientEntry'
+            $ref: '#/definitions/internal_api.sessionEntry'
         "404":
           description: Not Found
           schema:
@@ -862,7 +442,7 @@ paths:
         "200":
           description: status + updated session
           schema:
-            $ref: '#/definitions/internal_api.legacyClientEntry'
+            $ref: '#/definitions/internal_api.sessionEntry'
         "400":
           description: Bad Request
           schema:
@@ -880,9 +460,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Executes one shell command and returns its stdout. Plain TCP sessions
-        in PTY mode are refused (409); switch to non-PTY or use the WebSocket terminal.
-        Replaces the legacy form-encoded POST /api/client/{hash}.
+      description: Executes one shell command on a connected agent and returns its
+        stdout.
       parameters:
       - description: Session hash
         in: path
@@ -908,10 +487,6 @@ paths:
             $ref: '#/definitions/internal_api.errorResponse'
         "404":
           description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.errorResponse'
-        "409":
-          description: Conflict
           schema:
             $ref: '#/definitions/internal_api.errorResponse'
       security:
@@ -1074,7 +649,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_api.legacyClientEntry'
+            $ref: '#/definitions/internal_api.sessionEntry'
         "404":
           description: Not Found
           schema:
@@ -1153,46 +728,6 @@ paths:
       summary: Create tunnel
       tags:
       - tunnels
-  /api/v1/sessions/{id}/upgrade:
-    post:
-      consumes:
-      - application/json
-      description: Compiles a Termite agent for the session's architecture and pushes
-        it over the existing plain reverse shell, where it reconnects to the target
-        encrypted listener. Progress is broadcast on /notify; this endpoint returns
-        202 as soon as the upgrade is scheduled. Replaces the legacy GET /api/client/{hash}/upgrade/{target}.
-      parameters:
-      - description: Source session hash (plain TCP client)
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Target encrypted listener hash
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_api.upgradeRequest'
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            $ref: '#/definitions/internal_api.ackResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/internal_api.errorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/internal_api.errorResponse'
-      security:
-      - BearerAuth: []
-      summary: Upgrade session to Termite
-      tags:
-      - sessions
   /api/v1/sessions/dispatch:
     post:
       consumes:
