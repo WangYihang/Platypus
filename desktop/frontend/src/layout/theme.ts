@@ -1,4 +1,4 @@
-// Single source of truth for the new Slack-inspired visual system.
+// Single source of truth for the Vercel-inspired visual system.
 // Every component reads colours from here rather than from inline
 // style={{}} sprinkled across files; the Ant Design ConfigProvider
 // applied at the app root picks these up too so Ant components match.
@@ -6,20 +6,44 @@
 import type { ThemeConfig } from "antd";
 
 // --- Palette ---------------------------------------------------------
-// Region backgrounds go from darkest (profile rail) to slightly lighter
-// (main panel) so the eye has a natural focus gradient.
+// Pure neutral grays. Two surface tiers only: main (#000) and surface
+// (#0a0a0a). Borders carry the structure; no shadows.
 export const palette = {
-    rail: "#19171d",       // profile rail (leftmost narrow strip)
-    sidebar: "#1a1d29",    // project/host/listener list
-    main: "#1e2130",       // main content panel
-    detailRail: "#1a1d29", // right-side metadata rail
-    border: "#2a2e3d",     // 1px dividers between regions
-    textPrimary: "#e8e8e8",
-    textSecondary: "#8a8f9c",
-    accent: "#4a9eff",     // selection, primary buttons, links
-    success: "#2bac76",    // online presence dot, success tags
-    danger: "#e5484d",     // destructive actions, root user tag
+    // Region backgrounds (kept as fields so AppShell / legacy callers stay valid).
+    rail: "#000000",
+    sidebar: "#0a0a0a",
+    main: "#000000",
+    detailRail: "#0a0a0a",
+
+    // Surfaces & borders.
+    surface: "#0a0a0a",
+    surfaceHover: "#171717",
+    border: "#262626",
+    borderStrong: "#404040",
+
+    // Text.
+    textPrimary: "#fafafa",
+    textSecondary: "#a1a1a1",
+    textMuted: "#737373",
+
+    // Accent (Vercel uses near-white for primary fills).
+    accent: "#fafafa",
+    accentFg: "#0a0a0a",
+
+    // Status.
+    success: "#0070f3",
+    successDot: "#3ECF8E",
+    danger: "#ee0000",
     warning: "#f5a623",
+} as const;
+
+// Spacing / radius / font tokens. Components consume these instead of
+// magic numbers so density tweaks land in one place.
+export const radius = { sm: 4, md: 6, lg: 8, pill: 9999 } as const;
+export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
+export const font = {
+    sans: "var(--font-geist-sans)",
+    mono: "var(--font-geist-mono)",
 } as const;
 
 // Region widths. Kept here so CSS transitions can read them and the
@@ -28,27 +52,28 @@ export const layout = {
     profileRailWidth: 56,
     sidebarWidth: 280,
     detailRailWidth: 280,
-    mainHeaderHeight: 48,
+    mainHeaderHeight: 56,
 } as const;
 
 // Ant ConfigProvider token overrides. Scope is deliberately narrow —
-// colour + border radius + density. Anything more opinionated (menus,
-// modals) should be composed in the components, not globally themed.
+// colour + border radius + density + per-component tweaks for the
+// surfaces we touch (Tabs, Tables, Buttons, Inputs).
 export const antTheme: ThemeConfig = {
     token: {
         colorPrimary: palette.accent,
-        colorInfo: palette.accent,
-        colorSuccess: palette.success,
+        colorInfo: palette.success,
+        colorSuccess: palette.successDot,
         colorError: palette.danger,
         colorWarning: palette.warning,
         colorBgBase: palette.main,
+        colorBgContainer: palette.main,
+        colorBgElevated: palette.surface,
         colorTextBase: palette.textPrimary,
         colorBorder: palette.border,
-        borderRadius: 6,
-        fontFamily:
-            '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",\n' +
-            '"Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",\n' +
-            '"Helvetica Neue", sans-serif',
+        colorBorderSecondary: palette.border,
+        borderRadius: radius.md,
+        controlHeight: 32,
+        fontFamily: font.sans,
     },
     components: {
         Layout: {
@@ -58,10 +83,40 @@ export const antTheme: ThemeConfig = {
         },
         Menu: {
             darkItemBg: palette.sidebar,
-            darkItemSelectedBg: palette.accent,
+            darkItemSelectedBg: palette.surfaceHover,
         },
         Table: {
-            headerBg: palette.sidebar,
+            headerBg: palette.surface,
+            headerColor: palette.textSecondary,
+            rowHoverBg: palette.surfaceHover,
+            borderColor: palette.border,
+        },
+        Button: {
+            defaultBg: "transparent",
+            defaultBorderColor: palette.border,
+            defaultColor: palette.textPrimary,
+            primaryColor: palette.accentFg,
+        },
+        Input: {
+            activeBorderColor: palette.borderStrong,
+            hoverBorderColor: palette.borderStrong,
+            colorBgContainer: palette.main,
+        },
+        Tabs: {
+            itemColor: palette.textSecondary,
+            itemSelectedColor: palette.textPrimary,
+            itemHoverColor: palette.textPrimary,
+            inkBarColor: palette.textPrimary,
+        },
+        Modal: {
+            contentBg: palette.surface,
+            headerBg: palette.surface,
+        },
+        Card: {
+            colorBgContainer: palette.surface,
+        },
+        Select: {
+            optionSelectedBg: palette.surfaceHover,
         },
     },
 };
