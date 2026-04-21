@@ -13,9 +13,15 @@ import (
 // Auth manages Bearer Token authentication for the API.
 type Auth struct {
 	mu        sync.RWMutex
-	tokens    map[string]bool // valid tokens
+	tokens    map[string]bool // valid tokens (legacy single-secret path)
 	secret    string          // server secret for obtaining tokens
 	wsTickets *wsTicketStore  // short-lived one-shot tickets for WS auth
+	// jwtFallback, if set, lets Middleware also accept JWT access tokens
+	// alongside legacy single-secret tokens. Wired by main.go after the
+	// JWT issuer is constructed so that browser clients (which use JWTs)
+	// can hit endpoints still mounted under the legacy middleware —
+	// notably /api/v1/ws/ticket.
+	jwtFallback *TokenIssuer
 }
 
 // NewAuth creates an Auth instance with a random server secret.
@@ -44,6 +50,13 @@ func (a *Auth) ConsumeWSTicket(t string) bool {
 // GetSecret returns the server secret (printed at startup for operator).
 func (a *Auth) GetSecret() string {
 	return a.secret
+}
+
+// SetJWTFallback enables JWT access-token acceptance in Middleware().
+// Pass the same TokenIssuer used by RegisterV1AuthRoutes. Optional —
+// without it Middleware() only accepts legacy single-secret tokens.
+func (a *Auth) SetJWTFallback(t *TokenIssuer) {
+	a.jwtFallback = t
 }
 
 // CreateToken generates a new bearer token and registers it.
@@ -124,12 +137,17 @@ func (a *Auth) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		if !a.ValidateToken(parts[1]) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		if a.ValidateToken(parts[1]) {
+			c.Next()
 			return
 		}
-
-		c.Next()
+		if a.jwtFallback != nil {
+			if _, err := a.jwtFallback.ParseAccess(parts[1]); err == nil {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 	}
 }
 

@@ -22,7 +22,6 @@ import {
     createListener,
     createProject,
     listProjects,
-    loginAPI,
     waitForBackend,
     waitForSessions,
 } from "./fixtures/api";
@@ -251,18 +250,14 @@ export default async function globalSetup() {
         agent.stderr?.on("data", (c: Buffer) => process.stderr.write(`[agent!] ${c}`));
     }
 
-    // Re-login to capture a fresh JWT for spec-side API calls. Refresh
-    // tokens go stale fast — the access token from bootstrap is fine
-    // for setup but every spec gets its own anyway via the UI flow.
-    const adminAuth = await loginAPI(backendURL, {
-        username: ADMIN_USERNAME,
-        password: ADMIN_PASSWORD,
-    });
-    process.env.PLATYPUS_E2E_ADMIN_TOKEN = adminAuth.access_token;
+    // Reuse the bootstrap's access_token for spec-side API calls.
+    // Calling /auth/login back-to-back can race the refresh-token
+    // persist (500 "persist refresh") under the same DB.
+    process.env.PLATYPUS_E2E_ADMIN_TOKEN = auth.access_token;
 
     const live = await waitForSessions(
         backendURL,
-        adminAuth.access_token,
+        auth.access_token,
         defaultProject.id,
         1,
         15_000,

@@ -193,6 +193,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		// gate the new /auth/* + /users/* + /projects/* routes
 		// introduced by the redesign.
 		auth := api.NewAuth()
+		auth.SetJWTFallback(tokens) // browsers use JWTs; legacy middleware needs to accept them on /ws/ticket
 		authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
 		usersH := api.NewUsersHandler(db)
 		projectsH := api.NewProjectsHandler(db)
