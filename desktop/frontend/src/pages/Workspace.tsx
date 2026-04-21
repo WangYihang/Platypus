@@ -11,6 +11,7 @@ import AdminUsers from "./admin/AdminUsers";
 import DispatchPanel from "./DispatchPanel";
 import HostView from "./HostView";
 import ListenerView from "./ListenerView";
+import ProjectMembers from "./ProjectMembers";
 import ProjectOverview from "./ProjectOverview";
 
 interface Props {
@@ -94,7 +95,14 @@ function MainPanel({
 
     switch (selection.kind) {
         case "overview":
-            return <ProjectOverview project={project} />;
+            return (
+                <ProjectOverview
+                    project={project}
+                    onOpenMembers={() =>
+                        onSelect({ kind: "project-members", projectId: project.id })
+                    }
+                />
+            );
         case "host":
             return <HostView projectID={project.id} hostID={selection.hostId} />;
         case "listener":
@@ -113,6 +121,8 @@ function MainPanel({
             );
         case "dispatch":
             return <DispatchPanel projectID={project.id} projectName={project.name} />;
+        case "project-members":
+            return <ProjectMembers project={project} />;
     }
 }
 

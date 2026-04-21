@@ -1,0 +1,270 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+    Alert,
+    Button,
+    Form,
+    Modal,
+    Select,
+    Space,
+    Table,
+    Tag,
+    message,
+} from "antd";
+import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
+
+import MainHeader from "../layout/MainHeader";
+import { palette } from "../layout/theme";
+import {
+    Project,
+    ProjectMember,
+    UserRow,
+    addProjectMember,
+    listProjectMembers,
+    listUsers,
+    removeProjectMember,
+} from "../lib/api";
+import { getSessionUser } from "../lib/auth";
+
+interface Props {
+    project: Project;
+}
+
+// ProjectMembers is the per-project ACL editor. Global admins can add
+// anyone; project-admins can change roles and remove members but not
+// add new ones — the backend's /users list is admin-only, so the
+// "pick a user" modal needs that permission. When a project-admin
+// without global admin opens this page they see the list and the
+// role/remove controls only.
+export default function ProjectMembers({ project }: Props) {
+    const [members, setMembers] = useState<ProjectMember[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [candidates, setCandidates] = useState<UserRow[] | null>(null);
+    const [addForm] = Form.useForm<{ user_id: string; role: ProjectMember["role"] }>();
+    const [messageApi, contextHolder] = message.useMessage();
+
+    const me = getSessionUser();
+    const canAdd = me?.role === "admin"; // global admin can list users
+
+    const refresh = useCallback(async () => {
+        setLoading(true);
+        try {
+            setMembers(await listProjectMembers(project.id));
+            setError(null);
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setLoading(false);
+        }
+    }, [project.id]);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    async function openAddModal() {
+        setAddOpen(true);
+        if (!candidates) {
+            try {
+                setCandidates(await listUsers());
+            } catch (e) {
+                messageApi.error(`load users: ${String(e)}`);
+            }
+        }
+    }
+
+    async function handleAdd() {
+        const v = await addForm.validateFields();
+        try {
+            await addProjectMember(project.id, v.user_id, v.role);
+            messageApi.success("Member added");
+            setAddOpen(false);
+            addForm.resetFields();
+            refresh();
+        } catch (e) {
+            messageApi.error(`add: ${String(e)}`);
+        }
+    }
+
+    async function handleRoleChange(m: ProjectMember, role: ProjectMember["role"]) {
+        try {
+            // AddMember is UPSERT on the server, so a role change is just
+            // another POST; no dedicated endpoint needed.
+            await addProjectMember(project.id, m.user_id, role);
+            messageApi.success(`${m.username} → ${role}`);
+            refresh();
+        } catch (e) {
+            messageApi.error(`role: ${String(e)}`);
+        }
+    }
+
+    function handleRemove(m: ProjectMember) {
+        Modal.confirm({
+            title: `Remove ${m.username} from ${project.slug}?`,
+            content:
+                "They lose access to this project. Other projects and their global account are untouched.",
+            okText: "Remove",
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await removeProjectMember(project.id, m.user_id);
+                    messageApi.success(`${m.username} removed`);
+                    refresh();
+                } catch (e) {
+                    messageApi.error(`remove: ${String(e)}`);
+                }
+            },
+        });
+    }
+
+    // Candidate list filters out anyone already in this project so the
+    // "add" modal doesn't surface noop choices.
+    const existingIds = new Set(members?.map((m) => m.user_id));
+    const availableCandidates = (candidates ?? []).filter((u) => !existingIds.has(u.id));
+
+    const columns: ColumnsType<ProjectMember> = [
+        { title: "User", dataIndex: "username" },
+        {
+            title: "Role",
+            dataIndex: "role",
+            render: (role: ProjectMember["role"], m) => (
+                <Select
+                    size="small"
+                    value={role}
+                    style={{ minWidth: 120 }}
+                    onChange={(v) => handleRoleChange(m, v)}
+                    options={[
+                        { label: <Tag color="red">admin</Tag>, value: "admin" },
+                        { label: <Tag color="blue">operator</Tag>, value: "operator" },
+                        { label: <Tag>viewer</Tag>, value: "viewer" },
+                    ]}
+                />
+            ),
+            width: 180,
+        },
+        {
+            title: "",
+            render: (_, m) => (
+                <Button
+                    size="small"
+                    type="link"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleRemove(m)}
+                >
+                    Remove
+                </Button>
+            ),
+            width: 140,
+        },
+    ];
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            {contextHolder}
+            <MainHeader
+                title={`${project.name} · members`}
+                subtitle={`${members?.length ?? 0} member(s)`}
+                actions={
+                    <Space>
+                        <Button
+                            size="small"
+                            icon={<ReloadOutlined />}
+                            loading={loading}
+                            onClick={refresh}
+                        >
+                            Refresh
+                        </Button>
+                        {canAdd && (
+                            <Button
+                                size="small"
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                onClick={openAddModal}
+                            >
+                                Add member
+                            </Button>
+                        )}
+                    </Space>
+                }
+            />
+            <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+                {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
+                {!canAdd && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                        message="Adding new members requires global admin."
+                        description="Ask a global admin to add the user, then you can adjust their project role from here."
+                    />
+                )}
+                <Table
+                    rowKey="user_id"
+                    columns={columns}
+                    dataSource={members ?? []}
+                    loading={!members}
+                    pagination={false}
+                    size="small"
+                />
+            </div>
+
+            <Modal
+                title="Add project member"
+                open={addOpen}
+                onOk={handleAdd}
+                onCancel={() => {
+                    setAddOpen(false);
+                    addForm.resetFields();
+                }}
+                okText="Add"
+                destroyOnHidden
+            >
+                <Form
+                    form={addForm}
+                    layout="vertical"
+                    initialValues={{ role: "operator" }}
+                >
+                    <Form.Item
+                        name="user_id"
+                        label="User"
+                        rules={[{ required: true, message: "pick a user" }]}
+                    >
+                        <Select
+                            showSearch
+                            placeholder="Select a user"
+                            options={availableCandidates.map((u) => ({
+                                label: (
+                                    <span style={{ color: palette.textPrimary }}>
+                                        {u.username}{" "}
+                                        <span style={{ color: palette.textSecondary, fontSize: 11 }}>
+                                            ({u.role})
+                                        </span>
+                                    </span>
+                                ),
+                                value: u.id,
+                                label_text: u.username, // plain text for showSearch filter
+                            }))}
+                            filterOption={(input, opt) => {
+                                const lt = (opt as unknown as { label_text?: string })
+                                    .label_text;
+                                return (lt ?? "").toLowerCase().includes(input.toLowerCase());
+                            }}
+                        />
+                    </Form.Item>
+                    <Form.Item name="role" label="Project role" rules={[{ required: true }]}>
+                        <Select
+                            options={[
+                                { label: "admin", value: "admin" },
+                                { label: "operator", value: "operator" },
+                                { label: "viewer", value: "viewer" },
+                            ]}
+                        />
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
+}

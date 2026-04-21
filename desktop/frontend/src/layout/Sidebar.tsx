@@ -24,6 +24,7 @@ export type Selection =
     | { kind: "listener"; projectId: string; listenerId: string }
     | { kind: "host"; projectId: string; hostId: string }
     | { kind: "dispatch"; projectId: string }
+    | { kind: "project-members"; projectId: string }
     | { kind: "admin-users" };
 
 interface Props {

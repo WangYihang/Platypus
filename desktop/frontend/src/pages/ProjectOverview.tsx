@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Card, Col, Row, Statistic, Typography } from "antd";
+import { Button, Card, Col, Row, Statistic, Typography } from "antd";
+import { TeamOutlined } from "@ant-design/icons";
 
 import MainHeader from "../layout/MainHeader";
 import { palette } from "../layout/theme";
@@ -8,13 +9,14 @@ import { isOnline } from "../lib/time";
 
 interface Props {
     project: Project;
+    onOpenMembers?: () => void;
 }
 
 // ProjectOverview is the zero-selection dashboard for a project: three
 // big numbers (listeners, hosts, online hosts) plus "what's fresh"
 // callouts. Deliberately sparse — it's the empty-state you see before
 // you've picked a host; the real work happens in HostView.
-export default function ProjectOverview({ project }: Props) {
+export default function ProjectOverview({ project, onOpenMembers }: Props) {
     const [listeners, setListeners] = useState<Listener[] | null>(null);
     const [hosts, setHosts] = useState<Host[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,17 @@ export default function ProjectOverview({ project }: Props) {
             <MainHeader
                 title={project.name}
                 subtitle={`${project.slug} · overview`}
+                actions={
+                    onOpenMembers && (
+                        <Button
+                            size="small"
+                            icon={<TeamOutlined />}
+                            onClick={onOpenMembers}
+                        >
+                            Members
+                        </Button>
+                    )
+                }
             />
             <div style={{ padding: 20, overflow: "auto" }}>
                 {error && (
