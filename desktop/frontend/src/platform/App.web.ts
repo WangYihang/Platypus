@@ -158,19 +158,6 @@ export async function DeleteListener(hash: string): Promise<void> {
     await apiFetch("/api/v1/listeners/" + encodeURIComponent(hash), { method: "DELETE" });
 }
 
-// ---------- Upgrade -----------------------------------------------------
-
-export async function UpgradeToTermite(plainHash: string, targetListenerHash: string): Promise<void> {
-    await apiFetch(
-        "/api/v1/sessions/" + encodeURIComponent(plainHash) + "/upgrade",
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ listener_id: targetListenerHash }),
-        },
-    );
-}
-
 // ---------- Files -------------------------------------------------------
 // Pages still call PickFileToUpload → upload path → UploadFile(path). In a
 // browser there are no real paths, so we stash the user-picked File in a

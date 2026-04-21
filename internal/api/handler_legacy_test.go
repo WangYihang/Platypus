@@ -118,14 +118,6 @@ func TestLegacyExecClientNotFound(t *testing.T) {
 	}
 }
 
-func TestLegacyUpgradeClientNotFound(t *testing.T) {
-	r, tok := setupLegacyRouter(t)
-	w := doRequest(t, r, "GET", "/api/client/bogushash/upgrade/targethash", tok, "", "")
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("GET /api/client/:hash/upgrade/:target unknown → expected 404, got %d", w.Code)
-	}
-}
-
 // TestLegacyAuthRequired ensures the bearer middleware still guards every legacy route.
 func TestLegacyAuthRequired(t *testing.T) {
 	r, _ := setupLegacyRouter(t)
@@ -142,7 +134,6 @@ func TestLegacyAuthRequired(t *testing.T) {
 		{"GET", "/api/client/x"},
 		{"POST", "/api/client/x"},
 		{"DELETE", "/api/client/x"},
-		{"GET", "/api/client/x/upgrade/y"},
 	}
 	for _, tc := range cases {
 		w := doRequest(t, r, tc.method, tc.path, "", "", "")

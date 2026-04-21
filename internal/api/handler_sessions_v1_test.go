@@ -86,22 +86,6 @@ func TestSessionsV1_ExecNotFound(t *testing.T) {
 	}
 }
 
-func TestSessionsV1_UpgradeBadBody(t *testing.T) {
-	r, tok := setupSessionsV1Router(t)
-	w := smokeReq(t, r, "POST", "/api/v1/sessions/x/upgrade", tok, "{}")
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing listener_id, got %d", w.Code)
-	}
-}
-
-func TestSessionsV1_UpgradeNotFound(t *testing.T) {
-	r, tok := setupSessionsV1Router(t)
-	w := smokeReq(t, r, "POST", "/api/v1/sessions/bogus/upgrade", tok, `{"listener_id":"target"}`)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", w.Code)
-	}
-}
-
 // TestSessionsV1_AuthRequired asserts all new endpoints still need Bearer.
 func TestSessionsV1_AuthRequired(t *testing.T) {
 	r, _ := setupSessionsV1Router(t)
@@ -110,7 +94,6 @@ func TestSessionsV1_AuthRequired(t *testing.T) {
 		{"GET", "/api/v1/sessions/x", ""},
 		{"DELETE", "/api/v1/sessions/x", ""},
 		{"POST", "/api/v1/sessions/x/exec", `{"command":"id"}`},
-		{"POST", "/api/v1/sessions/x/upgrade", `{"listener_id":"t"}`},
 	}
 	for _, tc := range cases {
 		w := smokeReq(t, r, tc.method, tc.path, "", tc.body)

@@ -326,9 +326,6 @@ const (
 	CLIENT_CONNECTED WebSocketMessageType = iota
 	CLIENT_DUPLICATED
 	SERVER_DUPLICATED
-	COMPILING_TERMITE
-	COMPRESSING_TERMITE
-	UPLOADING_TERMITE
 )
 
 func (s *TCPServer) NotifyWebSocketDuplicateTCPClient(client *TCPClient) {

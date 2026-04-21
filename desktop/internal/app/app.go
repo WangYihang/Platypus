@@ -191,12 +191,6 @@ func notifyEventName(t api.EventType) string {
 		return "notify:client_duplicated"
 	case api.EventServerDuplicated:
 		return "notify:server_duplicated"
-	case api.EventCompiling:
-		return "notify:upgrade:compile"
-	case api.EventCompressing:
-		return "notify:upgrade:compress"
-	case api.EventUploading:
-		return "notify:upgrade:upload"
 	default:
 		return ""
 	}

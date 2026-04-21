@@ -31,7 +31,6 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 		v1.DELETE("/sessions/:id", DeleteSessionV1)
 		v1.PATCH("/sessions/:id", PatchSession)
 		v1.POST("/sessions/:id/exec", ExecSessionV1)
-		v1.POST("/sessions/:id/upgrade", UpgradeSessionV1)
 		v1.POST("/sessions/:id/gather", GatherSession)
 		v1.POST("/sessions/dispatch", DispatchCommand)
 

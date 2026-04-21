@@ -29,11 +29,6 @@ type execResponse struct {
 	Output string `json:"output"`
 }
 
-// upgradeRequest is the JSON body of POST /api/v1/sessions/:id/upgrade.
-type upgradeRequest struct {
-	ListenerID string `json:"listener_id" binding:"required"`
-}
-
 // collectAllSessions returns every TCP and Termite client across every
 // listener. Mirrors the legacy ListClients loop but returns a slice.
 func collectAllSessions() []interface{} {
@@ -153,32 +148,3 @@ func ExecSessionV1(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
-// UpgradeSessionV1 kicks off a plain→termite upgrade.
-//
-// @Summary     Upgrade session to Termite
-// @Description Compiles a Termite agent for the session's architecture and pushes it over the existing plain reverse shell, where it reconnects to the target encrypted listener. Progress is broadcast on /notify; this endpoint returns 202 as soon as the upgrade is scheduled. Replaces the legacy GET /api/client/{hash}/upgrade/{target}.
-// @Tags        sessions
-// @Accept      json
-// @Produce     json
-// @Security    BearerAuth
-// @Param       id   path      string         true "Source session hash (plain TCP client)"
-// @Param       body body      upgradeRequest true "Target encrypted listener hash"
-// @Success     202  {object}  ackResponse
-// @Failure     400  {object}  errorResponse
-// @Failure     404  {object}  errorResponse
-// @Router      /api/v1/sessions/{id}/upgrade [post]
-func UpgradeSessionV1(c *gin.Context) {
-	hash := c.Param("id")
-	var req upgradeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "listener_id is required"})
-		return
-	}
-	client := core.FindTCPClientByHash(hash)
-	if client == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found (upgrade applies to plain TCP sessions)"})
-		return
-	}
-	go client.UpgradeToTermite(req.ListenerID)
-	c.JSON(http.StatusAccepted, ackResponse{Status: true, Msg: "upgrade scheduled; watch /notify for progress"})
-}

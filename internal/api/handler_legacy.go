@@ -28,7 +28,6 @@ func RegisterLegacyRoutes(engine *gin.Engine, auth *Auth) {
 	clients := g.Group("/client")
 	clients.GET("", deprecate("/api/v1/sessions"), ListClients)
 	clients.GET("/:hash", deprecate("/api/v1/sessions/{id}"), GetClient)
-	clients.GET("/:hash/upgrade/:target", deprecate("/api/v1/sessions/{id}/upgrade"), UpgradeClient)
 	clients.DELETE("/:hash", deprecate("/api/v1/sessions/{id}"), DeleteClient)
 	clients.POST("/:hash", deprecate("/api/v1/sessions/{id}/exec"), ExecClient)
 }
@@ -233,43 +232,6 @@ func GetClient(c *gin.Context) {
 		}
 	}
 	abortWithLegacyError(c, 404, "No such client")
-}
-
-// UpgradeClient asks the server to compile + push a Termite agent to the
-// target listener, replacing a plain reverse shell with an encrypted one.
-//
-// @Summary     Upgrade to Termite
-// @Description Compile a Termite agent matching the client's architecture, push it over the existing plain shell, and let it reconnect to the target encrypted listener. Progress is broadcast on /notify; this endpoint only acknowledges the request.
-// @Tags        sessions
-// @Produce     json
-// @Security    BearerAuth
-// @Param       hash   path     string true "Source session hash (plain TCP client)"
-// @Param       target path     string true "Destination listener hash (must be encrypted)"
-// @Success     200    {object} legacyAck
-// @Failure     400    {object} legacyError
-// @Failure     404    {object} legacyError
-// @Router      /api/client/{hash}/upgrade/{target} [get]
-func UpgradeClient(c *gin.Context) {
-	if !paramsExistOrAbort(c, []string{"hash", "target"}) {
-		return
-	}
-	hash := c.Param("hash")
-	target := c.Param("target")
-	if target == "" {
-		abortWithLegacyError(c, 400, "Invalid server hash")
-		return
-	}
-	client := core.FindTCPClientByHash(hash)
-	if client == nil {
-		abortWithLegacyError(c, 404, "No such client")
-		return
-	}
-	go client.UpgradeToTermite(target)
-	c.JSON(200, gin.H{
-		"status": true,
-		"msg":    fmt.Sprintf("Upgrading client %s to termite", client.OnelineDesc()),
-	})
-	c.Abort()
 }
 
 // DeleteClient disconnects a TCP client by hash.

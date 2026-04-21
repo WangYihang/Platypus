@@ -107,9 +107,6 @@ func TestNotifier_ParsesAllKnownEventTypes(t *testing.T) {
 		{`{"Type":0,"Data":{}}`, EventClientConnected},
 		{`{"Type":1,"Data":{}}`, EventClientDuplicated},
 		{`{"Type":2,"Data":{}}`, EventServerDuplicated},
-		{`{"Type":3,"Data":{}}`, EventCompiling},
-		{`{"Type":4,"Data":{}}`, EventCompressing},
-		{`{"Type":5,"Data":{}}`, EventUploading},
 	}
 	frames := make([]string, len(cases))
 	for i, c := range cases {

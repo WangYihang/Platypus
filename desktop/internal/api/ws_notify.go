@@ -22,9 +22,6 @@ const (
 	EventClientConnected  EventType = 0
 	EventClientDuplicated EventType = 1
 	EventServerDuplicated EventType = 2
-	EventCompiling        EventType = 3
-	EventCompressing      EventType = 4
-	EventUploading        EventType = 5
 )
 
 // Event is one notification frame. Data preserves the raw JSON so callers

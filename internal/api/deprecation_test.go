@@ -36,7 +36,6 @@ func TestLegacyDeprecationHeaders(t *testing.T) {
 		{"GET", "/api/client", "/api/v1/sessions"},
 		{"GET", "/api/client/x", "/api/v1/sessions/{id}"},
 		{"DELETE", "/api/client/x", "/api/v1/sessions/{id}"},
-		{"GET", "/api/client/x/upgrade/y", "/api/v1/sessions/{id}/upgrade"},
 		{"POST", "/api/server", "/api/v1/listeners"},
 		{"GET", "/api/server/x", "/api/v1/listeners/{id}"},
 		{"DELETE", "/api/server/x", "/api/v1/listeners/{id}"},

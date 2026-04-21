@@ -8,7 +8,6 @@ import { ListSessions, SetGroupDispatch } from "../../wailsjs/go/app/App";
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import type { api } from "../../wailsjs/go/models";
 import DispatchModal from "./DispatchModal";
-import UpgradeModal from "./UpgradeModal";
 
 dayjs.extend(relativeTime);
 
@@ -21,7 +20,6 @@ interface Props {
 export default function Sessions({ onOpenTerminal }: Props) {
     const [sessions, setSessions] = useState<api.Session[]>([]);
     const [loading, setLoading] = useState(false);
-    const [upgradeFor, setUpgradeFor] = useState<string>("");
     const [dispatchOpen, setDispatchOpen] = useState(false);
     // Optimistic local override so the Switch toggle feels instant — we
     // overlay this on whatever ListSessions returned.
@@ -142,11 +140,6 @@ export default function Sessions({ onOpenTerminal }: Props) {
                     <Button type="link" onClick={() => onOpenTerminal(s)}>
                         Open Terminal
                     </Button>
-                    {s.tag === "shell" && (
-                        <Button type="link" onClick={() => setUpgradeFor(s.hash)}>
-                            Upgrade
-                        </Button>
-                    )}
                 </Space>
             ),
         },
@@ -188,12 +181,6 @@ export default function Sessions({ onOpenTerminal }: Props) {
                     size="middle"
                 />
             )}
-
-            <UpgradeModal
-                open={!!upgradeFor}
-                sessionHash={upgradeFor}
-                onClose={() => setUpgradeFor("")}
-            />
 
             <DispatchModal
                 open={dispatchOpen}
