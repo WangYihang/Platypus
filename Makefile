@@ -33,7 +33,7 @@ help:
 	@echo ""
 	@echo "Standalone web UI (no server embed):"
 	@echo "  web-ui           Build browser bundle to desktop/frontend/dist-web/"
-	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:8080"
+	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:7777"
 
 $(PROTO_OUT): $(PROTO_SRC)
 	protoc \
@@ -123,12 +123,12 @@ web-ui:
 	cd desktop/frontend && npm install && npm run build:web
 
 # Tiny preview so you can `make web-ui-serve` and browse
-# http://localhost:8080 without needing nginx/caddy. Picks python3 → python → busybox.
+# http://localhost:7777 without needing nginx/caddy. Picks python3 → python → busybox.
 web-ui-serve:
-	@echo "Serving desktop/frontend/dist-web/ at http://localhost:8080 (Ctrl-C to stop)"
+	@echo "Serving desktop/frontend/dist-web/ at http://localhost:7777 (Ctrl-C to stop)"
 	@cd desktop/frontend/dist-web && ( \
-		command -v python3 >/dev/null && python3 -m http.server 8080 || \
-		command -v python  >/dev/null && python  -m http.server 8080 || \
-		command -v busybox >/dev/null && busybox httpd -f -p 8080 || \
+		command -v python3 >/dev/null && python3 -m http.server 7777 || \
+		command -v python  >/dev/null && python  -m http.server 7777 || \
+		command -v busybox >/dev/null && busybox httpd -f -p 7777 || \
 		(echo "No python / busybox available — install one, or use any static host." && exit 1) \
 	)

@@ -50,3 +50,7 @@ tmp/
 # SQLite
 *.sqlite3
 *.db
+
+# Playwright
+.playwright-mcp/
+/*.png
