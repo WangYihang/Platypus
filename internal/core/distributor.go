@@ -73,7 +73,7 @@ func CreateDistributorServer(host string, port uint16, url string) *gin.Engine {
 		}
 		defer os.RemoveAll(dir)
 
-		err = compiler.BuildTermiteFromPrebuildAssets(filename, target)
+		err = compiler.BuildAgentFromPrebuildAssets(filename, target)
 		if err != nil {
 			log.Error("%s", err)
 			distributorPanic(c, err.Error())

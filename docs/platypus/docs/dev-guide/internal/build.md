@@ -41,29 +41,29 @@ make install_dependency
 make build_frontend
 ```
 
-### 编译 Termite
+### 编译 Agent
 
 ```bash
-make build_termite
+make build_agent
 ```
 
-为了保证 Platypus 只有单个文件，因此在编译 Platypus 时，会将所有 Termite 的二进制文件直接打包到 Platypus 的可执行文件中。
+为了保证 Platypus 只有单个文件，因此在编译 Platypus 时，会将所有 Agent 的二进制文件直接打包到 Platypus 的可执行文件中。
 
-但为了避免打包后的 Platypus 过大，目前暂时只配置了编译 `linux_amd64` 平台的 Termite，如需其他平台，可以修改 Makefile 
-中 `build_termite` 的部分，如下：
+但为了避免打包后的 Platypus 过大，目前暂时只配置了编译 `linux_amd64` 平台的 Agent，如需其他平台，可以修改 Makefile 
+中 `build_agent` 的部分，如下：
 
 ```
-env GOOS=linux GOARCH=amd64 go build -o termites/termite_linux_amd64 termite.go
+env GOOS=linux GOARCH=amd64 go build -o agents/agent_linux_amd64 agent.go
 ```
 
 可以通过 `go tool dist list` 列出所有 Golang 支持的操作系统与平台组合。
 
 !!! Warning
-    由于 Termite 依赖于 Linux 的伪终端特性，因此暂时不支持编译能在 Windows 上运行的 Termite 客户端。
+    由于 Agent 依赖于 Linux 的伪终端特性，因此暂时不支持编译能在 Windows 上运行的 Agent 客户端。
 
 ### 整合资源文件
 
-本步骤会将之前编译好的 Web 前端文件、Termite 可执行文件等统一打包用以编译 Platypus。 
+本步骤会将之前编译好的 Web 前端文件、Agent 可执行文件等统一打包用以编译 Platypus。 
 
 ```bash
 make collect_assets

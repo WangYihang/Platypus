@@ -2,7 +2,7 @@
 //
 // @title           Platypus API
 // @version         1.0
-// @description     REST API for managing listeners, reverse-shell sessions, file transfer, and tunnels.
+// @description     REST API for managing agent listeners, sessions, file transfer, and tunnels.
 // @description     Every endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.
 // @BasePath        /
 // @securityDefinitions.apikey BearerAuth
@@ -61,7 +61,7 @@ func main() {
 
 	servers := startHTTPServers(cfg)
 
-	for _, s := range cfg.Servers {
+	for _, s := range cfg.Listeners {
 		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.DisableHistory, s.PublicIP, s.ShellPath)
 		if listener != nil {
 			time.Sleep(0x100 * time.Millisecond)

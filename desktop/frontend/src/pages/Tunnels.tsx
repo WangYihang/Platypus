@@ -34,7 +34,7 @@ interface CreateForm {
 
 const MODE_DESC: Record<Mode, string> = {
     pull: "Inbound: agent listens on dst, forwards to src on operator side",
-    push: "Outbound: operator listens on src, agent dials dst on victim network",
+    push: "Outbound: operator listens on src, agent dials dst on its own network",
     dynamic: "Agent runs a SOCKS5 server on a free port (request from agent)",
     internet: "Server runs SOCKS5 at src and proxies via the agent to dst",
 };
@@ -110,7 +110,7 @@ export default function Tunnels() {
                     <Select
                         value={activeSession}
                         onChange={setActiveSession}
-                        placeholder="Pick a termite session"
+                        placeholder="Pick an agent session"
                         style={{ minWidth: 240 }}
                         options={sessions.map((s) => ({
                             label: `${s.alias || s.hash.slice(0, 12)} (${s.host}:${s.port})`,
@@ -132,7 +132,7 @@ export default function Tunnels() {
                 <Alert
                     type="info"
                     showIcon
-                    message="No termite sessions. Tunnels require an encrypted (termite) session — open one or upgrade a plain shell first."
+                    message="No agent sessions. Install and start platypus-agent on a managed host first."
                 />
             ) : (
                 <Table

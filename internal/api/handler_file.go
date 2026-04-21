@@ -10,7 +10,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 )
 
-// GetFileSize returns the size in bytes of a file on the victim.
+// GetFileSize returns the size in bytes of a file on the managed host.
 //
 // @Summary     File size
 // @Description Stat a remote file and return its size in bytes. Requires the session to be connected.

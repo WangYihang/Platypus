@@ -1,38 +1,40 @@
-servers: 
+# Platypus host management hub — server config.
+#
+# `listeners` is the list of TLS ingress ports where managed-host agents
+# dial back in. Each agent is identified by a hash derived from the fields
+# listed in hashFormat:
+#   `%i` IP
+#   `%u` Username
+#   `%m` MAC address
+#   `%o` Operating System
+#   `%t` Connect TimeStamp
+# Using %t makes every reconnect a fresh hash; drop it to collapse repeat
+# connections from the same host into a single session.
+listeners:
   - host: "0.0.0.0"
     port: 13337
-    # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
-    # All available properties are listed below:
-    # `%i` IP
-    # `%u` Username
-    # `%m` MAC address
-    # `%o` Operating System
-    # `%t` Income TimeStamp
-    hashFormat: "%i %u %m %o"
-    encrypted: true
-    disable_history: true
-    public_ip: ""
-    shell_path: "/bin/bash"
-  - host: "0.0.0.0"
-    port: 13338
-    # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
     hashFormat: "%i %u %m %o %t"
     disable_history: true
     public_ip: ""
     shell_path: "/bin/bash"
+
+# REST/WebSocket API the desktop + web UI + admin CLI call into.
+# Bind to 127.0.0.1 unless you've fronted it with TLS + reverse proxy.
 restful:
-  # Because RESTful DO NOT support any authentication mechanism,
-  # DO NOT expose the restful server into any external network.
   host: "0.0.0.0"
   port: 7331
-  # `enable: true` means starting RESTful Server when Platypus starts.
   enable: true
-# Termite binary distributor
+
+# HTTP endpoint that serves freshly-patched agent binaries for admins to
+# download and install on managed hosts. `url` is what agents use when
+# self-updating after the server ships a newer version.
 distributor:
   host: "0.0.0.0"
   port: 13339
   url: "http://127.0.0.1:13339"
-# Check new releases from GitHub when starting Platypus
+
+# Check for a new platypus-server release on startup.
 update: true
-# Open web browser to view the Web-UI on starting
+
+# Open the web UI in a browser on server startup.
 openBrowser: false

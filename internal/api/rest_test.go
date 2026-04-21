@@ -42,9 +42,8 @@ func TestCORSAllowsWildcardOrigin(t *testing.T) {
 	}
 }
 
-// TestRaasEndpointsRemoved locks in the removal of the reverse-shell
-// one-liner generator. RaaS was a reverse-shell-as-a-service feature that
-// doesn't belong in a host-management tool.
+// TestRaasEndpointsRemoved locks in the removal of the one-liner generator
+// that doesn't belong in a host-management tool.
 func TestRaasEndpointsRemoved(t *testing.T) {
 	engine := CreateRESTfulAPIServer()
 	auth := NewAuth()

@@ -36,11 +36,9 @@ func Compress(target string) bool {
 	return true
 }
 
-// BuildTermiteFromPrebuildAssets takes a prebuilt agent binary and patches
-// the connect-back-address placeholder in place. The name is kept for the
-// embed-time contract — the file on disk under build/termite/ is still the
-// canonical source for the asset.
-func BuildTermiteFromPrebuildAssets(targetFilename string, targetAddress string) error {
+// BuildAgentFromPrebuildAssets takes a prebuilt agent binary and patches
+// the connect-back-address placeholder in place.
+func BuildAgentFromPrebuildAssets(targetFilename string, targetAddress string) error {
 	assetFilepath := "build/termite/termite_linux_amd64"
 	content, err := os.ReadFile(assetFilepath)
 	if err != nil {

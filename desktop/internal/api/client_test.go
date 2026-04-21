@@ -124,7 +124,7 @@ func TestClient_Patch_JSONBody(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "tok")
-	_, err := c.Patch(context.Background(), "/api/v1/sessions/abc", map[string]string{"alias": "victim-1"})
+	_, err := c.Patch(context.Background(), "/api/v1/sessions/abc", map[string]string{"alias": "web-1"})
 	if err != nil {
 		t.Fatalf("Patch: %v", err)
 	}

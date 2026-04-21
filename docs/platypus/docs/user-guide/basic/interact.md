@@ -1,48 +1,20 @@
 # 交互式 Shell
 
 !!! Warning
-    由于 Windows 并未提供类似 Linux 伪终端的概念，因此 Platypus 暂不支持获取 Windows 的交互式 Shell。
+    由于 Windows 并未提供类似 Linux 伪终端的概念，因此 Platypus 暂不支持在 Windows Agent 上获取交互式 Shell。
 
-Platypus 提供 2 种方式实现交互式 Shell。
+Platypus 通过 Agent 与 Server 之间的 TLS + Protobuf 通道转发 PTY 数据，您可以对任意已上线的 Agent 打开完全交互式 Shell（体验接近 SSH）。
 
-## 方案一：Termite（推荐）
+## 通过 Admin CLI
 
-!!! Tips
-    Termite 客户端是 Platypus 特有的客户端，支持交互式 Shell、文件传输以及网络隧道等功能，您可以参考本文来了解关于如何获取 Termite Shell 以及 [Termite](./termite.md) 的更多信息。
-
-与哈希为 `134dd4cad7b110a021d46bd9dfe68d62` 的 Termite 客户端交互。
+已知目标 Agent 的哈希为 `134dd4cad7b110a021d46bd9dfe68d62`：
 
 ```
-» Jump 134dd4cad7b110a021d46bd9dfe68d62
-» Interact
+platypus-admin --server http://127.0.0.1:7331 --secret <S> exec 134dd4cad7b110a021d46bd9dfe68d62 -- /bin/bash
 ```
 
-暂时终止与当前 Shell 交互。
+## 通过 Desktop / Web UI
 
-```
-exit
-```
+打开 **Sessions** Tab，在目标行点击 **Open Terminal**。Terminal 面板是基于 xterm.js 的全功能终端，支持 `vim`、`htop`、`Ctrl+C/Z`、窗口大小自适应等。
 
-## 方案二：`PTY`（不推荐）
-
-与哈希为 `134dd4cad7b110a021d46bd9dfe68d62` 的客户端交互。
-
-```
-» Jump 134dd4cad7b110a021d46bd9dfe68d62
-» PTY
-» Interact
-```
-
-!!! Tips
-    本功能的实现逻辑参考自[本文](https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/)，本质是在目标机器上执行 `pty.spawn("/bin/bash")`，然后通过将攻击者的终端设置为 `raw` 模式来实现交互式 Shell。
-
-
-暂时终止与当前 Shell 交互。
-
-!!! Tips
-    由于 Platypus 需要提供**暂时终止与当前 Shell 进行交互**的功能，另外在裸 Shell 中我们很难去判断用户输入 `exit` 时，是否是对 `shell` 进行操作的（如：用户在 `vim` 中输入 `exit`），所以就不能通过用户是否输入 `exit` 来判断用户是否想要终止与当前 Shell 进行交互，因此 Platypus 定义了自己的退出命令 `platyquit`
-
-```
-platyquit
-```
-
+关闭 Terminal Tab 会请求 Agent 终止该进程；您可以为同一 Agent 打开任意数量的 Terminal，彼此互不影响。

@@ -1192,7 +1192,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Platypus API",
-	Description:      "REST API for managing listeners, reverse-shell sessions, file transfer, and tunnels.\nEvery endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.",
+	Description:      "REST API for managing agent listeners, sessions, file transfer, and tunnels.\nEvery endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

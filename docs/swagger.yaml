@@ -196,7 +196,7 @@ definitions:
 info:
   contact: {}
   description: |-
-    REST API for managing listeners, reverse-shell sessions, file transfer, and tunnels.
+    REST API for managing agent listeners, sessions, file transfer, and tunnels.
     Every endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.
   title: Platypus API
   version: "1.0"
