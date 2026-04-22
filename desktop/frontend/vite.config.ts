@@ -41,24 +41,23 @@ export default defineConfig(({ mode }) => {
         build: {
             outDir: isWeb ? "dist-web" : "dist",
             // Manual vendor chunking. Splits the heavy third-party libs
-            // (antd, recharts, xterm, react-router) into their own
-            // cacheable chunks so the pages that don't need them don't
-            // pay the bytes, and so a page update that leaves the
-            // vendor graph unchanged only invalidates a small app
-            // chunk. Route-level `React.lazy()` in routes.tsx handles
-            // the per-page split; this handles the shared graph.
+            // into their own cacheable chunks so the pages that don't
+            // need them don't pay the bytes, and so a page update that
+            // leaves the vendor graph unchanged only invalidates a
+            // small app chunk. Route-level `React.lazy()` in routes.tsx
+            // handles the per-page split; this handles the shared
+            // graph.
             //
-            // The antd icon set and the antd core are split apart even
-            // though both are technically shared deps: icons are huge
-            // (each `@ant-design/icons` entry is its own module) and
-            // don't change often, while antd core ships breaking
-            // changes at a normal cadence. Keeping them as separate
-            // chunks lets a bump to one invalidate only that cache.
+            // vendor-react / vendor-router are always on the hot path
+            // (every route mounts them). vendor-xterm is only fetched
+            // when the Host terminal tab opens; vendor-charts only when
+            // ProjectOverview does. Everything else (Radix primitives,
+            // react-hook-form, zod, lucide-react, date-fns, …) lands
+            // in vendor-misc.
             rolldownOptions: {
                 output: {
                     manualChunks(id: string) {
                         if (!id.includes("node_modules")) return undefined;
-                        if (id.includes("/@ant-design/icons")) return "vendor-antd-icons";
                         if (
                             id.includes("/recharts/") ||
                             id.includes("/victory-vendor/") ||
@@ -67,7 +66,6 @@ export default defineConfig(({ mode }) => {
                             return "vendor-charts";
                         }
                         if (id.includes("/@xterm/")) return "vendor-xterm";
-                        if (id.includes("/antd/") || id.includes("/rc-")) return "vendor-antd";
                         if (id.includes("/react-router")) return "vendor-router";
                         if (
                             id.includes("/react/") ||
@@ -80,13 +78,10 @@ export default defineConfig(({ mode }) => {
                     },
                 },
             },
-            // antd is the whole component library; its chunk is ~1 MB
-            // (~300 KB gzipped) by design and is shared across every
-            // route, so the default 500 KB warning threshold is noise
-            // here. Lift it just high enough that a real regression
-            // (e.g. a page accidentally bundling a huge dep) still
-            // trips the warning.
-            chunkSizeWarningLimit: 1200,
+            // Default 500 KB chunk-size warning. With antd gone the
+            // largest shared chunk is vendor-charts at ~370 KB raw; any
+            // new regression pushing a chunk past that probably deserves
+            // a second look.
         },
         // Build-time globals consumed by the status bar. Set GIT_COMMIT in
         // CI (or via the Makefile) to get a real short hash; falls back to
