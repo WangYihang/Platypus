@@ -1,31 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-    Alert,
-    Button,
-    Form,
-    Input,
-    Modal,
-    Segmented,
-    Spin,
-    Table,
-    Tabs,
-    Tag,
-    Typography,
-    message,
-} from "antd";
-import {
-    CopyOutlined,
-    DeleteOutlined,
-    PlusOutlined,
-    ReloadOutlined,
-    ThunderboltOutlined,
-} from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { useCallback, useEffect, useState } from "react";
+import { Copy, Loader2, Plus, RotateCw, Trash2, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import PageHeader from "../components/PageHeader";
+import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
@@ -43,71 +27,119 @@ import {
 } from "../lib/api";
 import { fromNow } from "../lib/time";
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+// Schema for Issue Install. All optional fields stay optional; the
+// backend fills in defaults. Numeric fields coerce empty strings to
+// undefined so RHF's optional-number round-trip works.
+const installSchema = z.object({
+    server_endpoint: z.string().min(1, "required"),
+    target_os: z.string().optional(),
+    target_arch: z.string().optional(),
+    ttl_seconds: z.number().int().positive().optional(),
+});
+type InstallFormValues = z.infer<typeof installSchema>;
+
+const patSchema = z.object({
+    description: z.string().optional(),
+    ttl_seconds: z.number().int().positive().optional(),
+    max_uses: z.number().int().positive().optional(),
+    binding_machine_id: z.string().optional(),
+});
+type PATFormValues = z.infer<typeof patSchema>;
+
 // EnrollmentPage bundles three related admin surfaces onto one page
 // because they share the same mental model — "hand an agent something
 // short-lived so it can join the mesh":
 //
 //  1. Install commands: one-shot `curl ... | sh` bootstraps that
-//     atomically mint a PAT the first time they're fetched. Easiest
-//     path for 99% of deployments.
+//     atomically mint a PAT the first time they're fetched.
 //  2. Raw PAT tokens: for scripted / CI flows that can't use the
 //     install-command shape.
-//  3. (future tab) Audit export: compliance ndjson/csv dump of every
-//     redemption and admin action. Stub in the "Export" button in the
-//     page header for now; full UI can follow.
 //
 // Every table row shows derived status, not a mutable column, so
 // refreshing the view always reflects what's true.
 export default function EnrollmentPage() {
     const project = useCurrentProject();
     const [tab, setTab] = useState<"install" | "tokens">("install");
-    const [messageApi, contextHolder] = message.useMessage();
 
     return (
         <>
-            {contextHolder}
             <PageHeader
                 title="Enrollment"
                 subtitle="Distribute agents with one-shot install commands or raw PATs"
             />
             <Tabs
-                activeKey={tab}
-                onChange={(k) => setTab(k as "install" | "tokens")}
-                items={[
-                    {
-                        key: "install",
-                        label: (
-                            <span>
-                                <ThunderboltOutlined /> Install commands
-                            </span>
-                        ),
-                        children: <InstallPanel projectID={project.id} messageApi={messageApi} />,
-                    },
-                    {
-                        key: "tokens",
-                        label: "PAT tokens",
-                        children: <PATPanel projectID={project.id} messageApi={messageApi} />,
-                    },
-                ]}
-            />
+                value={tab}
+                onValueChange={(v) => setTab(v as "install" | "tokens")}
+                className="px-8 pt-4"
+            >
+                <TabsList>
+                    <TabsTrigger value="install">
+                        <Zap className="size-3.5" />
+                        Install commands
+                    </TabsTrigger>
+                    <TabsTrigger value="tokens">PAT tokens</TabsTrigger>
+                </TabsList>
+                <TabsContent value="install" className="mt-4">
+                    <InstallPanel projectID={project.id} />
+                </TabsContent>
+                <TabsContent value="tokens" className="mt-4">
+                    <PATPanel projectID={project.id} />
+                </TabsContent>
+            </Tabs>
         </>
     );
 }
 
 // --- Install commands tab ---------------------------------------------
 
-interface PanelProps {
-    projectID: string;
-    messageApi: ReturnType<typeof message.useMessage>[0];
-}
-
-function InstallPanel({ projectID, messageApi }: PanelProps) {
+function InstallPanel({ projectID }: { projectID: string }) {
     const [rows, setRows] = useState<InstallArtifactListItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<"active" | "all">("active");
     const [issueOpen, setIssueOpen] = useState(false);
     const [lastIssued, setLastIssued] = useState<IssueInstallResponse | null>(null);
+    const [pendingRevoke, setPendingRevoke] = useState<InstallArtifactListItem | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -117,143 +149,154 @@ function InstallPanel({ projectID, messageApi }: PanelProps) {
             setError(null);
         } catch (e) {
             setError(String(e));
-            messageApi.error(`list install artifacts: ${String(e)}`);
+            toast.error(`list install artifacts: ${String(e)}`);
         } finally {
             setLoading(false);
         }
-    }, [projectID, filter, messageApi]);
+    }, [projectID, filter]);
 
     useEffect(() => {
         refresh();
     }, [refresh]);
 
-    const columns: ColumnsType<InstallArtifactListItem> = [
-        {
-            title: "Download ID",
-            dataIndex: "download_id",
-            render: (v: string) => <Mono size={12}>{v}</Mono>,
-            width: 260,
-        },
-        {
-            title: "Target",
-            render: (_: unknown, r: InstallArtifactListItem) =>
-                r.target_os || r.target_arch
-                    ? `${r.target_os || "any"}/${r.target_arch || "any"}`
-                    : <span style={{ color: palette.textMuted }}>—</span>,
-            width: 120,
-        },
-        {
-            title: "Server",
-            dataIndex: "server_endpoint",
-            render: (v: string) => <Mono size={12}>{v}</Mono>,
-        },
-        {
-            title: "Status",
-            dataIndex: "status",
-            render: (s: InstallArtifactListItem["status"]) => <StatusTag status={s} />,
-            width: 110,
-        },
-        {
-            title: "Expires",
-            dataIndex: "expires_at",
-            render: (v: string) => fromNow(v),
-            width: 120,
-        },
-        {
-            title: "Consumed",
-            render: (_: unknown, r: InstallArtifactListItem) =>
-                r.consumed_at ? (
-                    <span>
-                        {fromNow(r.consumed_at)}
-                        {r.consumed_ip ? ` · ${r.consumed_ip}` : ""}
-                    </span>
-                ) : (
-                    <span style={{ color: palette.textMuted }}>—</span>
-                ),
-        },
-        {
-            title: "",
-            width: 80,
-            render: (_: unknown, r: InstallArtifactListItem) =>
-                !r.revoked && !r.consumed_at ? (
-                    <Button
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() =>
-                            Modal.confirm({
-                                title: "Revoke install link?",
-                                content: "The curl command will stop working immediately.",
-                                okText: "Revoke",
-                                okButtonProps: { danger: true },
-                                onOk: async () => {
-                                    try {
-                                        await revokeInstallArtifact(projectID, r.download_id);
-                                        messageApi.success("Install link revoked");
-                                        refresh();
-                                    } catch (e) {
-                                        messageApi.error(`revoke: ${String(e)}`);
-                                    }
-                                },
-                            })
-                        }
-                    />
-                ) : null,
-        },
-    ];
+    async function confirmRevoke() {
+        if (!pendingRevoke) return;
+        const r = pendingRevoke;
+        setPendingRevoke(null);
+        try {
+            await revokeInstallArtifact(projectID, r.download_id);
+            toast.success("Install link revoked");
+            refresh();
+        } catch (e) {
+            toast.error(`revoke: ${String(e)}`);
+        }
+    }
 
     return (
         <>
             <Toolbar
                 left={
-                    <Segmented
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        size="sm"
                         value={filter}
-                        onChange={(v) => setFilter(v as "active" | "all")}
-                        options={[
-                            { label: "Active", value: "active" },
-                            { label: "All", value: "all" },
-                        ]}
-                    />
+                        onValueChange={(v) => {
+                            if (v) setFilter(v as "active" | "all");
+                        }}
+                    >
+                        <ToggleGroupItem value="active">Active</ToggleGroupItem>
+                        <ToggleGroupItem value="all">All</ToggleGroupItem>
+                    </ToggleGroup>
                 }
                 right={
                     <>
-                        <Button icon={<ReloadOutlined />} onClick={refresh}>
+                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
                             Refresh
                         </Button>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIssueOpen(true)}>
+                        <Button size="sm" onClick={() => setIssueOpen(true)}>
+                            <Plus className="size-3.5" />
                             Generate install command
                         </Button>
                     </>
                 }
             />
-            {error && <Alert type="error" message={error} style={{ marginBottom: space[3] }} />}
+            {error && (
+                <div
+                    style={{
+                        marginBottom: space[3],
+                        padding: `${space[3]}px ${space[4]}px`,
+                        border: `1px solid ${palette.danger}`,
+                        borderRadius: 6,
+                        color: palette.danger,
+                        fontSize: 13,
+                    }}
+                >
+                    {error}
+                </div>
+            )}
             <Card padding={0}>
                 {rows === null ? (
-                    <CenterPad>
-                        <Spin />
-                    </CenterPad>
+                    <div className="flex items-center justify-center p-10">
+                        <Loader2 className="size-5 animate-spin text-text-muted" />
+                    </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
                         title="No install commands yet"
                         description="Generate one for a host in this project."
                     />
                 ) : (
-                    <Table
-                        rowKey="download_id"
-                        columns={columns}
-                        dataSource={rows}
-                        pagination={{ pageSize: 25 }}
-                        size="small"
-                        loading={loading}
-                    />
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[260px]">Download ID</TableHead>
+                                <TableHead className="w-[120px]">Target</TableHead>
+                                <TableHead>Server</TableHead>
+                                <TableHead className="w-[110px]">Status</TableHead>
+                                <TableHead className="w-[120px]">Expires</TableHead>
+                                <TableHead>Consumed</TableHead>
+                                <TableHead className="w-[80px]" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((r) => (
+                                <TableRow key={r.download_id}>
+                                    <TableCell>
+                                        <Mono>{r.download_id}</Mono>
+                                    </TableCell>
+                                    <TableCell>
+                                        {r.target_os || r.target_arch ? (
+                                            `${r.target_os || "any"}/${r.target_arch || "any"}`
+                                        ) : (
+                                            <span className="text-text-muted">—</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Mono>{r.server_endpoint}</Mono>
+                                    </TableCell>
+                                    <TableCell>
+                                        <StatusBadge status={r.status} />
+                                    </TableCell>
+                                    <TableCell>{fromNow(r.expires_at)}</TableCell>
+                                    <TableCell>
+                                        {r.consumed_at ? (
+                                            <span>
+                                                {fromNow(r.consumed_at)}
+                                                {r.consumed_ip ? ` · ${r.consumed_ip}` : ""}
+                                            </span>
+                                        ) : (
+                                            <span className="text-text-muted">—</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {!r.revoked && !r.consumed_at && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-auto px-2 py-1 text-destructive hover:text-destructive"
+                                                onClick={() => setPendingRevoke(r)}
+                                            >
+                                                <Trash2 className="size-3.5" />
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 )}
             </Card>
 
-            <IssueInstallModal
+            <IssueInstallDialog
                 open={issueOpen}
-                onClose={() => {
-                    setIssueOpen(false);
-                    refresh();
+                onOpenChange={(o) => {
+                    setIssueOpen(o);
+                    if (!o) refresh();
                 }}
                 onIssued={(r) => {
                     setLastIssued(r);
@@ -261,153 +304,216 @@ function InstallPanel({ projectID, messageApi }: PanelProps) {
                     refresh();
                 }}
                 projectID={projectID}
-                messageApi={messageApi}
             />
 
-            <IssuedInstallModal
-                result={lastIssued}
-                onClose={() => setLastIssued(null)}
-                messageApi={messageApi}
-            />
+            <IssuedInstallDialog result={lastIssued} onClose={() => setLastIssued(null)} />
+
+            <AlertDialog
+                open={pendingRevoke !== null}
+                onOpenChange={(o) => !o && setPendingRevoke(null)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Revoke install link?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The curl command will stop working immediately.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmRevoke}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Revoke
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
 
-function IssueInstallModal({
+function IssueInstallDialog({
     open,
-    onClose,
+    onOpenChange,
     onIssued,
     projectID,
-    messageApi,
 }: {
     open: boolean;
-    onClose: () => void;
+    onOpenChange: (o: boolean) => void;
     onIssued: (r: IssueInstallResponse) => void;
     projectID: string;
-    messageApi: ReturnType<typeof message.useMessage>[0];
 }) {
-    const [form] = Form.useForm<{
-        server_endpoint: string;
-        target_os?: string;
-        target_arch?: string;
-        ttl_seconds?: number;
-    }>();
-    const [busy, setBusy] = useState(false);
+    const form = useForm<InstallFormValues>({
+        resolver: zodResolver(installSchema),
+        defaultValues: { server_endpoint: "", target_os: "", target_arch: "" },
+    });
 
-    async function submit() {
-        const v = await form.validateFields();
-        setBusy(true);
+    async function submit(v: InstallFormValues) {
         try {
             const r = await issueInstallArtifact(projectID, v);
             onIssued(r);
-            form.resetFields();
+            form.reset({ server_endpoint: "", target_os: "", target_arch: "" });
         } catch (e) {
-            messageApi.error(`issue: ${String(e)}`);
-        } finally {
-            setBusy(false);
+            toast.error(`issue: ${String(e)}`);
         }
     }
 
     return (
-        <Modal
-            title="Generate install command"
-            open={open}
-            onCancel={onClose}
-            onOk={submit}
-            okText="Generate"
-            confirmLoading={busy}
-        >
-            <Form form={form} layout="vertical">
-                <Form.Item
-                    label="Agent should dial"
-                    name="server_endpoint"
-                    rules={[{ required: true, message: "required" }]}
-                    tooltip="host:port that the agent will connect back to (usually one of your TCP listeners)"
-                >
-                    <Input placeholder="203.0.113.5:13337" />
-                </Form.Item>
-                <Form.Item label="Target OS" name="target_os">
-                    <Input placeholder="linux (optional)" />
-                </Form.Item>
-                <Form.Item label="Target arch" name="target_arch">
-                    <Input placeholder="amd64 (optional)" />
-                </Form.Item>
-                <Form.Item
-                    label="Download link TTL (seconds)"
-                    name="ttl_seconds"
-                    tooltip="Default 300 (5 min)"
-                >
-                    <Input type="number" placeholder="300" />
-                </Form.Item>
-            </Form>
-        </Modal>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[480px]">
+                <DialogHeader>
+                    <DialogTitle>Generate install command</DialogTitle>
+                    <DialogDescription>
+                        One-shot `curl ... | sh` bootstrap that mints a PAT on first fetch.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="server_endpoint"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Agent should dial</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="203.0.113.5:13337" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        host:port that the agent will connect back to (usually one
+                                        of your TCP listeners)
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="target_os"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Target OS</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="linux (optional)" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="target_arch"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Target arch</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="amd64 (optional)" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="ttl_seconds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Download link TTL (seconds)</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="300"
+                                            value={field.value ?? ""}
+                                            onChange={(e) =>
+                                                field.onChange(
+                                                    e.target.value === ""
+                                                        ? undefined
+                                                        : Number(e.target.value),
+                                                )
+                                            }
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            ref={field.ref}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>Default 300 (5 min)</FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => onOpenChange(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                )}
+                                Generate
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
     );
 }
 
-function IssuedInstallModal({
+function IssuedInstallDialog({
     result,
     onClose,
-    messageApi,
 }: {
     result: IssueInstallResponse | null;
     onClose: () => void;
-    messageApi: ReturnType<typeof message.useMessage>[0];
 }) {
-    if (!result) return null;
+    async function copy() {
+        if (!result) return;
+        await navigator.clipboard.writeText(result.install_command);
+        toast.success("Copied to clipboard");
+    }
+
     return (
-        <Modal
-            title="Install command generated"
-            open
-            onCancel={onClose}
-            footer={<Button onClick={onClose}>Done</Button>}
-            width={640}
-        >
-            <Alert
-                type="warning"
-                message="This is the only time the token is shown"
-                description="After closing this dialog the server discards the plaintext; further copies are not possible."
-                style={{ marginBottom: space[3] }}
-            />
-            <Typography.Paragraph style={{ marginBottom: space[2], color: palette.textMuted, fontSize: 12 }}>
-                Run on the target machine:
-            </Typography.Paragraph>
-            <div
-                style={{
-                    fontFamily: "monospace",
-                    fontSize: 12,
-                    background: palette.surface,
-                    border: `1px solid ${palette.border}`,
-                    borderRadius: 6,
-                    padding: space[3],
-                    wordBreak: "break-all",
-                }}
-            >
-                {result.install_command}
-            </div>
-            <div style={{ marginTop: space[3], display: "flex", justifyContent: "flex-end" }}>
-                <Button
-                    icon={<CopyOutlined />}
-                    onClick={async () => {
-                        await navigator.clipboard.writeText(result.install_command);
-                        messageApi.success("Copied to clipboard");
-                    }}
-                >
-                    Copy command
-                </Button>
-            </div>
-        </Modal>
+        <Dialog open={result !== null} onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="sm:max-w-[640px]">
+                <DialogHeader>
+                    <DialogTitle>Install command generated</DialogTitle>
+                    <DialogDescription>
+                        This is the only time the command is shown. After closing, the server
+                        discards the plaintext.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="text-xs text-text-muted">Run on the target machine:</div>
+                <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
+                    {result?.install_command}
+                </pre>
+                <DialogFooter>
+                    <Button variant="outline" onClick={copy}>
+                        <Copy className="size-3.5" />
+                        Copy command
+                    </Button>
+                    <Button onClick={onClose}>Done</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
 // --- PAT tokens tab ---------------------------------------------------
 
-function PATPanel({ projectID, messageApi }: PanelProps) {
+function PATPanel({ projectID }: { projectID: string }) {
     const [rows, setRows] = useState<PATTokenListItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<"active" | "all">("active");
     const [issueOpen, setIssueOpen] = useState(false);
     const [lastIssued, setLastIssued] = useState<IssuePATResponse | null>(null);
+    const [pendingRevoke, setPendingRevoke] = useState<PATTokenListItem | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -417,128 +523,141 @@ function PATPanel({ projectID, messageApi }: PanelProps) {
             setError(null);
         } catch (e) {
             setError(String(e));
-            messageApi.error(`list tokens: ${String(e)}`);
+            toast.error(`list tokens: ${String(e)}`);
         } finally {
             setLoading(false);
         }
-    }, [projectID, filter, messageApi]);
+    }, [projectID, filter]);
 
     useEffect(() => {
         refresh();
     }, [refresh]);
 
-    const columns: ColumnsType<PATTokenListItem> = [
-        {
-            title: "Token ID",
-            dataIndex: "token_id",
-            render: (v: string) => <Mono size={12}>{v}</Mono>,
-            width: 260,
-        },
-        {
-            title: "Description",
-            dataIndex: "description",
-            render: (v?: string) => v || <span style={{ color: palette.textMuted }}>—</span>,
-        },
-        {
-            title: "Status",
-            dataIndex: "status",
-            render: (s: PATTokenListItem["status"]) => <StatusTag status={s} />,
-            width: 110,
-        },
-        {
-            title: "Uses",
-            render: (_: unknown, r: PATTokenListItem) => `${r.uses}/${r.max_uses}`,
-            width: 80,
-        },
-        {
-            title: "Expires",
-            dataIndex: "expires_at",
-            render: (v: string) => fromNow(v),
-            width: 120,
-        },
-        {
-            title: "",
-            width: 80,
-            render: (_: unknown, r: PATTokenListItem) =>
-                !r.revoked && r.status === "pending" ? (
-                    <Button
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() =>
-                            Modal.confirm({
-                                title: "Revoke PAT?",
-                                content: "The token will be rejected on any subsequent enrollment attempt.",
-                                okText: "Revoke",
-                                okButtonProps: { danger: true },
-                                onOk: async () => {
-                                    try {
-                                        await revokePAT(projectID, r.token_id);
-                                        messageApi.success("PAT revoked");
-                                        refresh();
-                                    } catch (e) {
-                                        messageApi.error(`revoke: ${String(e)}`);
-                                    }
-                                },
-                            })
-                        }
-                    />
-                ) : null,
-        },
-    ];
+    async function confirmRevoke() {
+        if (!pendingRevoke) return;
+        const r = pendingRevoke;
+        setPendingRevoke(null);
+        try {
+            await revokePAT(projectID, r.token_id);
+            toast.success("PAT revoked");
+            refresh();
+        } catch (e) {
+            toast.error(`revoke: ${String(e)}`);
+        }
+    }
 
     return (
         <>
             <Toolbar
                 left={
-                    <Segmented
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        size="sm"
                         value={filter}
-                        onChange={(v) => setFilter(v as "active" | "all")}
-                        options={[
-                            { label: "Active", value: "active" },
-                            { label: "All", value: "all" },
-                        ]}
-                    />
+                        onValueChange={(v) => {
+                            if (v) setFilter(v as "active" | "all");
+                        }}
+                    >
+                        <ToggleGroupItem value="active">Active</ToggleGroupItem>
+                        <ToggleGroupItem value="all">All</ToggleGroupItem>
+                    </ToggleGroup>
                 }
                 right={
                     <>
-                        <Button icon={<ReloadOutlined />} onClick={refresh}>
+                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
                             Refresh
                         </Button>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIssueOpen(true)}>
+                        <Button size="sm" onClick={() => setIssueOpen(true)}>
+                            <Plus className="size-3.5" />
                             Issue PAT
                         </Button>
                     </>
                 }
             />
-            {error && <Alert type="error" message={error} style={{ marginBottom: space[3] }} />}
+            {error && (
+                <div
+                    style={{
+                        marginBottom: space[3],
+                        padding: `${space[3]}px ${space[4]}px`,
+                        border: `1px solid ${palette.danger}`,
+                        borderRadius: 6,
+                        color: palette.danger,
+                        fontSize: 13,
+                    }}
+                >
+                    {error}
+                </div>
+            )}
             <Card padding={0}>
                 {rows === null ? (
-                    <CenterPad>
-                        <Spin />
-                    </CenterPad>
+                    <div className="flex items-center justify-center p-10">
+                        <Loader2 className="size-5 animate-spin text-text-muted" />
+                    </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
                         title="No PATs issued yet"
                         description="Prefer the install command tab unless you need raw tokens for a CI pipeline."
                     />
                 ) : (
-                    <Table
-                        rowKey="token_id"
-                        columns={columns}
-                        dataSource={rows}
-                        pagination={{ pageSize: 25 }}
-                        size="small"
-                        loading={loading}
-                    />
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[260px]">Token ID</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="w-[110px]">Status</TableHead>
+                                <TableHead className="w-[80px]">Uses</TableHead>
+                                <TableHead className="w-[120px]">Expires</TableHead>
+                                <TableHead className="w-[80px]" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((r) => (
+                                <TableRow key={r.token_id}>
+                                    <TableCell>
+                                        <Mono>{r.token_id}</Mono>
+                                    </TableCell>
+                                    <TableCell>
+                                        {r.description || (
+                                            <span className="text-text-muted">—</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <StatusBadge status={r.status} />
+                                    </TableCell>
+                                    <TableCell>
+                                        {r.uses}/{r.max_uses}
+                                    </TableCell>
+                                    <TableCell>{fromNow(r.expires_at)}</TableCell>
+                                    <TableCell>
+                                        {!r.revoked && r.status === "pending" && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-auto px-2 py-1 text-destructive hover:text-destructive"
+                                                onClick={() => setPendingRevoke(r)}
+                                            >
+                                                <Trash2 className="size-3.5" />
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 )}
             </Card>
 
-            <IssuePATModal
+            <IssuePATDialog
                 open={issueOpen}
-                onClose={() => {
-                    setIssueOpen(false);
-                    refresh();
+                onOpenChange={(o) => {
+                    setIssueOpen(o);
+                    if (!o) refresh();
                 }}
                 onIssued={(r) => {
                     setLastIssued(r);
@@ -546,155 +665,234 @@ function PATPanel({ projectID, messageApi }: PanelProps) {
                     refresh();
                 }}
                 projectID={projectID}
-                messageApi={messageApi}
             />
-            <IssuedPATModal
-                result={lastIssued}
-                onClose={() => setLastIssued(null)}
-                messageApi={messageApi}
-            />
+            <IssuedPATDialog result={lastIssued} onClose={() => setLastIssued(null)} />
+
+            <AlertDialog
+                open={pendingRevoke !== null}
+                onOpenChange={(o) => !o && setPendingRevoke(null)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Revoke PAT?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The token will be rejected on any subsequent enrollment attempt.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmRevoke}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Revoke
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
 
-function IssuePATModal({
+function IssuePATDialog({
     open,
-    onClose,
+    onOpenChange,
     onIssued,
     projectID,
-    messageApi,
 }: {
     open: boolean;
-    onClose: () => void;
+    onOpenChange: (o: boolean) => void;
     onIssued: (r: IssuePATResponse) => void;
     projectID: string;
-    messageApi: ReturnType<typeof message.useMessage>[0];
 }) {
-    const [form] = Form.useForm<{
-        description?: string;
-        ttl_seconds?: number;
-        max_uses?: number;
-        binding_machine_id?: string;
-    }>();
-    const [busy, setBusy] = useState(false);
+    const form = useForm<PATFormValues>({
+        resolver: zodResolver(patSchema),
+        defaultValues: { description: "", binding_machine_id: "" },
+    });
 
-    async function submit() {
-        const v = await form.validateFields();
-        setBusy(true);
+    async function submit(v: PATFormValues) {
         try {
             const r = await issuePAT(projectID, v);
             onIssued(r);
-            form.resetFields();
+            form.reset({ description: "", binding_machine_id: "" });
         } catch (e) {
-            messageApi.error(`issue: ${String(e)}`);
-        } finally {
-            setBusy(false);
+            toast.error(`issue: ${String(e)}`);
         }
     }
 
     return (
-        <Modal
-            title="Issue PAT"
-            open={open}
-            onCancel={onClose}
-            onOk={submit}
-            okText="Issue"
-            confirmLoading={busy}
-        >
-            <Form form={form} layout="vertical">
-                <Form.Item label="Description" name="description" tooltip="Free-form note shown in the list">
-                    <Input placeholder="Deploy for web-01" />
-                </Form.Item>
-                <Form.Item label="TTL (seconds)" name="ttl_seconds" tooltip="Default 3600 (1h)">
-                    <Input type="number" placeholder="3600" />
-                </Form.Item>
-                <Form.Item label="Max uses" name="max_uses" tooltip="Default 1 (single-use)">
-                    <Input type="number" placeholder="1" />
-                </Form.Item>
-                <Form.Item
-                    label="Binding machine ID"
-                    name="binding_machine_id"
-                    tooltip="If set, the PAT is only accepted from a machine whose /etc/machine-id matches."
-                >
-                    <Input placeholder="(optional)" />
-                </Form.Item>
-            </Form>
-        </Modal>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[480px]">
+                <DialogHeader>
+                    <DialogTitle>Issue PAT</DialogTitle>
+                    <DialogDescription>
+                        Raw token for scripted enrollment flows.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="description"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Description</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Deploy for web-01" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        Free-form note shown in the list.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="ttl_seconds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>TTL (seconds)</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="3600"
+                                            value={field.value ?? ""}
+                                            onChange={(e) =>
+                                                field.onChange(
+                                                    e.target.value === ""
+                                                        ? undefined
+                                                        : Number(e.target.value),
+                                                )
+                                            }
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            ref={field.ref}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>Default 3600 (1h).</FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="max_uses"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Max uses</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            inputMode="numeric"
+                                            placeholder="1"
+                                            value={field.value ?? ""}
+                                            onChange={(e) =>
+                                                field.onChange(
+                                                    e.target.value === ""
+                                                        ? undefined
+                                                        : Number(e.target.value),
+                                                )
+                                            }
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            ref={field.ref}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>Default 1 (single-use).</FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="binding_machine_id"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Binding machine ID</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="(optional)" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        If set, the PAT is only accepted from a machine whose
+                                        /etc/machine-id matches.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => onOpenChange(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                )}
+                                Issue
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
     );
 }
 
-function IssuedPATModal({
+function IssuedPATDialog({
     result,
     onClose,
-    messageApi,
 }: {
     result: IssuePATResponse | null;
     onClose: () => void;
-    messageApi: ReturnType<typeof message.useMessage>[0];
 }) {
-    if (!result) return null;
+    async function copy() {
+        if (!result) return;
+        await navigator.clipboard.writeText(result.token);
+        toast.success("Copied to clipboard");
+    }
+
     return (
-        <Modal
-            title="PAT issued"
-            open
-            onCancel={onClose}
-            footer={<Button onClick={onClose}>Done</Button>}
-            width={640}
-        >
-            <Alert
-                type="warning"
-                message="This is the only time the token is shown"
-                description="Copy it now — after closing this dialog the server cannot show it again."
-                style={{ marginBottom: space[3] }}
-            />
-            <div
-                style={{
-                    fontFamily: "monospace",
-                    fontSize: 12,
-                    background: palette.surface,
-                    border: `1px solid ${palette.border}`,
-                    borderRadius: 6,
-                    padding: space[3],
-                    wordBreak: "break-all",
-                }}
-            >
-                {result.token}
-            </div>
-            <div style={{ marginTop: space[3], display: "flex", justifyContent: "flex-end" }}>
-                <Button
-                    icon={<CopyOutlined />}
-                    onClick={async () => {
-                        await navigator.clipboard.writeText(result.token);
-                        messageApi.success("Copied to clipboard");
-                    }}
-                >
-                    Copy token
-                </Button>
-            </div>
-        </Modal>
+        <Dialog open={result !== null} onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="sm:max-w-[640px]">
+                <DialogHeader>
+                    <DialogTitle>PAT issued</DialogTitle>
+                    <DialogDescription>
+                        This is the only time the token is shown. Copy it now — the server cannot
+                        show it again.
+                    </DialogDescription>
+                </DialogHeader>
+                <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
+                    {result?.token}
+                </pre>
+                <DialogFooter>
+                    <Button variant="outline" onClick={copy}>
+                        <Copy className="size-3.5" />
+                        Copy token
+                    </Button>
+                    <Button onClick={onClose}>Done</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
 // --- Shared bits -----------------------------------------------------
 
-function StatusTag({ status }: { status: "pending" | "consumed" | "expired" | "revoked" }) {
-    const colour = useMemo(() => {
-        switch (status) {
-            case "pending":
-                return "green";
-            case "consumed":
-                return "blue";
-            case "expired":
-                return "orange";
-            case "revoked":
-                return "red";
-        }
-    }, [status]);
-    return <Tag color={colour}>{status}</Tag>;
-}
+type EnrollmentStatus = "pending" | "consumed" | "expired" | "revoked";
 
-function CenterPad({ children }: { children: React.ReactNode }) {
-    return (
-        <div style={{ display: "flex", justifyContent: "center", padding: space[6] }}>{children}</div>
-    );
+const STATUS_TONE: Record<EnrollmentStatus, "success" | "info" | "warning" | "danger"> = {
+    pending: "success",
+    consumed: "info",
+    expired: "warning",
+    revoked: "danger",
+};
+
+function StatusBadge({ status }: { status: EnrollmentStatus }) {
+    return <StatusPill tone={STATUS_TONE[status]}>{status}</StatusPill>;
 }
