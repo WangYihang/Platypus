@@ -23,6 +23,7 @@ const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
 const DispatchRoute = lazy(() => import("./routes/DispatchRoute"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const TopologyPage = lazy(() => import("./pages/TopologyPage"));
 
 // routeFallback is the placeholder each lazy route renders while its
 // chunk is fetched. Centred spinner over the main surface so it doesn't
@@ -90,6 +91,7 @@ export const router = createBrowserRouter([
                         element: withSuspense(<ListenerDetailPage />),
                     },
                     { path: "sessions", element: withSuspense(<SessionsPage />) },
+                    { path: "topology", element: withSuspense(<TopologyPage />) },
                     { path: "activities", element: withSuspense(<ActivitiesPage />) },
                     { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
                     { path: "dispatch", element: withSuspense(<DispatchRoute />) },

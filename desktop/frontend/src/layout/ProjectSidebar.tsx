@@ -6,6 +6,7 @@ import {
     LayoutGrid,
     Loader2,
     Monitor,
+    Network,
     Router,
     ShieldCheck,
     Users,
@@ -18,6 +19,7 @@ import { z } from "zod";
 
 import Brand from "../components/Brand";
 import { Project, createProject } from "../lib/api";
+import { featureFlags } from "../lib/featureFlags";
 import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
 import ProjectSwitcher from "./ProjectSwitcher";
@@ -92,6 +94,9 @@ export default function ProjectSidebar({
         { to: "hosts", label: "Hosts", icon: <Monitor className="size-4" />, requiresProject: true },
         { to: "listeners", label: "Listeners", icon: <Router className="size-4" />, requiresProject: true },
         { to: "sessions", label: "Sessions", icon: <ShieldCheck className="size-4" />, requiresProject: true },
+        ...(featureFlags.topology
+            ? [{ to: "topology", label: "Topology", icon: <Network className="size-4" />, requiresProject: true }]
+            : []),
         { to: "activities", label: "Activities", icon: <Clock className="size-4" />, requiresProject: true },
         { to: "enrollment", label: "Enrollment", icon: <CloudDownload className="size-4" />, requiresProject: true, minRole: "admin" },
         { to: "dispatch", label: "Dispatch", icon: <Zap className="size-4" />, requiresProject: true, minRole: "operator" },
