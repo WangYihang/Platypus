@@ -222,3 +222,21 @@ export async function updateUser(
 export async function deleteUser(id: string): Promise<void> {
     await authFetch(`/api/v1/users/${id}`, { method: "DELETE" });
 }
+
+// --- Server info ----------------------------------------------------
+// A thin roll-up of build metadata + live counts. Backed by
+// GET /api/v1/info on the server; intended for low-frequency polling
+// from the status bar.
+
+export interface ServerInfo {
+    version: string;
+    commit: string;
+    date: string;
+    started_at: string;
+    listener_count: number;
+    session_count: number;
+}
+
+export async function getServerInfo(): Promise<ServerInfo> {
+    return authJSON<ServerInfo>("/api/v1/info");
+}

@@ -3,6 +3,7 @@ import { Outlet, useParams } from "react-router-dom";
 import { Spin } from "antd";
 
 import EmptyState from "../components/EmptyState";
+import StatusBar from "../components/StatusBar";
 import { Project, listProjects } from "../lib/api";
 import { getSessionUser, getSession } from "../lib/auth";
 import { palette } from "./theme";
@@ -121,20 +122,31 @@ function ShellChrome({
         <div
             style={{
                 display: "flex",
+                flexDirection: "column",
                 height: "100vh",
                 background: palette.main,
                 color: palette.textPrimary,
                 overflow: "hidden",
             }}
         >
-            <ProjectSidebar
-                user={user}
-                serverURL={serverURL}
-                projects={projects}
-                currentSlug={currentSlug}
-                onProjectsChanged={() => void refresh()}
-            />
-            <main style={{ flex: 1, minWidth: 0, overflow: "auto" }}>{children}</main>
+            <div
+                style={{
+                    display: "flex",
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "hidden",
+                }}
+            >
+                <ProjectSidebar
+                    user={user}
+                    serverURL={serverURL}
+                    projects={projects}
+                    currentSlug={currentSlug}
+                    onProjectsChanged={() => void refresh()}
+                />
+                <main style={{ flex: 1, minWidth: 0, overflow: "auto" }}>{children}</main>
+            </div>
+            <StatusBar />
         </div>
     );
 }

@@ -18,6 +18,9 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 	v1 := engine.Group("/api/v1")
 	v1.Use(auth.Middleware())
 	{
+		// Server info
+		v1.GET("/info", GetServerInfoV1)
+
 		// Listeners
 		v1.GET("/listeners", ListListenersV1)
 		v1.GET("/listeners/:id", GetListenerV1)

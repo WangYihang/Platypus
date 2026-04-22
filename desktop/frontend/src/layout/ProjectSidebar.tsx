@@ -75,7 +75,7 @@ export default function ProjectSidebar({
         <aside
             style={{
                 width: 240,
-                height: "100vh",
+                height: "100%",
                 background: palette.sidebar,
                 borderRight: `1px solid ${palette.border}`,
                 display: "flex",

@@ -32,5 +32,12 @@ export default defineConfig(({ mode }) => {
         plugins: [react()],
         resolve: { alias: platformAliases },
         build: { outDir: isWeb ? "dist-web" : "dist" },
+        // Build-time globals consumed by the status bar. Set GIT_COMMIT in
+        // CI (or via the Makefile) to get a real short hash; falls back to
+        // "dev" for local unreleased builds.
+        define: {
+            __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? "dev"),
+            __APP_COMMIT__: JSON.stringify(process.env.GIT_COMMIT ?? "dev"),
+        },
     };
 });
