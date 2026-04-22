@@ -18,7 +18,7 @@ listeners:
     public_ip: ""
     shell_path: "/bin/bash"
 
-# REST/WebSocket API the desktop + web UI + admin CLI call into.
+# REST/WebSocket API the desktop + web UI call into.
 # Bind to 127.0.0.1 unless you've fronted it with TLS + reverse proxy.
 restful:
   host: "0.0.0.0"
@@ -51,9 +51,6 @@ distributor:
     access_key_id: ""
     secret_access_key: ""
     use_ssl: true
-
-# Check for a new platypus-server release on startup.
-update: true
 
 # Open the web UI in a browser on server startup.
 openBrowser: false

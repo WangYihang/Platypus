@@ -7,9 +7,6 @@ type Listener interface {
 	GetHost() string
 	GetPort() uint16
 
-	// Display
-	FullDesc() string
-
 	// Lifecycle
 	Run()
 	Stop()

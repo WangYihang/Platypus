@@ -22,12 +22,11 @@ full gallery at [`docs/screenshots/`](docs/screenshots/README.md). Re-run
 
 ## Architecture
 
-Platypus ships as three backend binaries plus a standalone desktop client:
+Platypus ships as two backend binaries plus a standalone desktop client:
 
 | Binary | Role |
 |---|---|
 | `platypus-server`  | Daemon. Accepts inbound agent connections on TLS ingress ports; exposes a REST + WebSocket API for admin tooling; serves agent binaries for distribution. |
-| `platypus-admin`   | CLI client. Talks to `platypus-server` over HTTP; scriptable for CI and ops workflows. |
 | `platypus-agent`   | The process that runs on each managed host. Dials back to the server over TLS + protobuf. |
 | `platypus-desktop` | Native (Wails v2) desktop GUI. Connect to any reachable server with URL + secret; tabbed UI for sessions, terminals, listeners, files, tunnels. See [`desktop/`](./desktop/). |
 
@@ -59,7 +58,7 @@ Requires Go 1.24+ and `protoc` (only if you regenerate protobuf code).
 ```bash
 git clone https://github.com/WangYihang/Platypus
 cd Platypus
-make build              # → ./build/{platypus-server,platypus-admin,platypus-agent}
+make build              # → ./build/{platypus-server,platypus-agent}
 ```
 
 Other useful targets: `make test`, `make lint`, `make snapshot` (cross-platform via goreleaser), `make help`.
@@ -113,7 +112,6 @@ docker run --rm -p 7331:7331 -p 13337:13337 -v $(pwd)/config.yml:/config.yml pla
 
 ```bash
 ./build/platypus-server                # foreground; Ctrl-C for graceful shutdown
-./build/platypus-admin --secret <S>    # connect to server via secret → bearer token
 ```
 
 For production, run the server under `systemd` rather than backgrounding it manually.
@@ -149,7 +147,6 @@ distributor:
   host: "0.0.0.0"
   port: 13339
   url: "http://127.0.0.1:13339"
-update: true
 openBrowser: false
 ```
 
@@ -166,15 +163,6 @@ The distributor patches the connect-back target into the prebuilt agent
 binary in-place, so the same build serves every ingress. Once the agent
 starts, it dials `server:13337`, the TLS handshake completes, and the
 session appears in the server's session list.
-
-### Admin CLI
-
-```bash
-./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> list
-./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> sessions
-./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> exec <hash> -- uname -a
-./build/platypus-admin --server http://127.0.0.1:7331 --secret <S> tunnel ...
-```
 
 ### Desktop / Web
 

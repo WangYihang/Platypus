@@ -101,6 +101,5 @@ type Config struct {
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
 	Mesh        MeshConfig        `yaml:"mesh"`
-	Update      bool              `yaml:"update"`
 	OpenBrowser bool              `yaml:"openBrowser"`
 }

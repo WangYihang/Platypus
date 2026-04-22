@@ -57,11 +57,6 @@ func main() {
 	log.L.Info("server_starting", "version", update.Version, "config", configFile)
 
 	core.Ctx = app.New(cfg)
-	core.CreateContext()
-
-	if cfg.Update {
-		update.ConfirmAndSelfUpdate()
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -97,7 +92,7 @@ func main() {
 		}
 	}
 
-	log.Success("Server is running. Use platypus-admin or API to manage. (Ctrl-C to stop)")
+	log.L.Info("server_running")
 
 	<-ctx.Done()
 	log.Info("Shutdown signal received, draining connections...")

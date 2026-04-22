@@ -113,77 +113,6 @@ builds:
       - -X "github.com/WangYihang/Platypus/pkg/version.Commit={{.Commit}}"
       - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
 
-  - id: platypus-admin
-    main: cmd/platypus-admin/main.go
-    binary: platypus-admin
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - aix
-      - android
-      - darwin
-      - dragonfly
-      - freebsd
-      - illumos
-      - ios
-      - js
-      - linux
-      - netbsd
-      - openbsd
-      - plan9
-      - solaris
-      - wasip1
-      - windows
-    goarch:
-      - "386"
-      - amd64
-      - arm
-      - arm64
-      - loong64
-      - mips
-      - mips64
-      - mips64le
-      - mipsle
-      - ppc64
-      - ppc64le
-      - riscv64
-      - s390x
-      - wasm
-    ignore:
-      - goos: android
-        goarch: "386"
-      - goos: android
-        goarch: amd64
-      - goos: android
-        goarch: arm64
-      - goos: android
-        goarch: arm
-      - goos: ios
-        goarch: arm64
-      - goos: js
-        goarch: wasm
-      - goos: plan9
-        goarch: amd64
-      - goos: plan9
-        goarch: "386"
-      - goos: plan9
-        goarch: arm64
-      - goos: plan9
-        goarch: arm
-      - goos: wasip1
-        goarch: wasm
-      - goos: aix
-        goarch: ppc64
-      - goos: openbsd
-        goarch: arm
-      - goos: dragonfly
-        goarch: amd64
-    ldflags:
-      - -s -w
-      - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
-      - -X "github.com/WangYihang/Platypus/pkg/version.Commit={{.Commit}}"
-      - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
-
   - id: platypus-agent
     main: cmd/platypus-agent/main.go
     binary: platypus-agent
@@ -288,7 +217,7 @@ upx:
     enabled: true
 
     # Filter by build ID.
-    ids: [ "platypus-server", "platypus-admin", "platypus-agent" ]
+    ids: [ "platypus-server", "platypus-agent" ]
 
     # Compress argument.
     # Valid options are from '1' (faster) to '9' (better), and 'best'.

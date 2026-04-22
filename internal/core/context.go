@@ -6,20 +6,15 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 )
 
-// WindowSize represents terminal dimensions.
+// WindowSize represents terminal dimensions for the websocket-driven
+// remote shell. Browsers serialise this as JSON on a TTY-resize message.
 type WindowSize struct {
 	Columns int
 	Rows    int
 }
 
-// Ctx is the global application state. It replaces the former Context struct
-// with the App type from the app package.
+// Ctx is the global application state.
 var Ctx *app.App
-
-// CreateContext initializes signal handlers.
-func CreateContext() {
-	Signal()
-}
 
 // --- Helper functions that operate on Ctx for backward compatibility ---
 
@@ -76,10 +71,6 @@ func DeleteAgentClient(c *AgentClient) {
 func DeleteServer(s *TCPServer) {
 	s.Stop()
 	delete(Ctx.Servers, s.Hash)
-}
-
-func Shutdown() {
-	Ctx.Shutdown()
 }
 
 // GetServers returns the typed server map for iteration.

@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,18 +10,15 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/mod/semver"
-	"golang.org/x/term"
 	"gopkg.in/olahol/melody.v1"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/jedib0t/go-pretty/v6/table"
 
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
-	"github.com/WangYihang/Platypus/internal/utils/str"
 	"github.com/WangYihang/Platypus/internal/utils/update"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
@@ -206,27 +202,6 @@ func (c *AgentClient) GatherClientInfo(hashFormat string) bool {
 	return true
 }
 
-func (c *AgentClient) NotifyPlatypusWindowSize(columns int, rows int) {
-	c.LockAtom()
-	defer c.UnlockAtom()
-
-	if _, exists := c.processes[c.currentProcessKey]; exists {
-		err := c.Send(&agentpb.Envelope{
-			Payload: &agentpb.Envelope_WindowSize{
-				WindowSize: &agentpb.WindowSizeUpdate{
-					Key:     c.currentProcessKey,
-					Columns: int32(columns),
-					Rows:    int32(rows),
-				},
-			},
-		})
-		if err != nil {
-			log.Error("Network error: %s", err)
-			DeleteAgentClient(c)
-		}
-	}
-}
-
 func (c *AgentClient) RequestTerminate(key string) {
 	c.LockAtom()
 	defer c.UnlockAtom()
@@ -263,52 +238,6 @@ func (c *AgentClient) RequestStartProcess(path string, columns int, rows int, ke
 	if err != nil {
 		log.Error("Network error: %s", err)
 	}
-}
-
-func (c *AgentClient) InteractWith(key string) {
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		log.Error("Failed to set terminal to raw mode: %s", err)
-		return
-	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
-
-	for {
-		process, exists := c.processes[key]
-		if exists && process.State != terminated {
-			buffer := make([]byte, 0x10)
-			n, _ := os.Stdin.Read(buffer)
-			if n > 0 {
-				err = c.Send(&agentpb.Envelope{
-					Payload: &agentpb.Envelope_Stdio{
-						Stdio: &agentpb.StdioData{Key: key, Data: buffer[0:n]},
-					},
-				})
-				if err != nil {
-					log.Error("Network error: %s", err)
-					break
-				}
-			}
-		} else {
-			break
-		}
-	}
-}
-
-func (c *AgentClient) StartShell() {
-	columns, rows, _ := term.GetSize(0)
-	key := str.RandomString(0x10)
-	c.RequestStartProcess(c.GetShellPath(), columns, rows, key)
-
-	process := Process{
-		Pid:           -2,
-		WindowColumns: 0,
-		WindowRows:    0,
-		State:         StartRequested,
-		WebSocket:     nil,
-	}
-	c.processes[key] = &process
-	c.InteractWith(key)
 }
 
 // Execute runs a command on the remote and returns its output.
@@ -453,30 +382,6 @@ func (c *AgentClient) Close() {
 	if Ctx.CurrentAgent == c {
 		Ctx.CurrentAgent = nil
 	}
-}
-
-func (c *AgentClient) AsTable() {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
-	t.AppendRow([]interface{}{
-		c.Hash,
-		c.conn.RemoteAddr().String(),
-		c.OS.String(),
-		c.User,
-		c.Python2 != "" || c.Python3 != "",
-		humanize.Time(c.TimeStamp),
-		c.Alias,
-		c.GroupDispatch,
-	})
-	t.Render()
-}
-
-func (c *AgentClient) GetPrompt() string {
-	if c.Alias != "" {
-		return fmt.Sprintf("[%s] (%s) %s [%s] » ", c.Alias, c.OS.String(), c.GetConnString(), c.GetUsername())
-	}
-	return fmt.Sprintf("(%s) %s [%s] » ", c.OS.String(), c.GetConnString(), c.GetUsername())
 }
 
 func (c *AgentClient) GetConnString() string { return c.conn.RemoteAddr().String() }

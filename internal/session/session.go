@@ -28,10 +28,8 @@ type Session interface {
 	SetGroupDispatch(v bool)
 
 	// Display
-	GetPrompt() string
 	OnelineDesc() string
 	FullDesc() string
-	AsTable()
 
 	// Operations
 	Execute(command string) (string, error)

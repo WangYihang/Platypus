@@ -4,7 +4,6 @@ package app
 
 import (
 	"net"
-	"os"
 	"strings"
 	"sync"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
-	"github.com/WangYihang/Platypus/internal/utils/ui"
 )
 
 // PullTunnelConfig represents a local-to-remote port forwarding configuration.
@@ -137,10 +135,3 @@ func (a *App) FindListener(clue string) listener.Listener {
 	return a.Listeners.FindByHashPrefix(strings.ToLower(clue))
 }
 
-// Shutdown gracefully stops all servers and exits.
-func (a *App) Shutdown() {
-	if len(a.Servers) > 0 && !ui.PromptYesNo("There are listening servers, do you really want to exit?") {
-		return
-	}
-	os.Exit(0)
-}

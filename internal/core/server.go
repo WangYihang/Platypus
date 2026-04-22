@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	humanize "github.com/dustin/go-humanize"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/phayes/freeport"
 
 	"github.com/WangYihang/Platypus/internal/app"
@@ -216,42 +214,6 @@ func (s *TCPServer) Run() {
 	}
 }
 
-func (s *TCPServer) AsTable() {
-	if len(s.AgentClients) > 0 {
-		t := table.NewWriter()
-		t.SetOutputMirror(os.Stdout)
-		t.SetTitle(fmt.Sprintf(
-			"%s is listening on %s:%d, %d clients",
-			s.Hash,
-			s.Host,
-			s.Port,
-			len(s.AgentClients),
-		))
-
-		t.AppendHeader(table.Row{"Hash", "Network", "OS", "User", "Python", "Time", "Alias", "GroupDispatch"})
-
-		for chash, client := range s.AgentClients {
-			t.AppendRow([]interface{}{
-				chash,
-				client.conn.RemoteAddr().String(),
-				client.OS.String(),
-				client.User,
-				client.Python2 != "" || client.Python3 != "",
-				humanize.Time(client.TimeStamp),
-				client.Alias,
-				client.GroupDispatch,
-			})
-		}
-
-		t.Render()
-		log.Success("%s is listening on %s:%d, %d clients listed",
-			s.Hash, s.Host, s.Port, len(s.AgentClients))
-	} else {
-		log.Warn("[%s] is listening on %s:%d, 0 clients",
-			s.Hash, s.Host, s.Port)
-	}
-}
-
 func (s *TCPServer) OnelineDesc() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(
@@ -262,29 +224,6 @@ func (s *TCPServer) OnelineDesc() string {
 			len(s.AgentClients),
 		),
 	)
-	return buffer.String()
-}
-
-func (s *TCPServer) FullDesc() string {
-	var buffer bytes.Buffer
-	buffer.WriteString(
-		fmt.Sprintf(
-			"[%s] %s:%d (%d online clients) (started at: %s)",
-			s.Hash,
-			s.Host,
-			s.Port,
-			len(s.AgentClients),
-			humanize.Time(s.TimeStamp),
-		),
-	)
-	var descs []string
-	for _, client := range s.AgentClients {
-		descs = append(descs, fmt.Sprintf("\t%s", client.FullDesc()))
-	}
-	if len(descs) > 0 {
-		buffer.WriteString("\n")
-	}
-	buffer.WriteString(strings.Join(descs, "\n"))
 	return buffer.String()
 }
 

@@ -1,7 +1,7 @@
 GO         ?= go
 LDFLAGS    := -s -w
 BUILD_DIR  := build
-BINS       := platypus-server platypus-admin platypus-agent
+BINS       := platypus-server platypus-agent
 PROTO_SRC  := proto/agent/v1/agent.proto
 PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
@@ -21,8 +21,8 @@ AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.Sig
 all: build
 
 help:
-	@echo "Server / agent / admin (./cmd/...):"
-	@echo "  build           Build all three binaries to ./$(BUILD_DIR)/"
+	@echo "Server / agent (./cmd/...):"
+	@echo "  build           Build both binaries to ./$(BUILD_DIR)/"
 	@echo "  proto           Regenerate protobuf code"
 	@echo "  test            Run tests with race detector"
 	@echo "  lint            Run golangci-lint"
