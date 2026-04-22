@@ -285,6 +285,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		agentSessionsH := api.NewAgentSessionsHandler(db)
 		activitiesH := api.NewActivitiesHandler(db)
 		caH := api.NewCAHandler(db, pkiSvc)
+		topologyH := api.NewTopologyHandler()
 		rbac := api.NewRBACWithStorage(tokens, db)
 
 		// Install the process-wide activity recorder so free-function
@@ -309,6 +310,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 		api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 		api.RegisterV1CARoutes(rest, caH, rbac)
+		api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.L.Info("api_ready",
