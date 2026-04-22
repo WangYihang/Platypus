@@ -59,9 +59,22 @@ func New(configPath, keychainService string) (*App, error) {
 }
 
 // Startup is the wails OnStartup hook; we cache ctx so future EventsEmit
-// calls (D5+) can fire from background goroutines.
+// calls (D5+) can fire from background goroutines. We also install a
+// native OS-drop handler: when the user drags files from Finder/Explorer
+// onto the window, we re-emit a "files:os-drop" event carrying the
+// absolute paths so the React layer can pipe each through UploadFile().
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	wruntime.OnFileDrop(ctx, func(x, y int, paths []string) {
+		if len(paths) == 0 {
+			return
+		}
+		a.emit("files:os-drop", map[string]any{
+			"x":     x,
+			"y":     y,
+			"paths": paths,
+		})
+	})
 }
 
 // ListProfiles returns every saved server profile (without secrets).

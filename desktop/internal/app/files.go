@@ -133,6 +133,150 @@ func (a *App) DownloadFile(sessionID, remotePath, localPath string) error {
 	return nil
 }
 
+// FileEntryDTO is the TS-facing shape for a ListDir / StatFile entry.
+// Field names must match internal/api.fileEntryDTO so the JSON unmarshal
+// is symmetric; keep them in sync when touching either.
+type FileEntryDTO struct {
+	Name          string `json:"name"`
+	Size          int64  `json:"size"`
+	Mode          uint32 `json:"mode"`
+	ModTimeUnix   int64  `json:"modTimeUnix"`
+	IsDir         bool   `json:"isDir"`
+	IsSymlink     bool   `json:"isSymlink"`
+	SymlinkTarget string `json:"symlinkTarget,omitempty"`
+	Err           string `json:"error,omitempty"`
+}
+
+// ListDirResult is returned to the TS layer verbatim so callers can page
+// through a large directory without guessing at total/eof semantics.
+type ListDirResult struct {
+	Entries []FileEntryDTO `json:"entries"`
+	Total   int64          `json:"total"`
+	EOF     bool           `json:"eof"`
+}
+
+// ListDir returns a page of directory entries. offset=0, limit=0 asks
+// the agent for the first page at its default size (currently 5000).
+func (a *App) ListDir(sessionID, path string, offset, limit int64) (ListDirResult, error) {
+	c, err := a.client()
+	if err != nil {
+		return ListDirResult{}, err
+	}
+	q := url.Values{
+		"path":   []string{path},
+		"offset": []string{strconv.FormatInt(offset, 10)},
+		"limit":  []string{strconv.FormatInt(limit, 10)},
+	}
+	body, err := c.Get(context.Background(),
+		"/api/v1/sessions/"+url.PathEscape(sessionID)+"/files/list", q)
+	if err != nil {
+		return ListDirResult{}, err
+	}
+	var resp struct {
+		Status  bool           `json:"status"`
+		Entries []FileEntryDTO `json:"entries"`
+		Total   int64          `json:"total"`
+		EOF     bool           `json:"eof"`
+		Error   string         `json:"error"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return ListDirResult{}, fmt.Errorf("parse list: %w", err)
+	}
+	if !resp.Status {
+		return ListDirResult{}, fmt.Errorf("server: %s", resp.Error)
+	}
+	return ListDirResult{Entries: resp.Entries, Total: resp.Total, EOF: resp.EOF}, nil
+}
+
+// StatFile returns metadata for a single path.
+func (a *App) StatFile(sessionID, path string) (FileEntryDTO, error) {
+	c, err := a.client()
+	if err != nil {
+		return FileEntryDTO{}, err
+	}
+	q := url.Values{"path": []string{path}}
+	body, err := c.Get(context.Background(),
+		"/api/v1/sessions/"+url.PathEscape(sessionID)+"/files/stat", q)
+	if err != nil {
+		return FileEntryDTO{}, err
+	}
+	var resp struct {
+		Status bool         `json:"status"`
+		Entry  FileEntryDTO `json:"entry"`
+		Error  string       `json:"error"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return FileEntryDTO{}, fmt.Errorf("parse stat: %w", err)
+	}
+	if !resp.Status {
+		return FileEntryDTO{}, fmt.Errorf("server: %s", resp.Error)
+	}
+	return resp.Entry, nil
+}
+
+// DeleteFile removes a file or — with recursive=true — a whole subtree.
+func (a *App) DeleteFile(sessionID, path string, recursive bool) error {
+	c, err := a.client()
+	if err != nil {
+		return err
+	}
+	q := url.Values{
+		"path":      []string{path},
+		"recursive": []string{strconv.FormatBool(recursive)},
+	}
+	uri := "/api/v1/sessions/" + url.PathEscape(sessionID) + "/files?" + q.Encode()
+	_, err = c.Delete(context.Background(), uri)
+	return err
+}
+
+// RenameFile moves (renames) a path.
+func (a *App) RenameFile(sessionID, from, to string) error {
+	c, err := a.client()
+	if err != nil {
+		return err
+	}
+	_, err = c.Post(context.Background(),
+		"/api/v1/sessions/"+url.PathEscape(sessionID)+"/files/rename",
+		map[string]string{"from": from, "to": to})
+	return err
+}
+
+// Mkdir creates a directory. parents=true is mkdir -p. mode is the unix
+// permission bits (0755 if 0 is passed).
+func (a *App) Mkdir(sessionID, path string, parents bool, mode uint32) error {
+	c, err := a.client()
+	if err != nil {
+		return err
+	}
+	q := url.Values{
+		"path":    []string{path},
+		"parents": []string{strconv.FormatBool(parents)},
+	}
+	if mode != 0 {
+		q.Set("mode", strconv.FormatUint(uint64(mode), 8))
+	}
+	uri := "/api/v1/sessions/" + url.PathEscape(sessionID) + "/files/mkdir?" + q.Encode()
+	_, err = c.PostRaw(context.Background(), uri, "application/json", nil)
+	return err
+}
+
+// Chmod sets permission bits on a path. mode is passed as the unix
+// octal mode (e.g. 0o644). On Windows only the owner-write bit is
+// meaningful — that's a platform quirk, not a bug.
+func (a *App) Chmod(sessionID, path string, mode uint32) error {
+	c, err := a.client()
+	if err != nil {
+		return err
+	}
+	q := url.Values{
+		"path": []string{path},
+		"mode": []string{strconv.FormatUint(uint64(mode), 8)},
+	}
+	uri := "/api/v1/sessions/" + url.PathEscape(sessionID) + "/files/chmod?" + q.Encode()
+	_, err = c.PostRaw(context.Background(), uri, "application/json", nil)
+	return err
+}
+
 // UploadFile streams localPath to the remote path, again in 256 KiB chunks.
 // First chunk overwrites; subsequent chunks append.
 func (a *App) UploadFile(sessionID, remotePath, localPath string) error {

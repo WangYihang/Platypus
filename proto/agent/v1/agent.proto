@@ -85,6 +85,24 @@ message Envelope {
     // Session renewal (in-band rotation without reconnect)
     SessionRenewRequest  session_renew_request  = 72;
     SessionRenewResponse session_renew_response = 73;
+
+    // RPC: filesystem management (directory listing + metadata ops).
+    // Tags 38/39 and 74..109 are intentionally skipped — tunneling (40-49),
+    // socks5 (50-55), mesh (60-66), enrollment (70-71) and renewal (72-73)
+    // already occupy the low range; keeping these together at 110..121 avoids
+    // fragmenting the oneof.
+    ListDirRequest   list_dir_request   = 110;
+    ListDirResponse  list_dir_response  = 111;
+    StatRequest      stat_request       = 112;
+    StatResponse     stat_response      = 113;
+    DeleteRequest    delete_request     = 114;
+    DeleteResponse   delete_response    = 115;
+    RenameRequest    rename_request     = 116;
+    RenameResponse   rename_response    = 117;
+    MkdirRequest     mkdir_request      = 118;
+    MkdirResponse    mkdir_response     = 119;
+    ChmodRequest     chmod_request      = 120;
+    ChmodResponse    chmod_response     = 121;
   }
 }
 
@@ -200,6 +218,54 @@ message FileSizeResponse {
   int64  size  = 1;
   string error = 2;
 }
+
+// --- RPC: filesystem management ---
+//
+// These RPCs back the file explorer UI. Directory listing is paged
+// (offset/limit) so a single response stays well under the 16 MiB
+// envelope cap even for huge directories. Symlinks are never traversed
+// server-side — the agent reports is_symlink + symlink_target and lets
+// the client decide what to do.
+
+// FileEntry is the shared metadata record used by ListDir and Stat.
+message FileEntry {
+  string name           = 1; // basename only (no path separator)
+  int64  size           = 2; // bytes; 0 for directories and specials
+  uint32 mode           = 3; // os.FileMode bits (perm + type flags)
+  int64  mod_time_unix  = 4; // mtime in unix nanoseconds (UTC)
+  bool   is_dir         = 5;
+  bool   is_symlink     = 6;
+  string symlink_target = 7; // raw readlink target when is_symlink
+  string error          = 8; // per-entry lstat/readlink error, non-fatal
+}
+
+message ListDirRequest {
+  string path   = 1; // absolute directory path on the agent
+  int64  offset = 2; // index of first entry to return (0-based)
+  int64  limit  = 3; // 0 = use agent default (5000)
+}
+
+message ListDirResponse {
+  repeated FileEntry entries = 1;
+  int64  total = 2; // total entries in the directory (not just this page)
+  bool   eof   = 3; // true if this page contains the final entry
+  string error = 4;
+}
+
+message StatRequest  { string path = 1; }
+message StatResponse { FileEntry entry = 1; string error = 2; }
+
+message DeleteRequest  { string path = 1; bool recursive = 2; }
+message DeleteResponse { string error = 1; }
+
+message RenameRequest  { string from = 1; string to = 2; }
+message RenameResponse { string error = 1; }
+
+message MkdirRequest  { string path = 1; bool parents = 2; uint32 mode = 3; }
+message MkdirResponse { string error = 1; }
+
+message ChmodRequest  { string path = 1; uint32 mode = 2; }
+message ChmodResponse { string error = 1; }
 
 // --- Tunneling ---
 

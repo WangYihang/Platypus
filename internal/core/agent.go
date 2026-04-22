@@ -356,6 +356,148 @@ func (c *AgentClient) writeFileInternal(path string, content []byte, appendMode 
 	return -1, fmt.Errorf("invalid response")
 }
 
+func (c *AgentClient) ListDir(path string, offset, limit int64) ([]*agentpb.FileEntry, int64, bool, error) {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload: &agentpb.Envelope_ListDirRequest{
+			ListDirRequest: &agentpb.ListDirRequest{Path: path, Offset: offset, Limit: limit},
+		},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetListDirResponse(); resp != nil {
+		if resp.Error != "" {
+			return nil, 0, false, fmt.Errorf("%s", resp.Error)
+		}
+		return resp.Entries, resp.Total, resp.Eof, nil
+	}
+	return nil, 0, false, fmt.Errorf("invalid response")
+}
+
+func (c *AgentClient) Stat(path string) (*agentpb.FileEntry, error) {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload:   &agentpb.Envelope_StatRequest{StatRequest: &agentpb.StatRequest{Path: path}},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetStatResponse(); resp != nil {
+		if resp.Error != "" {
+			return nil, fmt.Errorf("%s", resp.Error)
+		}
+		return resp.Entry, nil
+	}
+	return nil, fmt.Errorf("invalid response")
+}
+
+func (c *AgentClient) Delete(path string, recursive bool) error {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload: &agentpb.Envelope_DeleteRequest{
+			DeleteRequest: &agentpb.DeleteRequest{Path: path, Recursive: recursive},
+		},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetDeleteResponse(); resp != nil {
+		if resp.Error != "" {
+			return fmt.Errorf("%s", resp.Error)
+		}
+		return nil
+	}
+	return fmt.Errorf("invalid response")
+}
+
+func (c *AgentClient) Rename(from, to string) error {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload: &agentpb.Envelope_RenameRequest{
+			RenameRequest: &agentpb.RenameRequest{From: from, To: to},
+		},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetRenameResponse(); resp != nil {
+		if resp.Error != "" {
+			return fmt.Errorf("%s", resp.Error)
+		}
+		return nil
+	}
+	return fmt.Errorf("invalid response")
+}
+
+func (c *AgentClient) Mkdir(path string, parents bool, mode uint32) error {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload: &agentpb.Envelope_MkdirRequest{
+			MkdirRequest: &agentpb.MkdirRequest{Path: path, Parents: parents, Mode: mode},
+		},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetMkdirResponse(); resp != nil {
+		if resp.Error != "" {
+			return fmt.Errorf("%s", resp.Error)
+		}
+		return nil
+	}
+	return fmt.Errorf("invalid response")
+}
+
+func (c *AgentClient) Chmod(path string, mode uint32) error {
+	token := uuid.New().String()
+	ch := make(chan interface{}, 1)
+	Ctx.MessageQueueMu.Lock()
+	Ctx.EnvelopeQueue[token] = ch
+	Ctx.MessageQueueMu.Unlock()
+
+	c.Send(&agentpb.Envelope{
+		RequestId: token,
+		Payload: &agentpb.Envelope_ChmodRequest{
+			ChmodRequest: &agentpb.ChmodRequest{Path: path, Mode: mode},
+		},
+	})
+
+	env := (<-ch).(*agentpb.Envelope)
+	if resp := env.GetChmodResponse(); resp != nil {
+		if resp.Error != "" {
+			return fmt.Errorf("%s", resp.Error)
+		}
+		return nil
+	}
+	return fmt.Errorf("invalid response")
+}
+
 // recordSessionOpen writes one session.open row when an agent has
 // finished the handshake and is registered into the server's active
 // client list. The ProjectID is left nil here — the agent session DB

@@ -41,6 +41,12 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        a.Startup,
+		DragAndDrop: &options.DragAndDrop{
+			// Enable the native OS file-drop handler; Startup() subscribes
+			// and re-emits a "files:os-drop" event for the React layer.
+			EnableFileDrop:     true,
+			DisableWebViewDrop: true,
+		},
 		Bind: []interface{}{
 			a,
 		},

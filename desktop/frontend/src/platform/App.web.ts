@@ -232,6 +232,136 @@ export async function UploadFile(
     }
 }
 
+// ---------- File management (list / stat / delete / rename / mkdir / chmod)
+// These mirror the Wails-side App methods with the same signatures. The
+// UI imports them from the platform barrel, so switching desktop ↔ web is
+// transparent.
+
+export interface FileEntryDTO {
+    name: string;
+    size: number;
+    mode: number;
+    modTimeUnix: number;
+    isDir: boolean;
+    isSymlink: boolean;
+    symlinkTarget?: string;
+    error?: string;
+}
+
+export interface ListDirResult {
+    entries: FileEntryDTO[];
+    total: number;
+    eof: boolean;
+}
+
+export async function ListDir(
+    sessionHash: string,
+    path: string,
+    offset: number,
+    limit: number,
+): Promise<ListDirResult> {
+    const q = new URLSearchParams({
+        path,
+        offset: String(offset),
+        limit: String(limit),
+    });
+    const resp = await apiJSON<{
+        status: boolean;
+        entries?: FileEntryDTO[];
+        total?: number;
+        eof?: boolean;
+        error?: string;
+    }>(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/list?${q}`);
+    if (!resp.status) throw new Error(resp.error || "list failed");
+    return {
+        entries: resp.entries || [],
+        total: resp.total || 0,
+        eof: !!resp.eof,
+    };
+}
+
+export async function StatFile(sessionHash: string, path: string): Promise<FileEntryDTO> {
+    const q = new URLSearchParams({ path });
+    const resp = await apiJSON<{ status: boolean; entry?: FileEntryDTO; error?: string }>(
+        `/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/stat?${q}`,
+    );
+    if (!resp.status || !resp.entry) throw new Error(resp.error || "stat failed");
+    return resp.entry;
+}
+
+export async function DeleteFile(
+    sessionHash: string,
+    path: string,
+    recursive: boolean,
+): Promise<void> {
+    const q = new URLSearchParams({ path, recursive: String(recursive) });
+    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
+        method: "DELETE",
+    });
+}
+
+export async function RenameFile(sessionHash: string, from: string, to: string): Promise<void> {
+    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to }),
+    });
+}
+
+export async function Mkdir(
+    sessionHash: string,
+    path: string,
+    parents: boolean,
+    mode: number,
+): Promise<void> {
+    const q = new URLSearchParams({ path, parents: String(parents) });
+    if (mode && mode !== 0) q.set("mode", mode.toString(8));
+    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/mkdir?${q}`, {
+        method: "POST",
+    });
+}
+
+export async function Chmod(sessionHash: string, path: string, mode: number): Promise<void> {
+    const q = new URLSearchParams({ path, mode: mode.toString(8) });
+    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/chmod?${q}`, {
+        method: "POST",
+    });
+}
+
+// UploadBrowserFile streams a File object directly (no synthetic token
+// indirection), matching the signature the Wails binding produces for
+// OS-drop callbacks. The React drop zone iterates dataTransfer.files and
+// calls this per file.
+export async function UploadBrowserFile(
+    sessionHash: string,
+    remotePath: string,
+    file: File,
+): Promise<void> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length === 0) {
+        // Empty file: truncate the destination with an empty payload.
+        const q = new URLSearchParams({ path: remotePath, append: "false" });
+        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: new Uint8Array(0),
+        });
+        return;
+    }
+    for (let off = 0; off < bytes.length; off += CHUNK_SIZE) {
+        const slice = bytes.subarray(off, Math.min(off + CHUNK_SIZE, bytes.length));
+        const q = new URLSearchParams({
+            path: remotePath,
+            append: String(off > 0),
+        });
+        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: slice,
+        });
+    }
+}
+
 // ---------- Tunnels -----------------------------------------------------
 
 export async function ListTunnels(sessionHash: string): Promise<api.TunnelInfo[]> {

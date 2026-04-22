@@ -36,7 +36,13 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 		// File operations
 		v1.GET("/sessions/:id/files", ReadFile)
 		v1.POST("/sessions/:id/files", WriteFile)
+		v1.DELETE("/sessions/:id/files", DeleteFileHandler)
 		v1.GET("/sessions/:id/files/size", GetFileSize)
+		v1.GET("/sessions/:id/files/list", ListDirHandler)
+		v1.GET("/sessions/:id/files/stat", StatHandler)
+		v1.POST("/sessions/:id/files/rename", RenameFileHandler)
+		v1.POST("/sessions/:id/files/mkdir", MkdirHandler)
+		v1.POST("/sessions/:id/files/chmod", ChmodHandler)
 
 		// Tunnels
 		v1.GET("/sessions/:id/tunnels", ListTunnels)

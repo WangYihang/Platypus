@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"syscall"
 	"time"
 
@@ -93,6 +95,18 @@ func dispatchEnvelope(c *Client, state *State, env *agentpb.Envelope) {
 		handleFileSize(c, env.RequestId, p.FileSizeRequest)
 	case *agentpb.Envelope_WriteFileRequest:
 		handleWriteFile(c, env.RequestId, p.WriteFileRequest)
+	case *agentpb.Envelope_ListDirRequest:
+		handleListDir(c, env.RequestId, p.ListDirRequest)
+	case *agentpb.Envelope_StatRequest:
+		handleStat(c, env.RequestId, p.StatRequest)
+	case *agentpb.Envelope_DeleteRequest:
+		handleDelete(c, env.RequestId, p.DeleteRequest)
+	case *agentpb.Envelope_RenameRequest:
+		handleRename(c, env.RequestId, p.RenameRequest)
+	case *agentpb.Envelope_MkdirRequest:
+		handleMkdir(c, env.RequestId, p.MkdirRequest)
+	case *agentpb.Envelope_ChmodRequest:
+		handleChmod(c, env.RequestId, p.ChmodRequest)
 	case *agentpb.Envelope_UpdateRequest:
 		handleUpdate(c, p.UpdateRequest)
 	case *agentpb.Envelope_SessionRenewResponse:
@@ -526,4 +540,153 @@ func handleWriteFile(c *Client, reqID string, req *agentpb.WriteFileRequest) {
 			WriteFileResponse: &agentpb.WriteFileResponse{BytesWritten: bytesWritten, Error: errMsg},
 		},
 	})
+}
+
+// maxListDirEntries caps how many entries a single ListDir response may
+// carry. A FileEntry is ~100 bytes on the wire; 5000 × 100 = 500 KiB,
+// well under the 16 MiB envelope limit even with long names.
+const maxListDirEntries = 5000
+
+// entryFromLstat populates a FileEntry by lstat'ing a path. Symlinks
+// are not traversed — if the target is itself a symlink to something
+// else, the UI decides whether to follow.
+func entryFromLstat(parent, name string) *agentpb.FileEntry {
+	entry := &agentpb.FileEntry{Name: name}
+	full := filepath.Join(parent, name)
+	fi, err := os.Lstat(full)
+	if err != nil {
+		entry.Error = err.Error()
+		return entry
+	}
+	mode := fi.Mode()
+	entry.Size = fi.Size()
+	entry.Mode = uint32(mode)
+	entry.ModTimeUnix = fi.ModTime().UnixNano()
+	entry.IsDir = mode.IsDir()
+	if mode&os.ModeSymlink != 0 {
+		entry.IsSymlink = true
+		if target, rlErr := os.Readlink(full); rlErr == nil {
+			entry.SymlinkTarget = target
+		}
+	}
+	return entry
+}
+
+func handleListDir(c *Client, reqID string, req *agentpb.ListDirRequest) {
+	resp := &agentpb.ListDirResponse{}
+	if req.Path == "" {
+		resp.Error = "path is empty"
+		send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_ListDirResponse{ListDirResponse: resp}})
+		return
+	}
+	raw, err := os.ReadDir(req.Path)
+	if err != nil {
+		resp.Error = err.Error()
+		send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_ListDirResponse{ListDirResponse: resp}})
+		return
+	}
+	// Stable alphabetical ordering so offset/limit paging is deterministic.
+	sort.Slice(raw, func(i, j int) bool { return raw[i].Name() < raw[j].Name() })
+
+	total := int64(len(raw))
+	resp.Total = total
+
+	offset := req.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+
+	limit := req.Limit
+	if limit <= 0 || limit > maxListDirEntries {
+		limit = maxListDirEntries
+	}
+
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	resp.Eof = end >= total
+
+	for i := offset; i < end; i++ {
+		resp.Entries = append(resp.Entries, entryFromLstat(req.Path, raw[i].Name()))
+	}
+
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_ListDirResponse{ListDirResponse: resp}})
+}
+
+func handleStat(c *Client, reqID string, req *agentpb.StatRequest) {
+	resp := &agentpb.StatResponse{}
+	if req.Path == "" {
+		resp.Error = "path is empty"
+		send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_StatResponse{StatResponse: resp}})
+		return
+	}
+	resp.Entry = entryFromLstat(filepath.Dir(req.Path), filepath.Base(req.Path))
+	if resp.Entry.Error != "" {
+		resp.Error = resp.Entry.Error
+	}
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_StatResponse{StatResponse: resp}})
+}
+
+func handleDelete(c *Client, reqID string, req *agentpb.DeleteRequest) {
+	resp := &agentpb.DeleteResponse{}
+	var err error
+	if req.Path == "" {
+		resp.Error = "path is empty"
+	} else if req.Recursive {
+		err = os.RemoveAll(req.Path)
+	} else {
+		err = os.Remove(req.Path)
+	}
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_DeleteResponse{DeleteResponse: resp}})
+}
+
+func handleRename(c *Client, reqID string, req *agentpb.RenameRequest) {
+	resp := &agentpb.RenameResponse{}
+	if req.From == "" || req.To == "" {
+		resp.Error = "from and to are required"
+	} else if err := os.Rename(req.From, req.To); err != nil {
+		// Cross-filesystem renames return EXDEV on Linux. Surface the
+		// raw error verbatim so the UI can tell users to copy+delete.
+		resp.Error = err.Error()
+	}
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_RenameResponse{RenameResponse: resp}})
+}
+
+func handleMkdir(c *Client, reqID string, req *agentpb.MkdirRequest) {
+	resp := &agentpb.MkdirResponse{}
+	mode := os.FileMode(req.Mode & 0o7777)
+	if mode == 0 {
+		mode = 0o755
+	}
+	var err error
+	if req.Path == "" {
+		resp.Error = "path is empty"
+	} else if req.Parents {
+		err = os.MkdirAll(req.Path, mode)
+	} else {
+		err = os.Mkdir(req.Path, mode)
+	}
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_MkdirResponse{MkdirResponse: resp}})
+}
+
+func handleChmod(c *Client, reqID string, req *agentpb.ChmodRequest) {
+	resp := &agentpb.ChmodResponse{}
+	// On Windows, os.Chmod only honours the owner-write bit; that's a
+	// platform limitation we surface as-is.
+	if req.Path == "" {
+		resp.Error = "path is empty"
+	} else if err := os.Chmod(req.Path, os.FileMode(req.Mode&0o7777)); err != nil {
+		resp.Error = err.Error()
+	}
+	send(c, &agentpb.Envelope{RequestId: reqID, Payload: &agentpb.Envelope_ChmodResponse{ChmodResponse: resp}})
 }
