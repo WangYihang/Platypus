@@ -6,6 +6,7 @@ PROTO_SRC  := proto/agent/v1/agent.proto
 PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
 .PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
+        hooks pre-commit \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
         web-ui web-ui-serve e2e e2e-deps screenshots
 
@@ -20,6 +21,8 @@ help:
 	@echo "  fmt             Format Go source"
 	@echo "  vet             Run go vet"
 	@echo "  tidy            Run go mod tidy"
+	@echo "  hooks           Install git pre-commit hooks (requires 'pip install pre-commit')"
+	@echo "  pre-commit      Run all pre-commit hooks against every tracked file"
 	@echo "  snapshot        Build cross-platform snapshot via goreleaser"
 	@echo "  release         Cut a release via goreleaser (requires tag + GITHUB_TOKEN)"
 	@echo "  clean           Remove build artifacts"
@@ -71,6 +74,12 @@ vet:
 
 tidy:
 	$(GO) mod tidy
+
+hooks:
+	pre-commit install
+
+pre-commit:
+	pre-commit run --all-files
 
 # swag regenerates docs/swagger.yaml + docs/swagger.json from the //@... tags
 # on the API handlers. Run this any time those tags change; the result is

@@ -36,16 +36,16 @@ var _ listener.Listener = (*TCPServer)(nil)
 
 // TCPServer is a TLS ingress port where agents dial in.
 type TCPServer struct {
-	Host           string                      `json:"host"`
-	GroupDispatch  bool                        `json:"group_dispatch"`
-	Port           uint16                      `json:"port"`
-	AgentClients map[string](*AgentClient) `json:"agent_clients"`
-	TimeStamp      time.Time                   `json:"timestamp"`
-	Interfaces     []string                    `json:"interfaces"`
-	Hash           string                      `json:"hash"`
-	DisableHistory bool                        `json:"disable_history"`
-	PublicIP       string                      `json:"public_ip"`
-	ShellPath      string                      `json:"shell_path"`
+	Host           string                    `json:"host"`
+	GroupDispatch  bool                      `json:"group_dispatch"`
+	Port           uint16                    `json:"port"`
+	AgentClients   map[string](*AgentClient) `json:"agent_clients"`
+	TimeStamp      time.Time                 `json:"timestamp"`
+	Interfaces     []string                  `json:"interfaces"`
+	Hash           string                    `json:"hash"`
+	DisableHistory bool                      `json:"disable_history"`
+	PublicIP       string                    `json:"public_ip"`
+	ShellPath      string                    `json:"shell_path"`
 	// ProjectID is the id of the storage.Project this listener is scoped
 	// to. Empty for listeners created via the pre-redesign config path —
 	// the agent-handshake code falls back to the "default" project slug
@@ -78,7 +78,7 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 		Host:           host,
 		Port:           port,
 		GroupDispatch:  true,
-		AgentClients: make(map[string](*AgentClient)),
+		AgentClients:   make(map[string](*AgentClient)),
 		Interfaces:     []string{},
 		TimeStamp:      time.Now(),
 		hashFormat:     hashFormat,

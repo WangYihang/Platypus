@@ -64,6 +64,17 @@ make build              # → ./build/{platypus-server,platypus-admin,platypus-a
 
 Other useful targets: `make test`, `make lint`, `make snapshot` (cross-platform via goreleaser), `make help`.
 
+### Development (pre-commit hooks)
+
+Contributors should install the git hooks so `gofmt` / `goimports` / `go vet` /
+`golangci-lint` run before each commit:
+
+```bash
+pip install pre-commit   # or: pipx install pre-commit
+make hooks               # one-time: wires .git/hooks/pre-commit
+make pre-commit          # optional: run all hooks against every file now
+```
+
 ### Build the desktop app
 
 Requires Node 22+, Wails CLI dependencies (`wails doctor`), and the platform's WebView libraries (webkit2gtk-4.1 on Linux, WebView2 on Windows, WKWebView on macOS).

@@ -48,20 +48,20 @@ type Process struct {
 }
 
 type AgentClient struct {
-	conn              net.Conn             `json:"-"`
-	Hash              string               `json:"hash"`
-	Host              string               `json:"host"`
-	Port              uint16               `json:"port"`
-	Alias             string               `json:"alias"`
-	User              string               `json:"user"`
-	OS                oss.OperatingSystem  `json:"os"`
-	Version           string               `json:"version"`
-	NetworkInterfaces map[string]string    `json:"network_interfaces"`
-	Python2           string               `json:"python2"`
-	Python3           string               `json:"python3"`
-	TimeStamp         time.Time            `json:"timestamp"`
-	DisableHistory    bool                 `json:"disable_hisory"`
-	GroupDispatch     bool                 `json:"group_dispatch"`
+	conn              net.Conn            `json:"-"`
+	Hash              string              `json:"hash"`
+	Host              string              `json:"host"`
+	Port              uint16              `json:"port"`
+	Alias             string              `json:"alias"`
+	User              string              `json:"user"`
+	OS                oss.OperatingSystem `json:"os"`
+	Version           string              `json:"version"`
+	NetworkInterfaces map[string]string   `json:"network_interfaces"`
+	Python2           string              `json:"python2"`
+	Python3           string              `json:"python3"`
+	TimeStamp         time.Time           `json:"timestamp"`
+	DisableHistory    bool                `json:"disable_hisory"`
+	GroupDispatch     bool                `json:"group_dispatch"`
 	// MachineID is the agent-reported stable id (see internal/agent/machine_id.go).
 	// Empty when the agent couldn't read a platform id; the server falls back
 	// to a hash of hostname + sorted MACs for host aggregation in that case.
@@ -69,8 +69,8 @@ type AgentClient struct {
 	Hostname  string `json:"hostname"`
 	// HostID + ProjectID are stamped by UpsertHostForAgent on successful
 	// handshake, pointing at the storage.Host row this session belongs to.
-	HostID    string `json:"host_id"`
-	ProjectID string `json:"project_id"`
+	HostID            string               `json:"host_id"`
+	ProjectID         string               `json:"project_id"`
 	server            *TCPServer           `json:"-"`
 	codec             *protocol.ProtoCodec `json:"-"`
 	atomLock          *sync.Mutex          `json:"-"`

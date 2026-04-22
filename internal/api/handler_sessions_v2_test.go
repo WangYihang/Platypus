@@ -130,7 +130,9 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("base status=%d body=%s", w.Code, w.Body.String())
 	}
-	var all struct{ Sessions []sessionResponse `json:"sessions"` }
+	var all struct {
+		Sessions []sessionResponse `json:"sessions"`
+	}
 	_ = json.NewDecoder(w.Body).Decode(&all)
 	if len(all.Sessions) != 2 {
 		t.Fatalf("expected 2 sessions; got %d", len(all.Sessions))
@@ -138,7 +140,9 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 
 	// live=true → just the live one.
 	w = probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/sessions?live=true", tok, nil)
-	var liveOnly struct{ Sessions []sessionResponse `json:"sessions"` }
+	var liveOnly struct {
+		Sessions []sessionResponse `json:"sessions"`
+	}
 	_ = json.NewDecoder(w.Body).Decode(&liveOnly)
 	if len(liveOnly.Sessions) != 1 || liveOnly.Sessions[0].ID != "live-now" {
 		t.Fatalf("live filter: %+v", liveOnly.Sessions)
@@ -148,7 +152,9 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 	since := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 	w = probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+proj.ID+"/sessions?since="+since, tok, nil)
-	var recent struct{ Sessions []sessionResponse `json:"sessions"` }
+	var recent struct {
+		Sessions []sessionResponse `json:"sessions"`
+	}
 	_ = json.NewDecoder(w.Body).Decode(&recent)
 	if len(recent.Sessions) != 1 || recent.Sessions[0].ID != "live-now" {
 		t.Fatalf("since filter: %+v", recent.Sessions)
