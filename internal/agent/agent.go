@@ -161,6 +161,14 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		}
 		defer close(stopRenew)
 
+		// Periodic sysinfo stream. Runs for every agent — the server
+		// stores the latest sample against the agent's Host row and
+		// uses it to drive the Topology / Hosts CPU & memory gauges.
+		// Cheap: one gopsutil sample per SysInfoSampleInterval.
+		stopSysInfo := make(chan struct{})
+		StartSysInfoPusher(c, stopSysInfo)
+		defer close(stopSysInfo)
+
 		HandleConnection(c, state)
 		return nil
 	}

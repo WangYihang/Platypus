@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -58,6 +59,8 @@ func dispatchEnvelope(c *Client, state *State, env *agentpb.Envelope) {
 	case *agentpb.Envelope_ProcessStopped:
 	case *agentpb.Envelope_GetClientInfoRequest:
 		handleGetClientInfo(c, env.RequestId)
+	case *agentpb.Envelope_SysInfoRequest:
+		handleSysInfoRequest(c, env.RequestId)
 	case *agentpb.Envelope_DuplicateClient:
 		log.Error("Duplicated connection")
 		os.Exit(0)
@@ -213,6 +216,18 @@ func handleGetClientInfo(c *Client, reqID string) {
 				AvailableLanguages: languages,
 				MachineId:          MachineID(),
 			},
+		},
+	})
+}
+
+func handleSysInfoRequest(c *Client, reqID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	info, _ := CollectSysInfo(ctx)
+	send(c, &agentpb.Envelope{
+		RequestId: reqID,
+		Payload: &agentpb.Envelope_SysInfoResponse{
+			SysInfoResponse: &agentpb.SysInfoResponse{Info: info},
 		},
 	})
 }

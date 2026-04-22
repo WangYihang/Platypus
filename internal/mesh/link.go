@@ -35,6 +35,72 @@ type Link struct {
 	closed    chan struct{}
 	lastRxNs  atomic.Int64
 	logger    *slog.Logger
+
+	// Time the link was promoted to up (run() entered the receive
+	// loop). Used by Stats to annotate the counters' observation
+	// window.
+	sinceNs atomic.Int64
+
+	// Timestamp of our most recently sent keepalive. The next
+	// inbound keepalive from the peer is ~RTT old; we derive
+	// lastRTTNs from that.
+	lastOutboundKeepaliveNs atomic.Int64
+	lastRTTNs               atomic.Int64
+
+	// Peer-reported counters, last observed on an inbound
+	// MeshKeepalive. Kept for cross-checking and debugging.
+	peerBytesIn  atomic.Uint64
+	peerBytesOut atomic.Uint64
+	peerMsgsIn   atomic.Uint64
+	peerMsgsOut  atomic.Uint64
+}
+
+// LinkStats is the observable counter snapshot for a live link. All
+// fields are from the local perspective: BytesIn is what we actually
+// received, BytesOut is what we actually wrote. The peer's
+// cross-check view lives on the Link struct (peerBytes*, set from
+// inbound keepalives).
+type LinkStats struct {
+	PeerNodeID string
+	RemoteAddr string
+	Since      time.Time     // when the link came up
+	RTT        time.Duration // last measured round-trip
+	BytesIn    uint64
+	BytesOut   uint64
+	MsgsIn     uint64
+	MsgsOut    uint64
+}
+
+// Stats returns a best-effort point-in-time snapshot of this link's
+// counters. Safe to call from any goroutine.
+func (l *Link) Stats() LinkStats {
+	return LinkStats{
+		PeerNodeID: l.PeerNodeID,
+		RemoteAddr: l.RemoteAddr,
+		Since:      time.Unix(0, l.sinceNs.Load()),
+		RTT:        time.Duration(l.lastRTTNs.Load()),
+		BytesIn:    l.codec.BytesRecv(),
+		BytesOut:   l.codec.BytesSent(),
+		MsgsIn:     l.codec.MsgsRecv(),
+		MsgsOut:    l.codec.MsgsSent(),
+	}
+}
+
+// observeInboundKeepalive is called from Node.handleIncoming when a
+// MeshKeepalive arrives. It updates RTT (if the peer echoed our last
+// outbound keepalive's send time through in-flight timing) and
+// captures the peer's reported lifetime counters.
+func (l *Link) observeInboundKeepalive(ka *agentpb.MeshKeepalive) {
+	if last := l.lastOutboundKeepaliveNs.Load(); last != 0 {
+		rtt := time.Now().UnixNano() - last
+		if rtt > 0 {
+			l.lastRTTNs.Store(rtt)
+		}
+	}
+	l.peerBytesIn.Store(ka.LifetimeBytesIn)
+	l.peerBytesOut.Store(ka.LifetimeBytesOut)
+	l.peerMsgsIn.Store(ka.LifetimeMsgsIn)
+	l.peerMsgsOut.Store(ka.LifetimeMsgsOut)
 }
 
 func newLink(
@@ -91,6 +157,7 @@ func (l *Link) run() {
 	defer l.Close()
 	defer l.node.onLinkDown(l)
 
+	l.sinceNs.Store(time.Now().UnixNano())
 	l.node.onLinkUp(l)
 
 	stopKeep := make(chan struct{})
@@ -124,11 +191,21 @@ func (l *Link) keepaliveLoop(stop chan struct{}) {
 				l.Close()
 				return
 			}
+			// Record this send BEFORE transmission so RTT
+			// measurement on the reply is never negative even if
+			// the peer ack'd it sub-microsecond.
+			l.lastOutboundKeepaliveNs.Store(now)
 			err := l.Send(&agentpb.Envelope{
 				Version:   meshProtocolVersion,
 				Timestamp: now,
 				Payload: &agentpb.Envelope_MeshKeepalive{
-					MeshKeepalive: &agentpb.MeshKeepalive{SentAt: now},
+					MeshKeepalive: &agentpb.MeshKeepalive{
+						SentAt:           now,
+						LifetimeBytesIn:  l.codec.BytesRecv(),
+						LifetimeBytesOut: l.codec.BytesSent(),
+						LifetimeMsgsIn:   l.codec.MsgsRecv(),
+						LifetimeMsgsOut:  l.codec.MsgsSent(),
+					},
 				},
 			})
 			if err != nil {

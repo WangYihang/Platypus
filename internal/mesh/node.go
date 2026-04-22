@@ -272,6 +272,19 @@ func (n *Node) linkSnapshot() []*Link {
 	return out
 }
 
+// LinkStats returns a snapshot of per-peer counter state for every
+// currently established direct link. Used by the Topology aggregator
+// to light up edge weights (bytes/s, msgs/s, RTT) on the Mesh
+// visualisation.
+func (n *Node) LinkStats() []LinkStats {
+	links := n.linkSnapshot()
+	out := make([]LinkStats, 0, len(links))
+	for _, l := range links {
+		out = append(out, l.Stats())
+	}
+	return out
+}
+
 func (n *Node) directPeerSet() map[string]struct{} {
 	n.linkMu.RLock()
 	defer n.linkMu.RUnlock()
@@ -291,8 +304,10 @@ func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
 	// Decide: mesh-control payload, locally-destined payload, or forward.
 	switch p := env.Payload.(type) {
 	case *agentpb.Envelope_MeshKeepalive:
-		// RTT measurement possible via p.MeshKeepalive.SentAt; not used yet.
-		_ = p
+		// Updates the link's RTT from our last outbound keepalive
+		// timestamp and captures the peer-reported lifetime
+		// counters for cross-checking against the local codec.
+		from.observeInboundKeepalive(p.MeshKeepalive)
 		return
 	case *agentpb.Envelope_MeshPeerAnnounce:
 		n.ingestAnnounce(from, p.MeshPeerAnnounce)
