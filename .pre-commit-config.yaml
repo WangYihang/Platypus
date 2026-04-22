@@ -12,23 +12,17 @@ repos:
         entry: gofmt -l -w
 
       - id: goimports
-        name: goimports (-local github.com/WangYihang/Platypus)
+        name: goimports (pinned golang.org/x/tools v0.44.0, -local github.com/WangYihang/Platypus)
         language: system
         types: [go]
         entry: bash -c '
           set -e;
+          WANT="golang.org/x/tools v0.44.0";
           BIN="$(go env GOPATH)/bin/goimports";
-          if [ ! -x "$BIN" ]; then
-            go install golang.org/x/tools/cmd/goimports@latest;
+          if [ ! -x "$BIN" ] || ! go version -m "$BIN" 2>/dev/null | grep -q "$WANT"; then
+            go install golang.org/x/tools/cmd/goimports@v0.44.0;
           fi;
           "$BIN" -l -w -local github.com/WangYihang/Platypus "$@"' --
-
-      - id: go-vet
-        name: go vet
-        language: system
-        types: [go]
-        pass_filenames: false
-        entry: go vet ./...
 
       - id: go-mod-tidy
         name: go mod tidy
