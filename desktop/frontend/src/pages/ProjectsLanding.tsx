@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { Spin } from "antd";
-import { AppstoreOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { FolderOpen, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../components/Card";
@@ -33,7 +32,7 @@ export default function ProjectsLanding() {
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {list.length === 0 ? (
                     <EmptyState
-                        icon={<FolderOpenOutlined />}
+                        icon={<FolderOpen className="size-5" />}
                         title="No projects yet"
                         description="An admin creates projects from the sidebar. Each project groups its own listeners, hosts, sessions, and dispatches."
                     />
@@ -72,7 +71,7 @@ function ProjectTile({ project, onOpen }: { project: Project; onOpen: () => void
                         fontSize: 12,
                     }}
                 >
-                    <AppstoreOutlined />
+                    <LayoutGrid className="size-3.5" />
                     <Mono size={11}>{project.slug}</Mono>
                 </div>
                 <div
