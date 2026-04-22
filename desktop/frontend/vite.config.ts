@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 // Two build modes share one source tree:
@@ -29,8 +30,14 @@ export default defineConfig(({ mode }) => {
         : {};
 
     return {
-        plugins: [react()],
-        resolve: { alias: platformAliases },
+        plugins: [react(), tailwindcss()],
+        resolve: {
+            alias: {
+                ...platformAliases,
+                // shadcn/ui generates components that import with "@/…"
+                "@": path.resolve(__dirname, "src"),
+            },
+        },
         build: {
             outDir: isWeb ? "dist-web" : "dist",
             // Manual vendor chunking. Splits the heavy third-party libs
