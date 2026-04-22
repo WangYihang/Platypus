@@ -1,36 +1,68 @@
+import { ReactNode, Suspense, lazy } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
-import { ConfigProvider } from "antd";
+import { ConfigProvider, Spin } from "antd";
 
 import { antTheme } from "./layout/theme";
+import { palette } from "./layout/theme";
 import RequireAuth from "./layout/RequireAuth";
 import ProjectShell from "./layout/ProjectShell";
-import LoginRoute from "./routes/LoginRoute";
-import ProjectsLanding from "./pages/ProjectsLanding";
-import ProjectOverviewRoute from "./routes/ProjectOverviewRoute";
-import HostsPage from "./pages/HostsPage";
-import HostViewRoute from "./routes/HostViewRoute";
-import ListenersPage from "./pages/ListenersPage";
-import ListenerDetailPage from "./pages/ListenerDetailPage";
-import SessionsPage from "./pages/SessionsPage";
-import ActivitiesPage from "./pages/ActivitiesPage";
-import EnrollmentPage from "./pages/EnrollmentPage";
-import DispatchRoute from "./routes/DispatchRoute";
-import MembersRoute from "./routes/MembersRoute";
-import AdminUsers from "./pages/admin/AdminUsers";
 
-// Top-level route table. The new flat-nav IA — every project-scoped
-// view sits under /projects/:projectSlug/<page>, with shared sidebar
-// chrome rendered by <ProjectShell>.
-//
-// HostsPage / SessionsPage are placeholders in step 3; ListenerView
-// still serves both /listeners and /listeners/:listenerId via its
-// existing dual-mode component (step 7 splits it).
+// Every page component is code-split into its own chunk. The app shell
+// (RequireAuth + ProjectShell + layout primitives) stays eagerly
+// loaded — Suspense below paints a full-viewport spinner while the
+// page chunk streams in, which on LAN / same-origin is a 50-200ms blip.
+const LoginRoute = lazy(() => import("./routes/LoginRoute"));
+const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
+const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
+const HostsPage = lazy(() => import("./pages/HostsPage"));
+const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
+const ListenersPage = lazy(() => import("./pages/ListenersPage"));
+const ListenerDetailPage = lazy(() => import("./pages/ListenerDetailPage"));
+const SessionsPage = lazy(() => import("./pages/SessionsPage"));
+const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
+const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
+const DispatchRoute = lazy(() => import("./routes/DispatchRoute"));
+const MembersRoute = lazy(() => import("./routes/MembersRoute"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+
+// routeFallback is the placeholder each lazy route renders while its
+// chunk is fetched. Centred spinner over the main surface so it doesn't
+// jank around the sidebar chrome that's already mounted.
+function routeFallback(): ReactNode {
+    return (
+        <div
+            style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                width: "100%",
+                height: "100%",
+                minHeight: 200,
+                background: palette.main,
+            }}
+        >
+            <Spin />
+        </div>
+    );
+}
+
+// withSuspense wraps a lazy element in a Suspense boundary. Centralising
+// the wrapper keeps the route table readable and guarantees every
+// code-split page renders the same fallback.
+function withSuspense(element: ReactNode): ReactNode {
+    return <Suspense fallback={routeFallback()}>{element}</Suspense>;
+}
+
+// Top-level route table. Flat nav IA — every project-scoped view sits
+// under /projects/:projectSlug/<page>, with shared sidebar chrome
+// rendered by <ProjectShell>. Page components are lazy-loaded so the
+// initial bundle only pulls in the shell + Ant Design core.
 export const router = createBrowserRouter([
     {
         path: "/login",
         element: (
             <ConfigProvider theme={antTheme}>
-                <LoginRoute />
+                {withSuspense(<LoginRoute />)}
             </ConfigProvider>
         ),
     },
@@ -45,8 +77,8 @@ export const router = createBrowserRouter([
             {
                 element: <ProjectShell />,
                 children: [
-                    { path: "/projects", element: <ProjectsLanding /> },
-                    { path: "/admin/users", element: <AdminUsers /> },
+                    { path: "/projects", element: withSuspense(<ProjectsLanding />) },
+                    { path: "/admin/users", element: withSuspense(<AdminUsers />) },
                 ],
             },
             {
@@ -54,20 +86,23 @@ export const router = createBrowserRouter([
                 element: <ProjectShell requireProject />,
                 children: [
                     { index: true, element: <Navigate to="overview" replace /> },
-                    { path: "overview", element: <ProjectOverviewRoute /> },
-                    { path: "hosts", element: <HostsPage /> },
+                    { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
+                    { path: "hosts", element: withSuspense(<HostsPage />) },
                     {
                         path: "hosts/:hostId",
                         element: <Navigate to="terminal" replace />,
                     },
-                    { path: "hosts/:hostId/:tab", element: <HostViewRoute /> },
-                    { path: "listeners", element: <ListenersPage /> },
-                    { path: "listeners/:listenerId", element: <ListenerDetailPage /> },
-                    { path: "sessions", element: <SessionsPage /> },
-                    { path: "activities", element: <ActivitiesPage /> },
-                    { path: "enrollment", element: <EnrollmentPage /> },
-                    { path: "dispatch", element: <DispatchRoute /> },
-                    { path: "members", element: <MembersRoute /> },
+                    { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
+                    { path: "listeners", element: withSuspense(<ListenersPage />) },
+                    {
+                        path: "listeners/:listenerId",
+                        element: withSuspense(<ListenerDetailPage />),
+                    },
+                    { path: "sessions", element: withSuspense(<SessionsPage />) },
+                    { path: "activities", element: withSuspense(<ActivitiesPage />) },
+                    { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
+                    { path: "dispatch", element: withSuspense(<DispatchRoute />) },
+                    { path: "members", element: withSuspense(<MembersRoute />) },
                 ],
             },
             // Catch-all → projects landing.
