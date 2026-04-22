@@ -2,32 +2,39 @@
 @import "tw-animate-css";
 
 /* ──────────────────────────────────────────────────────────────────────
-   Tailwind v4 is CSS-first: the @theme block below inlines the design
-   tokens from src/layout/theme.ts so utilities like `bg-surface`,
-   `text-muted`, `rounded-md` resolve to the same values the old inline
-   styles used. Everything stays a CSS variable so shadcn components
-   (which use `--color-*` semantic slots) can inherit them.
+   Two-layer token system:
+
+     :root          defines the RAW values (hex + px numbers). These are
+                    the single source of truth; `layout/theme.ts` also
+                    exports a TS-side mirror so inline-style code and
+                    class-based code stay in sync during the migration.
+
+     @theme inline  hoists those CSS vars into Tailwind's theme so class
+                    utilities (bg-*, text-*, border-*, rounded-*) pick
+                    them up. "inline" means Tailwind records the value
+                    as `var(--…)`, not as a compile-time literal, which
+                    lets :root overrides cascade at runtime.
+
+   shadcn's component surface reads from --background / --foreground /
+   --primary / …; those slots alias to our palette tokens so a default
+   shadcn component looks right without further work.
    ────────────────────────────────────────────────────────────────────── */
 
-@theme {
-    /* Region backgrounds. */
+:root {
+    color-scheme: dark;
+
+    /* Palette (mirrors palette in layout/theme.ts). */
     --color-rail: #0a0a0a;
     --color-sidebar: #0a0a0a;
     --color-main: #111111;
     --color-detail-rail: #0a0a0a;
-
-    /* Surfaces + borders. */
     --color-surface: #1a1a1a;
     --color-surface-hover: #262626;
     --color-border-subtle: #2e2e2e;
     --color-border-strong: #525252;
-
-    /* Text. */
     --color-text-primary: #fafafa;
     --color-text-secondary: #a1a1a1;
     --color-text-muted: #737373;
-
-    /* Accent + status. */
     --color-accent: #fafafa;
     --color-accent-fg: #0a0a0a;
     --color-success: #0070f3;
@@ -35,69 +42,95 @@
     --color-danger: #ee0000;
     --color-warning: #f5a623;
 
-    /* Radius scale (Tailwind reads `--radius-*`). */
+    /* Radius scale. */
+    --radius: 6px;
     --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 8px;
     --radius-pill: 9999px;
 
-    /* Fonts — driven by the existing Geist @font-face rules. */
-    --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    /* Fonts (Geist @font-face declared below). */
+    --font-geist-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         "Helvetica Neue", sans-serif;
-    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
         Consolas, "Liberation Mono", monospace;
-}
 
-/* ──────────────────────────────────────────────────────────────────────
-   Shadcn-ui semantic slots. The library expects `--background`,
-   `--foreground`, `--primary`, `--border`, etc. We just alias those to
-   our own tokens so adding a shadcn component works out of the box.
-   Kept in :root rather than @theme because shadcn reads them as plain
-   CSS custom properties, not Tailwind theme entries.
-   ────────────────────────────────────────────────────────────────────── */
-
-:root {
-    color-scheme: dark;
-
-    /* Font family handles. */
-    --font-geist-sans: var(--font-sans);
-    --font-geist-mono: var(--font-mono);
-
-    /* shadcn tokens mapped to our palette. */
+    /* shadcn semantic slots aliased onto our palette. */
     --background: var(--color-main);
     --foreground: var(--color-text-primary);
-
     --card: var(--color-surface);
     --card-foreground: var(--color-text-primary);
-
     --popover: var(--color-surface);
     --popover-foreground: var(--color-text-primary);
-
     --primary: var(--color-accent);
     --primary-foreground: var(--color-accent-fg);
-
     --secondary: var(--color-surface);
     --secondary-foreground: var(--color-text-primary);
-
     --muted: var(--color-surface);
     --muted-foreground: var(--color-text-muted);
-
     --accent: var(--color-surface-hover);
     --accent-foreground: var(--color-text-primary);
-
     --destructive: var(--color-danger);
     --destructive-foreground: var(--color-text-primary);
-
     --border: var(--color-border-subtle);
     --input: var(--color-border-subtle);
     --ring: var(--color-border-strong);
+}
 
-    --radius: var(--radius-md);
+@theme inline {
+    /* Palette utilities → bg-main, bg-surface, text-text-muted, etc. */
+    --color-rail: var(--color-rail);
+    --color-sidebar: var(--color-sidebar);
+    --color-main: var(--color-main);
+    --color-surface: var(--color-surface);
+    --color-surface-hover: var(--color-surface-hover);
+    --color-border-subtle: var(--color-border-subtle);
+    --color-border-strong: var(--color-border-strong);
+    --color-text-primary: var(--color-text-primary);
+    --color-text-secondary: var(--color-text-secondary);
+    --color-text-muted: var(--color-text-muted);
+    --color-accent: var(--color-accent);
+    --color-accent-fg: var(--color-accent-fg);
+    --color-success: var(--color-success);
+    --color-success-dot: var(--color-success-dot);
+    --color-danger: var(--color-danger);
+    --color-warning: var(--color-warning);
+
+    /* shadcn semantic utilities → bg-background, text-foreground, etc. */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent-shadcn: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    /* Fonts exposed as Tailwind font families (font-sans / font-mono). */
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+
+    /* Radius scale exposed as Tailwind sizes. */
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
 }
 
 /* ──────────────────────────────────────────────────────────────────────
-   Fonts, page reset, existing utility classes. Preserved verbatim —
-   the rest of the codebase still references .pl-card, .pl-nav-link, etc.
+   Fonts + page reset + existing utility classes (preserved verbatim so
+   inline-style code still referencing .pl-card / .pl-nav-link keeps
+   working through the migration).
    ────────────────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -193,8 +226,7 @@ body {
     margin-top: 2px;
 }
 
-/* Subtle fade-in for route transitions. Each route's outermost div
-   gets .pl-fade and the React mount triggers the keyframe once. */
+/* Subtle fade-in for route transitions. */
 @keyframes pl-fade-in {
     from {
         opacity: 0;
@@ -229,9 +261,7 @@ main {
     border: 2px solid transparent;
 }
 
-/* Antd Table row hover — removed once Table migration completes.
-   Kept during the transition so existing antd tables still hover
-   consistently inside our Card wrappers. */
+/* Antd Table row hover — removed once Table migration completes. */
 .ant-table-tbody > tr.ant-table-row:hover > td {
     background: #1f1f1f !important;
 }
