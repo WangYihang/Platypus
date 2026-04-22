@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Input, Table, message } from "antd";
-import { DesktopOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { Loader2, Monitor, RotateCw, Search } from "lucide-react";
+import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../components/Card";
@@ -15,6 +14,17 @@ import { palette, space } from "../layout/theme";
 import { Host, listHosts } from "../lib/api";
 import { fromNow, isOnline } from "../lib/time";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+
 // HostsPage is the cross-host list for a project. Solves the IA gap
 // where hosts were only reachable via sidebar tree expansion. Always
 // landable, always shows the empty-state path to creating a listener
@@ -26,7 +36,6 @@ export default function HostsPage() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [query, setQuery] = useState("");
-    const [messageApi, contextHolder] = message.useMessage();
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -35,11 +44,11 @@ export default function HostsPage() {
             setError(null);
         } catch (e) {
             setError(String(e));
-            messageApi.error(`load hosts: ${String(e)}`);
+            toast.error(`load hosts: ${String(e)}`);
         } finally {
             setLoading(false);
         }
-    }, [project.id, messageApi]);
+    }, [project.id]);
 
     useEffect(() => {
         refresh();
@@ -58,51 +67,8 @@ export default function HostsPage() {
 
     const onlineCount = hosts?.filter((h) => isOnline(h.last_seen_at)).length ?? 0;
 
-    const columns: ColumnsType<Host> = [
-        {
-            title: "Host",
-            render: (_, h) => {
-                const primary =
-                    h.primary_alias || h.hostname || h.machine_id?.slice(0, 8) || "unknown";
-                return (
-                    <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
-                        <StatusDot status={isOnline(h.last_seen_at) ? "online" : "offline"} />
-                        <span
-                            style={{
-                                color: palette.textPrimary,
-                                fontWeight: 500,
-                            }}
-                        >
-                            {primary}
-                        </span>
-                    </div>
-                );
-            },
-        },
-        {
-            title: "OS",
-            dataIndex: "os",
-            render: (os?: string) => os || <span style={{ color: palette.textMuted }}>—</span>,
-            width: 140,
-        },
-        {
-            title: "Machine ID",
-            dataIndex: "machine_id",
-            render: (mid?: string) =>
-                mid ? <Mono>{mid.slice(0, 12)}…</Mono> : <span style={{ color: palette.textMuted }}>fp</span>,
-            width: 160,
-        },
-        {
-            title: "Last seen",
-            dataIndex: "last_seen_at",
-            render: (t: string) => fromNow(t),
-            width: 140,
-        },
-    ];
-
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            {contextHolder}
             <PageHeader
                 title="Hosts"
                 subtitle={
@@ -111,73 +77,125 @@ export default function HostsPage() {
                         : `${hosts.length} total · ${onlineCount} online`
                 }
                 actions={
-                    <Button
-                        size="small"
-                        icon={<ReloadOutlined />}
-                        loading={loading}
-                        onClick={refresh}
-                    >
+                    <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                        {loading ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                            <RotateCw className="size-3.5" />
+                        )}
                         Refresh
                     </Button>
                 }
             />
             <Toolbar
                 left={
-                    <Input
-                        prefix={<SearchOutlined style={{ color: palette.textMuted }} />}
-                        placeholder="Search hostname, alias, OS"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        allowClear
-                        style={{ maxWidth: 360 }}
-                    />
+                    <div className="relative max-w-[360px] w-full">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
+                        <Input
+                            placeholder="Search hostname, alias, OS"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            className="h-8 pl-8"
+                        />
+                    </div>
                 }
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {error && (
-                    <Alert
-                        type="error"
-                        message={error}
-                        style={{ marginBottom: space[4] }}
-                    />
+                    <div
+                        style={{
+                            marginBottom: space[4],
+                            padding: `${space[3]}px ${space[4]}px`,
+                            border: `1px solid ${palette.danger}`,
+                            borderRadius: 6,
+                            color: palette.danger,
+                            fontSize: 13,
+                        }}
+                    >
+                        {error}
+                    </div>
                 )}
                 {hosts && hosts.length === 0 ? (
                     <EmptyState
-                        icon={<DesktopOutlined />}
+                        icon={<Monitor className="size-5" />}
                         title="No hosts yet"
                         description="Hosts register themselves when an agent connects to one of your listeners. Create a listener first, then run the agent on a target machine."
                         action={
                             <Button
-                                type="primary"
                                 onClick={() => navigate(`/projects/${project.slug}/listeners`)}
                             >
                                 Manage listeners
                             </Button>
                         }
                     />
+                ) : !hosts ? (
+                    <div className="flex items-center justify-center p-20">
+                        <Loader2 className="size-5 animate-spin text-text-muted" />
+                    </div>
                 ) : filtered && filtered.length === 0 ? (
-                    <EmptyState
-                        title="No matches"
-                        description={`No host matches "${query}".`}
-                    />
+                    <EmptyState title="No matches" description={`No host matches "${query}".`} />
                 ) : (
                     <Card padding={0}>
-                        <Table
-                            rowKey="id"
-                            columns={columns}
-                            dataSource={filtered ?? []}
-                            loading={loading && !hosts}
-                            pagination={false}
-                            size="small"
-                            bordered={false}
-                            onRow={(h) => ({
-                                onClick: () =>
-                                    navigate(
-                                        `/projects/${project.slug}/hosts/${h.id}/terminal`,
-                                    ),
-                                style: { cursor: "pointer" },
-                            })}
-                        />
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Host</TableHead>
+                                    <TableHead className="w-[140px]">OS</TableHead>
+                                    <TableHead className="w-[160px]">Machine ID</TableHead>
+                                    <TableHead className="w-[140px]">Last seen</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {(filtered ?? []).map((h) => {
+                                    const primary =
+                                        h.primary_alias ||
+                                        h.hostname ||
+                                        h.machine_id?.slice(0, 8) ||
+                                        "unknown";
+                                    return (
+                                        <TableRow
+                                            key={h.id}
+                                            className="cursor-pointer"
+                                            onClick={() =>
+                                                navigate(
+                                                    `/projects/${project.slug}/hosts/${h.id}/terminal`,
+                                                )
+                                            }
+                                        >
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <StatusDot
+                                                        status={
+                                                            isOnline(h.last_seen_at)
+                                                                ? "online"
+                                                                : "offline"
+                                                        }
+                                                    />
+                                                    <span className="font-medium text-text-primary">
+                                                        {primary}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.os || (
+                                                    <span className="text-text-muted">—</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.machine_id ? (
+                                                    <Mono>{`${h.machine_id.slice(0, 12)}…`}</Mono>
+                                                ) : (
+                                                    <span className="text-text-muted">fp</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-text-secondary">
+                                                {fromNow(h.last_seen_at)}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
                     </Card>
                 )}
             </div>
