@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // v1 listener endpoints mirror the legacy /api/server/* routes with a JSON
@@ -89,10 +90,29 @@ func CreateListenerV1(c *gin.Context) {
 	}
 	srv := core.CreateTCPServer(req.Host, uint16(req.Port), "", true, "", "")
 	if srv == nil {
+		RecordActivity(c, ActivityInput{
+			Category: storage.CategoryListener,
+			Action:   "listener.create",
+			Outcome:  storage.OutcomeError,
+			Error:    "failed to start listener",
+			Meta:     map[string]any{"host": req.Host, "port": req.Port},
+		})
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start listener"})
 		return
 	}
 	go (*srv).Run()
+	RecordActivity(c, ActivityInput{
+		Category:    storage.CategoryListener,
+		Action:      "listener.create",
+		TargetType:  "listener",
+		TargetID:    (*srv).Hash,
+		TargetLabel: listenerLabel(srv),
+		Meta: map[string]any{
+			"host": req.Host,
+			"port": req.Port,
+			"hash": (*srv).Hash,
+		},
+	})
 	c.JSON(http.StatusCreated, srv)
 }
 
@@ -111,12 +131,53 @@ func DeleteListenerV1(c *gin.Context) {
 	hash := c.Param("id")
 	for _, srv := range core.GetServers() {
 		if srv.Hash == hash {
+			label := listenerLabel(srv)
 			core.DeleteServer(srv)
+			RecordActivity(c, ActivityInput{
+				Category:    storage.CategoryListener,
+				Action:      "listener.delete",
+				TargetType:  "listener",
+				TargetID:    hash,
+				TargetLabel: label,
+			})
 			c.Status(http.StatusNoContent)
 			return
 		}
 	}
+	RecordActivity(c, ActivityInput{
+		Category:   storage.CategoryListener,
+		Action:     "listener.delete",
+		TargetType: "listener",
+		TargetID:   hash,
+		Outcome:    storage.OutcomeDenied,
+		Error:      "listener not found",
+	})
 	c.JSON(http.StatusNotFound, gin.H{"error": "listener not found"})
+}
+
+// listenerLabel builds a human-readable "host:port" string for use as
+// a TargetLabel on listener activities.
+func listenerLabel(srv *core.TCPServer) string {
+	if srv == nil {
+		return ""
+	}
+	return srv.Host + ":" + strconvUint16(srv.Port)
+}
+
+// strconvUint16 avoids pulling in strconv for a single call site; the
+// existing code in this file doesn't import it.
+func strconvUint16(v uint16) string {
+	if v == 0 {
+		return "0"
+	}
+	var buf [6]byte
+	n := len(buf)
+	for v > 0 {
+		n--
+		buf[n] = byte('0' + v%10)
+		v /= 10
+	}
+	return string(buf[n:])
 }
 
 // ListenerSessionsV1 lists every session attached to a listener.

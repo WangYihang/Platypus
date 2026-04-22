@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/enrollment"
@@ -102,21 +103,26 @@ func TestTryEnroll_PAT_HappyPath(t *testing.T) {
 		t.Fatalf("TryEnroll Outcome = %q; want success", result.out.Outcome)
 	}
 
-	// Audit: PAT redemption row + connection event row must exist.
-	evts, err := db.PATRedemptionEvents().ListByToken(ctx, issue.TokenID, 10)
-	if err != nil {
-		t.Fatalf("ListByToken: %v", err)
+	// Audit: the unified activities log should now contain at least
+	// one PAT redemption row (pat.redeem / pat.redeem_failed) and one
+	// agent enrollment row (agent.enroll).
+	redemptions := waitForActivities(t, db, storage.ActivityFilter{
+		TargetType: "pat_token",
+		TargetID:   issue.TokenID,
+		Limit:      10,
+	}, 1)
+	if redemptions[0].Outcome != storage.OutcomeSuccess {
+		t.Fatalf("redemption outcome = %q; want success", redemptions[0].Outcome)
 	}
-	if len(evts) != 1 || evts[0].Outcome != "success" {
-		t.Fatalf("redemption events = %+v", evts)
+	enrolls := waitForActivities(t, db, storage.ActivityFilter{
+		Categories: []string{storage.CategoryAgent},
+		ActorUser:  result.out.AgentID,
+		Limit:      10,
+	}, 1)
+	if enrolls[0].Action != "agent.enroll" {
+		t.Fatalf("enroll action = %q; want agent.enroll", enrolls[0].Action)
 	}
-	connEvts, err := db.AgentConnectionEvents().ListByAgent(ctx, result.out.AgentID, 10)
-	if err != nil {
-		t.Fatalf("ListByAgent: %v", err)
-	}
-	if len(connEvts) != 1 || connEvts[0].EventType != "enroll_success" {
-		t.Fatalf("connection events = %+v", connEvts)
-	}
+	_ = ctx
 }
 
 // TestTryEnroll_LegacyNoFrame confirms that a silent agent (legacy build
@@ -179,17 +185,44 @@ func seedProject(t *testing.T, db *storage.DB, slug string, creator *user.User) 
 	return p
 }
 
-// installCtx wires a minimal *app.App into core.Ctx so recordConnectionEvent
-// has somewhere to write. Restored by uninstallCtx via Cleanup.
+// installCtx wires a minimal *app.App into core.Ctx so
+// recordAgentConnection has somewhere to write, and installs a
+// per-test activity recorder bound to the same DB.
 func installCtx(t *testing.T, db *storage.DB) {
 	t.Helper()
 	prev := core.Ctx
 	core.Ctx = app.New(&config.Config{})
 	core.Ctx.Storage = db
-	t.Cleanup(func() { core.Ctx = prev })
+	activity.SetRecorder(activity.New(db))
+	t.Cleanup(func() {
+		core.Ctx = prev
+		activity.SetRecorder(nil)
+	})
 }
 
 func uninstallCtx() {}
+
+// waitForActivities polls until the activities table has at least want
+// rows matching the filter, or a short deadline passes. Needed because
+// the recorder writes asynchronously.
+func waitForActivities(t *testing.T, db *storage.DB, f storage.ActivityFilter, want int) []*storage.Activity {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, _, err := db.Activities().List(context.Background(), f)
+		if err != nil {
+			t.Fatalf("Activities().List: %v", err)
+		}
+		if len(got) >= want {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d activities; got %d", want, len(got))
+			return got
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 // TestSessionRenew_HappyPath drives a full in-band rotation via the
 // same enrollment.Service method handleSessionRenew calls. We don't

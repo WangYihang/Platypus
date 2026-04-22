@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -157,7 +156,15 @@ func (h *PATTokensHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "get pat"})
 		return
 	}
-	events, err := h.db.PATRedemptionEvents().ListByToken(ctx, tokenID, 200)
+	// Redemption events now live in the unified activities log. Filter
+	// to this specific token id and the auth category so we surface both
+	// success and failure attempts alongside each other.
+	events, _, err := h.db.Activities().List(ctx, storage.ActivityFilter{
+		Actions:    []string{"pat.redeem", "pat.redeem_failed"},
+		TargetType: "pat_token",
+		TargetID:   tokenID,
+		Limit:      200,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list redemption events"})
 		return
@@ -191,23 +198,20 @@ func (h *PATTokensHandler) Revoke(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// audit records a row in admin_audit_log. Errors during audit do NOT
-// fail the main flow; operators can investigate from server logs.
+// audit writes one row into the unified activities log. Errors during
+// audit do NOT fail the main flow; the recorder logs them itself.
 func (h *PATTokensHandler) audit(c *gin.Context, action, targetType, targetID, projectID string, details interface{}, outcome, errText string) {
-	claims, _ := ClaimsFromContext(c)
-	blob, _ := json.Marshal(details)
-	_ = h.db.AdminAuditLog().Record(c.Request.Context(), &storage.AdminAuditEvent{
-		At:         time.Now().UTC(),
-		ActorUser:  claims.UserID,
-		ActorIP:    c.ClientIP(),
-		ActorUA:    c.Request.UserAgent(),
-		Action:     action,
-		TargetType: targetType,
-		TargetID:   targetID,
-		ProjectID:  projectID,
-		Details:    string(blob),
-		Outcome:    outcome,
-		Error:      errText,
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      action,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		TargetLabel: targetID,
+		Outcome:     outcome,
+		Error:       errText,
+		Meta:        details,
 	})
 }
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -99,23 +98,20 @@ func (h *AgentSessionsHandler) History(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sessions": items})
 }
 
-// audit is the same small helper PAT / install handlers use. Kept
-// local to avoid cross-handler plumbing.
+// audit funnels into the unified activities log. Kept local so each
+// handler package owns the shape of its own meta field.
 func (h *AgentSessionsHandler) audit(c *gin.Context, action, targetType, targetID, projectID string, details interface{}, outcome, errText string) {
-	claims, _ := ClaimsFromContext(c)
-	blob, _ := json.Marshal(details)
-	_ = h.db.AdminAuditLog().Record(c.Request.Context(), &storage.AdminAuditEvent{
-		At:         time.Now().UTC(),
-		ActorUser:  claims.UserID,
-		ActorIP:    c.ClientIP(),
-		ActorUA:    c.Request.UserAgent(),
-		Action:     action,
-		TargetType: targetType,
-		TargetID:   targetID,
-		ProjectID:  projectID,
-		Details:    string(blob),
-		Outcome:    outcome,
-		Error:      errText,
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      action,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		TargetLabel: targetID,
+		Outcome:     outcome,
+		Error:       errText,
+		Meta:        details,
 	})
 }
 

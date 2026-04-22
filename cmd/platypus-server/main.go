@@ -95,8 +95,33 @@ func main() {
 
 	log.L.Info("server_running")
 
+	api.RecordSystemActivity(context.Background(), api.ActivityInput{
+		Category:    "server",
+		Action:      "server.start",
+		TargetType:  "server",
+		TargetLabel: "platypus-server",
+		Meta: map[string]any{
+			"version":      update.Version,
+			"config":       configFile,
+			"listeners":    len(cfg.Listeners),
+			"restful":      cfg.RESTful.Enable,
+			"mesh_enabled": cfg.Mesh.PSKFile != "",
+		},
+	})
+
 	<-ctx.Done()
 	log.Info("Shutdown signal received, draining connections...")
+
+	api.RecordSystemActivity(context.Background(), api.ActivityInput{
+		Category:    "server",
+		Action:      "server.stop",
+		TargetType:  "server",
+		TargetLabel: "platypus-server",
+		Meta: map[string]any{
+			"version": update.Version,
+			"reason":  "signal",
+		},
+	})
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
@@ -258,9 +283,14 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		distributorBase := fmt.Sprintf("http://%s:%d", cfg.Distributor.Host, cfg.Distributor.Port)
 		installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 		agentSessionsH := api.NewAgentSessionsHandler(db)
-		auditH := api.NewAuditHandler(db)
+		activitiesH := api.NewActivitiesHandler(db)
 		caH := api.NewCAHandler(db, pkiSvc)
 		rbac := api.NewRBACWithStorage(tokens, db)
+
+		// Install the process-wide activity recorder so free-function
+		// handlers (ExecSessionV1, ReadFile, …) can write audit rows
+		// without threading a dependency through the v1 router.
+		api.SetActivityRecorder(api.NewActivityRecorder(db))
 
 		// Expose the enrollment service globally so the agent-facing TCP
 		// handshake in internal/core can call it without plumbing an
@@ -277,7 +307,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 		api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
-		api.RegisterV1AuditRoutes(rest, auditH, rbac)
+		api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 		api.RegisterV1CARoutes(rest, caH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // createTunnelRequest is the typed mirror of the POST body for swag.
@@ -53,28 +54,54 @@ func CreateTunnel(c *gin.Context) {
 		return
 	}
 
+	recordTunnel := func(outcome, errMsg string) {
+		in := ActivityInput{
+			Category:    storage.CategoryTunnel,
+			Action:      "tunnel.create",
+			TargetType:  "session",
+			TargetID:    client.Hash,
+			TargetLabel: req.Mode + ":" + req.SrcAddress + "→" + req.DstAddress,
+			SessionID:   client.Hash,
+			Outcome:     outcome,
+			Error:       errMsg,
+			Meta: map[string]any{
+				"mode":        req.Mode,
+				"src_address": req.SrcAddress,
+				"dst_address": req.DstAddress,
+			},
+		}
+		RecordActivity(c, in)
+	}
+
 	switch req.Mode {
 	case "pull":
 		core.AddPullTunnelConfig(client, req.DstAddress, req.SrcAddress)
+		recordTunnel(storage.OutcomeSuccess, "")
 		c.JSON(http.StatusOK, gin.H{"status": true, "msg": "pull tunnel created"})
 	case "push":
 		core.AddPushTunnelConfig(client, req.SrcAddress, req.DstAddress)
+		recordTunnel(storage.OutcomeSuccess, "")
 		c.JSON(http.StatusOK, gin.H{"status": true, "msg": "push tunnel created"})
 	case "dynamic":
 		client.StartSocks5Server()
+		recordTunnel(storage.OutcomeSuccess, "")
 		c.JSON(http.StatusOK, gin.H{"status": true, "msg": "dynamic tunnel (socks5) requested"})
 	case "internet":
 		if _, exists := core.Ctx.Socks5Servers[req.SrcAddress]; exists {
+			recordTunnel(storage.OutcomeDenied, "socks5 already bound")
 			c.JSON(http.StatusConflict, gin.H{"error": "socks5 server already exists at " + req.SrcAddress})
 			return
 		}
 		if err := core.StartSocks5Server(req.SrcAddress); err != nil {
+			recordTunnel(storage.OutcomeError, err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		core.AddPushTunnelConfig(client, req.SrcAddress, req.DstAddress)
+		recordTunnel(storage.OutcomeSuccess, "")
 		c.JSON(http.StatusOK, gin.H{"status": true, "msg": "internet tunnel created"})
 	default:
+		recordTunnel(storage.OutcomeDenied, "invalid mode")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid mode, use: pull, push, dynamic, internet"})
 	}
 }

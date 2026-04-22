@@ -4,10 +4,12 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // GetFileSize returns the size in bytes of a file on the managed host.
@@ -33,11 +35,31 @@ func GetFileSize(c *gin.Context) {
 	}
 
 	if client := core.FindAgentClientByHash(hash); client != nil {
+		start := time.Now().UTC()
 		size, err := client.FileSize(path)
+		dur := time.Since(start).Milliseconds()
+		in := ActivityInput{
+			Category:    storage.CategoryFile,
+			Action:      "file.stat",
+			TargetType:  "session",
+			TargetID:    client.Hash,
+			TargetLabel: path,
+			SessionID:   client.Hash,
+			DurationMs:  &dur,
+			At:          start,
+			Meta: map[string]any{
+				"path": path,
+				"size": size,
+			},
+		}
 		if err != nil {
+			in.Outcome = storage.OutcomeError
+			in.Error = err.Error()
+			RecordActivity(c, in)
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
+		RecordActivity(c, in)
 		c.JSON(http.StatusOK, gin.H{"status": true, "size": size})
 		return
 	}
@@ -72,6 +94,7 @@ func ReadFile(c *gin.Context) {
 	size, _ := strconv.ParseInt(c.DefaultQuery("size", "0"), 10, 64)
 
 	if client := core.FindAgentClientByHash(hash); client != nil {
+		start := time.Now().UTC()
 		var data []byte
 		var err error
 		if size == 0 {
@@ -79,10 +102,31 @@ func ReadFile(c *gin.Context) {
 		} else {
 			data, err = client.ReadFileEx(path, offset, size)
 		}
+		dur := time.Since(start).Milliseconds()
+		in := ActivityInput{
+			Category:    storage.CategoryFile,
+			Action:      "file.read",
+			TargetType:  "session",
+			TargetID:    client.Hash,
+			TargetLabel: path,
+			SessionID:   client.Hash,
+			DurationMs:  &dur,
+			At:          start,
+			Meta: map[string]any{
+				"path":       path,
+				"offset":     offset,
+				"size":       size,
+				"bytes_read": len(data),
+			},
+		}
 		if err != nil {
+			in.Outcome = storage.OutcomeError
+			in.Error = err.Error()
+			RecordActivity(c, in)
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
+		RecordActivity(c, in)
 		c.Data(http.StatusOK, "application/octet-stream", data)
 		return
 	}
@@ -123,16 +167,38 @@ func WriteFile(c *gin.Context) {
 	}
 
 	if client := core.FindAgentClientByHash(hash); client != nil {
+		start := time.Now().UTC()
 		var n int
 		if appendMode {
 			n, err = client.WriteFileEx(path, data)
 		} else {
 			n, err = client.WriteFile(path, data)
 		}
+		dur := time.Since(start).Milliseconds()
+		in := ActivityInput{
+			Category:    storage.CategoryFile,
+			Action:      "file.write",
+			TargetType:  "session",
+			TargetID:    client.Hash,
+			TargetLabel: path,
+			SessionID:   client.Hash,
+			DurationMs:  &dur,
+			At:          start,
+			Meta: map[string]any{
+				"path":          path,
+				"bytes_written": n,
+				"bytes_offered": len(data),
+				"append":        appendMode,
+			},
+		}
 		if err != nil {
+			in.Outcome = storage.OutcomeError
+			in.Error = err.Error()
+			RecordActivity(c, in)
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
+		RecordActivity(c, in)
 		c.JSON(http.StatusOK, gin.H{"status": true, "bytes_written": n})
 		return
 	}

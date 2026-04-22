@@ -92,6 +92,15 @@ func (h *ProjectsHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create project"})
 		return
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &p.ID,
+		Category:    storage.CategoryProject,
+		Action:      "project.create",
+		TargetType:  "project",
+		TargetID:    p.ID,
+		TargetLabel: p.Slug,
+		Meta:        map[string]any{"name": p.Name, "slug": p.Slug},
+	})
 	c.JSON(http.StatusCreated, toProjectResponse(p))
 }
 
@@ -133,7 +142,8 @@ func (h *ProjectsHandler) Get(c *gin.Context) {
 
 // Delete handles DELETE /projects/:pid. Global-admin only.
 func (h *ProjectsHandler) Delete(c *gin.Context) {
-	err := h.db.Projects().Delete(c.Request.Context(), c.Param("pid"))
+	pid := c.Param("pid")
+	err := h.db.Projects().Delete(c.Request.Context(), pid)
 	if errors.Is(err, storage.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 		return
@@ -142,6 +152,14 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete project"})
 		return
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryProject,
+		Action:      "project.delete",
+		TargetType:  "project",
+		TargetID:    pid,
+		TargetLabel: pid,
+	})
 	c.Status(http.StatusNoContent)
 }
 
@@ -159,15 +177,27 @@ func (h *ProjectsHandler) AddMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.db.Projects().AddMember(c.Request.Context(), c.Param("pid"), req.UserID, role); err != nil {
+	pid := c.Param("pid")
+	if err := h.db.Projects().AddMember(c.Request.Context(), pid, req.UserID, role); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "add member"})
 		return
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryProject,
+		Action:      "project.member_add",
+		TargetType:  "user",
+		TargetID:    req.UserID,
+		TargetLabel: req.UserID,
+		Meta:        map[string]any{"role": string(role)},
+	})
 	c.Status(http.StatusNoContent)
 }
 
 func (h *ProjectsHandler) RemoveMember(c *gin.Context) {
-	err := h.db.Projects().RemoveMember(c.Request.Context(), c.Param("pid"), c.Param("uid"))
+	pid := c.Param("pid")
+	uid := c.Param("uid")
+	err := h.db.Projects().RemoveMember(c.Request.Context(), pid, uid)
 	if errors.Is(err, storage.ErrNotFound) {
 		c.Status(http.StatusNotFound)
 		return
@@ -176,6 +206,14 @@ func (h *ProjectsHandler) RemoveMember(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "remove member"})
 		return
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryProject,
+		Action:      "project.member_remove",
+		TargetType:  "user",
+		TargetID:    uid,
+		TargetLabel: uid,
+	})
 	c.Status(http.StatusNoContent)
 }
 

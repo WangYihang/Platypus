@@ -14,9 +14,11 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/session"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	oss "github.com/WangYihang/Platypus/internal/utils/os"
 	"github.com/WangYihang/Platypus/internal/utils/update"
@@ -354,8 +356,53 @@ func (c *AgentClient) writeFileInternal(path string, content []byte, appendMode 
 	return -1, fmt.Errorf("invalid response")
 }
 
+// recordSessionOpen writes one session.open row when an agent has
+// finished the handshake and is registered into the server's active
+// client list. The ProjectID is left nil here — the agent session DB
+// row (if any) carries the project, and the Activities UI can resolve
+// project_id at query time when needed.
+func recordSessionOpen(c *AgentClient) {
+	if c == nil {
+		return
+	}
+	activity.Record(activity.Input{
+		ActorType:   storage.ActorTypeAgent,
+		Category:    storage.CategorySession,
+		Action:      "session.open",
+		TargetType:  "session",
+		TargetID:    c.Hash,
+		TargetLabel: c.OnelineDesc(),
+		SessionID:   c.Hash,
+		ActorIP:     c.GetConnString(),
+		Meta: map[string]any{
+			"host":    c.Host,
+			"os":      c.OS.String(),
+			"user":    c.User,
+			"alias":   c.Alias,
+			"version": c.Version,
+		},
+	})
+}
+
 func (c *AgentClient) Close() {
 	log.Info("Closing client: %s", c.FullDesc())
+	activity.Record(activity.Input{
+		ActorType:   storage.ActorTypeAgent,
+		Category:    storage.CategorySession,
+		Action:      "session.close",
+		TargetType:  "session",
+		TargetID:    c.Hash,
+		TargetLabel: c.OnelineDesc(),
+		SessionID:   c.Hash,
+		ActorIP:     c.GetConnString(),
+		Meta: map[string]any{
+			"host":       c.Host,
+			"os":         c.OS.String(),
+			"user":       c.User,
+			"alias":      c.Alias,
+			"duration_s": time.Since(c.TimeStamp).Seconds(),
+		},
+	})
 	for k, ti := range Ctx.PushTunnelInstance {
 		if ti.Agent == c && ti.Conn != nil {
 			delete(Ctx.PushTunnelInstance, k)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -125,19 +126,7 @@ func TryEnroll(client *AgentClient) (*EnrollmentOutcome, error) {
 		return &EnrollmentOutcome{}, err
 	}
 
-	connEventType := "enroll_success"
-	if result.Outcome != "success" {
-		connEventType = "enroll_reject"
-	}
-	recordConnectionEvent(&agentpb.Envelope{}, &storage.AgentConnectionEvent{
-		At:        time.Now().UTC(),
-		AgentID:   result.AgentID,
-		SessionID: result.SessionID,
-		ClientIP:  rctx.ClientIP,
-		EventType: connEventType,
-		Reason:    result.Outcome,
-		Transport: "tls_direct",
-	})
+	recordAgentConnection(result, rctx.ClientIP, "tls_direct", "agent.enroll")
 
 	outcome := &EnrollmentOutcome{
 		Attempted: true,
@@ -165,16 +154,52 @@ func redeemByPrefix(ctx context.Context, raw string, rctx enrollment.RedeemConte
 	}
 }
 
-// recordConnectionEvent writes to agent_connection_events when a DB is
-// wired. Failures are logged and swallowed — a missing audit line is
-// strictly better than breaking the main flow.
-func recordConnectionEvent(_ *agentpb.Envelope, ev *storage.AgentConnectionEvent) {
+// recordAgentConnection writes an agent lifecycle event (enroll /
+// reconnect / disconnect) into the unified activities log. Resolves
+// the project id via the enrolled agent session so cross-project
+// filtering in the UI stays scoped correctly.
+func recordAgentConnection(result *enrollment.RedeemResult, clientIP, transport, action string) {
 	if Ctx == nil || Ctx.Storage == nil {
 		return
 	}
-	if err := Ctx.Storage.AgentConnectionEvents().Record(context.Background(), ev); err != nil {
-		log.Warn("record connection event: %v", err)
+	outcome := storage.OutcomeSuccess
+	if result.Outcome != "success" {
+		outcome = storage.OutcomeDenied
+		action += "_failed"
 	}
+
+	// Look up project id for successful events; on failure we keep it
+	// global so the security timeline sees every attempt in one place.
+	var projectID *string
+	if result.Outcome == "success" && result.AgentID != "" {
+		if sess, err := Ctx.Storage.AgentSessions().GetActive(context.Background(), result.AgentID); err == nil && sess != nil {
+			pid := sess.ProjectID
+			projectID = &pid
+		}
+	}
+
+	meta := map[string]any{
+		"transport": transport,
+		"reason":    result.Outcome,
+	}
+	if result.SessionID != "" {
+		meta["session_id"] = result.SessionID
+	}
+
+	activity.Record(activity.Input{
+		ProjectID:   projectID,
+		ActorType:   storage.ActorTypeAgent,
+		ActorUser:   result.AgentID,
+		ActorIP:     clientIP,
+		Category:    storage.CategoryAgent,
+		Action:      action,
+		TargetType:  "agent",
+		TargetID:    result.AgentID,
+		TargetLabel: result.AgentID,
+		Outcome:     outcome,
+		SessionID:   result.SessionID,
+		Meta:        meta,
+	})
 }
 
 // isTimeout tells a generic TLS / TCP read timeout apart from a real
@@ -257,16 +282,7 @@ func handleSessionRenew(client *AgentClient, requestID string, req *agentpb.Sess
 	resp.CertPem = result.CertPEM
 	resp.CaPem = result.CAPem
 
-	// Record the rotation event so the audit trail in
-	// agent_connection_events reflects when a long-running agent
-	// rotated its session without reconnecting.
-	recordConnectionEvent(nil, &storage.AgentConnectionEvent{
-		At:        time.Now().UTC(),
-		AgentID:   result.AgentID,
-		SessionID: result.SessionID,
-		ClientIP:  remoteIPOf(client.conn),
-		EventType: "reconnect_success", // schema CHECK doesn't have "renew"; reuse
-		Reason:    "in-band rotation",
-		Transport: "tls_direct",
-	})
+	// Record the rotation event so the audit trail reflects when a
+	// long-running agent rotated its session without reconnecting.
+	recordAgentConnection(result, remoteIPOf(client.conn), "tls_direct", "agent.reconnect")
 }

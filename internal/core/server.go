@@ -160,6 +160,7 @@ func (s *TCPServer) Handle(conn net.Conn) {
 		}
 		PersistSessionForAgent(ctx, client)
 		s.AddAgentClient(client)
+		recordSessionOpen(client)
 	} else {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
 		client.Close()

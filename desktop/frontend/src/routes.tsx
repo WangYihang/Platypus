@@ -12,6 +12,7 @@ import HostViewRoute from "./routes/HostViewRoute";
 import ListenersPage from "./pages/ListenersPage";
 import ListenerDetailPage from "./pages/ListenerDetailPage";
 import SessionsPage from "./pages/SessionsPage";
+import ActivitiesPage from "./pages/ActivitiesPage";
 import EnrollmentPage from "./pages/EnrollmentPage";
 import DispatchRoute from "./routes/DispatchRoute";
 import MembersRoute from "./routes/MembersRoute";
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
                     { path: "listeners", element: <ListenersPage /> },
                     { path: "listeners/:listenerId", element: <ListenerDetailPage /> },
                     { path: "sessions", element: <SessionsPage /> },
+                    { path: "activities", element: <ActivitiesPage /> },
                     { path: "enrollment", element: <EnrollmentPage /> },
                     { path: "dispatch", element: <DispatchRoute /> },
                     { path: "members", element: <MembersRoute /> },

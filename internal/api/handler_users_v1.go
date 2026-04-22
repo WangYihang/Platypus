@@ -82,6 +82,16 @@ func (h *UsersHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create user"})
 		return
 	}
+	empty := ""
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &empty,
+		Category:    storage.CategoryUser,
+		Action:      "user.create",
+		TargetType:  "user",
+		TargetID:    u.ID,
+		TargetLabel: u.Username,
+		Meta:        map[string]any{"username": u.Username, "role": string(u.Role)},
+	})
 	c.JSON(http.StatusCreated, userBody{ID: u.ID, Username: u.Username, Role: u.Role})
 }
 
@@ -145,11 +155,29 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup updated user"})
 		return
 	}
+	empty := ""
+	meta := map[string]any{"username": u.Username}
+	if req.Role != nil {
+		meta["role"] = *req.Role
+	}
+	if req.Password != nil {
+		meta["password_changed"] = true
+	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &empty,
+		Category:    storage.CategoryUser,
+		Action:      "user.update",
+		TargetType:  "user",
+		TargetID:    u.ID,
+		TargetLabel: u.Username,
+		Meta:        meta,
+	})
 	c.JSON(http.StatusOK, userBody{ID: u.ID, Username: u.Username, Role: u.Role})
 }
 
 func (h *UsersHandler) Delete(c *gin.Context) {
-	err := h.db.Users().Delete(c.Request.Context(), c.Param("id"))
+	id := c.Param("id")
+	err := h.db.Users().Delete(c.Request.Context(), id)
 	if errors.Is(err, storage.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
@@ -158,6 +186,14 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete user"})
 		return
 	}
+	empty := ""
+	RecordActivity(c, ActivityInput{
+		ProjectID:  &empty,
+		Category:   storage.CategoryUser,
+		Action:     "user.delete",
+		TargetType: "user",
+		TargetID:   id,
+	})
 	c.Status(http.StatusNoContent)
 }
 

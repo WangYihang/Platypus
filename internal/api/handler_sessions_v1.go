@@ -2,10 +2,12 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // v1 session endpoints mirror the legacy /api/client/* routes under a
@@ -119,9 +121,53 @@ func ExecSessionV1(c *gin.Context) {
 	}
 	for _, server := range core.GetServers() {
 		if client, ok := server.AgentClients[hash]; ok {
-			c.JSON(http.StatusOK, execResponse{Output: client.System(req.Command)})
+			start := time.Now().UTC()
+			output := client.System(req.Command)
+			dur := time.Since(start).Milliseconds()
+			RecordActivity(c, ActivityInput{
+				Category:    storage.CategoryCommand,
+				Action:      "command.exec",
+				TargetType:  "session",
+				TargetID:    client.Hash,
+				TargetLabel: client.OnelineDesc(),
+				SessionID:   client.Hash,
+				DurationMs:  &dur,
+				At:          start,
+				Meta: map[string]any{
+					"command":      req.Command,
+					"stdout_bytes": len(output),
+					"host":         client.Host,
+					"remote_addr":  clientAddrOf(client),
+				},
+			})
+			c.JSON(http.StatusOK, execResponse{Output: output})
 			return
 		}
 	}
+	// Recorded so a miss on a stale / unknown session shows up in the
+	// activity feed — useful for detecting drift between UI and agents.
+	RecordActivity(c, ActivityInput{
+		Category:    storage.CategoryCommand,
+		Action:      "command.exec",
+		TargetType:  "session",
+		TargetID:    hash,
+		TargetLabel: hash,
+		SessionID:   hash,
+		Outcome:     storage.OutcomeDenied,
+		Error:       "session not found",
+		Meta:        map[string]any{"command": req.Command},
+	})
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+}
+
+// clientAddrOf returns the agent's remote address string if the session
+// exposes one, else "". The AgentClient API doesn't guarantee a conn
+// pointer, so we tolerate nil rather than panicking on disconnected
+// sessions.
+func clientAddrOf(c *core.AgentClient) string {
+	if c == nil {
+		return ""
+	}
+	addr := c.GetConnString()
+	return addr
 }

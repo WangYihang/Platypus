@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
@@ -90,20 +92,33 @@ func TestRedeemPAT_HappyPath_IssuesSession(t *testing.T) {
 		t.Fatalf("second Outcome = %q; want max_uses_reached", again.Outcome)
 	}
 
-	// Audit: two redemption events — one success, one max_uses_reached.
-	evts, err := svc.DB().PATRedemptionEvents().ListByToken(ctx, issue.TokenID, 10)
+	// Audit: two redemption rows in the unified activities log — one
+	// success, one rejection with reason "max_uses_reached".
+	// The recorder writes asynchronously, so give it a moment.
+	waitForActivities(t, svc.DB(), storage.ActivityFilter{
+		TargetType: "pat_token",
+		TargetID:   issue.TokenID,
+		Limit:      10,
+	}, 2)
+
+	evts, _, err := svc.DB().Activities().List(ctx, storage.ActivityFilter{
+		TargetType: "pat_token",
+		TargetID:   issue.TokenID,
+		Limit:      10,
+	})
 	if err != nil {
-		t.Fatalf("ListByToken: %v", err)
+		t.Fatalf("Activities().List: %v", err)
 	}
 	if len(evts) != 2 {
-		t.Fatalf("audit events = %d; want 2", len(evts))
+		t.Fatalf("activity events = %d; want 2", len(evts))
 	}
+	// Outcome is success or denied; reason lives in meta.
 	outcomes := map[string]bool{}
 	for _, e := range evts {
 		outcomes[e.Outcome] = true
 	}
-	if !outcomes["success"] || !outcomes["max_uses_reached"] {
-		t.Fatalf("outcomes = %+v; want success + max_uses_reached", outcomes)
+	if !outcomes[storage.OutcomeSuccess] || !outcomes[storage.OutcomeDenied] {
+		t.Fatalf("outcomes = %+v; want success + denied", outcomes)
 	}
 }
 
@@ -195,7 +210,34 @@ func newSvc(t *testing.T) *svcFixture {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	// Install a per-test activity recorder so enrollment audit writes
+	// hit this DB. Each test owns its own singleton slot; the tests
+	// don't run concurrently in this package, so the race-free
+	// atomic-pointer set is fine.
+	activity.SetRecorder(activity.New(db))
+	t.Cleanup(func() { activity.SetRecorder(nil) })
 	return &svcFixture{db: db, Svc: enrollment.New(db)}
+}
+
+// waitForActivities polls the activities table until at least want rows
+// match the filter, or the deadline passes. Needed because the recorder
+// writes asynchronously.
+func waitForActivities(t *testing.T, db *storage.DB, f storage.ActivityFilter, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, _, err := db.Activities().List(context.Background(), f)
+		if err != nil {
+			t.Fatalf("Activities().List: %v", err)
+		}
+		if len(got) >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d activities; got %d", want, len(got))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func bootstrap(t *testing.T, db *storage.DB) (*user.User, *storage.Project) {

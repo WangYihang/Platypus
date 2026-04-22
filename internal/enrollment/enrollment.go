@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
@@ -449,20 +450,67 @@ func (s *Service) rotateSession(ctx context.Context, current *storage.AgentSessi
 	return next, full, nil
 }
 
-// logRedemption writes a row into pat_redemption_events. Swallows any
-// log-write error — failing the enrollment flow over a logging hiccup
-// would be worse than the missing log line.
+// logRedemption writes a PAT / session redemption attempt into the
+// unified activities log. Every attempt — success or otherwise — lands
+// here so scanning against bogus token_ids stays visible.
+//
+// Outcomes map onto the audit outcome tri-state: "success" stays as-is,
+// "error" is a server fault, and everything else (invalid_secret,
+// expired, revoked, max_uses_reached, …) is classified as "denied"
+// because it's a rejected attempt.
 func (s *Service) logRedemption(ctx context.Context, tokenID string, rctx RedeemContext, agentID, outcome, errDetail string) {
-	_ = s.db.PATRedemptionEvents().Record(ctx, &storage.PATRedemptionEvent{
-		At:          time.Now().UTC(),
-		TokenID:     tokenID,
-		ClientIP:    rctx.ClientIP,
-		MachineID:   rctx.MachineID,
-		Hostname:    rctx.Hostname,
-		AgentID:     agentID,
-		Outcome:     outcome,
-		ErrorDetail: errDetail,
-	})
+	action := "pat.redeem"
+	auditOutcome := storage.OutcomeDenied
+	switch outcome {
+	case "success":
+		auditOutcome = storage.OutcomeSuccess
+	case "error":
+		action = "pat.redeem_failed"
+		auditOutcome = storage.OutcomeError
+	default:
+		action = "pat.redeem_failed"
+	}
+
+	meta := map[string]any{
+		"reason":     outcome,
+		"machine_id": rctx.MachineID,
+		"hostname":   rctx.Hostname,
+	}
+	if agentID != "" {
+		meta["agent_id"] = agentID
+	}
+
+	// Resolve project id from the PAT row when known; the redemption
+	// may fail before we have a token, in which case the event is
+	// truly global (a scanning attempt that doesn't belong to any
+	// project).
+	var projectID *string
+	if tokenID != "" {
+		if tok, err := s.db.PATTokens().Get(ctx, tokenID); err == nil {
+			pid := tok.ProjectID
+			projectID = &pid
+		}
+	}
+
+	in := activity.Input{
+		ProjectID:    projectID,
+		ActorType:    storage.ActorTypeAgent,
+		ActorIP:      rctx.ClientIP,
+		ActorTokenID: tokenID,
+		Category:     storage.CategoryAuth,
+		Action:       action,
+		TargetType:   "pat_token",
+		TargetID:     tokenID,
+		TargetLabel:  tokenID,
+		Outcome:      auditOutcome,
+		Error:        errDetail,
+		SessionID:    "",
+		Meta:         meta,
+	}
+	if agentID != "" {
+		in.ActorUser = agentID // agent acts as itself once enrolled
+	}
+	activity.RecordWithContext(ctx, in)
 }
 
 // bytesEqualCT is subtle.ConstantTimeCompare wrapped so tests can stub.

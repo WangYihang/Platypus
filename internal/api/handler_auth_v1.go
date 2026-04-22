@@ -58,6 +58,7 @@ type tokenPair struct {
 // bootstrap secret. After the first admin exists this endpoint is dead
 // weight; subsequent calls return 409.
 func (h *AuthHandler) Bootstrap(c *gin.Context) {
+	empty := ""
 	var req bootstrapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -71,6 +72,15 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 	if n > 0 {
+		RecordActivity(c, ActivityInput{
+			ProjectID: &empty,
+			ActorType: storage.ActorTypeAnonymous,
+			Category:  storage.CategoryAuth,
+			Action:    "user.bootstrap",
+			Outcome:   storage.OutcomeDenied,
+			Error:     "already bootstrapped",
+			Meta:      map[string]any{"username": req.Username},
+		})
 		c.JSON(http.StatusConflict, gin.H{"error": "already bootstrapped"})
 		return
 	}
@@ -78,6 +88,15 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	// to time-side-channel, though the single-shot nature already limits
 	// exploitation.
 	if subtle.ConstantTimeCompare([]byte(req.Secret), []byte(h.bootstrapSecret)) != 1 {
+		RecordActivity(c, ActivityInput{
+			ProjectID: &empty,
+			ActorType: storage.ActorTypeAnonymous,
+			Category:  storage.CategoryAuth,
+			Action:    "user.bootstrap",
+			Outcome:   storage.OutcomeDenied,
+			Error:     "invalid secret",
+			Meta:      map[string]any{"username": req.Username},
+		})
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid secret"})
 		return
 	}
@@ -98,6 +117,17 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create user"})
 		return
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &empty,
+		ActorType:   storage.ActorTypeUser,
+		ActorUser:   u.ID,
+		Category:    storage.CategoryAuth,
+		Action:      "user.bootstrap",
+		TargetType:  "user",
+		TargetID:    u.ID,
+		TargetLabel: u.Username,
+		Meta:        map[string]any{"username": u.Username, "role": string(u.Role)},
+	})
 	// Seed a "default" project so the legacy listener flows (which know
 	// nothing about projects) still have somewhere to write. Only attempt
 	// when no project exists yet — idempotent if someone renamed the seed.
@@ -117,6 +147,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 // On invalid credentials we always return 401 with the same body so
 // attackers can't distinguish "wrong username" from "wrong password".
 func (h *AuthHandler) Login(c *gin.Context) {
+	empty := ""
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -126,6 +157,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 	u, err := h.db.Users().GetByUsername(ctx, req.Username)
 	if errors.Is(err, storage.ErrNotFound) {
+		RecordActivity(c, ActivityInput{
+			ProjectID: &empty,
+			ActorType: storage.ActorTypeAnonymous,
+			Category:  storage.CategoryAuth,
+			Action:    "user.login_failed",
+			Outcome:   storage.OutcomeDenied,
+			Error:     "unknown user",
+			Meta:      map[string]any{"username": req.Username, "reason": "unknown_user"},
+		})
 		unauthorized(c)
 		return
 	}
@@ -134,6 +174,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	if !user.VerifyPassword(u.PasswordHash, req.Password) {
+		RecordActivity(c, ActivityInput{
+			ProjectID:   &empty,
+			ActorType:   storage.ActorTypeAnonymous,
+			Category:    storage.CategoryAuth,
+			Action:      "user.login_failed",
+			TargetType:  "user",
+			TargetID:    u.ID,
+			TargetLabel: u.Username,
+			Outcome:     storage.OutcomeDenied,
+			Error:       "invalid password",
+			Meta:        map[string]any{"username": req.Username, "reason": "bad_password"},
+		})
 		unauthorized(c)
 		return
 	}
@@ -141,6 +193,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// Non-fatal — the login itself still succeeded.
 		_ = err
 	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &empty,
+		ActorType:   storage.ActorTypeUser,
+		ActorUser:   u.ID,
+		Category:    storage.CategoryAuth,
+		Action:      "user.login",
+		TargetType:  "user",
+		TargetID:    u.ID,
+		TargetLabel: u.Username,
+		Meta:        map[string]any{"username": u.Username, "method": "password"},
+	})
 	h.issueTokensTo(c, u)
 }
 
@@ -240,6 +303,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 // already revoked or unknown — logging out "harder than necessary" is not
 // an error.
 func (h *AuthHandler) Logout(c *gin.Context) {
+	empty := ""
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -253,6 +317,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	_ = h.db.RefreshTokens().Revoke(c.Request.Context(), claims.TokenID)
+	RecordActivity(c, ActivityInput{
+		ProjectID:  &empty,
+		ActorType:  storage.ActorTypeUser,
+		ActorUser:  claims.UserID,
+		Category:   storage.CategoryAuth,
+		Action:     "user.logout",
+		TargetType: "user",
+		TargetID:   claims.UserID,
+	})
 	c.Status(http.StatusNoContent)
 }
 
