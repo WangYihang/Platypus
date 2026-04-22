@@ -1,9 +1,16 @@
 // Single source of truth for the Vercel-inspired visual system.
-// Every component reads colours from here rather than from inline
-// style={{}} sprinkled across files; the Ant Design ConfigProvider
-// applied at the app root picks these up too so Ant components match.
-
-import type { ThemeConfig } from "antd";
+//
+// Two kinds of consumers read these tokens:
+//   · inline-style React (palette.textMuted, space[4], radius.md, …).
+//     The transitional files that haven't been rewritten to Tailwind
+//     classes still use this TS-side mirror.
+//   · shadcn/ui + Tailwind utilities. style.css hoists the same values
+//     into CSS variables (:root) and Tailwind theme keys (@theme inline),
+//     so `bg-surface`, `text-text-muted`, `rounded-md`, `bg-primary`,
+//     etc. resolve to the same numbers / hex codes you see below.
+//
+// Keep this file and the :root / @theme blocks in style.css in sync —
+// change values here, update style.css verbatim, and rebuild.
 
 // --- Palette ---------------------------------------------------------
 // Vercel-style neutral grays. Three visible surface tiers — main (the
@@ -57,69 +64,3 @@ export const layout = {
     detailRailWidth: 280,
     mainHeaderHeight: 56,
 } as const;
-
-// Ant ConfigProvider token overrides. Scope is deliberately narrow —
-// colour + border radius + density + per-component tweaks for the
-// surfaces we touch (Tabs, Tables, Buttons, Inputs).
-export const antTheme: ThemeConfig = {
-    token: {
-        colorPrimary: palette.accent,
-        colorInfo: palette.success,
-        colorSuccess: palette.successDot,
-        colorError: palette.danger,
-        colorWarning: palette.warning,
-        colorBgBase: palette.main,
-        colorBgContainer: palette.main,
-        colorBgElevated: palette.surface,
-        colorTextBase: palette.textPrimary,
-        colorBorder: palette.border,
-        colorBorderSecondary: palette.border,
-        borderRadius: radius.md,
-        controlHeight: 32,
-        fontFamily: font.sans,
-    },
-    components: {
-        Layout: {
-            bodyBg: palette.main,
-            headerBg: palette.rail,
-            siderBg: palette.sidebar,
-        },
-        Menu: {
-            darkItemBg: palette.sidebar,
-            darkItemSelectedBg: palette.surfaceHover,
-        },
-        Table: {
-            headerBg: palette.surface,
-            headerColor: palette.textSecondary,
-            rowHoverBg: palette.surfaceHover,
-            borderColor: palette.border,
-        },
-        Button: {
-            defaultBg: "transparent",
-            defaultBorderColor: palette.border,
-            defaultColor: palette.textPrimary,
-            primaryColor: palette.accentFg,
-        },
-        Input: {
-            activeBorderColor: palette.borderStrong,
-            hoverBorderColor: palette.borderStrong,
-            colorBgContainer: palette.main,
-        },
-        Tabs: {
-            itemColor: palette.textSecondary,
-            itemSelectedColor: palette.textPrimary,
-            itemHoverColor: palette.textPrimary,
-            inkBarColor: palette.textPrimary,
-        },
-        Modal: {
-            contentBg: palette.surface,
-            headerBg: palette.surface,
-        },
-        Card: {
-            colorBgContainer: palette.surface,
-        },
-        Select: {
-            optionSelectedBg: palette.surfaceHover,
-        },
-    },
-};

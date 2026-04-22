@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { GatewayOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Router, Zap } from "lucide-react";
 
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import { palette, radius, space } from "../layout/theme";
@@ -137,7 +137,7 @@ export default function StatusBar() {
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <GatewayOutlined style={{ fontSize: 11 }} />
+                    <Router className="size-3" />
                     <span>Listeners</span>
                     <Mono size={11} color={palette.textPrimary}>
                         {info?.listener_count ?? "—"}
@@ -145,7 +145,7 @@ export default function StatusBar() {
                 </span>
                 <span style={{ color: palette.border }}>·</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <ThunderboltOutlined style={{ fontSize: 11 }} />
+                    <Zap className="size-3" />
                     <span>Sessions</span>
                     <Mono size={11} color={palette.textPrimary}>
                         {info?.session_count ?? "—"}

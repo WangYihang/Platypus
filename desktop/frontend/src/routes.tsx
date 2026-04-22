@@ -1,8 +1,7 @@
 import { ReactNode, Suspense, lazy } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
-import { ConfigProvider, Spin } from "antd";
+import { Loader2 } from "lucide-react";
 
-import { antTheme } from "./layout/theme";
 import { palette } from "./layout/theme";
 import RequireAuth from "./layout/RequireAuth";
 import ProjectShell from "./layout/ProjectShell";
@@ -41,7 +40,7 @@ function routeFallback(): ReactNode {
                 background: palette.main,
             }}
         >
-            <Spin />
+            <Loader2 className="size-5 animate-spin text-text-muted" />
         </div>
     );
 }
@@ -56,22 +55,14 @@ function withSuspense(element: ReactNode): ReactNode {
 // Top-level route table. Flat nav IA — every project-scoped view sits
 // under /projects/:projectSlug/<page>, with shared sidebar chrome
 // rendered by <ProjectShell>. Page components are lazy-loaded so the
-// initial bundle only pulls in the shell + Ant Design core.
+// initial bundle only pulls in the shell + shadcn/ui primitives.
 export const router = createBrowserRouter([
     {
         path: "/login",
-        element: (
-            <ConfigProvider theme={antTheme}>
-                {withSuspense(<LoginRoute />)}
-            </ConfigProvider>
-        ),
+        element: withSuspense(<LoginRoute />),
     },
     {
-        element: (
-            <ConfigProvider theme={antTheme}>
-                <RequireAuth />
-            </ConfigProvider>
-        ),
+        element: <RequireAuth />,
         children: [
             { path: "/", element: <Navigate to="/projects" replace /> },
             {

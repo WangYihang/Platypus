@@ -261,7 +261,3 @@ main {
     border: 2px solid transparent;
 }
 
-/* Antd Table row hover — removed once Table migration completes. */
-.ant-table-tbody > tr.ant-table-row:hover > td {
-    background: #1f1f1f !important;
-}
