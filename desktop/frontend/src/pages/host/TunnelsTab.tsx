@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-    Button,
-    Form,
-    Input,
-    Modal,
-    Select,
-    Space,
-    Table,
-    message,
-} from "antd";
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { Loader2, Plus, RotateCw } from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
@@ -20,7 +13,43 @@ import { CreateTunnel, ListTunnels } from "../../../wailsjs/go/app/App";
 import type { api } from "../../../wailsjs/go/models";
 import { palette, space } from "../../layout/theme";
 
-type Mode = "pull" | "push" | "dynamic" | "internet";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+
+const MODES = ["pull", "push", "dynamic", "internet"] as const;
+type Mode = (typeof MODES)[number];
 
 const MODE_DESC: Record<Mode, string> = {
     pull: "Inbound: agent listens on dst, forwards to src on operator side",
@@ -28,6 +57,13 @@ const MODE_DESC: Record<Mode, string> = {
     dynamic: "Agent runs a SOCKS5 server on a free port (request from agent)",
     internet: "Server runs SOCKS5 at src and proxies via the agent to dst",
 };
+
+const tunnelSchema = z.object({
+    mode: z.enum(MODES),
+    srcAddress: z.string(),
+    dstAddress: z.string(),
+});
+type TunnelFormValues = z.infer<typeof tunnelSchema>;
 
 interface Props {
     sessionHash: string;
@@ -38,57 +74,40 @@ interface Props {
 export default function TunnelsTab({ sessionHash }: Props) {
     const [tunnels, setTunnels] = useState<api.TunnelInfo[]>([]);
     const [modalOpen, setModalOpen] = useState(false);
-    const [busy, setBusy] = useState(false);
-    const [form] = Form.useForm<{ mode: Mode; srcAddress: string; dstAddress: string }>();
-    const [messageApi, contextHolder] = message.useMessage();
+
+    const form = useForm<TunnelFormValues>({
+        resolver: zodResolver(tunnelSchema),
+        defaultValues: { mode: "dynamic", srcAddress: "", dstAddress: "" },
+    });
+
+    const mode = form.watch("mode");
 
     const refresh = useCallback(async () => {
         try {
             setTunnels(await ListTunnels(sessionHash));
         } catch (err) {
-            messageApi.error(`refresh: ${String(err)}`);
+            toast.error(`refresh: ${String(err)}`);
         }
-    }, [sessionHash, messageApi]);
+    }, [sessionHash]);
 
     useEffect(() => {
         refresh();
     }, [refresh]);
 
-    async function handleCreate() {
-        const v = await form.validateFields();
-        setBusy(true);
+    async function handleCreate(v: TunnelFormValues) {
         try {
             await CreateTunnel(sessionHash, v.mode, v.srcAddress, v.dstAddress);
-            messageApi.success(`${v.mode} tunnel created`);
+            toast.success(`${v.mode} tunnel created`);
             setModalOpen(false);
-            form.resetFields();
+            form.reset({ mode: "dynamic", srcAddress: "", dstAddress: "" });
             refresh();
         } catch (err) {
-            messageApi.error(`create: ${String(err)}`);
-        } finally {
-            setBusy(false);
+            toast.error(`create: ${String(err)}`);
         }
     }
 
-    const columns: ColumnsType<api.TunnelInfo> = [
-        {
-            title: "Type",
-            dataIndex: "type",
-            key: "type",
-            width: 120,
-            render: (t: string) => <StatusPill tone="info">{t}</StatusPill>,
-        },
-        {
-            title: "Address",
-            dataIndex: "address",
-            key: "addr",
-            render: (a: string) => <Mono>{a}</Mono>,
-        },
-    ];
-
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
-            {contextHolder}
             <div
                 style={{
                     display: "flex",
@@ -106,95 +125,138 @@ export default function TunnelsTab({ sessionHash }: Props) {
                 >
                     Active tunnels
                 </h3>
-                <Space size={space[2]}>
-                    <Button icon={<ReloadOutlined />} size="small" onClick={refresh}>
+                <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={refresh}>
+                        <RotateCw className="size-3.5" />
                         Refresh
                     </Button>
-                    <Button
-                        icon={<PlusOutlined />}
-                        size="small"
-                        type="primary"
-                        onClick={() => setModalOpen(true)}
-                    >
+                    <Button size="sm" onClick={() => setModalOpen(true)}>
+                        <Plus className="size-3.5" />
                         New tunnel
                     </Button>
-                </Space>
+                </div>
             </div>
 
             <Card padding={0}>
-                <Table
-                    rowKey={(r) => `${r.type}:${r.address}`}
-                    columns={columns}
-                    dataSource={tunnels}
-                    pagination={false}
-                    size="small"
-                    bordered={false}
-                    locale={{
-                        emptyText: (
-                            <EmptyState
-                                title="No active tunnels"
-                                description="Open a tunnel on this session via New tunnel."
-                            />
-                        ),
-                    }}
-                />
+                {tunnels.length === 0 ? (
+                    <EmptyState
+                        title="No active tunnels"
+                        description="Open a tunnel on this session via New tunnel."
+                    />
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[120px]">Type</TableHead>
+                                <TableHead>Address</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {tunnels.map((t) => (
+                                <TableRow key={`${t.type}:${t.address}`}>
+                                    <TableCell>
+                                        <StatusPill tone="info">{t.type}</StatusPill>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Mono>{t.address}</Mono>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
             </Card>
 
-            <Modal
-                title="New tunnel"
-                open={modalOpen}
-                onOk={handleCreate}
-                onCancel={() => setModalOpen(false)}
-                okText="Create"
-                confirmLoading={busy}
-                destroyOnHidden
-            >
-                <Form
-                    form={form}
-                    layout="vertical"
-                    initialValues={{ mode: "dynamic", srcAddress: "", dstAddress: "" }}
-                >
-                    <Form.Item name="mode" label="Mode" rules={[{ required: true }]}>
-                        <Select
-                            options={(["pull", "push", "dynamic", "internet"] as Mode[]).map((m) => ({
-                                label: m,
-                                value: m,
-                            }))}
-                        />
-                    </Form.Item>
-                    <Form.Item shouldUpdate noStyle>
-                        {() => {
-                            const mode = form.getFieldValue("mode") as Mode;
-                            return (
-                                <p
-                                    style={{
-                                        margin: `0 0 ${space[4]}px`,
-                                        color: palette.textSecondary,
-                                        fontSize: 12,
-                                        lineHeight: 1.5,
-                                    }}
+            <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+                <DialogContent className="sm:max-w-[480px]">
+                    <DialogHeader>
+                        <DialogTitle>New tunnel</DialogTitle>
+                        <DialogDescription>{MODE_DESC[mode as Mode]}</DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                        <form
+                            onSubmit={form.handleSubmit(handleCreate)}
+                            className="space-y-4"
+                        >
+                            <FormField
+                                control={form.control}
+                                name="mode"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Mode</FormLabel>
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {MODES.map((m) => (
+                                                    <SelectItem key={m} value={m}>
+                                                        {m}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="srcAddress"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>src_address</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="0.0.0.0:1080" {...field} />
+                                        </FormControl>
+                                        <FormDescription>
+                                            dynamic mode: ignored — server picks a free port
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="dstAddress"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>dst_address</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="127.0.0.1:80" {...field} />
+                                        </FormControl>
+                                        <FormDescription>
+                                            dynamic: ignored. internet: target IP:port the SOCKS5
+                                            server proxies to.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setModalOpen(false)}
                                 >
-                                    {MODE_DESC[mode]}
-                                </p>
-                            );
-                        }}
-                    </Form.Item>
-                    <Form.Item
-                        name="srcAddress"
-                        label="src_address"
-                        extra="dynamic mode: ignored — server picks a free port"
-                    >
-                        <Input placeholder="0.0.0.0:1080" />
-                    </Form.Item>
-                    <Form.Item
-                        name="dstAddress"
-                        label="dst_address"
-                        extra="dynamic: ignored. internet: target IP:port the SOCKS5 server proxies to."
-                    >
-                        <Input placeholder="127.0.0.1:80" />
-                    </Form.Item>
-                </Form>
-            </Modal>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={form.formState.isSubmitting}>
+                                    {form.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Create
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
