@@ -50,6 +50,7 @@ tmp/
 # SQLite
 *.sqlite3
 *.db
+*.db-journal
 
 # Playwright
 .playwright-mcp/
