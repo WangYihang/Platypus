@@ -17,6 +17,17 @@ const (
 	EventSessionClosed   = "session.closed"
 	EventListenerCreated = "listener.created"
 	EventListenerDeleted = "listener.deleted"
+
+	// Topology events. The 1 Hz coalescer in core/topology_stream.go
+	// batches rapid stat changes into one link_stats / machine_stats
+	// frame per second; link_up / link_down fire immediately on the
+	// observed edge.
+	EventTopologyLinkUp       = "topology.link_up"
+	EventTopologyLinkDown     = "topology.link_down"
+	EventTopologyLinkStats    = "topology.link_stats"
+	EventTopologyMachineStats = "topology.machine_stats"
+	EventTopologyNodeJoined   = "topology.node_joined"
+	EventTopologyNodeLeft     = "topology.node_left"
 )
 
 // notifyEnvelope is the JSON wrapper every /notify message is shipped in.

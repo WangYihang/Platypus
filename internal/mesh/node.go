@@ -40,6 +40,13 @@ type Node struct {
 	lastLSASeq     uint64            // our own outbound LSA seq
 	payloadHandler atomic.Pointer[PayloadHandler]
 
+	// Link event observers — called synchronously from onLinkUp /
+	// onLinkDown. Used by higher layers (core.topology_events) to
+	// fan out topology.* notify events without exposing internal
+	// mesh state. Guarded by observerMu.
+	observerMu sync.RWMutex
+	observers  []LinkObserver
+
 	startOnce sync.Once
 	stopped   chan struct{}
 }
@@ -218,6 +225,7 @@ func (n *Node) onLinkUp(l *Link) {
 	n.logger.Info("mesh link up",
 		slog.String("peer", l.PeerNodeID),
 		slog.String("remote", l.RemoteAddr))
+	n.notifyObservers(func(o LinkObserver) { o.OnLinkUp(l.PeerNodeID, l.RemoteAddr) })
 	// Kick off a full announce to the new neighbour so it learns our
 	// known peers right away.
 	announce := &agentpb.MeshPeerAnnounce{Nodes: n.registry.ToNodeInfos()}
@@ -237,6 +245,7 @@ func (n *Node) onLinkDown(l *Link) {
 	}
 	n.linkMu.Unlock()
 	n.logger.Info("mesh link down", slog.String("peer", l.PeerNodeID))
+	n.notifyObservers(func(o LinkObserver) { o.OnLinkDown(l.PeerNodeID) })
 	// Refresh routes + LSA to reflect the change.
 	n.publishLocalLSA()
 	n.recomputeRoutes()

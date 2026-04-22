@@ -150,3 +150,40 @@ func (n *Node) Topology() *MeshTopology {
 	})
 	return out
 }
+
+// LinkObserver receives synchronous notifications when a mesh link
+// transitions between up and down. Implementations must be cheap and
+// non-blocking — they run on the link's management goroutine.
+type LinkObserver interface {
+	OnLinkUp(peerNodeID string, remoteAddr string)
+	OnLinkDown(peerNodeID string)
+}
+
+// RegisterLinkObserver appends o to the observer list. Returns a
+// func that removes it again; typical usage is to defer the
+// unregister at the caller's lifecycle boundary.
+func (n *Node) RegisterLinkObserver(o LinkObserver) func() {
+	n.observerMu.Lock()
+	n.observers = append(n.observers, o)
+	n.observerMu.Unlock()
+	return func() {
+		n.observerMu.Lock()
+		defer n.observerMu.Unlock()
+		for i, existing := range n.observers {
+			if existing == o {
+				n.observers = append(n.observers[:i], n.observers[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// notifyObservers invokes fn for every registered observer under a
+// read lock.
+func (n *Node) notifyObservers(fn func(LinkObserver)) {
+	n.observerMu.RLock()
+	defer n.observerMu.RUnlock()
+	for _, o := range n.observers {
+		fn(o)
+	}
+}
