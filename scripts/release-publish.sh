@@ -19,6 +19,7 @@
 # Optional:
 #
 #   S3_REGION                  defaults to us-east-1
+#   S3_SCHEME                  "https" or "http"; defaults to "https"
 #   PLATFORMS                  space-separated list of GOOS/GOARCH pairs
 #                              (defaults to: linux/amd64 linux/arm64 windows/amd64 windows/arm64)
 
@@ -35,6 +36,7 @@ set -euo pipefail
 : "${S3_SECRET_KEY:?S3_SECRET_KEY is required}"
 
 S3_REGION="${S3_REGION:-us-east-1}"
+S3_SCHEME="${S3_SCHEME:-https}"
 PLATFORMS="${PLATFORMS:-linux/amd64 linux/arm64 windows/amd64 windows/arm64}"
 
 WORKDIR="$(mktemp -d)"
@@ -79,7 +81,7 @@ openssl pkeyutl -sign \
   -out "$WORKDIR/manifest.sig"
 
 echo "→ uploading to s3://$S3_BUCKET/$S3_PREFIX"
-mc alias set platypus-release "https://$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY" --api s3v4 >/dev/null
+mc alias set platypus-release "$S3_SCHEME://$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY" --api s3v4 >/dev/null
 
 # Upload artifacts first, manifest last — if the manifest lands before
 # all artifacts, an agent racing the release would see a manifest that

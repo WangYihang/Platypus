@@ -54,25 +54,29 @@ func (c RESTfulConfig) DBFileOrDefault() string {
 // release artifact store. The Distributor itself serves only a signed
 // manifest and redirects to presigned object-store URLs for artifact
 // downloads — the binaries live in Store.
+//
+// Every field carries a `mapstructure:` tag because viper's Unmarshal
+// reads those, not `yaml:`. Without it snake_case keys silently bind
+// to the zero value.
 type DistributorConfig struct {
-	Host         string               `yaml:"host" validate:"required"`
-	Port         uint16               `yaml:"port" validate:"required,min=1,max=65535"`
-	Url          string               `yaml:"url"`
-	Channel      string               `yaml:"channel"`       // default release channel; "stable" if empty
-	PresignedTTL string               `yaml:"presigned_ttl"` // duration, e.g. "5m"; defaults to 5 minutes
-	Store        ArtifactStoreConfig  `yaml:"store"`
+	Host         string              `yaml:"host"          mapstructure:"host" validate:"required"`
+	Port         uint16              `yaml:"port"          mapstructure:"port" validate:"required,min=1,max=65535"`
+	Url          string              `yaml:"url"           mapstructure:"url"`
+	Channel      string              `yaml:"channel"       mapstructure:"channel"`       // default release channel; "stable" if empty
+	PresignedTTL string              `yaml:"presigned_ttl" mapstructure:"presigned_ttl"` // duration, e.g. "5m"; defaults to 5 minutes
+	Store        ArtifactStoreConfig `yaml:"store"         mapstructure:"store"`
 }
 
 // ArtifactStoreConfig is the S3/MinIO backend for the agent release
 // artifacts and manifest.
 type ArtifactStoreConfig struct {
-	Endpoint        string `yaml:"endpoint"`
-	Region          string `yaml:"region"`
-	Bucket          string `yaml:"bucket"`
-	Prefix          string `yaml:"prefix"`
-	AccessKeyID     string `yaml:"access_key_id"`
-	SecretAccessKey string `yaml:"secret_access_key"`
-	UseSSL          bool   `yaml:"use_ssl"`
+	Endpoint        string `yaml:"endpoint"          mapstructure:"endpoint"`
+	Region          string `yaml:"region"            mapstructure:"region"`
+	Bucket          string `yaml:"bucket"            mapstructure:"bucket"`
+	Prefix          string `yaml:"prefix"            mapstructure:"prefix"`
+	AccessKeyID     string `yaml:"access_key_id"     mapstructure:"access_key_id"`
+	SecretAccessKey string `yaml:"secret_access_key" mapstructure:"secret_access_key"`
+	UseSSL          bool   `yaml:"use_ssl"           mapstructure:"use_ssl"`
 }
 
 // ChannelOrDefault returns the configured release channel, defaulting
