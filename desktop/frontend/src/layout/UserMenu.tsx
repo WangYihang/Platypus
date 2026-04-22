@@ -1,10 +1,49 @@
 import { useState } from "react";
-import { Avatar, Button, Form, Input, Modal, Popover, message } from "antd";
-import { KeyOutlined, LogoutOutlined, MoreOutlined, SettingOutlined } from "@ant-design/icons";
+import { Key, Loader2, LogOut, MoreHorizontal, Settings } from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 
 import { SessionUser, changePassword, logout } from "../lib/auth";
 import { palette, space } from "./theme";
+
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+// Zod refinement to check confirm matches new_password. Runs after the
+// individual-field validation, so we see match errors only once both
+// fields look otherwise valid.
+const passwordSchema = z
+    .object({
+        old_password: z.string().min(1, "current password is required"),
+        new_password: z.string().min(8, "Min 8 chars"),
+        confirm: z.string().min(1, "required"),
+    })
+    .refine((v) => v.confirm === v.new_password, {
+        path: ["confirm"],
+        message: "passwords do not match",
+    });
+type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 interface Props {
     user: SessionUser;
@@ -12,88 +51,36 @@ interface Props {
 }
 
 // UserMenu sits at the bottom of the sidebar: avatar + username + role,
-// with a more-menu (·••) opening a popover with admin/password/logout
-// actions. Replaces the old vertical ProfileRail (since nav is now flat
-// in the same sidebar, the rail is gone).
+// with a more-menu (...) opening a popover with admin/password/logout
+// actions.
 export default function UserMenu({ user, serverURL }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
     const [pwOpen, setPwOpen] = useState(false);
-    const [pwForm] = Form.useForm<{
-        old_password: string;
-        new_password: string;
-        confirm: string;
-    }>();
-    const [pwBusy, setPwBusy] = useState(false);
-    const [messageApi, contextHolder] = message.useMessage();
+    const [menuOpen, setMenuOpen] = useState(false);
     const navigate = useNavigate();
 
+    const pwForm = useForm<PasswordFormValues>({
+        resolver: zodResolver(passwordSchema),
+        defaultValues: { old_password: "", new_password: "", confirm: "" },
+    });
+
     async function handleLogout() {
+        setMenuOpen(false);
         await logout();
         navigate("/login", { replace: true });
     }
 
-    async function handlePasswordChange() {
-        const v = await pwForm.validateFields();
-        setPwBusy(true);
+    async function handlePasswordChange(v: PasswordFormValues) {
         try {
             await changePassword(v.old_password, v.new_password);
-            messageApi.success("Password updated — please log in again");
+            toast.success("Password updated — please log in again");
             setPwOpen(false);
-            pwForm.resetFields();
+            pwForm.reset({ old_password: "", new_password: "", confirm: "" });
             navigate("/login", { replace: true });
         } catch (e) {
-            messageApi.error(`change password: ${String(e)}`);
-        } finally {
-            setPwBusy(false);
+            toast.error(`change password: ${String(e)}`);
         }
     }
-
-    const popoverContent = (
-        <div style={{ minWidth: 220 }}>
-            <div
-                style={{
-                    marginBottom: space[3],
-                    paddingBottom: space[3],
-                    borderBottom: `1px solid ${palette.border}`,
-                }}
-            >
-                <div
-                    style={{
-                        fontWeight: 600,
-                        color: palette.textPrimary,
-                        fontSize: 13,
-                    }}
-                >
-                    {user.username}
-                </div>
-                <div style={{ color: palette.textMuted, fontSize: 12 }}>
-                    {roleLabel(user.role)} · {hostOf(serverURL)}
-                </div>
-            </div>
-            {user.role === "admin" && (
-                <button
-                    type="button"
-                    className="pl-popover-btn"
-                    onClick={() => navigate("/admin/users")}
-                >
-                    <SettingOutlined />
-                    <span>Manage users</span>
-                </button>
-            )}
-            <button
-                type="button"
-                className="pl-popover-btn"
-                onClick={() => setPwOpen(true)}
-            >
-                <KeyOutlined />
-                <span>Change password</span>
-            </button>
-            <button type="button" className="pl-popover-btn" onClick={handleLogout}>
-                <LogoutOutlined />
-                <span>Log out</span>
-            </button>
-        </div>
-    );
 
     return (
         <div
@@ -105,20 +92,11 @@ export default function UserMenu({ user, serverURL }: Props) {
                 borderTop: `1px solid ${palette.border}`,
             }}
         >
-            {contextHolder}
-            <Avatar
-                size={32}
-                style={{
-                    backgroundColor: palette.surfaceHover,
-                    color: palette.textPrimary,
-                    border: `1px solid ${palette.borderStrong}`,
-                    fontWeight: 600,
-                    fontSize: 12,
-                    flexShrink: 0,
-                }}
+            <div
+                className="grid place-items-center flex-shrink-0 size-8 rounded-full border border-border-strong bg-surface-hover text-xs font-semibold text-text-primary"
             >
                 {initials}
-            </Avatar>
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                     style={{
@@ -132,96 +110,142 @@ export default function UserMenu({ user, serverURL }: Props) {
                 >
                     {user.username}
                 </div>
-                <div
-                    style={{
-                        color: palette.textMuted,
-                        fontSize: 11,
-                    }}
-                >
+                <div style={{ color: palette.textMuted, fontSize: 11 }}>
                     {roleLabel(user.role)}
                 </div>
             </div>
-            <Popover content={popoverContent} placement="topRight" trigger="click">
-                <button
-                    type="button"
-                    aria-label="User menu"
-                    style={{
-                        background: "transparent",
-                        border: "none",
-                        color: palette.textMuted,
-                        cursor: "pointer",
-                        padding: 4,
-                        borderRadius: 4,
-                    }}
-                >
-                    <MoreOutlined style={{ fontSize: 16 }} />
-                </button>
-            </Popover>
 
-            <Modal
-                title="Change password"
-                open={pwOpen}
-                onCancel={() => {
-                    setPwOpen(false);
-                    pwForm.resetFields();
-                }}
-                footer={[
-                    <Button
-                        key="cancel"
+            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                <PopoverTrigger asChild>
+                    <button
+                        type="button"
+                        aria-label="User menu"
+                        className="cursor-pointer rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                    >
+                        <MoreHorizontal className="size-4" />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" side="top" className="w-[220px] p-1">
+                    <div className="mb-2 pb-2 border-b border-border px-2 pt-1">
+                        <div className="font-semibold text-text-primary text-sm">
+                            {user.username}
+                        </div>
+                        <div className="text-xs text-text-muted">
+                            {roleLabel(user.role)} · {hostOf(serverURL)}
+                        </div>
+                    </div>
+                    {user.role === "admin" && (
+                        <button
+                            type="button"
+                            className="pl-popover-btn"
+                            onClick={() => {
+                                setMenuOpen(false);
+                                navigate("/admin/users");
+                            }}
+                        >
+                            <Settings className="size-3.5" />
+                            <span>Manage users</span>
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="pl-popover-btn"
                         onClick={() => {
-                            setPwOpen(false);
-                            pwForm.resetFields();
+                            setMenuOpen(false);
+                            setPwOpen(true);
                         }}
                     >
-                        Cancel
-                    </Button>,
-                    <Button
-                        key="submit"
-                        type="primary"
-                        loading={pwBusy}
-                        onClick={handlePasswordChange}
-                    >
-                        Update password
-                    </Button>,
-                ]}
-                destroyOnHidden
+                        <Key className="size-3.5" />
+                        <span>Change password</span>
+                    </button>
+                    <button type="button" className="pl-popover-btn" onClick={handleLogout}>
+                        <LogOut className="size-3.5" />
+                        <span>Log out</span>
+                    </button>
+                </PopoverContent>
+            </Popover>
+
+            <Dialog
+                open={pwOpen}
+                onOpenChange={(o) => {
+                    setPwOpen(o);
+                    if (!o) pwForm.reset({ old_password: "", new_password: "", confirm: "" });
+                }}
             >
-                <Form form={pwForm} layout="vertical">
-                    <Form.Item
-                        name="old_password"
-                        label="Current password"
-                        rules={[{ required: true }]}
-                    >
-                        <Input.Password autoFocus />
-                    </Form.Item>
-                    <Form.Item
-                        name="new_password"
-                        label="New password"
-                        rules={[{ required: true, min: 8, message: "Min 8 chars" }]}
-                        extra="Changing your password will sign you out of all other sessions."
-                    >
-                        <Input.Password />
-                    </Form.Item>
-                    <Form.Item
-                        name="confirm"
-                        label="Confirm new password"
-                        dependencies={["new_password"]}
-                        rules={[
-                            { required: true },
-                            ({ getFieldValue }) => ({
-                                validator(_, v) {
-                                    if (!v || v === getFieldValue("new_password")) {
-                                        return Promise.resolve();
-                                    }
-                                    return Promise.reject(new Error("passwords do not match"));
-                                },
-                            }),
-                        ]}
-                    >
-                        <Input.Password />
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>Change password</DialogTitle>
+                        <DialogDescription>
+                            Changing your password will sign you out of all other sessions.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...pwForm}>
+                        <form
+                            onSubmit={pwForm.handleSubmit(handlePasswordChange)}
+                            className="space-y-4"
+                        >
+                            <FormField
+                                control={pwForm.control}
+                                name="old_password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Current password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" autoFocus {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={pwForm.control}
+                                name="new_password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>New password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" {...field} />
+                                        </FormControl>
+                                        <FormDescription>Min 8 characters.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={pwForm.control}
+                                name="confirm"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Confirm new password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setPwOpen(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={pwForm.formState.isSubmitting}
+                                >
+                                    {pwForm.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Update password
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
