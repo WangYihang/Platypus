@@ -226,6 +226,11 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		sessionsH := api.NewSessionsV2Handler(db)
 		enrollSvc := enrollment.New(db)
 		patTokensH := api.NewPATTokensHandler(db, enrollSvc)
+		// Install-artifact admin endpoints use the distributor's host:port
+		// when rendering the curl command, so admins get a pasteable link
+		// without having to know the topology themselves.
+		distributorBase := fmt.Sprintf("http://%s:%d", cfg.Distributor.Host, cfg.Distributor.Port)
+		installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 		rbac := api.NewRBACWithStorage(tokens, db)
 
 		// Expose the enrollment service globally so the agent-facing TCP
@@ -241,6 +246,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1ProjectListenersRoutes(rest, listenersH, rbac)
 		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
+		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.L.Info("api_ready",
