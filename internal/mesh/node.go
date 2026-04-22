@@ -40,6 +40,13 @@ type Node struct {
 	lastLSASeq     uint64            // our own outbound LSA seq
 	payloadHandler atomic.Pointer[PayloadHandler]
 
+	// Link event observers — called synchronously from onLinkUp /
+	// onLinkDown. Used by higher layers (core.topology_events) to
+	// fan out topology.* notify events without exposing internal
+	// mesh state. Guarded by observerMu.
+	observerMu sync.RWMutex
+	observers  []LinkObserver
+
 	startOnce sync.Once
 	stopped   chan struct{}
 }
@@ -218,6 +225,7 @@ func (n *Node) onLinkUp(l *Link) {
 	n.logger.Info("mesh link up",
 		slog.String("peer", l.PeerNodeID),
 		slog.String("remote", l.RemoteAddr))
+	n.notifyObservers(func(o LinkObserver) { o.OnLinkUp(l.PeerNodeID, l.RemoteAddr) })
 	// Kick off a full announce to the new neighbour so it learns our
 	// known peers right away.
 	announce := &agentpb.MeshPeerAnnounce{Nodes: n.registry.ToNodeInfos()}
@@ -237,6 +245,7 @@ func (n *Node) onLinkDown(l *Link) {
 	}
 	n.linkMu.Unlock()
 	n.logger.Info("mesh link down", slog.String("peer", l.PeerNodeID))
+	n.notifyObservers(func(o LinkObserver) { o.OnLinkDown(l.PeerNodeID) })
 	// Refresh routes + LSA to reflect the change.
 	n.publishLocalLSA()
 	n.recomputeRoutes()
@@ -272,6 +281,19 @@ func (n *Node) linkSnapshot() []*Link {
 	return out
 }
 
+// LinkStats returns a snapshot of per-peer counter state for every
+// currently established direct link. Used by the Topology aggregator
+// to light up edge weights (bytes/s, msgs/s, RTT) on the Mesh
+// visualisation.
+func (n *Node) LinkStats() []LinkStats {
+	links := n.linkSnapshot()
+	out := make([]LinkStats, 0, len(links))
+	for _, l := range links {
+		out = append(out, l.Stats())
+	}
+	return out
+}
+
 func (n *Node) directPeerSet() map[string]struct{} {
 	n.linkMu.RLock()
 	defer n.linkMu.RUnlock()
@@ -291,8 +313,10 @@ func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
 	// Decide: mesh-control payload, locally-destined payload, or forward.
 	switch p := env.Payload.(type) {
 	case *agentpb.Envelope_MeshKeepalive:
-		// RTT measurement possible via p.MeshKeepalive.SentAt; not used yet.
-		_ = p
+		// Updates the link's RTT from our last outbound keepalive
+		// timestamp and captures the peer-reported lifetime
+		// counters for cross-checking against the local codec.
+		from.observeInboundKeepalive(p.MeshKeepalive)
 		return
 	case *agentpb.Envelope_MeshPeerAnnounce:
 		n.ingestAnnounce(from, p.MeshPeerAnnounce)

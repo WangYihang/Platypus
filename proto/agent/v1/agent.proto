@@ -24,6 +24,8 @@ message Envelope {
     ClientInfoResponse    client_info_response    = 11;
     DuplicateClientNotice duplicate_client        = 12;
     UpdateRequest         update_request          = 13;
+    SysInfoRequest        sys_info_request        = 14;
+    SysInfoResponse       sys_info_response       = 15;
 
     // Process management
     ProcessStartRequest     process_start_request     = 20;
@@ -124,6 +126,39 @@ message ClientInfoResponse {
   // couldn't read one — the server then falls back to a hash of
   // hostname + sorted MACs as a weaker host fingerprint.
   string              machine_id          = 8;
+}
+
+// SysInfo is a snapshot of runtime operating-system metrics. Collected
+// by the agent via gopsutil at a fixed cadence (see
+// internal/agent/sysinfo.go) and pushed to the server for display on
+// the Topology / Hosts pages. All fields are best-effort: gopsutil may
+// fail on exotic platforms, in which case zero values are used.
+message SysInfo {
+  // e.g. "6.18.5-arch1-1"
+  string kernel_version   = 1;
+  // e.g. "Ubuntu 22.04.4 LTS"
+  string os_distribution  = 2;
+  // gopsutil platform name, e.g. "ubuntu" / "darwin" / "windows"
+  string platform         = 3;
+  string platform_version = 4;
+  // 0..100 — short-interval (1s) CPU utilisation across all cores.
+  double cpu_percent      = 5;
+  // 0..100
+  double mem_percent      = 6;
+  uint64 mem_total_bytes  = 7;
+  uint64 mem_used_bytes   = 8;
+  uint64 uptime_seconds   = 9;
+  // Wall-clock time the sample was taken, unix seconds.
+  int64  sampled_at_unix  = 10;
+}
+
+// SysInfoRequest is the on-demand pull: the server asks the agent for a
+// fresh SysInfo. Answered with SysInfoResponse. Agents also push
+// SysInfoResponse unsolicited at a fixed cadence.
+message SysInfoRequest  {}
+
+message SysInfoResponse {
+  SysInfo info = 1;
 }
 
 message DuplicateClientNotice {}
@@ -400,8 +435,23 @@ message MeshHelloAck {
 
 // MeshKeepalive is a periodic heartbeat. Either side may send one. Links
 // with no traffic for ~90 seconds are torn down.
+//
+// The keepalive doubles as the traffic-counter piggyback: the sender
+// reports its lifetime byte and message counters on this link as
+// observed locally. The receiver then knows the peer's perspective and
+// can cross-check against its own Rx counters for anomaly detection;
+// the Topology aggregator uses these values to light up edge weights
+// and to derive throughput (via successive-tick deltas).
+//
+// Counters are monotonically increasing from the moment the link was
+// established and are safe to wrap (consumers treat decreases as a
+// baseline reset).
 message MeshKeepalive {
-  int64 sent_at = 1; // unix nanos, for RTT measurement
+  int64  sent_at            = 1; // unix nanos, for RTT measurement
+  uint64 lifetime_bytes_in  = 2; // total bytes received on this link
+  uint64 lifetime_bytes_out = 3; // total bytes sent on this link
+  uint64 lifetime_msgs_in   = 4; // total envelopes received on this link
+  uint64 lifetime_msgs_out  = 5; // total envelopes sent on this link
 }
 
 // MeshPeerAnnounce is sent once per direction right after a handshake

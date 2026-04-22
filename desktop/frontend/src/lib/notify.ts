@@ -133,6 +133,12 @@ export const NotifyEvent = {
     SessionClosed: "session.closed",
     ListenerCreated: "listener.created",
     ListenerDeleted: "listener.deleted",
+    TopologyLinkUp: "topology.link_up",
+    TopologyLinkDown: "topology.link_down",
+    TopologyLinkStats: "topology.link_stats",
+    TopologyMachineStats: "topology.machine_stats",
+    TopologyNodeJoined: "topology.node_joined",
+    TopologyNodeLeft: "topology.node_left",
 } as const;
 
 export interface HostSeenPayload {
@@ -153,4 +159,58 @@ export interface ListenerEventPayload {
     listener_id: string;
     host?: string;
     port?: number;
+}
+
+// --- Topology event payloads ----------------------------------------
+
+export interface TopologyLinkUpPayload {
+    project_id: string;
+    peer: string;
+    remote_addr: string;
+    at: string;
+}
+
+export interface TopologyLinkDownPayload {
+    project_id: string;
+    peer: string;
+    at: string;
+}
+
+export interface TopologyLinkStatsEntry {
+    a: string;
+    b: string;
+    rtt_ns: number;
+    bytes_in: number;
+    bytes_out: number;
+    msgs_in: number;
+    msgs_out: number;
+}
+
+export interface TopologyLinkStatsPayload {
+    project_id: string;
+    tick_at: string;
+    links: TopologyLinkStatsEntry[];
+}
+
+export interface TopologyMachineStatsPayload {
+    project_id: string;
+    host_id: string;
+    cpu_percent: number;
+    mem_percent: number;
+    sampled_at: number;
+    sys_info?: {
+        kernel_version?: string;
+        os_distribution?: string;
+        cpu_percent?: number;
+        mem_percent?: number;
+        mem_total_bytes?: number;
+        mem_used_bytes?: number;
+        uptime_seconds?: number;
+    };
+}
+
+export interface TopologyNodeEventPayload {
+    project_id: string;
+    node_id: string;
+    machine_id?: string;
 }

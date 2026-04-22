@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
 
@@ -27,11 +28,22 @@ const (
 
 // ProtoCodec provides thread-safe reading/writing of length-prefixed
 // protobuf Envelope messages over a stream (typically a TLS connection).
+//
+// The codec also maintains best-effort lifetime byte/message counters
+// for observability. Counters start at zero when the codec is created
+// and increment monotonically on each successful Send / Recv. Non-mesh
+// callers simply ignore them; the mesh Link layer exposes them via
+// MeshKeepalive and LinkStats for the Topology visualisation.
 type ProtoCodec struct {
 	reader  io.Reader
 	writer  io.Writer
 	readMu  sync.Mutex
 	writeMu sync.Mutex
+
+	bytesSent atomic.Uint64
+	bytesRecv atomic.Uint64
+	msgsSent  atomic.Uint64
+	msgsRecv  atomic.Uint64
 }
 
 // NewProtoCodec creates a ProtoCodec from a ReadWriter.
@@ -64,6 +76,8 @@ func (c *ProtoCodec) Send(env *agentpb.Envelope) error {
 	if err != nil {
 		return fmt.Errorf("write frame: %w", err)
 	}
+	c.bytesSent.Add(uint64(len(frame)))
+	c.msgsSent.Add(1)
 	return nil
 }
 
@@ -93,5 +107,21 @@ func (c *ProtoCodec) Recv() (*agentpb.Envelope, error) {
 	if err := proto.Unmarshal(payload, env); err != nil {
 		return nil, fmt.Errorf("unmarshal envelope: %w", err)
 	}
+	c.bytesRecv.Add(uint64(HeaderSize + len(payload)))
+	c.msgsRecv.Add(1)
 	return env, nil
 }
+
+// BytesSent returns the total number of wire bytes (including the
+// 4-byte length header) written successfully by Send.
+func (c *ProtoCodec) BytesSent() uint64 { return c.bytesSent.Load() }
+
+// BytesRecv returns the total number of wire bytes read successfully
+// by Recv.
+func (c *ProtoCodec) BytesRecv() uint64 { return c.bytesRecv.Load() }
+
+// MsgsSent returns the total envelopes successfully written.
+func (c *ProtoCodec) MsgsSent() uint64 { return c.msgsSent.Load() }
+
+// MsgsRecv returns the total envelopes successfully read.
+func (c *ProtoCodec) MsgsRecv() uint64 { return c.msgsRecv.Load() }

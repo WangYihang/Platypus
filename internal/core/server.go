@@ -478,6 +478,14 @@ func AgentMessageDispatcher(client *AgentClient) {
 		case *agentpb.Envelope_Socks5CreateFailed:
 			log.Error("%s", p.Socks5CreateFailed.Reason)
 
+		case *agentpb.Envelope_SysInfoResponse:
+			// Cache the sample in memory; the Topology / Hosts pages
+			// pick it up on their next request. Zero persistence
+			// here — time-series storage lands in PR3.
+			if p.SysInfoResponse != nil {
+				PutSysInfo(client.Hash, p.SysInfoResponse.Info)
+			}
+
 		// RPC responses — route to EnvelopeQueue by request_id
 		case *agentpb.Envelope_ExecResponse,
 			*agentpb.Envelope_ReadFileResponse,
@@ -507,6 +515,7 @@ func AgentMessageDispatcher(client *AgentClient) {
 
 func (s *TCPServer) DeleteAgentClient(client *AgentClient) {
 	delete(s.AgentClients, client.Hash)
+	DropSysInfo(client.Hash)
 	MarkSessionDisconnected(context.Background(), client)
 	client.Close()
 }
