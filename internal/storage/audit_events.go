@@ -66,7 +66,7 @@ func (r *PATRedemptionEventRepo) ListByToken(ctx context.Context, tokenID string
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*PATRedemptionEvent
 	for rows.Next() {
 		e, err := scanPATRedemptionEvent(rows)
@@ -156,7 +156,7 @@ func (r *AgentConnectionEventRepo) ListByAgent(ctx context.Context, agentID stri
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*AgentConnectionEvent
 	for rows.Next() {
 		e, err := scanAgentConnectionEvent(rows)
@@ -258,7 +258,7 @@ func (r *AdminAuditLogRepo) ListRecent(ctx context.Context, limit int) ([]*Admin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*AdminAuditEvent
 	for rows.Next() {
 		e, err := scanAdminAuditEvent(rows)

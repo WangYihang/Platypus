@@ -37,7 +37,7 @@ type Manifest struct {
 type ManifestArtifact struct {
 	OS     string `json:"os"`
 	Arch   string `json:"arch"`
-	Key    string `json:"key"`    // object-store key, relative to the store prefix
+	Key    string `json:"key"` // object-store key, relative to the store prefix
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"` // hex-encoded
 }

@@ -130,7 +130,7 @@ func (r *PATTokenRepo) ListByProject(ctx context.Context, projectID string, incl
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*PATToken
 	for rows.Next() {
 		p, err := scanPATToken(rows)

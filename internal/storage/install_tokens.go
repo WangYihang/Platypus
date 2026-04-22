@@ -118,7 +118,7 @@ func (r *InstallDownloadTokenRepo) ListByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*InstallDownloadToken
 	for rows.Next() {
 		t, err := scanInstallDownloadToken(rows)
@@ -366,7 +366,7 @@ func (r *InstallDownloadEventRepo) ListByDownload(ctx context.Context, id string
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*InstallDownloadEvent
 	for rows.Next() {
 		e := &InstallDownloadEvent{}

@@ -134,4 +134,3 @@ func (a *App) FindListener(clue string) listener.Listener {
 	}
 	return a.Listeners.FindByHashPrefix(strings.ToLower(clue))
 }
-

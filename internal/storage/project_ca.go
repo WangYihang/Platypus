@@ -11,16 +11,16 @@ import (
 // row per project; the Ed25519 private key is stored AES-GCM-encrypted
 // against an operator-supplied KEK so a raw DB leak can't forge certs.
 type ProjectCA struct {
-	ProjectID      string
-	CertPEM        string // PEM-encoded self-signed Ed25519 root
-	PrivKeyNonce   []byte // 12-byte AES-GCM nonce
-	PrivKeyCT      []byte // AES-GCM-sealed PKCS#8 bytes
-	SerialCounter  int64
-	CreatedAt      time.Time
-	CreatedByUser  string
-	RevokedAt      *time.Time
-	RevokedByUser  string
-	RevokedReason  string
+	ProjectID     string
+	CertPEM       string // PEM-encoded self-signed Ed25519 root
+	PrivKeyNonce  []byte // 12-byte AES-GCM nonce
+	PrivKeyCT     []byte // AES-GCM-sealed PKCS#8 bytes
+	SerialCounter int64
+	CreatedAt     time.Time
+	CreatedByUser string
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
 }
 
 func (db *DB) ProjectCA() *ProjectCARepo { return &ProjectCARepo{db: db.DB} }
@@ -53,10 +53,10 @@ func (r *ProjectCARepo) Get(ctx context.Context, projectID string) (*ProjectCA, 
 		       created_at, created_by_user, revoked_at, revoked_by_user, revoked_reason
 		  FROM project_ca WHERE project_id = ?`, projectID)
 	var (
-		ca       ProjectCA
-		revAt    sql.NullTime
-		revBy    sql.NullString
-		revRes   sql.NullString
+		ca     ProjectCA
+		revAt  sql.NullTime
+		revBy  sql.NullString
+		revRes sql.NullString
 	)
 	err := row.Scan(&ca.ProjectID, &ca.CertPEM, &ca.PrivKeyNonce, &ca.PrivKeyCT,
 		&ca.SerialCounter, &ca.CreatedAt, &ca.CreatedByUser,

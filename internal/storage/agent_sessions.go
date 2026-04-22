@@ -202,7 +202,7 @@ func (r *AgentSessionRepo) History(ctx context.Context, agentID string) ([]*Agen
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*AgentSession
 	for rows.Next() {
 		s, err := scanAgentSession(rows)

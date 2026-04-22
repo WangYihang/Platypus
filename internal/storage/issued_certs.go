@@ -81,7 +81,7 @@ func (r *IssuedCertRepo) ListByProject(ctx context.Context, projectID string, ac
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*IssuedCert
 	for rows.Next() {
 		c, err := scanIssuedCert(rows)
@@ -148,7 +148,7 @@ func (r *IssuedCertRepo) ListRevokedLive(ctx context.Context, projectID string, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*IssuedCert
 	for rows.Next() {
 		c, err := scanIssuedCert(rows)

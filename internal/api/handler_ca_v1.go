@@ -202,7 +202,7 @@ func (h *CAHandler) CRL(c *gin.Context) {
 		return
 	}
 	c.Header("Content-Type", "application/pkix-crl")
-	c.Writer.Write(derCRL)
+	_, _ = c.Writer.Write(derCRL)
 }
 
 // audit mirrors the helper used by PAT / install handlers.

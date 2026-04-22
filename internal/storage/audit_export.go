@@ -52,7 +52,7 @@ func (r *PATRedemptionEventRepo) ListInRange(ctx context.Context, f AuditExportF
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*PATRedemptionEvent
 	for rows.Next() {
 		e, err := scanPATRedemptionEvent(rows)
@@ -98,7 +98,7 @@ func (r *AgentConnectionEventRepo) ListInRange(ctx context.Context, f AuditExpor
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*AgentConnectionEvent
 	for rows.Next() {
 		e, err := scanAgentConnectionEvent(rows)
@@ -138,7 +138,7 @@ func (r *AdminAuditLogRepo) ListInRange(ctx context.Context, f AuditExportFilter
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*AdminAuditEvent
 	for rows.Next() {
 		e, err := scanAdminAuditEvent(rows)

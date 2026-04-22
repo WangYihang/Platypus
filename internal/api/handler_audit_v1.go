@@ -84,14 +84,14 @@ func (h *AuditHandler) Export(c *gin.Context) {
 			// Headers have already been sent; best we can do is log and
 			// close. A partial ndjson response is more useful than a 500
 			// replacing everything.
-			c.Writer.WriteString(fmt.Sprintf("\n{\"error\":%q}\n", err.Error()))
+			_, _ = fmt.Fprintf(c.Writer, "\n{\"error\":%q}\n", err.Error())
 		}
 	case "csv":
 		c.Header("Content-Type", "text/csv; charset=utf-8")
 		c.Header("Content-Disposition",
 			`attachment; filename="platypus-audit-`+projectID+`.csv"`)
 		if err := h.streamCSV(c, filter, kinds); err != nil {
-			c.Writer.WriteString(fmt.Sprintf("\n# error: %s\n", err.Error()))
+			_, _ = fmt.Fprintf(c.Writer, "\n# error: %s\n", err.Error())
 		}
 	}
 }

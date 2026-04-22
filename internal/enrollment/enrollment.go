@@ -381,11 +381,11 @@ func (s *Service) RedeemSession(ctx context.Context, raw string, rctx RedeemCont
 // Three short-circuits:
 //   - No PKI configured   → nothing to do, agent stays on PSK / session.
 //   - No pubkey provided  → the agent built against an older binary
-//                           that doesn't set the field; skip silently.
+//     that doesn't set the field; skip silently.
 //   - Issuance errors     → we log and continue. A failed cert issue
-//                           MUST NOT fail enrollment; the PAT /
-//                           session auth is independent and operators
-//                           shouldn't lose agents because of a CA hiccup.
+//     MUST NOT fail enrollment; the PAT /
+//     session auth is independent and operators
+//     shouldn't lose agents because of a CA hiccup.
 func (s *Service) maybeIssueCert(ctx context.Context, projectID, agentID string, pubkey []byte, reason string) (string, string) {
 	if s.pki == nil || len(pubkey) == 0 {
 		return "", ""

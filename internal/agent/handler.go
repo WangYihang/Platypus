@@ -527,4 +527,3 @@ func handleWriteFile(c *Client, reqID string, req *agentpb.WriteFileRequest) {
 		},
 	})
 }
-
