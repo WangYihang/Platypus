@@ -1,8 +1,8 @@
 import { ReactNode, Suspense, lazy } from "react";
-import { Navigate, createBrowserRouter } from "react-router-dom";
+import { Navigate, createBrowserRouter, useRouteError } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
-import { palette } from "./layout/theme";
+import { font, palette, radius } from "./layout/theme";
 import RequireAuth from "./layout/RequireAuth";
 import ProjectShell from "./layout/ProjectShell";
 
@@ -53,6 +53,70 @@ function withSuspense(element: ReactNode): ReactNode {
     return <Suspense fallback={routeFallback()}>{element}</Suspense>;
 }
 
+// RootErrorBoundary catches rendering and chunk-loading errors.
+// Specifically, it detects "Failed to fetch dynamically imported module"
+// (which happens when a new version is deployed and old chunks are gone)
+// and reloads the page once to pull the fresh index.html.
+function RootErrorBoundary() {
+    const error = useRouteError() as Error;
+
+    const isChunkLoadError =
+        error?.message?.includes("Failed to fetch dynamically imported module") ||
+        error?.message?.includes("Importing a module script failed");
+
+    if (isChunkLoadError) {
+        const hasReloaded = sessionStorage.getItem("app-reloaded-on-error");
+        if (!hasReloaded) {
+            sessionStorage.setItem("app-reloaded-on-error", "true");
+            window.location.reload();
+            return null;
+        }
+    }
+
+    // Clear reload flag if we either successfully reloaded (and now have a
+    // different error) or if this isn't a chunk error at all.
+    sessionStorage.removeItem("app-reloaded-on-error");
+
+    return (
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100vh",
+                width: "100vw",
+                background: palette.main,
+                color: palette.textPrimary,
+                padding: "2rem",
+                textAlign: "center",
+                fontFamily: font.sans,
+            }}
+        >
+            <h1 style={{ marginBottom: "1rem", fontSize: "1.5rem", fontWeight: "bold" }}>
+                Unexpected Application Error
+            </h1>
+            <p style={{ marginBottom: "2rem", color: palette.textMuted, maxWidth: "600px" }}>
+                {error?.message || "An unknown error occurred while rendering this page."}
+            </p>
+            <button
+                style={{
+                    padding: "0.5rem 1rem",
+                    borderRadius: radius.md,
+                    background: palette.accent,
+                    color: palette.accentFg,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                }}
+                onClick={() => window.location.reload()}
+            >
+                Reload Page
+            </button>
+        </div>
+    );
+}
+
 // Top-level route table. Flat nav IA — every project-scoped view sits
 // under /projects/:projectSlug/<page>, with shared sidebar chrome
 // rendered by <ProjectShell>. Page components are lazy-loaded so the
@@ -61,9 +125,11 @@ export const router = createBrowserRouter([
     {
         path: "/login",
         element: withSuspense(<LoginRoute />),
+        errorElement: <RootErrorBoundary />,
     },
     {
         element: <RequireAuth />,
+        errorElement: <RootErrorBoundary />,
         children: [
             { path: "/", element: <Navigate to="/projects" replace /> },
             {
