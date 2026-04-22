@@ -130,8 +130,9 @@ func handleAgentClientConnect(s *melody.Session, currentAgent *core.AgentClient)
 	key := str.RandomString(0x10)
 	s.Set("key", key)
 
-	currentAgent.RequestStartProcess(currentAgent.GetShellPath(), 0, 0, key)
-
+	// Don't start the process yet — wait for the first resize message from
+	// xterm.js so we can pass real cols/rows to the PTY. Starting with 0×0
+	// breaks ncurses apps (tmux, vim) until the first SIGWINCH arrives.
 	process := core.Process{
 		Pid:           -2,
 		WindowColumns: 0,
@@ -198,6 +199,15 @@ func handleAgentClientMessage(s *melody.Session, currentAgent *core.AgentClient,
 	case ttyActionResize:
 		var ws core.WindowSize
 		json.Unmarshal(body, &ws)
+
+		// If the process hasn't been started yet (waiting for initial
+		// dimensions from xterm.js), use this resize to kick it off with
+		// real cols/rows so ncurses apps work immediately.
+		if proc := currentAgent.GetProcess(key); proc != nil && proc.State == core.StartRequested {
+			currentAgent.RequestStartProcess(currentAgent.GetShellPath(), ws.Columns, ws.Rows, key)
+			return
+		}
+
 		err := currentAgent.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_WindowSize{
 				WindowSize: &agentpb.WindowSizeUpdate{Key: key, Columns: int32(ws.Columns), Rows: int32(ws.Rows)},

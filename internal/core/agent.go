@@ -622,3 +622,7 @@ func (c *AgentClient) FullDesc() string {
 func (c *AgentClient) AddProcess(key string, process *Process) {
 	c.processes[key] = process
 }
+
+func (c *AgentClient) GetProcess(key string) *Process {
+	return c.processes[key]
+}

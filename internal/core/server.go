@@ -490,7 +490,13 @@ func AgentMessageDispatcher(client *AgentClient) {
 		case *agentpb.Envelope_ExecResponse,
 			*agentpb.Envelope_ReadFileResponse,
 			*agentpb.Envelope_FileSizeResponse,
-			*agentpb.Envelope_WriteFileResponse:
+			*agentpb.Envelope_WriteFileResponse,
+			*agentpb.Envelope_ListDirResponse,
+			*agentpb.Envelope_StatResponse,
+			*agentpb.Envelope_DeleteResponse,
+			*agentpb.Envelope_RenameResponse,
+			*agentpb.Envelope_MkdirResponse,
+			*agentpb.Envelope_ChmodResponse:
 			token := env.RequestId
 			Ctx.MessageQueueMu.RLock()
 			ch, exists := Ctx.EnvelopeQueue[token]
