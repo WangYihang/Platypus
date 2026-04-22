@@ -240,3 +240,187 @@ export interface ServerInfo {
 export async function getServerInfo(): Promise<ServerInfo> {
     return authJSON<ServerInfo>("/api/v1/info");
 }
+
+// --- PAT tokens -----------------------------------------------------
+//
+// Admin-only surface for provisioning access tokens. The plaintext
+// token (`plt_*`) only ever comes back in the response to POST; every
+// subsequent list / get strips it and returns just metadata.
+
+export interface PATTokenListItem {
+    token_id: string;
+    description?: string;
+    issued_by_user: string;
+    issued_at: string;
+    expires_at: string;
+    max_uses: number;
+    uses: number;
+    binding_machine_id?: string;
+    binding_host_alias?: string;
+    revoked: boolean;
+    revoked_at?: string;
+    revoked_reason?: string;
+    status: "pending" | "consumed" | "expired" | "revoked";
+}
+
+export interface IssuePATResponse {
+    token_id: string;
+    token: string; // plt_<id>.<secret> — only time plaintext is exposed
+    expires_at: string;
+    issued_at: string;
+    max_uses: number;
+    description?: string;
+}
+
+export interface IssuePATRequest {
+    description?: string;
+    ttl_seconds?: number;
+    max_uses?: number;
+    binding_machine_id?: string;
+    binding_host_alias?: string;
+}
+
+export async function listPATTokens(pid: string, includeInactive = false): Promise<PATTokenListItem[]> {
+    const q = includeInactive ? "?include_inactive=true" : "";
+    const j = await authJSON<{ tokens: PATTokenListItem[] }>(`/api/v1/projects/${pid}/pat-tokens${q}`);
+    return j.tokens ?? [];
+}
+
+export async function issuePAT(pid: string, req: IssuePATRequest): Promise<IssuePATResponse> {
+    return authJSON<IssuePATResponse>(`/api/v1/projects/${pid}/pat-tokens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+    });
+}
+
+export async function revokePAT(pid: string, tokenID: string, reason?: string): Promise<void> {
+    const q = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    const r = await authFetch(`/api/v1/projects/${pid}/pat-tokens/${tokenID}${q}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
+}
+
+// --- Install artifacts ----------------------------------------------
+//
+// "Generate a one-shot curl command to install an agent". The returned
+// install_command is ready to paste.
+
+export interface InstallArtifactListItem {
+    download_id: string;
+    project_id: string;
+    issued_by_user: string;
+    issued_at: string;
+    expires_at: string;
+    server_endpoint: string;
+    target_os?: string;
+    target_arch?: string;
+    pat_ttl_seconds: number;
+    pat_binding_machine_id?: string;
+    pat_description?: string;
+    consumed_at?: string;
+    consumed_ip?: string;
+    consumed_pat_id?: string;
+    revoked: boolean;
+    revoked_at?: string;
+    status: "pending" | "consumed" | "expired" | "revoked";
+}
+
+export interface IssueInstallResponse {
+    download_id: string;
+    download_token: string; // dl_<id>.<secret>
+    expires_at: string;
+    server_endpoint: string;
+    target_os?: string;
+    target_arch?: string;
+    install_command: string; // "curl -fsSL ... | sh"
+}
+
+export interface IssueInstallRequest {
+    server_endpoint: string;
+    target_os?: string;
+    target_arch?: string;
+    ttl_seconds?: number;
+    pat_ttl_seconds?: number;
+    pat_binding_machine_id?: string;
+    pat_description?: string;
+}
+
+export async function listInstallArtifacts(pid: string, includeInactive = false): Promise<InstallArtifactListItem[]> {
+    const q = includeInactive ? "?include_inactive=true" : "";
+    const j = await authJSON<{ install_artifacts: InstallArtifactListItem[] }>(
+        `/api/v1/projects/${pid}/install-artifacts${q}`,
+    );
+    return j.install_artifacts ?? [];
+}
+
+export async function issueInstallArtifact(pid: string, req: IssueInstallRequest): Promise<IssueInstallResponse> {
+    return authJSON<IssueInstallResponse>(`/api/v1/projects/${pid}/install-artifacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+    });
+}
+
+export async function revokeInstallArtifact(pid: string, downloadID: string, reason?: string): Promise<void> {
+    const q = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    const r = await authFetch(`/api/v1/projects/${pid}/install-artifacts/${downloadID}${q}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
+}
+
+// --- Agent sessions --------------------------------------------------
+//
+// Admin view of a specific agent's session lineage and kill-switch.
+// Routes aren't project-scoped on the server (agent_id is global).
+
+export interface AgentSessionRow {
+    session_id: string;
+    agent_id: string;
+    project_id: string;
+    issued_at: string;
+    issued_reason: string;
+    rotated_from?: string;
+    expires_at: string;
+    rotated_at?: string;
+    revoked_at?: string;
+    revoked_reason?: string;
+    revoked_by_user?: string;
+    last_seen_at?: string;
+    last_seen_ip?: string;
+    machine_id?: string;
+    active: boolean;
+}
+
+export async function listAgentSessions(agentID: string): Promise<AgentSessionRow[]> {
+    const j = await authJSON<{ sessions: AgentSessionRow[] }>(`/api/v1/agents/${agentID}/sessions`);
+    return j.sessions ?? [];
+}
+
+export async function revokeAgentSession(agentID: string, reason?: string): Promise<void> {
+    const r = await authFetch(`/api/v1/agents/${agentID}/sessions/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason ?? "" }),
+    });
+    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
+}
+
+// --- Audit export ----------------------------------------------------
+//
+// The /audit/export endpoint streams ndjson or csv — fetching the
+// blob synchronously is fine for the admin UI since the volume is
+// bounded by project size and the button is rare. For very large
+// deployments the UI would switch to a streaming download link.
+
+export async function exportAuditBlob(
+    pid: string,
+    opts: { from?: Date; to?: Date; kinds?: string[]; format?: "jsonl" | "csv" } = {},
+): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (opts.from) params.set("from", String(Math.floor(opts.from.getTime() / 1000)));
+    if (opts.to) params.set("to", String(Math.floor(opts.to.getTime() / 1000)));
+    if (opts.kinds && opts.kinds.length) params.set("types", opts.kinds.join(","));
+    params.set("format", opts.format ?? "jsonl");
+    const r = await authFetch(`/api/v1/projects/${pid}/audit/export?${params.toString()}`);
+    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+    return r.blob();
+}

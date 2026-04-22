@@ -3,6 +3,7 @@ import { Form, Input, Modal, message } from "antd";
 import { NavLink } from "react-router-dom";
 import {
     AppstoreOutlined,
+    CloudDownloadOutlined,
     DesktopOutlined,
     GatewayOutlined,
     SafetyOutlined,
@@ -52,6 +53,7 @@ export default function ProjectSidebar({
         { to: "hosts", label: "Hosts", icon: <DesktopOutlined />, requiresProject: true },
         { to: "listeners", label: "Listeners", icon: <GatewayOutlined />, requiresProject: true },
         { to: "sessions", label: "Sessions", icon: <SafetyOutlined />, requiresProject: true },
+        { to: "enrollment", label: "Enrollment", icon: <CloudDownloadOutlined />, requiresProject: true, minRole: "admin" },
         { to: "dispatch", label: "Dispatch", icon: <ThunderboltOutlined />, requiresProject: true, minRole: "operator" },
         { to: "members", label: "Members", icon: <TeamOutlined />, requiresProject: true, minRole: "operator" },
     ];
