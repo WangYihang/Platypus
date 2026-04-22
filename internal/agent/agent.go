@@ -145,6 +145,22 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 				er.AgentID, er.SessionExpiresAt.Format("2006-01-02 15:04:05"))
 		}
 
+		// Kick off the in-band rotation goroutine. It schedules itself
+		// RenewGrace before expiry and keeps going until the stop
+		// channel closes (on normal return from HandleConnection).
+		// Skipped when enrollment didn't actually happen so legacy
+		// agents don't try to rotate a non-existent token.
+		stopRenew := make(chan struct{})
+		if er.Succeeded {
+			StartRenewalLoop(RenewalContext{
+				Client:       c,
+				IdentityDir:  identityDir,
+				CurrentToken: er.SessionToken,
+				ExpiresAt:    er.SessionExpiresAt,
+			}, stopRenew)
+		}
+		defer close(stopRenew)
+
 		HandleConnection(c, state)
 		return nil
 	}

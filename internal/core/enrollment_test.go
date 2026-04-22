@@ -190,3 +190,101 @@ func installCtx(t *testing.T, db *storage.DB) {
 }
 
 func uninstallCtx() {}
+
+// TestSessionRenew_HappyPath drives a full in-band rotation via the
+// same enrollment.Service method handleSessionRenew calls. We don't
+// pipe protobuf frames here — that plumbing is covered by
+// TestTryEnroll_PAT_HappyPath. This test locks down the semantics:
+// RedeemSession rotates on valid input, keeps the agent_id stable,
+// and marks the old session as rotated_at.
+func TestSessionRenew_HappyPath(t *testing.T) {
+	db := mustOpenDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", admin)
+
+	svc := enrollment.New(db)
+	core.SetEnrollment(svc)
+	installCtx(t, db)
+	defer uninstallCtx()
+
+	issue, err := svc.MintPAT(ctx, enrollment.MintPATInput{
+		ProjectID: proj.ID, IssuedByUser: admin.ID, MaxUses: 1,
+	})
+	if err != nil {
+		t.Fatalf("MintPAT: %v", err)
+	}
+	redeem, err := svc.RedeemPAT(ctx, issue.PlaintextToken, enrollment.RedeemContext{MachineID: "m1"})
+	if err != nil || redeem.Outcome != "success" {
+		t.Fatalf("RedeemPAT: %+v err=%v", redeem, err)
+	}
+	first := redeem.SessionPlaintext
+	firstID := redeem.SessionID
+
+	rotated, err := svc.RedeemSession(ctx, first, enrollment.RedeemContext{})
+	if err != nil {
+		t.Fatalf("RedeemSession: %v", err)
+	}
+	if rotated.Outcome != "success" {
+		t.Fatalf("rotated.Outcome = %q", rotated.Outcome)
+	}
+	if rotated.SessionID == firstID || rotated.SessionPlaintext == first {
+		t.Fatal("rotation didn't produce a fresh session")
+	}
+	if rotated.AgentID != redeem.AgentID {
+		t.Fatalf("agent_id changed during rotation: %q -> %q", redeem.AgentID, rotated.AgentID)
+	}
+
+	active, err := db.AgentSessions().GetActive(ctx, redeem.AgentID)
+	if err != nil {
+		t.Fatalf("GetActive: %v", err)
+	}
+	if active.SessionID != rotated.SessionID {
+		t.Fatalf("active = %q; want %q", active.SessionID, rotated.SessionID)
+	}
+	old, err := db.AgentSessions().GetBySessionID(ctx, firstID)
+	if err != nil {
+		t.Fatalf("GetBySessionID: %v", err)
+	}
+	if old.RotatedAt == nil {
+		t.Fatal("old session not marked rotated")
+	}
+}
+
+// Stale-token replay (someone captured a previous session file, then
+// the agent rotated) must be rejected — otherwise an attacker could
+// roll the old token forward.
+func TestSessionRenew_StaleTokenRejected(t *testing.T) {
+	db := mustOpenDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", admin)
+
+	svc := enrollment.New(db)
+	core.SetEnrollment(svc)
+	installCtx(t, db)
+	defer uninstallCtx()
+
+	issue, err := svc.MintPAT(ctx, enrollment.MintPATInput{
+		ProjectID: proj.ID, IssuedByUser: admin.ID, MaxUses: 1,
+	})
+	if err != nil {
+		t.Fatalf("MintPAT: %v", err)
+	}
+	redeem, err := svc.RedeemPAT(ctx, issue.PlaintextToken, enrollment.RedeemContext{MachineID: "m1"})
+	if err != nil || redeem.Outcome != "success" {
+		t.Fatalf("RedeemPAT: %+v err=%v", redeem, err)
+	}
+	stale := redeem.SessionPlaintext
+
+	if _, err := svc.RedeemSession(ctx, stale, enrollment.RedeemContext{}); err != nil {
+		t.Fatalf("first rotation: %v", err)
+	}
+	replay, err := svc.RedeemSession(ctx, stale, enrollment.RedeemContext{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if replay.Outcome == "success" {
+		t.Fatal("stale token replay succeeded; should have been rejected")
+	}
+}

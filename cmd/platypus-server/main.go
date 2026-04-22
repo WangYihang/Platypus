@@ -231,6 +231,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		// without having to know the topology themselves.
 		distributorBase := fmt.Sprintf("http://%s:%d", cfg.Distributor.Host, cfg.Distributor.Port)
 		installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
+		agentSessionsH := api.NewAgentSessionsHandler(db)
 		rbac := api.NewRBACWithStorage(tokens, db)
 
 		// Expose the enrollment service globally so the agent-facing TCP
@@ -247,6 +248,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
+		api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.L.Info("api_ready",

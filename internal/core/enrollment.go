@@ -199,3 +199,67 @@ func remoteIPOf(c net.Conn) string {
 	}
 	return host
 }
+
+// handleSessionRenew services an in-band SessionRenewRequest. We reuse
+// enrollment.Service.RedeemSession because the semantics are identical:
+// validate the echoed session_token, rotate to a new generation, return
+// the plaintext to the agent. The difference vs reconnect is purely
+// transport — the agent keeps the TLS connection open and its running
+// PTYs / tunnels survive the rotation.
+func handleSessionRenew(client *AgentClient, requestID string, req *agentpb.SessionRenewRequest) {
+	resp := &agentpb.SessionRenewResponse{}
+	defer func() {
+		out := &agentpb.Envelope{
+			Version:   1,
+			Timestamp: time.Now().UnixNano(),
+			RequestId: requestID,
+			Payload:   &agentpb.Envelope_SessionRenewResponse{SessionRenewResponse: resp},
+		}
+		if err := client.codec.Send(out); err != nil {
+			log.Warn("session renew response send: %v", err)
+		}
+	}()
+
+	if enrollSvc == nil {
+		resp.Error = "enrollment not configured"
+		return
+	}
+	if req == nil || req.CurrentSessionToken == "" {
+		resp.Error = "missing current session token"
+		return
+	}
+
+	result, err := enrollSvc.RedeemSession(context.Background(), req.CurrentSessionToken,
+		enrollment.RedeemContext{
+			ClientIP: remoteIPOf(client.conn),
+			// hostname / machine_id aren't needed for rotation — the
+			// session row already has them from enrollment.
+		})
+	if err != nil {
+		resp.Error = "renew failed"
+		log.Warn("session renew error for %s: %v", client.OnelineDesc(), err)
+		return
+	}
+	if result.Outcome != "success" {
+		resp.Error = result.Outcome
+		log.Info("session renew rejected for %s: %s", client.OnelineDesc(), result.Outcome)
+		return
+	}
+
+	resp.SessionToken = result.SessionPlaintext
+	resp.SessionExpiresAt = result.SessionExpiresAt.Unix()
+	resp.RecommendedRenewAt = result.SessionExpiresAt.Add(-enrollment.RenewGrace).Unix()
+
+	// Record the rotation event so the audit trail in
+	// agent_connection_events reflects when a long-running agent
+	// rotated its session without reconnecting.
+	recordConnectionEvent(nil, &storage.AgentConnectionEvent{
+		At:        time.Now().UTC(),
+		AgentID:   result.AgentID,
+		SessionID: result.SessionID,
+		ClientIP:  remoteIPOf(client.conn),
+		EventType: "reconnect_success", // schema CHECK doesn't have "renew"; reuse
+		Reason:    "in-band rotation",
+		Transport: "tls_direct",
+	})
+}

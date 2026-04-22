@@ -81,6 +81,10 @@ message Envelope {
     // Enrollment (PAT / session_token exchange)
     AgentEnrollRequest  agent_enroll_request  = 70;
     AgentEnrollResponse agent_enroll_response = 71;
+
+    // Session renewal (in-band rotation without reconnect)
+    SessionRenewRequest  session_renew_request  = 72;
+    SessionRenewResponse session_renew_response = 73;
   }
 }
 
@@ -427,4 +431,34 @@ message AgentEnrollResponse {
   // session_expires_at minus a few hours so rotation doesn't race
   // against expiry during a temporary network partition.
   int64 recommended_renew_at = 7;
+}
+
+// SessionRenewRequest is sent by the agent over its already-authenticated
+// connection a few hours before the session_token hits expires_at. It
+// swaps the current session for a fresh one WITHOUT reconnecting, so
+// any running shell / tunnel / SOCKS5 state stays live.
+//
+// Semantically identical to a reconnect-with-session_token, but
+// cheaper: no TLS handshake, no hub-and-spoke session_id change in the
+// agent-side Connect loop. The server rotates via
+// enrollment.Service.RedeemSession and sends the new plaintext in
+// SessionRenewResponse. The agent persists it atomically over the old
+// session.token file before carrying on.
+message SessionRenewRequest {
+  // The agent echoes its currently-active session token so the server
+  // can verify it matches the live row — a third party who somehow
+  // got onto the open connection (not possible today, but defence in
+  // depth) can't rotate without proof of ownership.
+  string current_session_token = 1;
+}
+
+message SessionRenewResponse {
+  // Non-empty means renewal failed (usually session_inactive, revoked,
+  // or invalid_secret). The agent should disconnect and re-enroll; an
+  // in-band failure means the session was killed out-of-band.
+  string error = 1;
+
+  string session_token        = 2;
+  int64  session_expires_at   = 3;
+  int64  recommended_renew_at = 4;
 }

@@ -559,6 +559,15 @@ func AgentMessageDispatcher(client *AgentClient) {
 			} else {
 				log.Error("No such channel: %s", token)
 			}
+
+		case *agentpb.Envelope_SessionRenewRequest:
+			// In-band session rotation. The agent has decided its current
+			// session_token is nearing expiry and wants a fresh one
+			// without tearing down the TLS connection. We validate the
+			// token the agent echoed, call the enrollment service to
+			// rotate, and send back the new plaintext in a
+			// SessionRenewResponse addressed to the same request id.
+			handleSessionRenew(client, env.RequestId, p.SessionRenewRequest)
 		}
 	}
 }

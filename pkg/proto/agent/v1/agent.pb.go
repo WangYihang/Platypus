@@ -127,6 +127,8 @@ type Envelope struct {
 	//	*Envelope_MeshUnreachable
 	//	*Envelope_AgentEnrollRequest
 	//	*Envelope_AgentEnrollResponse
+	//	*Envelope_SessionRenewRequest
+	//	*Envelope_SessionRenewResponse
 	Payload       isEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -598,6 +600,24 @@ func (x *Envelope) GetAgentEnrollResponse() *AgentEnrollResponse {
 	return nil
 }
 
+func (x *Envelope) GetSessionRenewRequest() *SessionRenewRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_SessionRenewRequest); ok {
+			return x.SessionRenewRequest
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetSessionRenewResponse() *SessionRenewResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_SessionRenewResponse); ok {
+			return x.SessionRenewResponse
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Payload interface {
 	isEnvelope_Payload()
 }
@@ -784,6 +804,15 @@ type Envelope_AgentEnrollResponse struct {
 	AgentEnrollResponse *AgentEnrollResponse `protobuf:"bytes,71,opt,name=agent_enroll_response,json=agentEnrollResponse,proto3,oneof"`
 }
 
+type Envelope_SessionRenewRequest struct {
+	// Session renewal (in-band rotation without reconnect)
+	SessionRenewRequest *SessionRenewRequest `protobuf:"bytes,72,opt,name=session_renew_request,json=sessionRenewRequest,proto3,oneof"`
+}
+
+type Envelope_SessionRenewResponse struct {
+	SessionRenewResponse *SessionRenewResponse `protobuf:"bytes,73,opt,name=session_renew_response,json=sessionRenewResponse,proto3,oneof"`
+}
+
 func (*Envelope_GetClientInfoRequest) isEnvelope_Payload() {}
 
 func (*Envelope_ClientInfoResponse) isEnvelope_Payload() {}
@@ -869,6 +898,10 @@ func (*Envelope_MeshUnreachable) isEnvelope_Payload() {}
 func (*Envelope_AgentEnrollRequest) isEnvelope_Payload() {}
 
 func (*Envelope_AgentEnrollResponse) isEnvelope_Payload() {}
+
+func (*Envelope_SessionRenewRequest) isEnvelope_Payload() {}
+
+func (*Envelope_SessionRenewResponse) isEnvelope_Payload() {}
 
 type GetClientInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3367,6 +3400,136 @@ func (x *AgentEnrollResponse) GetRecommendedRenewAt() int64 {
 	return 0
 }
 
+// SessionRenewRequest is sent by the agent over its already-authenticated
+// connection a few hours before the session_token hits expires_at. It
+// swaps the current session for a fresh one WITHOUT reconnecting, so
+// any running shell / tunnel / SOCKS5 state stays live.
+//
+// Semantically identical to a reconnect-with-session_token, but
+// cheaper: no TLS handshake, no hub-and-spoke session_id change in the
+// agent-side Connect loop. The server rotates via
+// enrollment.Service.RedeemSession and sends the new plaintext in
+// SessionRenewResponse. The agent persists it atomically over the old
+// session.token file before carrying on.
+type SessionRenewRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The agent echoes its currently-active session token so the server
+	// can verify it matches the live row — a third party who somehow
+	// got onto the open connection (not possible today, but defence in
+	// depth) can't rotate without proof of ownership.
+	CurrentSessionToken string `protobuf:"bytes,1,opt,name=current_session_token,json=currentSessionToken,proto3" json:"current_session_token,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SessionRenewRequest) Reset() {
+	*x = SessionRenewRequest{}
+	mi := &file_agent_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionRenewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionRenewRequest) ProtoMessage() {}
+
+func (x *SessionRenewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionRenewRequest.ProtoReflect.Descriptor instead.
+func (*SessionRenewRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *SessionRenewRequest) GetCurrentSessionToken() string {
+	if x != nil {
+		return x.CurrentSessionToken
+	}
+	return ""
+}
+
+type SessionRenewResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Non-empty means renewal failed (usually session_inactive, revoked,
+	// or invalid_secret). The agent should disconnect and re-enroll; an
+	// in-band failure means the session was killed out-of-band.
+	Error              string `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	SessionToken       string `protobuf:"bytes,2,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	SessionExpiresAt   int64  `protobuf:"varint,3,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
+	RecommendedRenewAt int64  `protobuf:"varint,4,opt,name=recommended_renew_at,json=recommendedRenewAt,proto3" json:"recommended_renew_at,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *SessionRenewResponse) Reset() {
+	*x = SessionRenewResponse{}
+	mi := &file_agent_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionRenewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionRenewResponse) ProtoMessage() {}
+
+func (x *SessionRenewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionRenewResponse.ProtoReflect.Descriptor instead.
+func (*SessionRenewResponse) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *SessionRenewResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *SessionRenewResponse) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *SessionRenewResponse) GetSessionExpiresAt() int64 {
+	if x != nil {
+		return x.SessionExpiresAt
+	}
+	return 0
+}
+
+func (x *SessionRenewResponse) GetRecommendedRenewAt() int64 {
+	if x != nil {
+		return x.RecommendedRenewAt
+	}
+	return 0
+}
+
 type MeshLSA_Link struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"` // neighbour's node_id
@@ -3377,7 +3540,7 @@ type MeshLSA_Link struct {
 
 func (x *MeshLSA_Link) Reset() {
 	*x = MeshLSA_Link{}
-	mi := &file_agent_proto_msgTypes[46]
+	mi := &file_agent_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3389,7 +3552,7 @@ func (x *MeshLSA_Link) String() string {
 func (*MeshLSA_Link) ProtoMessage() {}
 
 func (x *MeshLSA_Link) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[46]
+	mi := &file_agent_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3423,7 +3586,7 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\x11platypus.agent.v1\"\xb6\x1e\n" +
+	"\vagent.proto\x12\x11platypus.agent.v1\"\xf5\x1f\n" +
 	"\bEnvelope\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -3480,7 +3643,9 @@ const file_agent_proto_rawDesc = "" +
 	"\bmesh_lsa\x18A \x01(\v2\x1a.platypus.agent.v1.MeshLSAH\x00R\ameshLsa\x12O\n" +
 	"\x10mesh_unreachable\x18B \x01(\v2\".platypus.agent.v1.MeshUnreachableH\x00R\x0fmeshUnreachable\x12Y\n" +
 	"\x14agent_enroll_request\x18F \x01(\v2%.platypus.agent.v1.AgentEnrollRequestH\x00R\x12agentEnrollRequest\x12\\\n" +
-	"\x15agent_enroll_response\x18G \x01(\v2&.platypus.agent.v1.AgentEnrollResponseH\x00R\x13agentEnrollResponseB\t\n" +
+	"\x15agent_enroll_response\x18G \x01(\v2&.platypus.agent.v1.AgentEnrollResponseH\x00R\x13agentEnrollResponse\x12\\\n" +
+	"\x15session_renew_request\x18H \x01(\v2&.platypus.agent.v1.SessionRenewRequestH\x00R\x13sessionRenewRequest\x12_\n" +
+	"\x16session_renew_response\x18I \x01(\v2'.platypus.agent.v1.SessionRenewResponseH\x00R\x14sessionRenewResponseB\t\n" +
 	"\apayload\"\x16\n" +
 	"\x14GetClientInfoRequest\"\x85\x03\n" +
 	"\x12ClientInfoResponse\x12\x18\n" +
@@ -3649,7 +3814,14 @@ const file_agent_proto_rawDesc = "" +
 	"\bmesh_psk\x18\x05 \x01(\fR\ameshPsk\x12\x1d\n" +
 	"\n" +
 	"mesh_peers\x18\x06 \x03(\tR\tmeshPeers\x120\n" +
-	"\x14recommended_renew_at\x18\a \x01(\x03R\x12recommendedRenewAt*8\n" +
+	"\x14recommended_renew_at\x18\a \x01(\x03R\x12recommendedRenewAt\"I\n" +
+	"\x13SessionRenewRequest\x122\n" +
+	"\x15current_session_token\x18\x01 \x01(\tR\x13currentSessionToken\"\xb1\x01\n" +
+	"\x14SessionRenewResponse\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\x12#\n" +
+	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\x12,\n" +
+	"\x12session_expires_at\x18\x03 \x01(\x03R\x10sessionExpiresAt\x120\n" +
+	"\x14recommended_renew_at\x18\x04 \x01(\x03R\x12recommendedRenewAt*8\n" +
 	"\n" +
 	"TunnelMode\x12\x14\n" +
 	"\x10TUNNEL_MODE_PULL\x10\x00\x12\x14\n" +
@@ -3668,7 +3840,7 @@ func file_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_agent_proto_goTypes = []any{
 	(TunnelMode)(0),                  // 0: platypus.agent.v1.TunnelMode
 	(*Envelope)(nil),                 // 1: platypus.agent.v1.Envelope
@@ -3716,8 +3888,10 @@ var file_agent_proto_goTypes = []any{
 	(*MeshUnreachable)(nil),          // 43: platypus.agent.v1.MeshUnreachable
 	(*AgentEnrollRequest)(nil),       // 44: platypus.agent.v1.AgentEnrollRequest
 	(*AgentEnrollResponse)(nil),      // 45: platypus.agent.v1.AgentEnrollResponse
-	nil,                              // 46: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
-	(*MeshLSA_Link)(nil),             // 47: platypus.agent.v1.MeshLSA.Link
+	(*SessionRenewRequest)(nil),      // 46: platypus.agent.v1.SessionRenewRequest
+	(*SessionRenewResponse)(nil),     // 47: platypus.agent.v1.SessionRenewResponse
+	nil,                              // 48: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	(*MeshLSA_Link)(nil),             // 49: platypus.agent.v1.MeshLSA.Link
 }
 var file_agent_proto_depIdxs = []int32{
 	2,  // 0: platypus.agent.v1.Envelope.get_client_info_request:type_name -> platypus.agent.v1.GetClientInfoRequest
@@ -3763,16 +3937,18 @@ var file_agent_proto_depIdxs = []int32{
 	43, // 40: platypus.agent.v1.Envelope.mesh_unreachable:type_name -> platypus.agent.v1.MeshUnreachable
 	44, // 41: platypus.agent.v1.Envelope.agent_enroll_request:type_name -> platypus.agent.v1.AgentEnrollRequest
 	45, // 42: platypus.agent.v1.Envelope.agent_enroll_response:type_name -> platypus.agent.v1.AgentEnrollResponse
-	46, // 43: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
-	0,  // 44: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
-	36, // 45: platypus.agent.v1.MeshPeerAnnounce.nodes:type_name -> platypus.agent.v1.NodeInfo
-	36, // 46: platypus.agent.v1.MeshPeerDelta.added:type_name -> platypus.agent.v1.NodeInfo
-	47, // 47: platypus.agent.v1.MeshLSA.links:type_name -> platypus.agent.v1.MeshLSA.Link
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	46, // 43: platypus.agent.v1.Envelope.session_renew_request:type_name -> platypus.agent.v1.SessionRenewRequest
+	47, // 44: platypus.agent.v1.Envelope.session_renew_response:type_name -> platypus.agent.v1.SessionRenewResponse
+	48, // 45: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	0,  // 46: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
+	36, // 47: platypus.agent.v1.MeshPeerAnnounce.nodes:type_name -> platypus.agent.v1.NodeInfo
+	36, // 48: platypus.agent.v1.MeshPeerDelta.added:type_name -> platypus.agent.v1.NodeInfo
+	49, // 49: platypus.agent.v1.MeshLSA.links:type_name -> platypus.agent.v1.MeshLSA.Link
+	50, // [50:50] is the sub-list for method output_type
+	50, // [50:50] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -3824,6 +4000,8 @@ func file_agent_proto_init() {
 		(*Envelope_MeshUnreachable)(nil),
 		(*Envelope_AgentEnrollRequest)(nil),
 		(*Envelope_AgentEnrollResponse)(nil),
+		(*Envelope_SessionRenewRequest)(nil),
+		(*Envelope_SessionRenewResponse)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3831,7 +4009,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   47,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

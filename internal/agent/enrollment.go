@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/log"
@@ -34,6 +35,172 @@ type EnrollmentResult struct {
 	SessionToken     string
 	SessionExpiresAt time.Time
 	ErrorMessage     string
+}
+
+// RenewalContext is handed to StartRenewalLoop so it can rotate the
+// session token mid-connection. It's a shrink-wrapped view of the
+// agent's live Client and identity dir — keeps the package boundaries
+// clean without forcing callers to pass the whole agent state.
+type RenewalContext struct {
+	Client      *Client
+	IdentityDir string
+	// CurrentToken is the session_token plaintext that MaybeEnroll just
+	// persisted; the renewal loop uses this as the first "current"
+	// value and then tracks rotations itself.
+	CurrentToken string
+	// ExpiresAt is when the server says the current token dies. The
+	// loop fires the renewal at `ExpiresAt - renewalMarginBeforeExpiry`.
+	ExpiresAt time.Time
+}
+
+// renewalMarginBeforeExpiry is how early we attempt rotation. The
+// server sends a recommended_renew_at in AgentEnrollResponse but when
+// the agent didn't get one (e.g. enrollment was skipped and we're
+// resuming with a session file) we fall back to this.
+const renewalMarginBeforeExpiry = 6 * time.Hour
+
+// StartRenewalLoop schedules an in-band session rotation before the
+// current session_token expires. Returns immediately; the rotation
+// runs in a goroutine. Passing a zero ExpiresAt disables the loop
+// (common on legacy paths where no session was negotiated).
+//
+// The loop is intentionally single-shot per-call: once it rotates
+// successfully, it schedules itself again from the new expiry. If the
+// TLS connection drops mid-loop the timer fires harmlessly against a
+// closed codec and returns.
+func StartRenewalLoop(ctx RenewalContext, stop <-chan struct{}) {
+	if ctx.Client == nil || ctx.ExpiresAt.IsZero() || ctx.CurrentToken == "" {
+		return
+	}
+	go runRenewalLoop(ctx, stop)
+}
+
+func runRenewalLoop(rctx RenewalContext, stop <-chan struct{}) {
+	current := rctx.CurrentToken
+	expiresAt := rctx.ExpiresAt
+	for {
+		wait := time.Until(expiresAt.Add(-renewalMarginBeforeExpiry))
+		// A min floor keeps a misbehaving server (or clock skew) from
+		// hot-looping us; a max ceiling is unnecessary because we
+		// trust expires_at.
+		if wait < 30*time.Second {
+			wait = 30 * time.Second
+		}
+		select {
+		case <-stop:
+			return
+		case <-time.After(wait):
+		}
+
+		next, newExpires, err := requestRenewal(rctx.Client, current)
+		if err != nil {
+			log.Warn("Session renew RPC failed: %s", err)
+			return
+		}
+		if next == "" {
+			// Server rejected. The RPC logged the reason; there's
+			// nothing productive the loop can do — Connect's main
+			// read path will notice the connection soon.
+			return
+		}
+		if err := persistSessionToken(rctx.IdentityDir, next); err != nil {
+			log.Warn("Failed to persist rotated session token: %s", err)
+			// Keep going anyway; the in-memory `current` is still
+			// valid for this connection.
+		}
+		log.Success("Session token rotated (new expiry %s)", newExpires.Format("2006-01-02 15:04:05"))
+		current = next
+		expiresAt = newExpires
+	}
+}
+
+// requestRenewal sends a SessionRenewRequest on the live connection and
+// waits for the paired SessionRenewResponse. It matches on a fresh
+// request_id so replies can't collide with unrelated RPC responses.
+//
+// Returns (plaintext, newExpiresAt, nil) on success, ("", zero, nil)
+// on a server-side rejection (error string non-empty), and ("", zero, err)
+// on transport failures.
+func requestRenewal(c *Client, current string) (string, time.Time, error) {
+	reqID := fmt.Sprintf("renew-%d", time.Now().UnixNano())
+	env := &agentpb.Envelope{
+		Version:   protocolVersion,
+		Timestamp: time.Now().UnixNano(),
+		RequestId: reqID,
+		Payload: &agentpb.Envelope_SessionRenewRequest{
+			SessionRenewRequest: &agentpb.SessionRenewRequest{
+				CurrentSessionToken: current,
+			},
+		},
+	}
+	// Handshake over the normal codec. We don't install a receiver
+	// goroutine — the response comes back in the same frame we're
+	// reading from, but on the agent side nothing else is reading
+	// from the connection concurrently because HandleConnection is
+	// the sole consumer and it filters by message type.
+	//
+	// Wait, that last statement is wrong — HandleConnection IS running
+	// and will grab this frame first. We route responses back through
+	// it via a channel registered before sending; see renewalResponseCh.
+	ch, cancel := registerRenewalWaiter(reqID)
+	defer cancel()
+
+	if err := c.SendEnvelope(env); err != nil {
+		return "", time.Time{}, fmt.Errorf("send renew: %w", err)
+	}
+
+	select {
+	case resp := <-ch:
+		if resp.Error != "" {
+			log.Warn("Server rejected session renew: %s", resp.Error)
+			return "", time.Time{}, nil
+		}
+		return resp.SessionToken, time.Unix(resp.SessionExpiresAt, 0), nil
+	case <-time.After(30 * time.Second):
+		return "", time.Time{}, fmt.Errorf("renew response timeout")
+	}
+}
+
+// renewalWaiters is the small per-process registry that bridges
+// HandleConnection (which owns reads) and the renewal loop (which sends
+// a request and needs to read the matching response). When an envelope
+// of type SessionRenewResponse arrives, HandleConnection looks up the
+// request_id and forwards the inner response on the channel.
+var renewalWaiters = struct {
+	sync.Mutex
+	byID map[string]chan *agentpb.SessionRenewResponse
+}{byID: map[string]chan *agentpb.SessionRenewResponse{}}
+
+// registerRenewalWaiter allocates a one-shot channel keyed by request_id.
+// The returned cancel func removes the entry on defer regardless of
+// whether the response arrived — prevents the map from growing when
+// the server misbehaves or the timeout fires.
+func registerRenewalWaiter(id string) (<-chan *agentpb.SessionRenewResponse, func()) {
+	ch := make(chan *agentpb.SessionRenewResponse, 1)
+	renewalWaiters.Lock()
+	renewalWaiters.byID[id] = ch
+	renewalWaiters.Unlock()
+	return ch, func() {
+		renewalWaiters.Lock()
+		delete(renewalWaiters.byID, id)
+		renewalWaiters.Unlock()
+	}
+}
+
+// deliverRenewalResponse is called by the message-handling loop when a
+// SessionRenewResponse comes in. Silent no-op if nobody's waiting
+// (shouldn't happen, but we'd rather log-and-drop than deadlock).
+func deliverRenewalResponse(reqID string, resp *agentpb.SessionRenewResponse) {
+	renewalWaiters.Lock()
+	ch, ok := renewalWaiters.byID[reqID]
+	renewalWaiters.Unlock()
+	if !ok {
+		return
+	}
+	select {
+	case ch <- resp:
+	default:
+	}
 }
 
 // MaybeEnroll optionally runs the agent-side enrollment handshake. It

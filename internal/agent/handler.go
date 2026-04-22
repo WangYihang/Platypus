@@ -98,6 +98,12 @@ func dispatchEnvelope(c *Client, state *State, env *agentpb.Envelope) {
 		handleWriteFile(c, env.RequestId, p.WriteFileRequest)
 	case *agentpb.Envelope_UpdateRequest:
 		handleUpdate(c, p.UpdateRequest)
+	case *agentpb.Envelope_SessionRenewResponse:
+		// Route back to whichever goroutine sent the matching
+		// SessionRenewRequest. The renewal loop (see StartRenewalLoop)
+		// registers a channel keyed by the request_id before sending;
+		// here we just forward.
+		deliverRenewalResponse(env.RequestId, p.SessionRenewResponse)
 	}
 }
 
