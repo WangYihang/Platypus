@@ -7,16 +7,30 @@ import (
 	"strings"
 
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/protocol"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
-// Client represents an agent's connection to the platypus server.
+// EnvelopeCodec is the minimal interface handler.go needs from whatever
+// transports envelopes — a TLS connection to the server or a mesh-backed
+// adapter that routes through the overlay.
+type EnvelopeCodec interface {
+	Send(env *agentpb.Envelope) error
+	Recv() (*agentpb.Envelope, error)
+}
+
+// Compile-time check: *protocol.ProtoCodec still satisfies our interface.
+var _ EnvelopeCodec = (*protocol.ProtoCodec)(nil)
+
+// Client represents an agent's connection to the platypus server or to
+// a mesh peer. When a Client is backed by the mesh, Conn is nil and
+// Codec is a mesh adapter.
 type Client struct {
 	Conn    *tls.Conn
-	Codec   *protocol.ProtoCodec
+	Codec   EnvelopeCodec
 	Service string
 }
 
@@ -26,6 +40,10 @@ type State struct {
 	PullTunnels    *ConnMap
 	PushTunnels    *ConnMap
 	Socks5Listener *net.Listener
+
+	// Mesh is set by AttachMesh when the agent is running with the
+	// overlay enabled. Nil for legacy hub-and-spoke deployments.
+	Mesh *mesh.Node
 }
 
 // NewState creates a new initialized agent state.
@@ -35,6 +53,16 @@ func NewState() *State {
 		PullTunnels: NewConnMap(),
 		PushTunnels: NewConnMap(),
 	}
+}
+
+// AttachMesh wires a mesh.Node into the agent state and installs a
+// payload handler so envelopes targeted at this node get dispatched
+// through the normal agent handler path (HandleMeshEnvelope).
+func AttachMesh(state *State, node *mesh.Node) {
+	state.Mesh = node
+	node.SetPayloadHandler(func(peer string, env *agentpb.Envelope) {
+		HandleMeshEnvelope(state, peer, env)
+	})
 }
 
 // SendEnvelope sends a protobuf envelope via the codec.

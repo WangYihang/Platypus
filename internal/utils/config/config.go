@@ -58,10 +58,23 @@ type DistributorConfig struct {
 	Url  string `yaml:"url"`
 }
 
+// MeshConfig opts the server into the agent overlay. When PSKFile is
+// empty the server stays in pure hub-and-spoke mode; otherwise it
+// generates a persistent mesh identity, accepts inbound mesh links, and
+// can route admin traffic to any reachable agent by NodeID.
+type MeshConfig struct {
+	PSKFile        string   `yaml:"psk_file"`
+	IdentityDir    string   `yaml:"identity_dir"`
+	ListenAddr     string   `yaml:"listen_addr"`
+	AdvertiseAddrs []string `yaml:"advertise_addrs"`
+	Peers          []string `yaml:"peers"`
+}
+
 type Config struct {
 	Listeners   []ListenerConfig  `yaml:"listeners"`
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
+	Mesh        MeshConfig        `yaml:"mesh"`
 	Update      bool              `yaml:"update"`
 	OpenBrowser bool              `yaml:"openBrowser"`
 }

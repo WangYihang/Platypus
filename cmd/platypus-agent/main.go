@@ -12,6 +12,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/WangYihang/Platypus/internal/agent"
+	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/pkg/options"
 )
 
@@ -36,6 +37,33 @@ func main() {
 		slog.String("endpoint", endpoint),
 		slog.String("token", opts.Token),
 	)
+
+	// Mesh overlay is opt-in: enable only when the operator provides a PSK
+	// file. This preserves the legacy hub-and-spoke behaviour for agents
+	// that have not yet been migrated.
+	if opts.MeshPSKFile != "" {
+		cfg := mesh.Config{
+			IdentityDir:    opts.MeshIdentityDir,
+			PSKFile:        opts.MeshPSKFile,
+			ListenAddr:     opts.MeshListen,
+			Peers:          opts.MeshPeers,
+			AdvertiseAddrs: opts.MeshAdvertise,
+			Role:           "agent",
+		}
+		node, err := mesh.NewNode(cfg, logger)
+		if err != nil {
+			logger.Error("mesh init", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		agent.AttachMesh(state, node)
+		if err := node.Start(ctx); err != nil {
+			logger.Error("mesh start", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		logger.Info("mesh enabled",
+			slog.String("node_id", node.NodeID()),
+			slog.String("listen", node.ListenerAddr()))
+	}
 
 	bo := backoff.WithContext(
 		backoff.NewExponentialBackOff(

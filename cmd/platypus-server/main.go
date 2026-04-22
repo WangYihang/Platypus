@@ -30,6 +30,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
@@ -63,6 +64,27 @@ func main() {
 	defer stop()
 
 	servers := startHTTPServers(cfg)
+
+	if cfg.Mesh.PSKFile != "" {
+		node, err := mesh.NewNode(mesh.Config{
+			IdentityDir:    cfg.Mesh.IdentityDir,
+			PSKFile:        cfg.Mesh.PSKFile,
+			ListenAddr:     cfg.Mesh.ListenAddr,
+			AdvertiseAddrs: cfg.Mesh.AdvertiseAddrs,
+			Peers:          cfg.Mesh.Peers,
+			Role:           "server",
+		}, nil)
+		if err != nil {
+			log.Error("mesh init failed: %v", err)
+			os.Exit(1)
+		}
+		if err := node.Start(ctx); err != nil {
+			log.Error("mesh start failed: %v", err)
+			os.Exit(1)
+		}
+		core.Ctx.Mesh = node
+		log.Success("Mesh enabled: node_id=%s listen=%s", node.NodeID(), node.ListenerAddr())
+	}
 
 	for _, s := range cfg.Listeners {
 		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.DisableHistory, s.PublicIP, s.ShellPath)

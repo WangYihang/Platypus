@@ -34,63 +34,70 @@ func HandleConnection(c *Client, state *State) {
 			log.Error("Network error: %s", err)
 			break
 		}
-		switch p := env.Payload.(type) {
-		case *agentpb.Envelope_Stdio:
-			if proc, ok := state.Processes.Get(p.Stdio.Key); ok {
-				proc.Ptmx.Write(p.Stdio.Data)
-			}
-		case *agentpb.Envelope_WindowSize:
-			ws := &pty.Winsize{
-				Cols: uint16(p.WindowSize.Columns),
-				Rows: uint16(p.WindowSize.Rows),
-			}
-			if proc, ok := state.Processes.Get(p.WindowSize.Key); ok {
-				pty.Setsize(proc.Ptmx, ws)
-			}
-		case *agentpb.Envelope_ProcessStartRequest:
-			handleProcessStart(c, state, env.RequestId, p.ProcessStartRequest)
-		case *agentpb.Envelope_ProcessStartedResponse:
-		case *agentpb.Envelope_ProcessStopped:
-		case *agentpb.Envelope_GetClientInfoRequest:
-			handleGetClientInfo(c, env.RequestId)
-		case *agentpb.Envelope_DuplicateClient:
-			log.Error("Duplicated connection")
-			os.Exit(0)
-		case *agentpb.Envelope_ProcessTerminateRequest:
-			handleProcessTerminate(state, p.ProcessTerminateRequest)
-		case *agentpb.Envelope_TunnelConnectRequest:
-			handleTunnelConnect(c, state, p.TunnelConnectRequest)
-		case *agentpb.Envelope_TunnelData:
-			handleTunnelData(state, p.TunnelData)
-		case *agentpb.Envelope_TunnelCloseRequest:
-			handleTunnelClose(c, state, p.TunnelCloseRequest)
-		case *agentpb.Envelope_TunnelCreateRequest:
-			handleTunnelCreate(c, state, p.TunnelCreateRequest)
-		case *agentpb.Envelope_TunnelConnectedResponse:
-			handleTunnelConnected(c, state, p.TunnelConnectedResponse)
-		case *agentpb.Envelope_TunnelDisconnected:
-			if conn, ok := state.PushTunnels.GetAndDelete(p.TunnelDisconnected.TunnelId); ok {
-				(*conn).Close()
-			}
-		case *agentpb.Envelope_TunnelConnectFailed:
-			if conn, ok := state.PushTunnels.GetAndDelete(p.TunnelConnectFailed.TunnelId); ok {
-				(*conn).Close()
-			}
-		case *agentpb.Envelope_Socks5CreateRequest:
-			handleSocks5Create(c, state)
-		case *agentpb.Envelope_Socks5DestroyRequest:
-			handleSocks5Destroy(c, state)
-		case *agentpb.Envelope_ExecRequest:
-			handleExec(c, env.RequestId, p.ExecRequest)
-		case *agentpb.Envelope_ReadFileRequest:
-			handleReadFile(c, env.RequestId, p.ReadFileRequest)
-		case *agentpb.Envelope_FileSizeRequest:
-			handleFileSize(c, env.RequestId, p.FileSizeRequest)
-		case *agentpb.Envelope_WriteFileRequest:
-			handleWriteFile(c, env.RequestId, p.WriteFileRequest)
-		case *agentpb.Envelope_UpdateRequest:
-			handleUpdate(c, p.UpdateRequest)
+		dispatchEnvelope(c, state, env)
+	}
+}
+
+// dispatchEnvelope routes a single envelope to the appropriate handler.
+// Shared between the TLS loop (HandleConnection) and mesh delivery
+// (HandleMeshEnvelope).
+func dispatchEnvelope(c *Client, state *State, env *agentpb.Envelope) {
+	switch p := env.Payload.(type) {
+	case *agentpb.Envelope_Stdio:
+		if proc, ok := state.Processes.Get(p.Stdio.Key); ok {
+			proc.Ptmx.Write(p.Stdio.Data)
 		}
+	case *agentpb.Envelope_WindowSize:
+		ws := &pty.Winsize{
+			Cols: uint16(p.WindowSize.Columns),
+			Rows: uint16(p.WindowSize.Rows),
+		}
+		if proc, ok := state.Processes.Get(p.WindowSize.Key); ok {
+			pty.Setsize(proc.Ptmx, ws)
+		}
+	case *agentpb.Envelope_ProcessStartRequest:
+		handleProcessStart(c, state, env.RequestId, p.ProcessStartRequest)
+	case *agentpb.Envelope_ProcessStartedResponse:
+	case *agentpb.Envelope_ProcessStopped:
+	case *agentpb.Envelope_GetClientInfoRequest:
+		handleGetClientInfo(c, env.RequestId)
+	case *agentpb.Envelope_DuplicateClient:
+		log.Error("Duplicated connection")
+		os.Exit(0)
+	case *agentpb.Envelope_ProcessTerminateRequest:
+		handleProcessTerminate(state, p.ProcessTerminateRequest)
+	case *agentpb.Envelope_TunnelConnectRequest:
+		handleTunnelConnect(c, state, p.TunnelConnectRequest)
+	case *agentpb.Envelope_TunnelData:
+		handleTunnelData(state, p.TunnelData)
+	case *agentpb.Envelope_TunnelCloseRequest:
+		handleTunnelClose(c, state, p.TunnelCloseRequest)
+	case *agentpb.Envelope_TunnelCreateRequest:
+		handleTunnelCreate(c, state, p.TunnelCreateRequest)
+	case *agentpb.Envelope_TunnelConnectedResponse:
+		handleTunnelConnected(c, state, p.TunnelConnectedResponse)
+	case *agentpb.Envelope_TunnelDisconnected:
+		if conn, ok := state.PushTunnels.GetAndDelete(p.TunnelDisconnected.TunnelId); ok {
+			(*conn).Close()
+		}
+	case *agentpb.Envelope_TunnelConnectFailed:
+		if conn, ok := state.PushTunnels.GetAndDelete(p.TunnelConnectFailed.TunnelId); ok {
+			(*conn).Close()
+		}
+	case *agentpb.Envelope_Socks5CreateRequest:
+		handleSocks5Create(c, state)
+	case *agentpb.Envelope_Socks5DestroyRequest:
+		handleSocks5Destroy(c, state)
+	case *agentpb.Envelope_ExecRequest:
+		handleExec(c, env.RequestId, p.ExecRequest)
+	case *agentpb.Envelope_ReadFileRequest:
+		handleReadFile(c, env.RequestId, p.ReadFileRequest)
+	case *agentpb.Envelope_FileSizeRequest:
+		handleFileSize(c, env.RequestId, p.FileSizeRequest)
+	case *agentpb.Envelope_WriteFileRequest:
+		handleWriteFile(c, env.RequestId, p.WriteFileRequest)
+	case *agentpb.Envelope_UpdateRequest:
+		handleUpdate(c, p.UpdateRequest)
 	}
 }
 

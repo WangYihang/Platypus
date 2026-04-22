@@ -83,6 +83,12 @@ type App struct {
 	// projects, hosts, and sessions. Nil when the RESTful subsystem is
 	// disabled in config (older deployments that never wanted HTTP).
 	Storage *storage.DB
+
+	// Mesh holds the overlay node when the server opts into the agent
+	// mesh (config.Mesh.PSKFile set). Typed as interface{} to avoid a
+	// cycle with core/*; the concrete type is *mesh.Node. Nil means
+	// legacy hub-and-spoke mode.
+	Mesh interface{}
 }
 
 // New creates a new App with initialized managers.

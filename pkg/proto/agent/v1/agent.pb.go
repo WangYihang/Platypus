@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: proto/agent/v1/agent.proto
+// source: agent.proto
 
 package agentpb
 
@@ -51,11 +51,11 @@ func (x TunnelMode) String() string {
 }
 
 func (TunnelMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_v1_agent_proto_enumTypes[0].Descriptor()
+	return file_agent_proto_enumTypes[0].Descriptor()
 }
 
 func (TunnelMode) Type() protoreflect.EnumType {
-	return &file_proto_agent_v1_agent_proto_enumTypes[0]
+	return &file_agent_proto_enumTypes[0]
 }
 
 func (x TunnelMode) Number() protoreflect.EnumNumber {
@@ -64,15 +64,24 @@ func (x TunnelMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TunnelMode.Descriptor instead.
 func (TunnelMode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
-// Envelope is the top-level message for all Agent <-> Server communication.
+// Envelope is the top-level message for all Agent <-> Server and
+// Agent <-> Agent (mesh) communication.
 type Envelope struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Version   uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`                     // Protocol version (current = 1)
 	RequestId string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"` // UUID for RPC request/response correlation
 	Timestamp int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                 // Unix nanosecond timestamp
+	// Mesh routing fields. Optional — empty target_node means "for the
+	// immediate peer / server this envelope was sent over" (legacy
+	// hub-and-spoke behaviour). When target_node is set and does not match
+	// the receiving node's NodeID, the receiver forwards the envelope along
+	// its routing table toward that node.
+	SourceNode string `protobuf:"bytes,4,opt,name=source_node,json=sourceNode,proto3" json:"source_node,omitempty"` // NodeID of originator (base32, 32 chars)
+	TargetNode string `protobuf:"bytes,5,opt,name=target_node,json=targetNode,proto3" json:"target_node,omitempty"` // NodeID of destination; empty = link-local
+	Ttl        uint32 `protobuf:"varint,6,opt,name=ttl,proto3" json:"ttl,omitempty"`                                // decremented at each forwarding hop; drop at 0
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*Envelope_GetClientInfoRequest
@@ -109,6 +118,13 @@ type Envelope struct {
 	//	*Envelope_Socks5DestroyRequest
 	//	*Envelope_Socks5DestroyedResponse
 	//	*Envelope_Socks5DestroyFailed
+	//	*Envelope_MeshHello
+	//	*Envelope_MeshHelloAck
+	//	*Envelope_MeshKeepalive
+	//	*Envelope_MeshPeerAnnounce
+	//	*Envelope_MeshPeerDelta
+	//	*Envelope_MeshLsa
+	//	*Envelope_MeshUnreachable
 	Payload       isEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -116,7 +132,7 @@ type Envelope struct {
 
 func (x *Envelope) Reset() {
 	*x = Envelope{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_agent_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -128,7 +144,7 @@ func (x *Envelope) String() string {
 func (*Envelope) ProtoMessage() {}
 
 func (x *Envelope) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_agent_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -141,7 +157,7 @@ func (x *Envelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Envelope.ProtoReflect.Descriptor instead.
 func (*Envelope) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Envelope) GetVersion() uint32 {
@@ -161,6 +177,27 @@ func (x *Envelope) GetRequestId() string {
 func (x *Envelope) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *Envelope) GetSourceNode() string {
+	if x != nil {
+		return x.SourceNode
+	}
+	return ""
+}
+
+func (x *Envelope) GetTargetNode() string {
+	if x != nil {
+		return x.TargetNode
+	}
+	return ""
+}
+
+func (x *Envelope) GetTtl() uint32 {
+	if x != nil {
+		return x.Ttl
 	}
 	return 0
 }
@@ -478,6 +515,69 @@ func (x *Envelope) GetSocks5DestroyFailed() *Socks5DestroyFailed {
 	return nil
 }
 
+func (x *Envelope) GetMeshHello() *MeshHello {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshHello); ok {
+			return x.MeshHello
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshHelloAck() *MeshHelloAck {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshHelloAck); ok {
+			return x.MeshHelloAck
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshKeepalive() *MeshKeepalive {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshKeepalive); ok {
+			return x.MeshKeepalive
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshPeerAnnounce() *MeshPeerAnnounce {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshPeerAnnounce); ok {
+			return x.MeshPeerAnnounce
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshPeerDelta() *MeshPeerDelta {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshPeerDelta); ok {
+			return x.MeshPeerDelta
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshLsa() *MeshLSA {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshLsa); ok {
+			return x.MeshLsa
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetMeshUnreachable() *MeshUnreachable {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_MeshUnreachable); ok {
+			return x.MeshUnreachable
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Payload interface {
 	isEnvelope_Payload()
 }
@@ -624,6 +724,37 @@ type Envelope_Socks5DestroyFailed struct {
 	Socks5DestroyFailed *Socks5DestroyFailed `protobuf:"bytes,55,opt,name=socks5_destroy_failed,json=socks5DestroyFailed,proto3,oneof"`
 }
 
+type Envelope_MeshHello struct {
+	// Mesh: link handshake + keepalive
+	MeshHello *MeshHello `protobuf:"bytes,60,opt,name=mesh_hello,json=meshHello,proto3,oneof"`
+}
+
+type Envelope_MeshHelloAck struct {
+	MeshHelloAck *MeshHelloAck `protobuf:"bytes,61,opt,name=mesh_hello_ack,json=meshHelloAck,proto3,oneof"`
+}
+
+type Envelope_MeshKeepalive struct {
+	MeshKeepalive *MeshKeepalive `protobuf:"bytes,62,opt,name=mesh_keepalive,json=meshKeepalive,proto3,oneof"`
+}
+
+type Envelope_MeshPeerAnnounce struct {
+	// Mesh: peer-table gossip
+	MeshPeerAnnounce *MeshPeerAnnounce `protobuf:"bytes,63,opt,name=mesh_peer_announce,json=meshPeerAnnounce,proto3,oneof"`
+}
+
+type Envelope_MeshPeerDelta struct {
+	MeshPeerDelta *MeshPeerDelta `protobuf:"bytes,64,opt,name=mesh_peer_delta,json=meshPeerDelta,proto3,oneof"`
+}
+
+type Envelope_MeshLsa struct {
+	// Mesh: link-state routing
+	MeshLsa *MeshLSA `protobuf:"bytes,65,opt,name=mesh_lsa,json=meshLsa,proto3,oneof"`
+}
+
+type Envelope_MeshUnreachable struct {
+	MeshUnreachable *MeshUnreachable `protobuf:"bytes,66,opt,name=mesh_unreachable,json=meshUnreachable,proto3,oneof"`
+}
+
 func (*Envelope_GetClientInfoRequest) isEnvelope_Payload() {}
 
 func (*Envelope_ClientInfoResponse) isEnvelope_Payload() {}
@@ -692,6 +823,20 @@ func (*Envelope_Socks5DestroyedResponse) isEnvelope_Payload() {}
 
 func (*Envelope_Socks5DestroyFailed) isEnvelope_Payload() {}
 
+func (*Envelope_MeshHello) isEnvelope_Payload() {}
+
+func (*Envelope_MeshHelloAck) isEnvelope_Payload() {}
+
+func (*Envelope_MeshKeepalive) isEnvelope_Payload() {}
+
+func (*Envelope_MeshPeerAnnounce) isEnvelope_Payload() {}
+
+func (*Envelope_MeshPeerDelta) isEnvelope_Payload() {}
+
+func (*Envelope_MeshLsa) isEnvelope_Payload() {}
+
+func (*Envelope_MeshUnreachable) isEnvelope_Payload() {}
+
 type GetClientInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -700,7 +845,7 @@ type GetClientInfoRequest struct {
 
 func (x *GetClientInfoRequest) Reset() {
 	*x = GetClientInfoRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -712,7 +857,7 @@ func (x *GetClientInfoRequest) String() string {
 func (*GetClientInfoRequest) ProtoMessage() {}
 
 func (x *GetClientInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -725,7 +870,7 @@ func (x *GetClientInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClientInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetClientInfoRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{1}
+	return file_agent_proto_rawDescGZIP(), []int{1}
 }
 
 type ClientInfoResponse struct {
@@ -749,7 +894,7 @@ type ClientInfoResponse struct {
 
 func (x *ClientInfoResponse) Reset() {
 	*x = ClientInfoResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -761,7 +906,7 @@ func (x *ClientInfoResponse) String() string {
 func (*ClientInfoResponse) ProtoMessage() {}
 
 func (x *ClientInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -774,7 +919,7 @@ func (x *ClientInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientInfoResponse.ProtoReflect.Descriptor instead.
 func (*ClientInfoResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+	return file_agent_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ClientInfoResponse) GetVersion() string {
@@ -841,7 +986,7 @@ type DuplicateClientNotice struct {
 
 func (x *DuplicateClientNotice) Reset() {
 	*x = DuplicateClientNotice{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -853,7 +998,7 @@ func (x *DuplicateClientNotice) String() string {
 func (*DuplicateClientNotice) ProtoMessage() {}
 
 func (x *DuplicateClientNotice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -866,7 +1011,7 @@ func (x *DuplicateClientNotice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DuplicateClientNotice.ProtoReflect.Descriptor instead.
 func (*DuplicateClientNotice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{3}
+	return file_agent_proto_rawDescGZIP(), []int{3}
 }
 
 type UpdateRequest struct {
@@ -879,7 +1024,7 @@ type UpdateRequest struct {
 
 func (x *UpdateRequest) Reset() {
 	*x = UpdateRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +1036,7 @@ func (x *UpdateRequest) String() string {
 func (*UpdateRequest) ProtoMessage() {}
 
 func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +1049,7 @@ func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
 func (*UpdateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+	return file_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UpdateRequest) GetDistributorUrl() string {
@@ -933,7 +1078,7 @@ type ProcessStartRequest struct {
 
 func (x *ProcessStartRequest) Reset() {
 	*x = ProcessStartRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -945,7 +1090,7 @@ func (x *ProcessStartRequest) String() string {
 func (*ProcessStartRequest) ProtoMessage() {}
 
 func (x *ProcessStartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -958,7 +1103,7 @@ func (x *ProcessStartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStartRequest.ProtoReflect.Descriptor instead.
 func (*ProcessStartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+	return file_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProcessStartRequest) GetKey() string {
@@ -999,7 +1144,7 @@ type ProcessStartedResponse struct {
 
 func (x *ProcessStartedResponse) Reset() {
 	*x = ProcessStartedResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1011,7 +1156,7 @@ func (x *ProcessStartedResponse) String() string {
 func (*ProcessStartedResponse) ProtoMessage() {}
 
 func (x *ProcessStartedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1024,7 +1169,7 @@ func (x *ProcessStartedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStartedResponse.ProtoReflect.Descriptor instead.
 func (*ProcessStartedResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{6}
+	return file_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProcessStartedResponse) GetKey() string {
@@ -1051,7 +1196,7 @@ type ProcessStoppedNotice struct {
 
 func (x *ProcessStoppedNotice) Reset() {
 	*x = ProcessStoppedNotice{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1063,7 +1208,7 @@ func (x *ProcessStoppedNotice) String() string {
 func (*ProcessStoppedNotice) ProtoMessage() {}
 
 func (x *ProcessStoppedNotice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1076,7 +1221,7 @@ func (x *ProcessStoppedNotice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStoppedNotice.ProtoReflect.Descriptor instead.
 func (*ProcessStoppedNotice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{7}
+	return file_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProcessStoppedNotice) GetKey() string {
@@ -1102,7 +1247,7 @@ type ProcessTerminateRequest struct {
 
 func (x *ProcessTerminateRequest) Reset() {
 	*x = ProcessTerminateRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1114,7 +1259,7 @@ func (x *ProcessTerminateRequest) String() string {
 func (*ProcessTerminateRequest) ProtoMessage() {}
 
 func (x *ProcessTerminateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1127,7 +1272,7 @@ func (x *ProcessTerminateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessTerminateRequest.ProtoReflect.Descriptor instead.
 func (*ProcessTerminateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProcessTerminateRequest) GetKey() string {
@@ -1147,7 +1292,7 @@ type StdioData struct {
 
 func (x *StdioData) Reset() {
 	*x = StdioData{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1159,7 +1304,7 @@ func (x *StdioData) String() string {
 func (*StdioData) ProtoMessage() {}
 
 func (x *StdioData) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1172,7 +1317,7 @@ func (x *StdioData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StdioData.ProtoReflect.Descriptor instead.
 func (*StdioData) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StdioData) GetKey() string {
@@ -1200,7 +1345,7 @@ type WindowSizeUpdate struct {
 
 func (x *WindowSizeUpdate) Reset() {
 	*x = WindowSizeUpdate{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1212,7 +1357,7 @@ func (x *WindowSizeUpdate) String() string {
 func (*WindowSizeUpdate) ProtoMessage() {}
 
 func (x *WindowSizeUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +1370,7 @@ func (x *WindowSizeUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowSizeUpdate.ProtoReflect.Descriptor instead.
 func (*WindowSizeUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WindowSizeUpdate) GetKey() string {
@@ -1258,7 +1403,7 @@ type ExecRequest struct {
 
 func (x *ExecRequest) Reset() {
 	*x = ExecRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1270,7 +1415,7 @@ func (x *ExecRequest) String() string {
 func (*ExecRequest) ProtoMessage() {}
 
 func (x *ExecRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1428,7 @@ func (x *ExecRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
 func (*ExecRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ExecRequest) GetCommand() string {
@@ -1304,7 +1449,7 @@ type ExecResponse struct {
 
 func (x *ExecResponse) Reset() {
 	*x = ExecResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1461,7 @@ func (x *ExecResponse) String() string {
 func (*ExecResponse) ProtoMessage() {}
 
 func (x *ExecResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1474,7 @@ func (x *ExecResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
 func (*ExecResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ExecResponse) GetOutput() []byte {
@@ -1364,7 +1509,7 @@ type ReadFileRequest struct {
 
 func (x *ReadFileRequest) Reset() {
 	*x = ReadFileRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1376,7 +1521,7 @@ func (x *ReadFileRequest) String() string {
 func (*ReadFileRequest) ProtoMessage() {}
 
 func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1389,7 +1534,7 @@ func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileRequest.ProtoReflect.Descriptor instead.
 func (*ReadFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReadFileRequest) GetPath() string {
@@ -1423,7 +1568,7 @@ type ReadFileResponse struct {
 
 func (x *ReadFileResponse) Reset() {
 	*x = ReadFileResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1580,7 @@ func (x *ReadFileResponse) String() string {
 func (*ReadFileResponse) ProtoMessage() {}
 
 func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1593,7 @@ func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileResponse.ProtoReflect.Descriptor instead.
 func (*ReadFileResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ReadFileResponse) GetData() []byte {
@@ -1476,7 +1621,7 @@ type WriteFileRequest struct {
 
 func (x *WriteFileRequest) Reset() {
 	*x = WriteFileRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1488,7 +1633,7 @@ func (x *WriteFileRequest) String() string {
 func (*WriteFileRequest) ProtoMessage() {}
 
 func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1501,7 +1646,7 @@ func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileRequest.ProtoReflect.Descriptor instead.
 func (*WriteFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *WriteFileRequest) GetPath() string {
@@ -1535,7 +1680,7 @@ type WriteFileResponse struct {
 
 func (x *WriteFileResponse) Reset() {
 	*x = WriteFileResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1547,7 +1692,7 @@ func (x *WriteFileResponse) String() string {
 func (*WriteFileResponse) ProtoMessage() {}
 
 func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1560,7 +1705,7 @@ func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileResponse.ProtoReflect.Descriptor instead.
 func (*WriteFileResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WriteFileResponse) GetBytesWritten() int64 {
@@ -1586,7 +1731,7 @@ type FileSizeRequest struct {
 
 func (x *FileSizeRequest) Reset() {
 	*x = FileSizeRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +1743,7 @@ func (x *FileSizeRequest) String() string {
 func (*FileSizeRequest) ProtoMessage() {}
 
 func (x *FileSizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +1756,7 @@ func (x *FileSizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSizeRequest.ProtoReflect.Descriptor instead.
 func (*FileSizeRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *FileSizeRequest) GetPath() string {
@@ -1631,7 +1776,7 @@ type FileSizeResponse struct {
 
 func (x *FileSizeResponse) Reset() {
 	*x = FileSizeResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1788,7 @@ func (x *FileSizeResponse) String() string {
 func (*FileSizeResponse) ProtoMessage() {}
 
 func (x *FileSizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1801,7 @@ func (x *FileSizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSizeResponse.ProtoReflect.Descriptor instead.
 func (*FileSizeResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *FileSizeResponse) GetSize() int64 {
@@ -1683,7 +1828,7 @@ type TunnelCreateRequest struct {
 
 func (x *TunnelCreateRequest) Reset() {
 	*x = TunnelCreateRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1695,7 +1840,7 @@ func (x *TunnelCreateRequest) String() string {
 func (*TunnelCreateRequest) ProtoMessage() {}
 
 func (x *TunnelCreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1708,7 +1853,7 @@ func (x *TunnelCreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelCreateRequest.ProtoReflect.Descriptor instead.
 func (*TunnelCreateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *TunnelCreateRequest) GetAddress() string {
@@ -1735,7 +1880,7 @@ type TunnelCreatedResponse struct {
 
 func (x *TunnelCreatedResponse) Reset() {
 	*x = TunnelCreatedResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1747,7 +1892,7 @@ func (x *TunnelCreatedResponse) String() string {
 func (*TunnelCreatedResponse) ProtoMessage() {}
 
 func (x *TunnelCreatedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1760,7 +1905,7 @@ func (x *TunnelCreatedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelCreatedResponse.ProtoReflect.Descriptor instead.
 func (*TunnelCreatedResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TunnelCreatedResponse) GetTunnelId() string {
@@ -1787,7 +1932,7 @@ type TunnelCreateFailed struct {
 
 func (x *TunnelCreateFailed) Reset() {
 	*x = TunnelCreateFailed{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1799,7 +1944,7 @@ func (x *TunnelCreateFailed) String() string {
 func (*TunnelCreateFailed) ProtoMessage() {}
 
 func (x *TunnelCreateFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1812,7 +1957,7 @@ func (x *TunnelCreateFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelCreateFailed.ProtoReflect.Descriptor instead.
 func (*TunnelCreateFailed) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TunnelCreateFailed) GetAddress() string {
@@ -1839,7 +1984,7 @@ type TunnelConnectRequest struct {
 
 func (x *TunnelConnectRequest) Reset() {
 	*x = TunnelConnectRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1851,7 +1996,7 @@ func (x *TunnelConnectRequest) String() string {
 func (*TunnelConnectRequest) ProtoMessage() {}
 
 func (x *TunnelConnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1864,7 +2009,7 @@ func (x *TunnelConnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelConnectRequest.ProtoReflect.Descriptor instead.
 func (*TunnelConnectRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *TunnelConnectRequest) GetTunnelId() string {
@@ -1890,7 +2035,7 @@ type TunnelConnectedResponse struct {
 
 func (x *TunnelConnectedResponse) Reset() {
 	*x = TunnelConnectedResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1902,7 +2047,7 @@ func (x *TunnelConnectedResponse) String() string {
 func (*TunnelConnectedResponse) ProtoMessage() {}
 
 func (x *TunnelConnectedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1915,7 +2060,7 @@ func (x *TunnelConnectedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelConnectedResponse.ProtoReflect.Descriptor instead.
 func (*TunnelConnectedResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TunnelConnectedResponse) GetTunnelId() string {
@@ -1935,7 +2080,7 @@ type TunnelConnectFailed struct {
 
 func (x *TunnelConnectFailed) Reset() {
 	*x = TunnelConnectFailed{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1947,7 +2092,7 @@ func (x *TunnelConnectFailed) String() string {
 func (*TunnelConnectFailed) ProtoMessage() {}
 
 func (x *TunnelConnectFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1960,7 +2105,7 @@ func (x *TunnelConnectFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelConnectFailed.ProtoReflect.Descriptor instead.
 func (*TunnelConnectFailed) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{24}
+	return file_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TunnelConnectFailed) GetTunnelId() string {
@@ -1987,7 +2132,7 @@ type TunnelData struct {
 
 func (x *TunnelData) Reset() {
 	*x = TunnelData{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1999,7 +2144,7 @@ func (x *TunnelData) String() string {
 func (*TunnelData) ProtoMessage() {}
 
 func (x *TunnelData) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2012,7 +2157,7 @@ func (x *TunnelData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelData.ProtoReflect.Descriptor instead.
 func (*TunnelData) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{25}
+	return file_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *TunnelData) GetTunnelId() string {
@@ -2038,7 +2183,7 @@ type TunnelCloseRequest struct {
 
 func (x *TunnelCloseRequest) Reset() {
 	*x = TunnelCloseRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2050,7 +2195,7 @@ func (x *TunnelCloseRequest) String() string {
 func (*TunnelCloseRequest) ProtoMessage() {}
 
 func (x *TunnelCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2063,7 +2208,7 @@ func (x *TunnelCloseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelCloseRequest.ProtoReflect.Descriptor instead.
 func (*TunnelCloseRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{26}
+	return file_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TunnelCloseRequest) GetTunnelId() string {
@@ -2082,7 +2227,7 @@ type TunnelClosedNotice struct {
 
 func (x *TunnelClosedNotice) Reset() {
 	*x = TunnelClosedNotice{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2094,7 +2239,7 @@ func (x *TunnelClosedNotice) String() string {
 func (*TunnelClosedNotice) ProtoMessage() {}
 
 func (x *TunnelClosedNotice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2107,7 +2252,7 @@ func (x *TunnelClosedNotice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelClosedNotice.ProtoReflect.Descriptor instead.
 func (*TunnelClosedNotice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{27}
+	return file_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *TunnelClosedNotice) GetTunnelId() string {
@@ -2127,7 +2272,7 @@ type TunnelDisconnectedNotice struct {
 
 func (x *TunnelDisconnectedNotice) Reset() {
 	*x = TunnelDisconnectedNotice{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2139,7 +2284,7 @@ func (x *TunnelDisconnectedNotice) String() string {
 func (*TunnelDisconnectedNotice) ProtoMessage() {}
 
 func (x *TunnelDisconnectedNotice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2152,7 +2297,7 @@ func (x *TunnelDisconnectedNotice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelDisconnectedNotice.ProtoReflect.Descriptor instead.
 func (*TunnelDisconnectedNotice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{28}
+	return file_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *TunnelDisconnectedNotice) GetTunnelId() string {
@@ -2177,7 +2322,7 @@ type Socks5CreateRequest struct {
 
 func (x *Socks5CreateRequest) Reset() {
 	*x = Socks5CreateRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2189,7 +2334,7 @@ func (x *Socks5CreateRequest) String() string {
 func (*Socks5CreateRequest) ProtoMessage() {}
 
 func (x *Socks5CreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2202,7 +2347,7 @@ func (x *Socks5CreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5CreateRequest.ProtoReflect.Descriptor instead.
 func (*Socks5CreateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{29}
+	return file_agent_proto_rawDescGZIP(), []int{29}
 }
 
 type Socks5CreatedResponse struct {
@@ -2214,7 +2359,7 @@ type Socks5CreatedResponse struct {
 
 func (x *Socks5CreatedResponse) Reset() {
 	*x = Socks5CreatedResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2226,7 +2371,7 @@ func (x *Socks5CreatedResponse) String() string {
 func (*Socks5CreatedResponse) ProtoMessage() {}
 
 func (x *Socks5CreatedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2239,7 +2384,7 @@ func (x *Socks5CreatedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5CreatedResponse.ProtoReflect.Descriptor instead.
 func (*Socks5CreatedResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{30}
+	return file_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Socks5CreatedResponse) GetPort() int32 {
@@ -2258,7 +2403,7 @@ type Socks5CreateFailed struct {
 
 func (x *Socks5CreateFailed) Reset() {
 	*x = Socks5CreateFailed{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_agent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2270,7 +2415,7 @@ func (x *Socks5CreateFailed) String() string {
 func (*Socks5CreateFailed) ProtoMessage() {}
 
 func (x *Socks5CreateFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_agent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2283,7 +2428,7 @@ func (x *Socks5CreateFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5CreateFailed.ProtoReflect.Descriptor instead.
 func (*Socks5CreateFailed) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{31}
+	return file_agent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *Socks5CreateFailed) GetReason() string {
@@ -2301,7 +2446,7 @@ type Socks5DestroyRequest struct {
 
 func (x *Socks5DestroyRequest) Reset() {
 	*x = Socks5DestroyRequest{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2313,7 +2458,7 @@ func (x *Socks5DestroyRequest) String() string {
 func (*Socks5DestroyRequest) ProtoMessage() {}
 
 func (x *Socks5DestroyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2326,7 +2471,7 @@ func (x *Socks5DestroyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5DestroyRequest.ProtoReflect.Descriptor instead.
 func (*Socks5DestroyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{32}
+	return file_agent_proto_rawDescGZIP(), []int{32}
 }
 
 type Socks5DestroyedResponse struct {
@@ -2337,7 +2482,7 @@ type Socks5DestroyedResponse struct {
 
 func (x *Socks5DestroyedResponse) Reset() {
 	*x = Socks5DestroyedResponse{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_agent_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2349,7 +2494,7 @@ func (x *Socks5DestroyedResponse) String() string {
 func (*Socks5DestroyedResponse) ProtoMessage() {}
 
 func (x *Socks5DestroyedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_agent_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2362,7 +2507,7 @@ func (x *Socks5DestroyedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5DestroyedResponse.ProtoReflect.Descriptor instead.
 func (*Socks5DestroyedResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{33}
+	return file_agent_proto_rawDescGZIP(), []int{33}
 }
 
 type Socks5DestroyFailed struct {
@@ -2374,7 +2519,7 @@ type Socks5DestroyFailed struct {
 
 func (x *Socks5DestroyFailed) Reset() {
 	*x = Socks5DestroyFailed{}
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_agent_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2386,7 +2531,7 @@ func (x *Socks5DestroyFailed) String() string {
 func (*Socks5DestroyFailed) ProtoMessage() {}
 
 func (x *Socks5DestroyFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_agent_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2399,7 +2544,7 @@ func (x *Socks5DestroyFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Socks5DestroyFailed.ProtoReflect.Descriptor instead.
 func (*Socks5DestroyFailed) Descriptor() ([]byte, []int) {
-	return file_proto_agent_v1_agent_proto_rawDescGZIP(), []int{34}
+	return file_agent_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Socks5DestroyFailed) GetReason() string {
@@ -2409,16 +2554,648 @@ func (x *Socks5DestroyFailed) GetReason() string {
 	return ""
 }
 
-var File_proto_agent_v1_agent_proto protoreflect.FileDescriptor
+// NodeInfo is a minimal record of a mesh node — enough to attempt a
+// connection to it. pubkey is included so recipients can re-derive and
+// verify the node_id locally.
+type NodeInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`        // base32(sha256(pubkey))[:32]
+	Pubkey        []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`                      // 32-byte Ed25519 public key
+	Addresses     []string               `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`                // host:port entries the node listens on
+	LastSeen      int64                  `protobuf:"varint,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"` // unix seconds — observer's wall clock
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const file_proto_agent_v1_agent_proto_rawDesc = "" +
+func (x *NodeInfo) Reset() {
+	*x = NodeInfo{}
+	mi := &file_agent_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeInfo) ProtoMessage() {}
+
+func (x *NodeInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeInfo.ProtoReflect.Descriptor instead.
+func (*NodeInfo) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *NodeInfo) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *NodeInfo) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *NodeInfo) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+func (x *NodeInfo) GetLastSeen() int64 {
+	if x != nil {
+		return x.LastSeen
+	}
+	return 0
+}
+
+// MeshHello is the first application-level frame sent on a new mesh link
+// (the dialing side sends it, the listener replies with MeshHelloAck).
+type MeshHello struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Pubkey        []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`               // 32-byte Ed25519 public key
+	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`                 // 32 random bytes
+	PskMac        []byte                 `protobuf:"bytes,4,opt,name=psk_mac,json=pskMac,proto3" json:"psk_mac,omitempty"` // HMAC-SHA256(PSK, "platypus-mesh-hello"||pubkey||nonce)
+	Protocol      uint32                 `protobuf:"varint,5,opt,name=protocol,proto3" json:"protocol,omitempty"`          // mesh protocol version (current = 1)
+	Addresses     []string               `protobuf:"bytes,6,rep,name=addresses,proto3" json:"addresses,omitempty"`         // advertised listen addresses, informational
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshHello) Reset() {
+	*x = MeshHello{}
+	mi := &file_agent_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshHello) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshHello) ProtoMessage() {}
+
+func (x *MeshHello) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshHello.ProtoReflect.Descriptor instead.
+func (*MeshHello) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *MeshHello) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *MeshHello) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *MeshHello) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *MeshHello) GetPskMac() []byte {
+	if x != nil {
+		return x.PskMac
+	}
+	return nil
+}
+
+func (x *MeshHello) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *MeshHello) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+// MeshHelloAck is the reply. sig proves the responder holds the private
+// key matching pubkey by signing the concatenated nonces and the peer's
+// claimed node_id (prevents replay and identity swap).
+type MeshHelloAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Pubkey        []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`               // 32-byte Ed25519 public key
+	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`                 // 32 random bytes (responder's side)
+	PskMac        []byte                 `protobuf:"bytes,4,opt,name=psk_mac,json=pskMac,proto3" json:"psk_mac,omitempty"` // HMAC-SHA256(PSK, "platypus-mesh-hello-ack"||pubkey||nonce)
+	Sig           []byte                 `protobuf:"bytes,5,opt,name=sig,proto3" json:"sig,omitempty"`                     // Ed25519_sign(priv, peer_nonce||own_nonce||peer_node_id)
+	Protocol      uint32                 `protobuf:"varint,6,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	Addresses     []string               `protobuf:"bytes,7,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshHelloAck) Reset() {
+	*x = MeshHelloAck{}
+	mi := &file_agent_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshHelloAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshHelloAck) ProtoMessage() {}
+
+func (x *MeshHelloAck) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshHelloAck.ProtoReflect.Descriptor instead.
+func (*MeshHelloAck) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *MeshHelloAck) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *MeshHelloAck) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *MeshHelloAck) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *MeshHelloAck) GetPskMac() []byte {
+	if x != nil {
+		return x.PskMac
+	}
+	return nil
+}
+
+func (x *MeshHelloAck) GetSig() []byte {
+	if x != nil {
+		return x.Sig
+	}
+	return nil
+}
+
+func (x *MeshHelloAck) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *MeshHelloAck) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+// MeshKeepalive is a periodic heartbeat. Either side may send one. Links
+// with no traffic for ~90 seconds are torn down.
+type MeshKeepalive struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SentAt        int64                  `protobuf:"varint,1,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"` // unix nanos, for RTT measurement
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshKeepalive) Reset() {
+	*x = MeshKeepalive{}
+	mi := &file_agent_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshKeepalive) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshKeepalive) ProtoMessage() {}
+
+func (x *MeshKeepalive) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshKeepalive.ProtoReflect.Descriptor instead.
+func (*MeshKeepalive) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *MeshKeepalive) GetSentAt() int64 {
+	if x != nil {
+		return x.SentAt
+	}
+	return 0
+}
+
+// MeshPeerAnnounce is sent once per direction right after a handshake
+// completes, carrying the sender's full known-peer table so the other
+// side can quickly learn the wider mesh.
+type MeshPeerAnnounce struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nodes         []*NodeInfo            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshPeerAnnounce) Reset() {
+	*x = MeshPeerAnnounce{}
+	mi := &file_agent_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshPeerAnnounce) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshPeerAnnounce) ProtoMessage() {}
+
+func (x *MeshPeerAnnounce) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshPeerAnnounce.ProtoReflect.Descriptor instead.
+func (*MeshPeerAnnounce) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *MeshPeerAnnounce) GetNodes() []*NodeInfo {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+// MeshPeerDelta is an incremental update broadcast to every directly
+// connected neighbour when the sender's known-peer set changes. seq
+// is monotonically increasing per (origin_node_id) so receivers can
+// deduplicate across multiple flooding paths.
+type MeshPeerDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OriginNodeId  string                 `protobuf:"bytes,1,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
+	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	Added         []*NodeInfo            `protobuf:"bytes,3,rep,name=added,proto3" json:"added,omitempty"`
+	RemovedIds    []string               `protobuf:"bytes,4,rep,name=removed_ids,json=removedIds,proto3" json:"removed_ids,omitempty"`
+	Ttl           uint32                 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"` // flood TTL, distinct from Envelope.ttl
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshPeerDelta) Reset() {
+	*x = MeshPeerDelta{}
+	mi := &file_agent_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshPeerDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshPeerDelta) ProtoMessage() {}
+
+func (x *MeshPeerDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshPeerDelta.ProtoReflect.Descriptor instead.
+func (*MeshPeerDelta) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *MeshPeerDelta) GetOriginNodeId() string {
+	if x != nil {
+		return x.OriginNodeId
+	}
+	return ""
+}
+
+func (x *MeshPeerDelta) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *MeshPeerDelta) GetAdded() []*NodeInfo {
+	if x != nil {
+		return x.Added
+	}
+	return nil
+}
+
+func (x *MeshPeerDelta) GetRemovedIds() []string {
+	if x != nil {
+		return x.RemovedIds
+	}
+	return nil
+}
+
+func (x *MeshPeerDelta) GetTtl() uint32 {
+	if x != nil {
+		return x.Ttl
+	}
+	return 0
+}
+
+// MeshLSA — link-state advertisement. Each node periodically (and on
+// adjacency change) signs and floods a description of its directly
+// connected neighbours. Only the node identified by origin_node_id can
+// produce a valid signature; receivers discard duplicates by (origin, seq).
+type MeshLSA struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OriginNodeId  string                 `protobuf:"bytes,1,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
+	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`                              // monotonic per origin
+	ExpiresAt     int64                  `protobuf:"varint,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // unix seconds
+	Links         []*MeshLSA_Link        `protobuf:"bytes,4,rep,name=links,proto3" json:"links,omitempty"`
+	Pubkey        []byte                 `protobuf:"bytes,5,opt,name=pubkey,proto3" json:"pubkey,omitempty"`                      // for convenience; must match origin_node_id
+	Sig           []byte                 `protobuf:"bytes,6,opt,name=sig,proto3" json:"sig,omitempty"`                            // Ed25519_sign(priv, canonical_bytes(lsa without sig))
+	FloodTtl      uint32                 `protobuf:"varint,7,opt,name=flood_ttl,json=floodTtl,proto3" json:"flood_ttl,omitempty"` // flooding hop limit
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshLSA) Reset() {
+	*x = MeshLSA{}
+	mi := &file_agent_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshLSA) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshLSA) ProtoMessage() {}
+
+func (x *MeshLSA) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshLSA.ProtoReflect.Descriptor instead.
+func (*MeshLSA) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *MeshLSA) GetOriginNodeId() string {
+	if x != nil {
+		return x.OriginNodeId
+	}
+	return ""
+}
+
+func (x *MeshLSA) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *MeshLSA) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *MeshLSA) GetLinks() []*MeshLSA_Link {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *MeshLSA) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *MeshLSA) GetSig() []byte {
+	if x != nil {
+		return x.Sig
+	}
+	return nil
+}
+
+func (x *MeshLSA) GetFloodTtl() uint32 {
+	if x != nil {
+		return x.FloodTtl
+	}
+	return 0
+}
+
+// MeshUnreachable is sent back along the reverse path when a forwarding
+// node has no route for an envelope's target_node.
+type MeshUnreachable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetNode    string                 `protobuf:"bytes,1,opt,name=target_node,json=targetNode,proto3" json:"target_node,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshUnreachable) Reset() {
+	*x = MeshUnreachable{}
+	mi := &file_agent_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshUnreachable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshUnreachable) ProtoMessage() {}
+
+func (x *MeshUnreachable) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshUnreachable.ProtoReflect.Descriptor instead.
+func (*MeshUnreachable) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *MeshUnreachable) GetTargetNode() string {
+	if x != nil {
+		return x.TargetNode
+	}
+	return ""
+}
+
+func (x *MeshUnreachable) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type MeshLSA_Link struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"` // neighbour's node_id
+	Cost          uint32                 `protobuf:"varint,2,opt,name=cost,proto3" json:"cost,omitempty"`                  // abstract cost (1 by default; can be RTT-based later)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeshLSA_Link) Reset() {
+	*x = MeshLSA_Link{}
+	mi := &file_agent_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeshLSA_Link) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeshLSA_Link) ProtoMessage() {}
+
+func (x *MeshLSA_Link) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeshLSA_Link.ProtoReflect.Descriptor instead.
+func (*MeshLSA_Link) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{41, 0}
+}
+
+func (x *MeshLSA_Link) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *MeshLSA_Link) GetCost() uint32 {
+	if x != nil {
+		return x.Cost
+	}
+	return 0
+}
+
+var File_agent_proto protoreflect.FileDescriptor
+
+const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/agent/v1/agent.proto\x12\x11platypus.agent.v1\"\xab\x18\n" +
+	"\vagent.proto\x12\x11platypus.agent.v1\"\xfd\x1c\n" +
 	"\bEnvelope\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x02 \x01(\tR\trequestId\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12`\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12\x1f\n" +
+	"\vsource_node\x18\x04 \x01(\tR\n" +
+	"sourceNode\x12\x1f\n" +
+	"\vtarget_node\x18\x05 \x01(\tR\n" +
+	"targetNode\x12\x10\n" +
+	"\x03ttl\x18\x06 \x01(\rR\x03ttl\x12`\n" +
 	"\x17get_client_info_request\x18\n" +
 	" \x01(\v2'.platypus.agent.v1.GetClientInfoRequestH\x00R\x14getClientInfoRequest\x12Y\n" +
 	"\x14client_info_response\x18\v \x01(\v2%.platypus.agent.v1.ClientInfoResponseH\x00R\x12clientInfoResponse\x12U\n" +
@@ -2455,7 +3232,15 @@ const file_proto_agent_v1_agent_proto_rawDesc = "" +
 	"\x14socks5_create_failed\x184 \x01(\v2%.platypus.agent.v1.Socks5CreateFailedH\x00R\x12socks5CreateFailed\x12_\n" +
 	"\x16socks5_destroy_request\x185 \x01(\v2'.platypus.agent.v1.Socks5DestroyRequestH\x00R\x14socks5DestroyRequest\x12h\n" +
 	"\x19socks5_destroyed_response\x186 \x01(\v2*.platypus.agent.v1.Socks5DestroyedResponseH\x00R\x17socks5DestroyedResponse\x12\\\n" +
-	"\x15socks5_destroy_failed\x187 \x01(\v2&.platypus.agent.v1.Socks5DestroyFailedH\x00R\x13socks5DestroyFailedB\t\n" +
+	"\x15socks5_destroy_failed\x187 \x01(\v2&.platypus.agent.v1.Socks5DestroyFailedH\x00R\x13socks5DestroyFailed\x12=\n" +
+	"\n" +
+	"mesh_hello\x18< \x01(\v2\x1c.platypus.agent.v1.MeshHelloH\x00R\tmeshHello\x12G\n" +
+	"\x0emesh_hello_ack\x18= \x01(\v2\x1f.platypus.agent.v1.MeshHelloAckH\x00R\fmeshHelloAck\x12I\n" +
+	"\x0emesh_keepalive\x18> \x01(\v2 .platypus.agent.v1.MeshKeepaliveH\x00R\rmeshKeepalive\x12S\n" +
+	"\x12mesh_peer_announce\x18? \x01(\v2#.platypus.agent.v1.MeshPeerAnnounceH\x00R\x10meshPeerAnnounce\x12J\n" +
+	"\x0fmesh_peer_delta\x18@ \x01(\v2 .platypus.agent.v1.MeshPeerDeltaH\x00R\rmeshPeerDelta\x127\n" +
+	"\bmesh_lsa\x18A \x01(\v2\x1a.platypus.agent.v1.MeshLSAH\x00R\ameshLsa\x12O\n" +
+	"\x10mesh_unreachable\x18B \x01(\v2\".platypus.agent.v1.MeshUnreachableH\x00R\x0fmeshUnreachableB\t\n" +
 	"\apayload\"\x16\n" +
 	"\x14GetClientInfoRequest\"\x85\x03\n" +
 	"\x12ClientInfoResponse\x12\x18\n" +
@@ -2557,27 +3342,74 @@ const file_proto_agent_v1_agent_proto_rawDesc = "" +
 	"\x14Socks5DestroyRequest\"\x19\n" +
 	"\x17Socks5DestroyedResponse\"-\n" +
 	"\x13Socks5DestroyFailed\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason*8\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"v\n" +
+	"\bNodeInfo\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
+	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x1c\n" +
+	"\taddresses\x18\x03 \x03(\tR\taddresses\x12\x1b\n" +
+	"\tlast_seen\x18\x04 \x01(\x03R\blastSeen\"\xa5\x01\n" +
+	"\tMeshHello\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
+	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x14\n" +
+	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x17\n" +
+	"\apsk_mac\x18\x04 \x01(\fR\x06pskMac\x12\x1a\n" +
+	"\bprotocol\x18\x05 \x01(\rR\bprotocol\x12\x1c\n" +
+	"\taddresses\x18\x06 \x03(\tR\taddresses\"\xba\x01\n" +
+	"\fMeshHelloAck\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
+	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x14\n" +
+	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x17\n" +
+	"\apsk_mac\x18\x04 \x01(\fR\x06pskMac\x12\x10\n" +
+	"\x03sig\x18\x05 \x01(\fR\x03sig\x12\x1a\n" +
+	"\bprotocol\x18\x06 \x01(\rR\bprotocol\x12\x1c\n" +
+	"\taddresses\x18\a \x03(\tR\taddresses\"(\n" +
+	"\rMeshKeepalive\x12\x17\n" +
+	"\asent_at\x18\x01 \x01(\x03R\x06sentAt\"E\n" +
+	"\x10MeshPeerAnnounce\x121\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x1b.platypus.agent.v1.NodeInfoR\x05nodes\"\xad\x01\n" +
+	"\rMeshPeerDelta\x12$\n" +
+	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
+	"\x03seq\x18\x02 \x01(\x04R\x03seq\x121\n" +
+	"\x05added\x18\x03 \x03(\v2\x1b.platypus.agent.v1.NodeInfoR\x05added\x12\x1f\n" +
+	"\vremoved_ids\x18\x04 \x03(\tR\n" +
+	"removedIds\x12\x10\n" +
+	"\x03ttl\x18\x05 \x01(\rR\x03ttl\"\x93\x02\n" +
+	"\aMeshLSA\x12$\n" +
+	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
+	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\x03R\texpiresAt\x125\n" +
+	"\x05links\x18\x04 \x03(\v2\x1f.platypus.agent.v1.MeshLSA.LinkR\x05links\x12\x16\n" +
+	"\x06pubkey\x18\x05 \x01(\fR\x06pubkey\x12\x10\n" +
+	"\x03sig\x18\x06 \x01(\fR\x03sig\x12\x1b\n" +
+	"\tflood_ttl\x18\a \x01(\rR\bfloodTtl\x1a3\n" +
+	"\x04Link\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x12\n" +
+	"\x04cost\x18\x02 \x01(\rR\x04cost\"J\n" +
+	"\x0fMeshUnreachable\x12\x1f\n" +
+	"\vtarget_node\x18\x01 \x01(\tR\n" +
+	"targetNode\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason*8\n" +
 	"\n" +
 	"TunnelMode\x12\x14\n" +
 	"\x10TUNNEL_MODE_PULL\x10\x00\x12\x14\n" +
 	"\x10TUNNEL_MODE_PUSH\x10\x01B;Z9github.com/WangYihang/Platypus/pkg/proto/agent/v1;agentpbb\x06proto3"
 
 var (
-	file_proto_agent_v1_agent_proto_rawDescOnce sync.Once
-	file_proto_agent_v1_agent_proto_rawDescData []byte
+	file_agent_proto_rawDescOnce sync.Once
+	file_agent_proto_rawDescData []byte
 )
 
-func file_proto_agent_v1_agent_proto_rawDescGZIP() []byte {
-	file_proto_agent_v1_agent_proto_rawDescOnce.Do(func() {
-		file_proto_agent_v1_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_agent_v1_agent_proto_rawDesc), len(file_proto_agent_v1_agent_proto_rawDesc)))
+func file_agent_proto_rawDescGZIP() []byte {
+	file_agent_proto_rawDescOnce.Do(func() {
+		file_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)))
 	})
-	return file_proto_agent_v1_agent_proto_rawDescData
+	return file_agent_proto_rawDescData
 }
 
-var file_proto_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
-var file_proto_agent_v1_agent_proto_goTypes = []any{
+var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_agent_proto_goTypes = []any{
 	(TunnelMode)(0),                  // 0: platypus.agent.v1.TunnelMode
 	(*Envelope)(nil),                 // 1: platypus.agent.v1.Envelope
 	(*GetClientInfoRequest)(nil),     // 2: platypus.agent.v1.GetClientInfoRequest
@@ -2614,9 +3446,18 @@ var file_proto_agent_v1_agent_proto_goTypes = []any{
 	(*Socks5DestroyRequest)(nil),     // 33: platypus.agent.v1.Socks5DestroyRequest
 	(*Socks5DestroyedResponse)(nil),  // 34: platypus.agent.v1.Socks5DestroyedResponse
 	(*Socks5DestroyFailed)(nil),      // 35: platypus.agent.v1.Socks5DestroyFailed
-	nil,                              // 36: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	(*NodeInfo)(nil),                 // 36: platypus.agent.v1.NodeInfo
+	(*MeshHello)(nil),                // 37: platypus.agent.v1.MeshHello
+	(*MeshHelloAck)(nil),             // 38: platypus.agent.v1.MeshHelloAck
+	(*MeshKeepalive)(nil),            // 39: platypus.agent.v1.MeshKeepalive
+	(*MeshPeerAnnounce)(nil),         // 40: platypus.agent.v1.MeshPeerAnnounce
+	(*MeshPeerDelta)(nil),            // 41: platypus.agent.v1.MeshPeerDelta
+	(*MeshLSA)(nil),                  // 42: platypus.agent.v1.MeshLSA
+	(*MeshUnreachable)(nil),          // 43: platypus.agent.v1.MeshUnreachable
+	nil,                              // 44: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	(*MeshLSA_Link)(nil),             // 45: platypus.agent.v1.MeshLSA.Link
 }
-var file_proto_agent_v1_agent_proto_depIdxs = []int32{
+var file_agent_proto_depIdxs = []int32{
 	2,  // 0: platypus.agent.v1.Envelope.get_client_info_request:type_name -> platypus.agent.v1.GetClientInfoRequest
 	3,  // 1: platypus.agent.v1.Envelope.client_info_response:type_name -> platypus.agent.v1.ClientInfoResponse
 	4,  // 2: platypus.agent.v1.Envelope.duplicate_client:type_name -> platypus.agent.v1.DuplicateClientNotice
@@ -2651,21 +3492,31 @@ var file_proto_agent_v1_agent_proto_depIdxs = []int32{
 	33, // 31: platypus.agent.v1.Envelope.socks5_destroy_request:type_name -> platypus.agent.v1.Socks5DestroyRequest
 	34, // 32: platypus.agent.v1.Envelope.socks5_destroyed_response:type_name -> platypus.agent.v1.Socks5DestroyedResponse
 	35, // 33: platypus.agent.v1.Envelope.socks5_destroy_failed:type_name -> platypus.agent.v1.Socks5DestroyFailed
-	36, // 34: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
-	0,  // 35: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
-	36, // [36:36] is the sub-list for method output_type
-	36, // [36:36] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	37, // 34: platypus.agent.v1.Envelope.mesh_hello:type_name -> platypus.agent.v1.MeshHello
+	38, // 35: platypus.agent.v1.Envelope.mesh_hello_ack:type_name -> platypus.agent.v1.MeshHelloAck
+	39, // 36: platypus.agent.v1.Envelope.mesh_keepalive:type_name -> platypus.agent.v1.MeshKeepalive
+	40, // 37: platypus.agent.v1.Envelope.mesh_peer_announce:type_name -> platypus.agent.v1.MeshPeerAnnounce
+	41, // 38: platypus.agent.v1.Envelope.mesh_peer_delta:type_name -> platypus.agent.v1.MeshPeerDelta
+	42, // 39: platypus.agent.v1.Envelope.mesh_lsa:type_name -> platypus.agent.v1.MeshLSA
+	43, // 40: platypus.agent.v1.Envelope.mesh_unreachable:type_name -> platypus.agent.v1.MeshUnreachable
+	44, // 41: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	0,  // 42: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
+	36, // 43: platypus.agent.v1.MeshPeerAnnounce.nodes:type_name -> platypus.agent.v1.NodeInfo
+	36, // 44: platypus.agent.v1.MeshPeerDelta.added:type_name -> platypus.agent.v1.NodeInfo
+	45, // 45: platypus.agent.v1.MeshLSA.links:type_name -> platypus.agent.v1.MeshLSA.Link
+	46, // [46:46] is the sub-list for method output_type
+	46, // [46:46] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
-func init() { file_proto_agent_v1_agent_proto_init() }
-func file_proto_agent_v1_agent_proto_init() {
-	if File_proto_agent_v1_agent_proto != nil {
+func init() { file_agent_proto_init() }
+func file_agent_proto_init() {
+	if File_agent_proto != nil {
 		return
 	}
-	file_proto_agent_v1_agent_proto_msgTypes[0].OneofWrappers = []any{
+	file_agent_proto_msgTypes[0].OneofWrappers = []any{
 		(*Envelope_GetClientInfoRequest)(nil),
 		(*Envelope_ClientInfoResponse)(nil),
 		(*Envelope_DuplicateClient)(nil),
@@ -2700,23 +3551,30 @@ func file_proto_agent_v1_agent_proto_init() {
 		(*Envelope_Socks5DestroyRequest)(nil),
 		(*Envelope_Socks5DestroyedResponse)(nil),
 		(*Envelope_Socks5DestroyFailed)(nil),
+		(*Envelope_MeshHello)(nil),
+		(*Envelope_MeshHelloAck)(nil),
+		(*Envelope_MeshKeepalive)(nil),
+		(*Envelope_MeshPeerAnnounce)(nil),
+		(*Envelope_MeshPeerDelta)(nil),
+		(*Envelope_MeshLsa)(nil),
+		(*Envelope_MeshUnreachable)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_v1_agent_proto_rawDesc), len(file_proto_agent_v1_agent_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   36,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_proto_agent_v1_agent_proto_goTypes,
-		DependencyIndexes: file_proto_agent_v1_agent_proto_depIdxs,
-		EnumInfos:         file_proto_agent_v1_agent_proto_enumTypes,
-		MessageInfos:      file_proto_agent_v1_agent_proto_msgTypes,
+		GoTypes:           file_agent_proto_goTypes,
+		DependencyIndexes: file_agent_proto_depIdxs,
+		EnumInfos:         file_agent_proto_enumTypes,
+		MessageInfos:      file_agent_proto_msgTypes,
 	}.Build()
-	File_proto_agent_v1_agent_proto = out.File
-	file_proto_agent_v1_agent_proto_goTypes = nil
-	file_proto_agent_v1_agent_proto_depIdxs = nil
+	File_agent_proto = out.File
+	file_agent_proto_goTypes = nil
+	file_agent_proto_depIdxs = nil
 }
