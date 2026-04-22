@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Modal, Spin, message } from "antd";
-import { ArrowLeftOutlined, DeleteOutlined } from "@ant-design/icons";
+import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Card from "../components/Card";
@@ -10,9 +10,21 @@ import Mono from "../components/Mono";
 import PageHeader from "../components/PageHeader";
 import StatusPill from "../components/StatusPill";
 import { useCurrentProject } from "../layout/ProjectShell";
-import { space } from "../layout/theme";
+import { palette, space } from "../layout/theme";
 import { Listener, deleteListener, listListeners } from "../lib/api";
 import { fromNow } from "../lib/time";
+
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 // ListenerDetailPage is /projects/:slug/listeners/:listenerId.
 // Detail card + Stop action. Back button returns to the list.
@@ -23,7 +35,7 @@ export default function ListenerDetailPage() {
     const [listener, setListener] = useState<Listener | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [messageApi, contextHolder] = message.useMessage();
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     const refresh = useCallback(async () => {
         if (!listenerId) return;
@@ -43,37 +55,39 @@ export default function ListenerDetailPage() {
         refresh();
     }, [refresh]);
 
-    function handleDelete() {
+    async function confirmDelete() {
         if (!listener) return;
-        Modal.confirm({
-            title: `Stop listener ${listener.host}:${listener.port}?`,
-            content:
-                "Existing sessions stay alive, but no new connections will be accepted. The row is removed from storage.",
-            okText: "Stop",
-            okButtonProps: { danger: true },
-            onOk: async () => {
-                try {
-                    await deleteListener(project.id, listener.id);
-                    messageApi.success("Listener stopped");
-                    navigate(`/projects/${project.slug}/listeners`);
-                } catch (e) {
-                    messageApi.error(`delete: ${String(e)}`);
-                }
-            },
-        });
+        setConfirmOpen(false);
+        try {
+            await deleteListener(project.id, listener.id);
+            toast.success("Listener stopped");
+            navigate(`/projects/${project.slug}/listeners`);
+        } catch (e) {
+            toast.error(`delete: ${String(e)}`);
+        }
     }
 
     if (loading && !listener) {
         return (
-            <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-                <Spin />
+            <div className="flex items-center justify-center p-20">
+                <Loader2 className="size-5 animate-spin text-text-muted" />
             </div>
         );
     }
     if (error) {
         return (
             <div style={{ padding: space[5] }}>
-                <Alert type="error" message={error} />
+                <div
+                    style={{
+                        padding: `${space[3]}px ${space[4]}px`,
+                        border: `1px solid ${palette.danger}`,
+                        borderRadius: 6,
+                        color: palette.danger,
+                        fontSize: 13,
+                    }}
+                >
+                    {error}
+                </div>
             </div>
         );
     }
@@ -94,21 +108,28 @@ export default function ListenerDetailPage() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            {contextHolder}
             <PageHeader
                 title={
-                    <span style={{ display: "flex", alignItems: "center", gap: space[3] }}>
+                    <span className="flex items-center gap-3">
                         <Button
-                            size="small"
-                            icon={<ArrowLeftOutlined />}
+                            size="icon"
+                            variant="outline"
+                            className="size-7"
                             onClick={() => navigate(`/projects/${project.slug}/listeners`)}
-                        />
+                        >
+                            <ArrowLeft className="size-3.5" />
+                        </Button>
                         <Mono size={22}>{`${listener.host}:${listener.port}`}</Mono>
                     </span>
                 }
                 subtitle={`listener · created ${fromNow(listener.created_at)}`}
                 actions={
-                    <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                    <Button
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setConfirmOpen(true)}
+                    >
+                        <Trash2 className="size-3.5" />
                         Stop listener
                     </Button>
                 }
@@ -147,6 +168,29 @@ export default function ListenerDetailPage() {
                     </Card>
                 </div>
             </div>
+
+            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Stop listener {listener.host}:{listener.port}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Existing sessions stay alive, but no new connections will be
+                            accepted. The row is removed from storage.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Stop
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
