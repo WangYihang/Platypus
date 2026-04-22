@@ -46,14 +46,14 @@ const TITLES: Record<string, { title: string; caption: string; section: string }
         caption: "Bind host + port; modal is reachable from header, empty state, or quick actions.",
         section: "Project pages",
     },
-    "08-hosts-empty": {
-        title: "Hosts (empty)",
-        caption: "Cross-host list. Empty state guides you to the listener page since hosts only appear after an agent connects.",
+    "08-hosts-list": {
+        title: "Hosts list",
+        caption: "Cross-host list. One row per managed host; click into a row for the per-host terminal/files/tunnels view.",
         section: "Project pages",
     },
-    "09-sessions-empty": {
-        title: "Sessions (empty)",
-        caption: "Cross-host live + historical sessions, with Live/All filter chips.",
+    "09-sessions-list": {
+        title: "Sessions list",
+        caption: "Cross-host live + historical sessions, with Live/All filter chips and a green StatusPill on every connected agent.",
         section: "Project pages",
     },
     "10-dispatch": {
@@ -80,6 +80,41 @@ const TITLES: Record<string, { title: string; caption: string; section: string }
         title: "Projects landing (multi)",
         caption: "Same landing as above with two projects seeded.",
         section: "Shell",
+    },
+    "15-host-info": {
+        title: "Host detail",
+        caption: "Per-host page with five tabs (Terminal · Files · Tunnels · Sessions · Info). Header shows the live StatusDot + active-session count.",
+        section: "Host pages",
+    },
+    "16-host-terminal": {
+        title: "Host terminal",
+        caption: "Live xterm session served over WebSocket against the connected agent. Streams stdout, accepts keystrokes back, resizes with the viewport.",
+        section: "Host pages",
+    },
+    "17-host-files": {
+        title: "Host files",
+        caption: "Path-based file transfer panel: type a remote path, then Get size / Download / Upload acts on it via the agent.",
+        section: "Host pages",
+    },
+    "18-host-tunnels": {
+        title: "Host tunnels",
+        caption: "Per-session tunnel manager. New tunnel modal supports inbound, outbound, dynamic SOCKS5, and an internet-side variant.",
+        section: "Host pages",
+    },
+    "19-dispatch-live": {
+        title: "Dispatch with live results",
+        caption: "Run a command across every flagged live session. Each row is the per-session output (or a timeout error) — slow boxes don't block the rest.",
+        section: "Project pages",
+    },
+    "20-multi-agent": {
+        title: "Multiple agents on one host",
+        caption: "Two agents on the same managed host show up as two distinct live sessions; the table groups by host and disambiguates by session hash.",
+        section: "Host pages",
+    },
+    "21-hosts-empty": {
+        title: "Hosts (empty)",
+        caption: "A fresh project with no listener and no agent. Empty-state CTA points to the listener page since hosts only appear after an agent connects.",
+        section: "Edge cases",
     },
 };
 
@@ -128,7 +163,7 @@ function build(): string {
     );
     lines.push("");
 
-    const order = ["Auth", "Shell", "Project pages", "Admin", "Misc"];
+    const order = ["Auth", "Shell", "Project pages", "Host pages", "Admin", "Edge cases", "Misc"];
     for (const sec of order) {
         const items = sections.get(sec);
         if (!items || items.length === 0) continue;
