@@ -143,7 +143,6 @@ func handleProcessStart(c *Client, state *State, reqID string, req *agentpb.Proc
 	ptmx, _ := pty.StartWithSize(process, &ws)
 	state.Processes.Set(req.Key, &AgentProcess{WindowSize: &ws, Ptmx: ptmx, Process: process})
 	log.Success("Process started: %d", process.Process.Pid)
-	defer func() { _ = ptmx.Close() }()
 
 	send(c, &agentpb.Envelope{
 		RequestId: reqID,
@@ -178,6 +177,7 @@ func handleProcessStart(c *Client, state *State, reqID string, req *agentpb.Proc
 
 	go func() {
 		err := process.Wait()
+		_ = ptmx.Close()
 		exitCode := int32(0)
 		if err != nil {
 			exitCode = int32(err.(*exec.ExitError).ExitCode())
