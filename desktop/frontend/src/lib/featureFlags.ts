@@ -7,10 +7,12 @@
 
 export const featureFlags = {
     // Mesh + machine topology page. Backend (snapshot + 1 Hz stats +
-    // time-series history) landed on branch
-    // claude/mesh-network-visualization-OQDWB; the UI page is behind
-    // this flag until the end-to-end integration test lands.
-    topology: false,
+    // time-series history) + frontend (Cytoscape + fcose + detail
+    // panels) landed on branch claude/mesh-network-visualization-
+    // OQDWB and are now enabled by default. The flag stays so the
+    // sidebar entry can still be hidden in e.g. embedded tenants
+    // that disable the mesh entirely.
+    topology: true,
 } as const;
 
 export type FeatureName = keyof typeof featureFlags;
