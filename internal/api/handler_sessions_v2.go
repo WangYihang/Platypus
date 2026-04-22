@@ -109,18 +109,26 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 
 	results := []dispatchV2Result{}
 	for _, s := range live {
-		if !s.GroupDispatch {
-			continue
-		}
 		client := core.FindAgentClientByHash(s.ID)
 		if client == nil {
 			// Row is marked live but the runtime object is gone —
-			// likely a crash since the last disconnect stamp. Record
-			// it as an error so the caller can see the gap.
-			results = append(results, dispatchV2Result{
-				SessionHash: s.ID, HostID: s.HostID,
-				Error: "session runtime missing (server restart?)",
-			})
+			// likely a crash since the last disconnect stamp. Skip
+			// silently here (a future PATCH that flagged it would
+			// have updated the in-memory mirror); only the path
+			// where the user explicitly flagged it via the UI is
+			// reportable, and that case lives further below.
+			if s.GroupDispatch {
+				results = append(results, dispatchV2Result{
+					SessionHash: s.ID, HostID: s.HostID,
+					Error: "session runtime missing (server restart?)",
+				})
+			}
+			continue
+		}
+		// PatchSession only flips the in-memory mirror today; consult
+		// it so the UI's dispatch flag is honoured even before a
+		// future commit persists to the DB row.
+		if !s.GroupDispatch && !client.GroupDispatch {
 			continue
 		}
 		ch := make(chan string, 1)
