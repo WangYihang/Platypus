@@ -1,30 +1,82 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-    Alert,
-    Button,
-    Form,
-    Input,
-    Modal,
-    Select,
-    Space,
-    Table,
-    message,
-} from "antd";
-import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
-import StatusPill from "../../components/StatusPill";
 import PageHeader from "../../components/PageHeader";
-import { space } from "../../layout/theme";
+import StatusPill from "../../components/StatusPill";
+import { palette, space } from "../../layout/theme";
 import { UserRow, createUser, deleteUser, listUsers, updateUser } from "../../lib/api";
 
-const ROLE_TONE: Record<UserRow["role"], "danger" | "info" | "neutral"> = {
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+
+const ROLES = ["admin", "operator", "viewer"] as const;
+type Role = (typeof ROLES)[number];
+
+const ROLE_TONE: Record<Role, "danger" | "info" | "neutral"> = {
     admin: "danger",
     operator: "info",
     viewer: "neutral",
 };
+
+const createUserSchema = z.object({
+    username: z.string().min(1, "username is required"),
+    password: z.string().min(8, "Min 8 chars"),
+    role: z.enum(ROLES),
+});
+type CreateUserValues = z.infer<typeof createUserSchema>;
+
+const resetPasswordSchema = z.object({
+    password: z.string().min(8, "Min 8 chars"),
+});
+type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
 // AdminUsers is the /users admin surface: list / create / change-role /
 // change-password / delete. Single-table view so admins can scan the
@@ -35,13 +87,16 @@ export default function AdminUsers() {
     const [loading, setLoading] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
     const [pwOpen, setPwOpen] = useState<string | null>(null);
-    const [createForm] = Form.useForm<{
-        username: string;
-        password: string;
-        role: UserRow["role"];
-    }>();
-    const [pwForm] = Form.useForm<{ password: string }>();
-    const [messageApi, contextHolder] = message.useMessage();
+    const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
+
+    const createForm = useForm<CreateUserValues>({
+        resolver: zodResolver(createUserSchema),
+        defaultValues: { username: "", password: "", role: "operator" },
+    });
+    const pwForm = useForm<ResetPasswordValues>({
+        resolver: zodResolver(resetPasswordSchema),
+        defaultValues: { password: "" },
+    });
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -59,219 +114,329 @@ export default function AdminUsers() {
         refresh();
     }, [refresh]);
 
-    async function handleCreate() {
-        const v = await createForm.validateFields();
+    async function handleCreate(v: CreateUserValues) {
         try {
             await createUser(v.username, v.password, v.role);
-            messageApi.success(`Created ${v.username}`);
+            toast.success(`Created ${v.username}`);
             setCreateOpen(false);
-            createForm.resetFields();
+            createForm.reset({ username: "", password: "", role: "operator" });
             refresh();
         } catch (e) {
-            messageApi.error(`create: ${String(e)}`);
+            toast.error(`create: ${String(e)}`);
         }
     }
 
-    function handleDelete(u: UserRow) {
-        Modal.confirm({
-            title: `Delete user ${u.username}?`,
-            content: "Their refresh tokens are revoked and they can no longer log in.",
-            okText: "Delete",
-            okButtonProps: { danger: true },
-            onOk: async () => {
-                try {
-                    await deleteUser(u.id);
-                    messageApi.success(`Deleted ${u.username}`);
-                    refresh();
-                } catch (e) {
-                    messageApi.error(`delete: ${String(e)}`);
-                }
-            },
-        });
+    async function confirmDelete() {
+        if (!pendingDelete) return;
+        const u = pendingDelete;
+        setPendingDelete(null);
+        try {
+            await deleteUser(u.id);
+            toast.success(`Deleted ${u.username}`);
+            refresh();
+        } catch (e) {
+            toast.error(`delete: ${String(e)}`);
+        }
     }
 
-    async function handleRoleChange(u: UserRow, role: UserRow["role"]) {
+    async function handleRoleChange(u: UserRow, role: Role) {
         try {
             await updateUser(u.id, { role });
-            messageApi.success(`Updated ${u.username} role`);
+            toast.success(`Updated ${u.username} role`);
             refresh();
         } catch (e) {
-            messageApi.error(`role: ${String(e)}`);
+            toast.error(`role: ${String(e)}`);
         }
     }
 
-    async function handlePasswordReset() {
-        const v = await pwForm.validateFields();
+    async function handlePasswordReset(v: ResetPasswordValues) {
         if (!pwOpen) return;
         try {
             await updateUser(pwOpen, { password: v.password });
-            messageApi.success("Password updated; existing sessions revoked");
+            toast.success("Password updated; existing sessions revoked");
             setPwOpen(null);
-            pwForm.resetFields();
+            pwForm.reset({ password: "" });
         } catch (e) {
-            messageApi.error(`reset: ${String(e)}`);
+            toast.error(`reset: ${String(e)}`);
         }
     }
 
-    const columns: ColumnsType<UserRow> = [
-        { title: "Username", dataIndex: "username" },
-        {
-            title: "Role",
-            dataIndex: "role",
-            render: (role: UserRow["role"], u) => (
-                <Select
-                    size="small"
-                    value={role}
-                    style={{ minWidth: 130 }}
-                    onChange={(v) => handleRoleChange(u, v)}
-                    options={(["admin", "operator", "viewer"] as UserRow["role"][]).map((r) => ({
-                        label: <StatusPill tone={ROLE_TONE[r]}>{r}</StatusPill>,
-                        value: r,
-                    }))}
-                />
-            ),
-            width: 180,
-        },
-        {
-            title: "",
-            render: (_, u) => (
-                <Space>
-                    <Button size="small" type="link" onClick={() => setPwOpen(u.id)}>
-                        Reset password
-                    </Button>
-                    <Button
-                        size="small"
-                        type="link"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(u)}
-                    >
-                        Delete
-                    </Button>
-                </Space>
-            ),
-            width: 260,
-        },
-    ];
-
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            {contextHolder}
             <PageHeader
                 title="Users"
                 subtitle="Manage who can log in and what they can do"
                 actions={
-                    <Space size={space[2]}>
-                        <Button
-                            size="small"
-                            icon={<ReloadOutlined />}
-                            loading={loading}
-                            onClick={refresh}
-                        >
+                    <>
+                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
                             Refresh
                         </Button>
-                        <Button
-                            size="small"
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={() => setCreateOpen(true)}
-                        >
+                        <Button size="sm" onClick={() => setCreateOpen(true)}>
+                            <Plus className="size-3.5" />
                             New user
                         </Button>
-                    </Space>
+                    </>
                 }
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                <div>
-                    {error && (
-                        <Alert type="error" message={error} style={{ marginBottom: space[4] }} />
-                    )}
-                    {users && users.length === 0 ? (
-                        <EmptyState
-                            title="No users"
-                            description="Create the first user via New user."
-                            action={
-                                <Button
-                                    type="primary"
-                                    icon={<PlusOutlined />}
-                                    onClick={() => setCreateOpen(true)}
-                                >
-                                    New user
-                                </Button>
-                            }
-                        />
-                    ) : (
-                        <Card padding={0}>
-                            <Table
-                                rowKey="id"
-                                columns={columns}
-                                dataSource={users ?? []}
-                                loading={!users}
-                                pagination={false}
-                                size="small"
-                                bordered={false}
-                            />
-                        </Card>
-                    )}
-                </div>
+                {error && (
+                    <div
+                        style={{
+                            marginBottom: space[4],
+                            padding: `${space[3]}px ${space[4]}px`,
+                            border: `1px solid ${palette.danger}`,
+                            borderRadius: 6,
+                            color: palette.danger,
+                            fontSize: 13,
+                        }}
+                    >
+                        {error}
+                    </div>
+                )}
+                {users && users.length === 0 ? (
+                    <EmptyState
+                        title="No users"
+                        description="Create the first user via New user."
+                        action={
+                            <Button onClick={() => setCreateOpen(true)}>
+                                <Plus className="size-3.5" />
+                                New user
+                            </Button>
+                        }
+                    />
+                ) : !users ? (
+                    <div className="flex items-center justify-center p-20">
+                        <Loader2 className="size-5 animate-spin text-text-muted" />
+                    </div>
+                ) : (
+                    <Card padding={0}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Username</TableHead>
+                                    <TableHead className="w-[180px]">Role</TableHead>
+                                    <TableHead className="w-[260px] text-right" />
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {users.map((u) => (
+                                    <TableRow key={u.id}>
+                                        <TableCell className="font-medium">{u.username}</TableCell>
+                                        <TableCell>
+                                            <Select
+                                                value={u.role}
+                                                onValueChange={(v) =>
+                                                    handleRoleChange(u, v as Role)
+                                                }
+                                            >
+                                                <SelectTrigger size="sm" className="min-w-[130px]">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {ROLES.map((r) => (
+                                                        <SelectItem key={r} value={r}>
+                                                            <StatusPill tone={ROLE_TONE[r]}>
+                                                                {r}
+                                                            </StatusPill>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setPwOpen(u.id)}
+                                                >
+                                                    Reset password
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-destructive hover:text-destructive"
+                                                    onClick={() => setPendingDelete(u)}
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                    Delete
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </Card>
+                )}
             </div>
 
-            <Modal
-                title="New user"
-                open={createOpen}
-                onOk={handleCreate}
-                onCancel={() => setCreateOpen(false)}
-                okText="Create"
-                destroyOnHidden
-            >
-                <Form
-                    form={createForm}
-                    layout="vertical"
-                    initialValues={{ role: "operator" }}
-                >
-                    <Form.Item name="username" label="Username" rules={[{ required: true }]}>
-                        <Input autoFocus />
-                    </Form.Item>
-                    <Form.Item
-                        name="password"
-                        label="Initial password"
-                        rules={[{ required: true, min: 8, message: "Min 8 chars" }]}
-                        extra="The user can change this after logging in."
-                    >
-                        <Input.Password />
-                    </Form.Item>
-                    <Form.Item name="role" label="Role" rules={[{ required: true }]}>
-                        <Select
-                            options={(["admin", "operator", "viewer"] as UserRow["role"][]).map(
-                                (r) => ({
-                                    label: <StatusPill tone={ROLE_TONE[r]}>{r}</StatusPill>,
-                                    value: r,
-                                }),
-                            )}
-                        />
-                    </Form.Item>
-                </Form>
-            </Modal>
+            {/* Create user */}
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>New user</DialogTitle>
+                        <DialogDescription>
+                            The user can change their own password after logging in.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...createForm}>
+                        <form
+                            onSubmit={createForm.handleSubmit(handleCreate)}
+                            className="space-y-4"
+                        >
+                            <FormField
+                                control={createForm.control}
+                                name="username"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Username</FormLabel>
+                                        <FormControl>
+                                            <Input autoFocus {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={createForm.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Initial password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" {...field} />
+                                        </FormControl>
+                                        <FormDescription>Min 8 characters.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={createForm.control}
+                                name="role"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Role</FormLabel>
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {ROLES.map((r) => (
+                                                    <SelectItem key={r} value={r}>
+                                                        <StatusPill tone={ROLE_TONE[r]}>
+                                                            {r}
+                                                        </StatusPill>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setCreateOpen(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={createForm.formState.isSubmitting}>
+                                    {createForm.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Create
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
 
-            <Modal
-                title="Reset password"
-                open={pwOpen !== null}
-                onOk={handlePasswordReset}
-                onCancel={() => setPwOpen(null)}
-                okText="Reset"
-                destroyOnHidden
+            {/* Reset password */}
+            <Dialog open={pwOpen !== null} onOpenChange={(o) => !o && setPwOpen(null)}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>Reset password</DialogTitle>
+                        <DialogDescription>
+                            All of the user's active sessions are invalidated.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...pwForm}>
+                        <form
+                            onSubmit={pwForm.handleSubmit(handlePasswordReset)}
+                            className="space-y-4"
+                        >
+                            <FormField
+                                control={pwForm.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>New password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" autoFocus {...field} />
+                                        </FormControl>
+                                        <FormDescription>Min 8 characters.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setPwOpen(null)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={pwForm.formState.isSubmitting}>
+                                    {pwForm.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Reset
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete confirmation */}
+            <AlertDialog
+                open={pendingDelete !== null}
+                onOpenChange={(o) => !o && setPendingDelete(null)}
             >
-                <Form form={pwForm} layout="vertical">
-                    <Form.Item
-                        name="password"
-                        label="New password"
-                        rules={[{ required: true, min: 8, message: "Min 8 chars" }]}
-                        extra="All of the user's active sessions are invalidated."
-                    >
-                        <Input.Password autoFocus />
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete user {pendingDelete?.username}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Their refresh tokens are revoked and they can no longer log in.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
