@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { Spin } from "antd";
+import { Loader2 } from "lucide-react";
 
 import { getSession, onSessionChange, refresh } from "../lib/auth";
 
@@ -35,8 +35,8 @@ export default function RequireAuth() {
 
     if (!ready) {
         return (
-            <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-                <Spin size="large" />
+            <div className="flex items-center justify-center p-20">
+                <Loader2 className="size-6 animate-spin text-text-muted" />
             </div>
         );
     }
