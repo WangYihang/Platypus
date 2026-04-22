@@ -33,6 +33,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
+	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
@@ -244,7 +245,12 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		hostsH := api.NewHostsHandler(db)
 		listenersH := api.NewListenersV2Handler(db, core.CoreLiveListeners{})
 		sessionsH := api.NewSessionsV2Handler(db)
-		enrollSvc := enrollment.New(db)
+		// Enrollment + (optional) PKI. Attaching the PKI issuer to the
+		// enrollment service makes every successful PAT / rotation
+		// response carry a freshly signed leaf cert when PLATYPUS_CA_KEK
+		// is configured; when it isn't, enrollment stays on PSK only.
+		pkiSvc := pki.New(db)
+		enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
 		patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 		// Install-artifact admin endpoints use the distributor's host:port
 		// when rendering the curl command, so admins get a pasteable link
@@ -253,6 +259,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 		agentSessionsH := api.NewAgentSessionsHandler(db)
 		auditH := api.NewAuditHandler(db)
+		caH := api.NewCAHandler(db, pkiSvc)
 		rbac := api.NewRBACWithStorage(tokens, db)
 
 		// Expose the enrollment service globally so the agent-facing TCP
@@ -271,6 +278,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 		api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 		api.RegisterV1AuditRoutes(rest, auditH, rbac)
+		api.RegisterV1CARoutes(rest, caH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.L.Info("api_ready",

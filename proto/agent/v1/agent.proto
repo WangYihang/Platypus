@@ -438,6 +438,16 @@ message AgentEnrollResponse {
   // session_expires_at minus a few hours so rotation doesn't race
   // against expiry during a temporary network partition.
   int64 recommended_renew_at = 7;
+
+  // PKI bootstrap (Phase 4): when the server has its project CA
+  // initialised, each enrollment returns a freshly-signed identity
+  // cert for the agent's pubkey plus the CA cert bundle. Agents
+  // persist these alongside session.token so a future mesh / server
+  // handshake can validate them via standard x509 tooling. Both
+  // fields are empty when PKI isn't configured (operators still
+  // on PSK + session_token).
+  string cert_pem = 8; // PEM-encoded leaf cert signed by the project CA
+  string ca_pem   = 9; // PEM-encoded CA cert chain (single cert in MVP)
 }
 
 // SessionRenewRequest is sent by the agent over its already-authenticated
@@ -468,4 +478,10 @@ message SessionRenewResponse {
   string session_token        = 2;
   int64  session_expires_at   = 3;
   int64  recommended_renew_at = 4;
+
+  // PKI re-issuance: on a successful rotation the server also signs a
+  // fresh leaf cert for the agent's current pubkey so cert + session
+  // lifetimes stay aligned. Empty when PKI isn't configured.
+  string cert_pem = 5;
+  string ca_pem   = 6;
 }

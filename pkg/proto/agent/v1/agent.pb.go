@@ -3331,8 +3331,17 @@ type AgentEnrollResponse struct {
 	// session_expires_at minus a few hours so rotation doesn't race
 	// against expiry during a temporary network partition.
 	RecommendedRenewAt int64 `protobuf:"varint,7,opt,name=recommended_renew_at,json=recommendedRenewAt,proto3" json:"recommended_renew_at,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// PKI bootstrap (Phase 4): when the server has its project CA
+	// initialised, each enrollment returns a freshly-signed identity
+	// cert for the agent's pubkey plus the CA cert bundle. Agents
+	// persist these alongside session.token so a future mesh / server
+	// handshake can validate them via standard x509 tooling. Both
+	// fields are empty when PKI isn't configured (operators still
+	// on PSK + session_token).
+	CertPem       string `protobuf:"bytes,8,opt,name=cert_pem,json=certPem,proto3" json:"cert_pem,omitempty"` // PEM-encoded leaf cert signed by the project CA
+	CaPem         string `protobuf:"bytes,9,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`       // PEM-encoded CA cert chain (single cert in MVP)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentEnrollResponse) Reset() {
@@ -3414,6 +3423,20 @@ func (x *AgentEnrollResponse) GetRecommendedRenewAt() int64 {
 	return 0
 }
 
+func (x *AgentEnrollResponse) GetCertPem() string {
+	if x != nil {
+		return x.CertPem
+	}
+	return ""
+}
+
+func (x *AgentEnrollResponse) GetCaPem() string {
+	if x != nil {
+		return x.CaPem
+	}
+	return ""
+}
+
 // SessionRenewRequest is sent by the agent over its already-authenticated
 // connection a few hours before the session_token hits expires_at. It
 // swaps the current session for a fresh one WITHOUT reconnecting, so
@@ -3482,8 +3505,13 @@ type SessionRenewResponse struct {
 	SessionToken       string `protobuf:"bytes,2,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
 	SessionExpiresAt   int64  `protobuf:"varint,3,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
 	RecommendedRenewAt int64  `protobuf:"varint,4,opt,name=recommended_renew_at,json=recommendedRenewAt,proto3" json:"recommended_renew_at,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// PKI re-issuance: on a successful rotation the server also signs a
+	// fresh leaf cert for the agent's current pubkey so cert + session
+	// lifetimes stay aligned. Empty when PKI isn't configured.
+	CertPem       string `protobuf:"bytes,5,opt,name=cert_pem,json=certPem,proto3" json:"cert_pem,omitempty"`
+	CaPem         string `protobuf:"bytes,6,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SessionRenewResponse) Reset() {
@@ -3542,6 +3570,20 @@ func (x *SessionRenewResponse) GetRecommendedRenewAt() int64 {
 		return x.RecommendedRenewAt
 	}
 	return 0
+}
+
+func (x *SessionRenewResponse) GetCertPem() string {
+	if x != nil {
+		return x.CertPem
+	}
+	return ""
+}
+
+func (x *SessionRenewResponse) GetCaPem() string {
+	if x != nil {
+		return x.CaPem
+	}
+	return ""
 }
 
 type MeshLSA_Link struct {
@@ -3820,7 +3862,7 @@ const file_agent_proto_rawDesc = "" +
 	"\x06pubkey\x18\x04 \x01(\fR\x06pubkey\x12\x0e\n" +
 	"\x02os\x18\x05 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x06 \x01(\tR\x04arch\x12\x18\n" +
-	"\aversion\x18\a \x01(\tR\aversion\"\x85\x02\n" +
+	"\aversion\x18\a \x01(\tR\aversion\"\xb7\x02\n" +
 	"\x13AgentEnrollResponse\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12#\n" +
@@ -3829,14 +3871,18 @@ const file_agent_proto_rawDesc = "" +
 	"\bmesh_psk\x18\x05 \x01(\fR\ameshPsk\x12\x1d\n" +
 	"\n" +
 	"mesh_peers\x18\x06 \x03(\tR\tmeshPeers\x120\n" +
-	"\x14recommended_renew_at\x18\a \x01(\x03R\x12recommendedRenewAt\"I\n" +
+	"\x14recommended_renew_at\x18\a \x01(\x03R\x12recommendedRenewAt\x12\x19\n" +
+	"\bcert_pem\x18\b \x01(\tR\acertPem\x12\x15\n" +
+	"\x06ca_pem\x18\t \x01(\tR\x05caPem\"I\n" +
 	"\x13SessionRenewRequest\x122\n" +
-	"\x15current_session_token\x18\x01 \x01(\tR\x13currentSessionToken\"\xb1\x01\n" +
+	"\x15current_session_token\x18\x01 \x01(\tR\x13currentSessionToken\"\xe3\x01\n" +
 	"\x14SessionRenewResponse\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12#\n" +
 	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\x12,\n" +
 	"\x12session_expires_at\x18\x03 \x01(\x03R\x10sessionExpiresAt\x120\n" +
-	"\x14recommended_renew_at\x18\x04 \x01(\x03R\x12recommendedRenewAt*8\n" +
+	"\x14recommended_renew_at\x18\x04 \x01(\x03R\x12recommendedRenewAt\x12\x19\n" +
+	"\bcert_pem\x18\x05 \x01(\tR\acertPem\x12\x15\n" +
+	"\x06ca_pem\x18\x06 \x01(\tR\x05caPem*8\n" +
 	"\n" +
 	"TunnelMode\x12\x14\n" +
 	"\x10TUNNEL_MODE_PULL\x10\x00\x12\x14\n" +

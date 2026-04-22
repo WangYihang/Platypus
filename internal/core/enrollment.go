@@ -96,9 +96,10 @@ func TryEnroll(client *AgentClient) (*EnrollmentOutcome, error) {
 	}
 
 	rctx := enrollment.RedeemContext{
-		ClientIP:  remoteIPOf(client.conn),
-		MachineID: req.AgentEnrollRequest.MachineId,
-		Hostname:  req.AgentEnrollRequest.Hostname,
+		ClientIP:    remoteIPOf(client.conn),
+		MachineID:   req.AgentEnrollRequest.MachineId,
+		Hostname:    req.AgentEnrollRequest.Hostname,
+		AgentPubKey: req.AgentEnrollRequest.Pubkey,
 	}
 
 	result, redeemErr := redeemByPrefix(context.Background(), req.AgentEnrollRequest.Credential, rctx)
@@ -111,6 +112,10 @@ func TryEnroll(client *AgentClient) (*EnrollmentOutcome, error) {
 		resp.SessionToken = result.SessionPlaintext
 		resp.SessionExpiresAt = result.SessionExpiresAt.Unix()
 		resp.RecommendedRenewAt = result.SessionExpiresAt.Add(-enrollment.RenewGrace).Unix()
+		// Phase 4 PKI: optional leaf cert + CA chain. Empty when PKI
+		// isn't configured; agents tolerate the empty-string form.
+		resp.CertPem = result.CertPEM
+		resp.CaPem = result.CAPem
 	} else {
 		resp.Error = result.Outcome
 	}
@@ -249,6 +254,8 @@ func handleSessionRenew(client *AgentClient, requestID string, req *agentpb.Sess
 	resp.SessionToken = result.SessionPlaintext
 	resp.SessionExpiresAt = result.SessionExpiresAt.Unix()
 	resp.RecommendedRenewAt = result.SessionExpiresAt.Add(-enrollment.RenewGrace).Unix()
+	resp.CertPem = result.CertPEM
+	resp.CaPem = result.CAPem
 
 	// Record the rotation event so the audit trail in
 	// agent_connection_events reflects when a long-running agent

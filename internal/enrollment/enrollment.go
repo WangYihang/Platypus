@@ -151,9 +151,34 @@ func generate(prefix string) (id string, secretBytes, hash []byte, full string, 
 // operations that handlers / agents call.
 type Service struct {
 	db *storage.DB
+	// pki is optional — when set, enrollment responses include a
+	// freshly-signed agent identity cert. When nil, enrollment still
+	// works using PSK + session_token only (Phase 1–3 behaviour).
+	pki PKIIssuer
+}
+
+// PKIIssuer is the subset of internal/pki.Service that enrollment
+// depends on. Declared as an interface so the enrollment package
+// doesn't import internal/pki directly — that keeps the dep graph
+// linear (pki → enrollment → nothing pki-aware).
+type PKIIssuer interface {
+	// IssueForAgent issues a cert binding (agent_id, pubkey). The
+	// caller passes a raw Ed25519 pubkey; the implementation handles
+	// CA ensure + serial alloc + signing atomically. Returns empty
+	// strings with nil error if PKI isn't configured on the server;
+	// returns non-nil error for hard failures (KEK missing, etc).
+	IssueForAgent(ctx context.Context, projectID, agentID string, pubkey []byte, reason string) (certPEM, caPEM string, err error)
 }
 
 func New(db *storage.DB) *Service { return &Service{db: db} }
+
+// WithPKI attaches a PKI issuer. Call this during bootstrap after
+// both services are constructed. Calling it more than once replaces
+// the issuer — useful for tests.
+func (s *Service) WithPKI(p PKIIssuer) *Service {
+	s.pki = p
+	return s
+}
 
 // IssuePATResult is what Mint returns. PlaintextToken is the only
 // moment the plaintext exists in memory — the caller must return it in
@@ -237,6 +262,13 @@ type RedeemResult struct {
 	SessionPlaintext string
 	SessionExpiresAt time.Time
 	Outcome          string // "success" always on nil error; diagnostic string otherwise
+
+	// CertPEM / CAPem are populated when the server has PKI configured
+	// AND the agent included a valid Ed25519 pubkey in its request.
+	// Both empty means "no cert this round" — the agent stays on
+	// PSK + session_token only, same as before Phase 4.
+	CertPEM string
+	CAPem   string
 }
 
 // RedeemContext is the per-request metadata the enrollment code needs
@@ -245,6 +277,12 @@ type RedeemContext struct {
 	ClientIP  string
 	MachineID string
 	Hostname  string
+
+	// AgentPubKey is the Ed25519 public key the agent advertised in
+	// AgentEnrollRequest.pubkey. When non-empty and a PKI issuer is
+	// attached, enrollment mints a leaf cert binding this key and
+	// returns it in CertPEM. Empty → no cert.
+	AgentPubKey []byte
 }
 
 // RedeemPAT verifies a PAT string, atomically consumes one use, creates
@@ -278,12 +316,16 @@ func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext)
 	}
 	s.logRedemption(ctx, parsed.ID, rctx, agentID, "success", "")
 
+	certPEM, caPEM := s.maybeIssueCert(ctx, tok.ProjectID, agentID, rctx.AgentPubKey, "enroll")
+
 	return &RedeemResult{
 		AgentID:          agentID,
 		SessionID:        sess.SessionID,
 		SessionPlaintext: plaintext,
 		SessionExpiresAt: sess.ExpiresAt,
 		Outcome:          "success",
+		CertPEM:          certPEM,
+		CAPem:            caPEM,
 	}, nil
 }
 
@@ -318,13 +360,45 @@ func (s *Service) RedeemSession(ctx context.Context, raw string, rctx RedeemCont
 	if err != nil {
 		return &RedeemResult{Outcome: "error"}, err
 	}
+	// In-band rotation: re-issue cert only if the agent provided a
+	// pubkey in its renew request. Today's SessionRenewRequest
+	// doesn't carry one (the agent's cert is expected to outlive its
+	// session_token because cert TTL is explicit on issuance), so this
+	// branch is dormant until a future proto revision.
+	certPEM, caPEM := s.maybeIssueCert(ctx, current.ProjectID, current.AgentID, rctx.AgentPubKey, "rotation")
 	return &RedeemResult{
 		AgentID:          current.AgentID,
 		SessionID:        next.SessionID,
 		SessionPlaintext: plaintext,
 		SessionExpiresAt: next.ExpiresAt,
 		Outcome:          "success",
+		CertPEM:          certPEM,
+		CAPem:            caPEM,
 	}, nil
+}
+
+// maybeIssueCert delegates to the attached PKI issuer when possible.
+// Three short-circuits:
+//   - No PKI configured   → nothing to do, agent stays on PSK / session.
+//   - No pubkey provided  → the agent built against an older binary
+//                           that doesn't set the field; skip silently.
+//   - Issuance errors     → we log and continue. A failed cert issue
+//                           MUST NOT fail enrollment; the PAT /
+//                           session auth is independent and operators
+//                           shouldn't lose agents because of a CA hiccup.
+func (s *Service) maybeIssueCert(ctx context.Context, projectID, agentID string, pubkey []byte, reason string) (string, string) {
+	if s.pki == nil || len(pubkey) == 0 {
+		return "", ""
+	}
+	certPEM, caPEM, err := s.pki.IssueForAgent(ctx, projectID, agentID, pubkey, reason)
+	if err != nil {
+		// The maybeIssueCert contract: log-and-return-empty. Callers
+		// (RedeemPAT / RedeemSession) still emit the "success"
+		// enrollment event; the audit trail in admin_audit_log can
+		// capture the CA failure via the PKI handler later.
+		return "", ""
+	}
+	return certPEM, caPEM
 }
 
 // issueSession creates a brand-new active session for an agent. Used on
