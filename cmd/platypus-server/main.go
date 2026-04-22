@@ -44,14 +44,15 @@ import (
 const shutdownTimeout = 30 * time.Second
 
 func main() {
+	log.Init()
+
 	cfg, configFile, err := loadConfig()
 	if err != nil {
 		log.Error("config: %v", err)
 		os.Exit(1)
 	}
 
-	log.Success("Platypus %s is starting...", update.Version)
-	log.Success("Using configuration file: %s", configFile)
+	log.L.Info("server_starting", "version", update.Version, "config", configFile)
 
 	core.Ctx = app.New(cfg)
 	core.CreateContext()
@@ -233,12 +234,13 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
-		log.Success("API bootstrap secret: %s", auth.GetSecret())
-		log.Success("  First-time setup: POST http://%s:%d/api/v1/auth/bootstrap", rh, rp)
-		log.Success("                    {\"secret\":\"%s\",\"username\":\"admin\",\"password\":\"...\"}", auth.GetSecret())
-		log.Success("  Regular login:    POST http://%s:%d/api/v1/auth/login", rh, rp)
-		log.Success("  (legacy compat):  POST http://%s:%d/api/v1/auth/token", rh, rp)
-		log.Success("  API docs:         http://%s:%d/swagger/index.html", rh, rp)
+		log.L.Info("api_ready",
+			"bootstrap_secret", auth.GetSecret(),
+			"bootstrap_url", fmt.Sprintf("http://%s:%d/api/v1/auth/bootstrap", rh, rp),
+			"login_url", fmt.Sprintf("http://%s:%d/api/v1/auth/login", rh, rp),
+			"token_url", fmt.Sprintf("http://%s:%d/api/v1/auth/token", rh, rp),
+			"docs_url", fmt.Sprintf("http://%s:%d/swagger/index.html", rh, rp),
+		)
 
 		restSrv := &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", rh, rp),

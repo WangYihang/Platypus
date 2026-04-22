@@ -2,15 +2,11 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-
-	"github.com/WangYihang/Platypus/internal/log"
 )
 
 // RegisterV1Routes registers all /api/v1/ routes with authentication.
 // Call this after CreateRESTfulAPIServer() to add the new endpoints.
 func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
-	log.Info("Registering /api/v1/ routes with Bearer Token authentication")
-
 	// Public: token endpoint
 	engine.POST("/api/v1/auth/token", auth.TokenEndpoint())
 

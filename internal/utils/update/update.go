@@ -18,14 +18,13 @@ func ConfirmAndSelfUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Info("Detecting the latest version...")
 	latest, found, err := selfupdate.DetectLatest(ctx, selfupdate.ParseSlug("WangYihang/Platypus"))
 	if err != nil {
 		log.Error("Error occurred while detecting version: %s", err)
 		return
 	}
 	if !found || latest.LessOrEqual(Version) {
-		log.Success("Current version is the latest")
+		log.L.Debug("up_to_date", "version", Version)
 		return
 	}
 
