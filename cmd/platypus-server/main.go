@@ -29,6 +29,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/core/artifact"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
@@ -162,7 +163,31 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 
 	dh := cfg.Distributor.Host
 	dp := cfg.Distributor.Port
-	distributor := core.CreateDistributorServer(dh, dp, cfg.Distributor.Url)
+	store, err := artifact.NewS3Store(artifact.S3Config{
+		Endpoint:        cfg.Distributor.Store.Endpoint,
+		Region:          cfg.Distributor.Store.Region,
+		Bucket:          cfg.Distributor.Store.Bucket,
+		Prefix:          cfg.Distributor.Store.Prefix,
+		AccessKeyID:     cfg.Distributor.Store.AccessKeyID,
+		SecretAccessKey: cfg.Distributor.Store.SecretAccessKey,
+		UseSSL:          cfg.Distributor.Store.UseSSL,
+	})
+	if err != nil {
+		log.Error("distributor: init artifact store: %v", err)
+		os.Exit(1)
+	}
+	ttl, err := time.ParseDuration(cfg.Distributor.PresignedTTL)
+	if err != nil || ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	distributor := core.CreateDistributorServer(core.DistributorArgs{
+		Host:         dh,
+		Port:         dp,
+		Url:          cfg.Distributor.Url,
+		Channel:      cfg.Distributor.ChannelOrDefault(),
+		PresignedTTL: ttl,
+		Store:        store,
+	})
 	distributorSrv := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", dh, dp),
 		Handler:           distributor,

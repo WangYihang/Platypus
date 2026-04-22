@@ -110,9 +110,16 @@ message ClientInfoResponse {
 
 message DuplicateClientNotice {}
 
+// UpdateRequest tells an agent to self-update. The agent fetches
+// {base_url}/v1/manifest/{channel} and its detached Ed25519 signature,
+// verifies the signature against the public key baked into the agent
+// binary, picks the artifact entry that matches its own (GOOS, GOARCH),
+// downloads {base_url}/v1/artifacts/{os}/{arch}/{version}, verifies
+// SHA-256, and re-execs.
 message UpdateRequest {
-  string distributor_url = 1;
-  string version         = 2;
+  string base_url = 1;
+  string version  = 2;
+  string channel  = 3;
 }
 
 // --- Process management ---

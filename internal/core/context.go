@@ -91,15 +91,3 @@ func GetServers() map[string]*TCPServer {
 	return result
 }
 
-func FindServerListeningAddressByRouteKey(routeKey string) string {
-	if Ctx.Distributor == nil {
-		return ""
-	}
-	dist := Ctx.Distributor.(*Distributor)
-	for k, v := range dist.Route {
-		if v == routeKey {
-			return k
-		}
-	}
-	return ""
-}

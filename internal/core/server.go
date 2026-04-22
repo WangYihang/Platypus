@@ -22,7 +22,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 	"github.com/WangYihang/Platypus/internal/utils/hash"
 	"github.com/WangYihang/Platypus/internal/utils/network"
-	"github.com/WangYihang/Platypus/internal/utils/str"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
@@ -93,12 +92,6 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 
 	// Gather listening interfaces
 	tcpServer.Interfaces = network.GatherInterfacesList(tcpServer.Host)
-
-	// Distributor route so the agent binary download URL can address this listener
-	for _, ifaddr := range tcpServer.Interfaces {
-		routeKey := str.RandomString(0x08)
-		Ctx.Distributor.(*Distributor).Route[fmt.Sprintf("%s:%d", ifaddr, port)] = routeKey
-	}
 
 	// Fetch real public IP address if not specified
 	if tcpServer.PublicIP == "" {

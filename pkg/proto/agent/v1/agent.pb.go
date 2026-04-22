@@ -1080,12 +1080,19 @@ func (*DuplicateClientNotice) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{3}
 }
 
+// UpdateRequest tells an agent to self-update. The agent fetches
+// {base_url}/v1/manifest/{channel} and its detached Ed25519 signature,
+// verifies the signature against the public key baked into the agent
+// binary, picks the artifact entry that matches its own (GOOS, GOARCH),
+// downloads {base_url}/v1/artifacts/{os}/{arch}/{version}, verifies
+// SHA-256, and re-execs.
 type UpdateRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DistributorUrl string                 `protobuf:"bytes,1,opt,name=distributor_url,json=distributorUrl,proto3" json:"distributor_url,omitempty"`
-	Version        string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BaseUrl       string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Channel       string                 `protobuf:"bytes,3,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateRequest) Reset() {
@@ -1118,9 +1125,9 @@ func (*UpdateRequest) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *UpdateRequest) GetDistributorUrl() string {
+func (x *UpdateRequest) GetBaseUrl() string {
 	if x != nil {
-		return x.DistributorUrl
+		return x.BaseUrl
 	}
 	return ""
 }
@@ -1128,6 +1135,13 @@ func (x *UpdateRequest) GetDistributorUrl() string {
 func (x *UpdateRequest) GetVersion() string {
 	if x != nil {
 		return x.Version
+	}
+	return ""
+}
+
+func (x *UpdateRequest) GetChannel() string {
+	if x != nil {
+		return x.Channel
 	}
 	return ""
 }
@@ -3661,10 +3675,11 @@ const file_agent_proto_rawDesc = "" +
 	"\x16NetworkInterfacesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x17\n" +
-	"\x15DuplicateClientNotice\"R\n" +
-	"\rUpdateRequest\x12'\n" +
-	"\x0fdistributor_url\x18\x01 \x01(\tR\x0edistributorUrl\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\x83\x01\n" +
+	"\x15DuplicateClientNotice\"^\n" +
+	"\rUpdateRequest\x12\x19\n" +
+	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x18\n" +
+	"\achannel\x18\x03 \x01(\tR\achannel\"\x83\x01\n" +
 	"\x13ProcessStartRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12%\n" +

@@ -50,12 +50,38 @@ func (c RESTfulConfig) DBFileOrDefault() string {
 	return "./platypus.db"
 }
 
-// DistributorConfig defines the HTTP endpoint that serves agent binaries for
-// admins to download and install on managed hosts.
+// DistributorConfig defines the HTTP endpoint that fronts the agent
+// release artifact store. The Distributor itself serves only a signed
+// manifest and redirects to presigned object-store URLs for artifact
+// downloads — the binaries live in Store.
 type DistributorConfig struct {
-	Host string `yaml:"host" validate:"required"`
-	Port uint16 `yaml:"port" validate:"required,min=1,max=65535"`
-	Url  string `yaml:"url"`
+	Host         string               `yaml:"host" validate:"required"`
+	Port         uint16               `yaml:"port" validate:"required,min=1,max=65535"`
+	Url          string               `yaml:"url"`
+	Channel      string               `yaml:"channel"`       // default release channel; "stable" if empty
+	PresignedTTL string               `yaml:"presigned_ttl"` // duration, e.g. "5m"; defaults to 5 minutes
+	Store        ArtifactStoreConfig  `yaml:"store"`
+}
+
+// ArtifactStoreConfig is the S3/MinIO backend for the agent release
+// artifacts and manifest.
+type ArtifactStoreConfig struct {
+	Endpoint        string `yaml:"endpoint"`
+	Region          string `yaml:"region"`
+	Bucket          string `yaml:"bucket"`
+	Prefix          string `yaml:"prefix"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	SecretAccessKey string `yaml:"secret_access_key"`
+	UseSSL          bool   `yaml:"use_ssl"`
+}
+
+// ChannelOrDefault returns the configured release channel, defaulting
+// to "stable" when unset.
+func (c DistributorConfig) ChannelOrDefault() string {
+	if c.Channel != "" {
+		return c.Channel
+	}
+	return "stable"
 }
 
 // MeshConfig opts the server into the agent overlay. When PSKFile is

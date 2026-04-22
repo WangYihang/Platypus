@@ -5,6 +5,14 @@ BINS       := platypus-server platypus-admin platypus-agent
 PROTO_SRC  := proto/agent/v1/agent.proto
 PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
 
+# AGENT_SIGNING_PUBKEY is the base64-encoded Ed25519 public key baked
+# into the platypus-agent binary. The release pipeline signs the update
+# manifest with the matching private key; agents refuse to self-update
+# if this is empty (an unsigned channel would be worse than none).
+# Provide it via environment variable at build time.
+AGENT_SIGNING_PUBKEY ?=
+AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
+
 .PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
         hooks pre-commit \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
@@ -56,8 +64,13 @@ build: proto
 	@mkdir -p $(BUILD_DIR)
 	@for b in $(BINS); do \
 	  echo "→ $$b"; \
-	  $(GO) build -ldflags="$(LDFLAGS)" -trimpath \
-	    -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
+	  if [ "$$b" = "platypus-agent" ]; then \
+	    $(GO) build -ldflags="$(AGENT_LDFLAGS)" -trimpath \
+	      -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
+	  else \
+	    $(GO) build -ldflags="$(LDFLAGS)" -trimpath \
+	      -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
+	  fi \
 	done
 
 test:

@@ -25,13 +25,32 @@ restful:
   port: 7331
   enable: true
 
-# HTTP endpoint that serves freshly-patched agent binaries for admins to
-# download and install on managed hosts. `url` is what agents use when
-# self-updating after the server ships a newer version.
+# HTTP facade in front of the release artifact store. Agents hit this
+# endpoint to fetch the signed release manifest and then follow a
+# presigned URL straight to the object store for the binary itself —
+# the Distributor never streams artifact bytes.
+#
+# `url` is the externally-reachable base URL that gets sent to agents
+# in UpdateRequest messages. `channel` picks which manifest file is
+# served (stable / beta / canary).
+#
+# `store` points at the S3-compatible backend where the release
+# pipeline uploaded the manifest + binaries. Works with MinIO, AWS S3,
+# Ceph RGW, or anything else that speaks the S3 API.
 distributor:
   host: "0.0.0.0"
   port: 13339
   url: "http://127.0.0.1:13339"
+  channel: "stable"
+  presigned_ttl: "5m"
+  store:
+    endpoint: "s3.example.com"
+    region: "us-east-1"
+    bucket: "platypus-artifacts"
+    prefix: "agent/"
+    access_key_id: ""
+    secret_access_key: ""
+    use_ssl: true
 
 # Check for a new platypus-server release on startup.
 update: true

@@ -1,20 +1,17 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"os/user"
-	"path"
 	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/creativeprojects/go-selfupdate"
 	"github.com/phayes/freeport"
 	socks5 "github.com/things-go/go-socks5"
 
@@ -531,23 +528,3 @@ func handleWriteFile(c *Client, reqID string, req *agentpb.WriteFileRequest) {
 	})
 }
 
-func handleUpdate(c *Client, req *agentpb.UpdateRequest) {
-	file, err := os.CreateTemp(os.TempDir(), "temp")
-	if err != nil {
-		log.Error("Failed to create temp file: %s", err)
-		return
-	}
-	exe := file.Name()
-	log.Info("New filename: %s", exe)
-	log.Info("New version v%s is available, upgrading...", req.Version)
-	url := fmt.Sprintf("%s/agent/%s", req.DistributorUrl, c.Service)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	if err := selfupdate.UpdateTo(ctx, url, path.Base(url), exe); err != nil {
-		log.Error("Error occurred while updating binary: %s", err)
-		return
-	}
-	log.Info("Update to v%s finished", req.Version)
-	log.Info("Restarting...")
-	syscall.Exec(exe, []string{exe}, nil)
-}

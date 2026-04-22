@@ -1,0 +1,39 @@
+// Package artifact abstracts the object store that holds released agent
+// binaries and the signed release manifest. The Distributor is a thin
+// facade in front of this store — it never proxies bytes, only issues
+// short-lived presigned URLs and forwards the (small) manifest.
+package artifact
+
+import (
+	"context"
+	"time"
+)
+
+// Manifest layout in the bucket.
+//
+//	{prefix}/manifest/{channel}.json
+//	{prefix}/manifest/{channel}.json.sig
+//	{prefix}/artifacts/{version}/{os}/{arch}/platypus-agent[.exe]
+const (
+	ManifestKeyFmt    = "manifest/%s.json"
+	ManifestSigKeyFmt = "manifest/%s.json.sig"
+)
+
+// Store is the minimal surface the Distributor needs. A single
+// implementation backed by S3/MinIO lives in s3.go; the interface exists
+// so tests can drop in a fake.
+type Store interface {
+	// GetObject reads a whole object. Used for the manifest + sig, which
+	// are small and need to be inspected before serving.
+	GetObject(ctx context.Context, key string) ([]byte, error)
+
+	// PresignGet issues a time-limited download URL for key. The agent
+	// downloads artifact bytes directly from the object store via this
+	// URL; the Distributor never sees the binary.
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error)
+
+	// Prefix returns the bucket-local prefix under which ManifestKeyFmt /
+	// artifact keys are rooted. Handy for building full keys without
+	// having to know the concrete backend's config.
+	Prefix() string
+}

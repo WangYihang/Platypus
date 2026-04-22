@@ -191,11 +191,13 @@ func (c *AgentClient) GatherClientInfo(hashFormat string) bool {
 	c.Hash = c.makeHash(hashFormat)
 
 	if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
+		dist := Ctx.Distributor.(*Distributor)
 		c.Send(&agentpb.Envelope{
 			Payload: &agentpb.Envelope_UpdateRequest{
 				UpdateRequest: &agentpb.UpdateRequest{
-					DistributorUrl: Ctx.Distributor.(*Distributor).Url,
-					Version:        update.Version,
+					BaseUrl: dist.Url,
+					Version: update.Version,
+					Channel: dist.Channel,
 				},
 			},
 		})
