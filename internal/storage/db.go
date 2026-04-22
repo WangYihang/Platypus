@@ -38,10 +38,25 @@ func Open(path string) (*DB, error) {
 	if err := raw.Ping(); err != nil {
 		return nil, closeWith(raw, fmt.Errorf("ping sqlite %q: %w", path, err))
 	}
+	// Pragmas are per-connection in SQLite — Go's sql.DB may create
+	// several underlying connections under concurrent load, and each
+	// spawn resets to defaults. Pinning MaxOpenConns to 1 guarantees
+	// every query hits the single connection we configure below, which
+	// is the standard idiom for SQLite (concurrent writers serialise on
+	// the write lock anyway; one connection is strictly simpler).
+	raw.SetMaxOpenConns(1)
 	// SQLite defaults foreign_keys to OFF; the ON DELETE CASCADE edges in the
 	// schema are only meaningful with it on.
 	if _, err := raw.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		return nil, closeWith(raw, fmt.Errorf("enable foreign_keys: %w", err))
+	}
+	// Block instead of failing fast when two callers both want a
+	// RESERVED write lock at the same time. With MaxOpenConns=1 the
+	// pool serialises for us, but the timeout is still belt-and-braces
+	// for tests that sometimes hit the driver-level lock before the
+	// pool's queue.
+	if _, err := raw.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return nil, closeWith(raw, fmt.Errorf("set busy_timeout: %w", err))
 	}
 	if err := runMigrations(raw); err != nil {
 		return nil, closeWith(raw, err)

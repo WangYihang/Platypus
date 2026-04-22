@@ -75,9 +75,23 @@ func (c *Client) RecvEnvelope() (*agentpb.Envelope, error) {
 	return c.Codec.Recv()
 }
 
+// ConnectOptions carries knobs that Connect doesn't otherwise receive
+// directly. Nil-safe (callers on the legacy path pass nil and get the
+// old behaviour).
+type ConnectOptions struct {
+	// IdentityDir is where the agent persists its session_token. When
+	// empty, defaults to ~/.platypus/agent.
+	IdentityDir string
+}
+
 // Connect establishes a TLS connection to the server endpoint and runs
 // the message handler loop.
 func Connect(endpoint, token string, state *State) error {
+	return ConnectWithOptions(endpoint, token, state, nil)
+}
+
+// ConnectWithOptions is Connect + optional enrollment knobs.
+func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptions) error {
 	certBuilder := new(strings.Builder)
 	keyBuilder := new(strings.Builder)
 	crypto.Generate(certBuilder, keyBuilder)
@@ -108,6 +122,29 @@ func Connect(endpoint, token string, state *State) error {
 			Codec:   protocol.NewProtoCodec(conn),
 			Service: endpoint,
 		}
+
+		// Optional enrollment handshake. Runs when we have a PAT or a
+		// previously persisted session token. On reject we abort (a
+		// bad/revoked credential must not silently fall back to the
+		// legacy unauthenticated path). On absence, we continue straight
+		// into HandleConnection — legacy compatibility.
+		identityDir := ""
+		if opts != nil {
+			identityDir = opts.IdentityDir
+		}
+		er, err := MaybeEnroll(c, token, identityDir)
+		if err != nil {
+			log.Error("Enrollment error: %s", err)
+			return err
+		}
+		if er.Attempted && !er.Succeeded {
+			return fmt.Errorf("agent: enrollment rejected: %s", er.ErrorMessage)
+		}
+		if er.Succeeded {
+			log.Success("Enrolled with server (agent_id=%s, session expires %s)",
+				er.AgentID, er.SessionExpiresAt.Format("2006-01-02 15:04:05"))
+		}
+
 		HandleConnection(c, state)
 		return nil
 	}

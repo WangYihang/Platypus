@@ -125,6 +125,8 @@ type Envelope struct {
 	//	*Envelope_MeshPeerDelta
 	//	*Envelope_MeshLsa
 	//	*Envelope_MeshUnreachable
+	//	*Envelope_AgentEnrollRequest
+	//	*Envelope_AgentEnrollResponse
 	Payload       isEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -578,6 +580,24 @@ func (x *Envelope) GetMeshUnreachable() *MeshUnreachable {
 	return nil
 }
 
+func (x *Envelope) GetAgentEnrollRequest() *AgentEnrollRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_AgentEnrollRequest); ok {
+			return x.AgentEnrollRequest
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetAgentEnrollResponse() *AgentEnrollResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*Envelope_AgentEnrollResponse); ok {
+			return x.AgentEnrollResponse
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Payload interface {
 	isEnvelope_Payload()
 }
@@ -755,6 +775,15 @@ type Envelope_MeshUnreachable struct {
 	MeshUnreachable *MeshUnreachable `protobuf:"bytes,66,opt,name=mesh_unreachable,json=meshUnreachable,proto3,oneof"`
 }
 
+type Envelope_AgentEnrollRequest struct {
+	// Enrollment (PAT / session_token exchange)
+	AgentEnrollRequest *AgentEnrollRequest `protobuf:"bytes,70,opt,name=agent_enroll_request,json=agentEnrollRequest,proto3,oneof"`
+}
+
+type Envelope_AgentEnrollResponse struct {
+	AgentEnrollResponse *AgentEnrollResponse `protobuf:"bytes,71,opt,name=agent_enroll_response,json=agentEnrollResponse,proto3,oneof"`
+}
+
 func (*Envelope_GetClientInfoRequest) isEnvelope_Payload() {}
 
 func (*Envelope_ClientInfoResponse) isEnvelope_Payload() {}
@@ -836,6 +865,10 @@ func (*Envelope_MeshPeerDelta) isEnvelope_Payload() {}
 func (*Envelope_MeshLsa) isEnvelope_Payload() {}
 
 func (*Envelope_MeshUnreachable) isEnvelope_Payload() {}
+
+func (*Envelope_AgentEnrollRequest) isEnvelope_Payload() {}
+
+func (*Envelope_AgentEnrollResponse) isEnvelope_Payload() {}
 
 type GetClientInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3129,6 +3162,211 @@ func (x *MeshUnreachable) GetReason() string {
 	return ""
 }
 
+type AgentEnrollRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Either a PAT (prefix "plt_") or a session token (prefix "sess_").
+	// The server routes on the prefix — an agent reconnecting with its
+	// session token never needs a new PAT.
+	Credential string `protobuf:"bytes,1,opt,name=credential,proto3" json:"credential,omitempty"`
+	// Stable machine identifier (/etc/machine-id on Linux, IOPlatformUUID
+	// on macOS, MachineGuid on Windows). May be empty if the agent
+	// couldn't read one.
+	MachineId string `protobuf:"bytes,2,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
+	Hostname  string `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// Ed25519 public key — reserved for future mesh/PKI integration so
+	// that enrollment can also issue a mesh identity certificate.
+	Pubkey        []byte `protobuf:"bytes,4,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
+	Os            string `protobuf:"bytes,5,opt,name=os,proto3" json:"os,omitempty"`
+	Arch          string `protobuf:"bytes,6,opt,name=arch,proto3" json:"arch,omitempty"`
+	Version       string `protobuf:"bytes,7,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentEnrollRequest) Reset() {
+	*x = AgentEnrollRequest{}
+	mi := &file_agent_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentEnrollRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentEnrollRequest) ProtoMessage() {}
+
+func (x *AgentEnrollRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentEnrollRequest.ProtoReflect.Descriptor instead.
+func (*AgentEnrollRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *AgentEnrollRequest) GetCredential() string {
+	if x != nil {
+		return x.Credential
+	}
+	return ""
+}
+
+func (x *AgentEnrollRequest) GetMachineId() string {
+	if x != nil {
+		return x.MachineId
+	}
+	return ""
+}
+
+func (x *AgentEnrollRequest) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *AgentEnrollRequest) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *AgentEnrollRequest) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *AgentEnrollRequest) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *AgentEnrollRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type AgentEnrollResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Non-empty means enrollment failed. The agent should surface this
+	// and exit; the server side has already recorded the attempt in
+	// pat_redemption_events / agent_connection_events.
+	Error string `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	// Stable per-agent identifier, assigned on the first successful PAT
+	// redemption. Unchanged across subsequent session rotations.
+	AgentId string `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// Long-lived credential for future reconnects. The agent must
+	// persist this to a 0600 file before acknowledging. Format: sess_<id>.<secret>.
+	SessionToken     string `protobuf:"bytes,3,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	SessionExpiresAt int64  `protobuf:"varint,4,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
+	// Optional mesh bootstrap: if the server has mesh enabled, it hands
+	// the agent a PSK and (eventually) a list of known mesh peers so the
+	// agent can join the overlay without any extra configuration.
+	MeshPsk   []byte   `protobuf:"bytes,5,opt,name=mesh_psk,json=meshPsk,proto3" json:"mesh_psk,omitempty"`
+	MeshPeers []string `protobuf:"bytes,6,rep,name=mesh_peers,json=meshPeers,proto3" json:"mesh_peers,omitempty"`
+	// Unix seconds at which the agent is encouraged to rotate — typically
+	// session_expires_at minus a few hours so rotation doesn't race
+	// against expiry during a temporary network partition.
+	RecommendedRenewAt int64 `protobuf:"varint,7,opt,name=recommended_renew_at,json=recommendedRenewAt,proto3" json:"recommended_renew_at,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AgentEnrollResponse) Reset() {
+	*x = AgentEnrollResponse{}
+	mi := &file_agent_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentEnrollResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentEnrollResponse) ProtoMessage() {}
+
+func (x *AgentEnrollResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentEnrollResponse.ProtoReflect.Descriptor instead.
+func (*AgentEnrollResponse) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *AgentEnrollResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *AgentEnrollResponse) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *AgentEnrollResponse) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *AgentEnrollResponse) GetSessionExpiresAt() int64 {
+	if x != nil {
+		return x.SessionExpiresAt
+	}
+	return 0
+}
+
+func (x *AgentEnrollResponse) GetMeshPsk() []byte {
+	if x != nil {
+		return x.MeshPsk
+	}
+	return nil
+}
+
+func (x *AgentEnrollResponse) GetMeshPeers() []string {
+	if x != nil {
+		return x.MeshPeers
+	}
+	return nil
+}
+
+func (x *AgentEnrollResponse) GetRecommendedRenewAt() int64 {
+	if x != nil {
+		return x.RecommendedRenewAt
+	}
+	return 0
+}
+
 type MeshLSA_Link struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"` // neighbour's node_id
@@ -3139,7 +3377,7 @@ type MeshLSA_Link struct {
 
 func (x *MeshLSA_Link) Reset() {
 	*x = MeshLSA_Link{}
-	mi := &file_agent_proto_msgTypes[44]
+	mi := &file_agent_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3151,7 +3389,7 @@ func (x *MeshLSA_Link) String() string {
 func (*MeshLSA_Link) ProtoMessage() {}
 
 func (x *MeshLSA_Link) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[44]
+	mi := &file_agent_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3185,7 +3423,7 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\x11platypus.agent.v1\"\xfd\x1c\n" +
+	"\vagent.proto\x12\x11platypus.agent.v1\"\xb6\x1e\n" +
 	"\bEnvelope\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -3240,7 +3478,9 @@ const file_agent_proto_rawDesc = "" +
 	"\x12mesh_peer_announce\x18? \x01(\v2#.platypus.agent.v1.MeshPeerAnnounceH\x00R\x10meshPeerAnnounce\x12J\n" +
 	"\x0fmesh_peer_delta\x18@ \x01(\v2 .platypus.agent.v1.MeshPeerDeltaH\x00R\rmeshPeerDelta\x127\n" +
 	"\bmesh_lsa\x18A \x01(\v2\x1a.platypus.agent.v1.MeshLSAH\x00R\ameshLsa\x12O\n" +
-	"\x10mesh_unreachable\x18B \x01(\v2\".platypus.agent.v1.MeshUnreachableH\x00R\x0fmeshUnreachableB\t\n" +
+	"\x10mesh_unreachable\x18B \x01(\v2\".platypus.agent.v1.MeshUnreachableH\x00R\x0fmeshUnreachable\x12Y\n" +
+	"\x14agent_enroll_request\x18F \x01(\v2%.platypus.agent.v1.AgentEnrollRequestH\x00R\x12agentEnrollRequest\x12\\\n" +
+	"\x15agent_enroll_response\x18G \x01(\v2&.platypus.agent.v1.AgentEnrollResponseH\x00R\x13agentEnrollResponseB\t\n" +
 	"\apayload\"\x16\n" +
 	"\x14GetClientInfoRequest\"\x85\x03\n" +
 	"\x12ClientInfoResponse\x12\x18\n" +
@@ -3389,7 +3629,27 @@ const file_agent_proto_rawDesc = "" +
 	"\x0fMeshUnreachable\x12\x1f\n" +
 	"\vtarget_node\x18\x01 \x01(\tR\n" +
 	"targetNode\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason*8\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xc5\x01\n" +
+	"\x12AgentEnrollRequest\x12\x1e\n" +
+	"\n" +
+	"credential\x18\x01 \x01(\tR\n" +
+	"credential\x12\x1d\n" +
+	"\n" +
+	"machine_id\x18\x02 \x01(\tR\tmachineId\x12\x1a\n" +
+	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x16\n" +
+	"\x06pubkey\x18\x04 \x01(\fR\x06pubkey\x12\x0e\n" +
+	"\x02os\x18\x05 \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\x06 \x01(\tR\x04arch\x12\x18\n" +
+	"\aversion\x18\a \x01(\tR\aversion\"\x85\x02\n" +
+	"\x13AgentEnrollResponse\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12#\n" +
+	"\rsession_token\x18\x03 \x01(\tR\fsessionToken\x12,\n" +
+	"\x12session_expires_at\x18\x04 \x01(\x03R\x10sessionExpiresAt\x12\x19\n" +
+	"\bmesh_psk\x18\x05 \x01(\fR\ameshPsk\x12\x1d\n" +
+	"\n" +
+	"mesh_peers\x18\x06 \x03(\tR\tmeshPeers\x120\n" +
+	"\x14recommended_renew_at\x18\a \x01(\x03R\x12recommendedRenewAt*8\n" +
 	"\n" +
 	"TunnelMode\x12\x14\n" +
 	"\x10TUNNEL_MODE_PULL\x10\x00\x12\x14\n" +
@@ -3408,7 +3668,7 @@ func file_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_agent_proto_goTypes = []any{
 	(TunnelMode)(0),                  // 0: platypus.agent.v1.TunnelMode
 	(*Envelope)(nil),                 // 1: platypus.agent.v1.Envelope
@@ -3454,8 +3714,10 @@ var file_agent_proto_goTypes = []any{
 	(*MeshPeerDelta)(nil),            // 41: platypus.agent.v1.MeshPeerDelta
 	(*MeshLSA)(nil),                  // 42: platypus.agent.v1.MeshLSA
 	(*MeshUnreachable)(nil),          // 43: platypus.agent.v1.MeshUnreachable
-	nil,                              // 44: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
-	(*MeshLSA_Link)(nil),             // 45: platypus.agent.v1.MeshLSA.Link
+	(*AgentEnrollRequest)(nil),       // 44: platypus.agent.v1.AgentEnrollRequest
+	(*AgentEnrollResponse)(nil),      // 45: platypus.agent.v1.AgentEnrollResponse
+	nil,                              // 46: platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	(*MeshLSA_Link)(nil),             // 47: platypus.agent.v1.MeshLSA.Link
 }
 var file_agent_proto_depIdxs = []int32{
 	2,  // 0: platypus.agent.v1.Envelope.get_client_info_request:type_name -> platypus.agent.v1.GetClientInfoRequest
@@ -3499,16 +3761,18 @@ var file_agent_proto_depIdxs = []int32{
 	41, // 38: platypus.agent.v1.Envelope.mesh_peer_delta:type_name -> platypus.agent.v1.MeshPeerDelta
 	42, // 39: platypus.agent.v1.Envelope.mesh_lsa:type_name -> platypus.agent.v1.MeshLSA
 	43, // 40: platypus.agent.v1.Envelope.mesh_unreachable:type_name -> platypus.agent.v1.MeshUnreachable
-	44, // 41: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
-	0,  // 42: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
-	36, // 43: platypus.agent.v1.MeshPeerAnnounce.nodes:type_name -> platypus.agent.v1.NodeInfo
-	36, // 44: platypus.agent.v1.MeshPeerDelta.added:type_name -> platypus.agent.v1.NodeInfo
-	45, // 45: platypus.agent.v1.MeshLSA.links:type_name -> platypus.agent.v1.MeshLSA.Link
-	46, // [46:46] is the sub-list for method output_type
-	46, // [46:46] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	44, // 41: platypus.agent.v1.Envelope.agent_enroll_request:type_name -> platypus.agent.v1.AgentEnrollRequest
+	45, // 42: platypus.agent.v1.Envelope.agent_enroll_response:type_name -> platypus.agent.v1.AgentEnrollResponse
+	46, // 43: platypus.agent.v1.ClientInfoResponse.network_interfaces:type_name -> platypus.agent.v1.ClientInfoResponse.NetworkInterfacesEntry
+	0,  // 44: platypus.agent.v1.TunnelCreateRequest.mode:type_name -> platypus.agent.v1.TunnelMode
+	36, // 45: platypus.agent.v1.MeshPeerAnnounce.nodes:type_name -> platypus.agent.v1.NodeInfo
+	36, // 46: platypus.agent.v1.MeshPeerDelta.added:type_name -> platypus.agent.v1.NodeInfo
+	47, // 47: platypus.agent.v1.MeshLSA.links:type_name -> platypus.agent.v1.MeshLSA.Link
+	48, // [48:48] is the sub-list for method output_type
+	48, // [48:48] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -3558,6 +3822,8 @@ func file_agent_proto_init() {
 		(*Envelope_MeshPeerDelta)(nil),
 		(*Envelope_MeshLsa)(nil),
 		(*Envelope_MeshUnreachable)(nil),
+		(*Envelope_AgentEnrollRequest)(nil),
+		(*Envelope_AgentEnrollResponse)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3565,7 +3831,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   45,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -133,6 +133,29 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 
 func (s *TCPServer) Handle(conn net.Conn) {
 	client := CreateAgentClient(conn, s, s.DisableHistory)
+
+	// Optional enrollment handshake. If the agent was built with
+	// credential support it sends AgentEnrollRequest first; we redeem
+	// and reply with AgentEnrollResponse. Legacy agents stay silent
+	// for enrollWaitTimeout and we proceed straight to the old
+	// GatherClientInfo flow.
+	enroll, err := TryEnroll(client)
+	if err != nil {
+		log.Warn("Enrollment error from %s: %s", client.conn.RemoteAddr(), err)
+		client.Close()
+		return
+	}
+	if enroll.Attempted && !enroll.Succeeded {
+		log.Warn("Rejected agent from %s (enrollment outcome=%s)",
+			client.conn.RemoteAddr(), enroll.Outcome)
+		client.Close()
+		return
+	}
+	if enroll.Succeeded {
+		log.Info("Agent enrolled from %s (agent_id=%s)",
+			client.conn.RemoteAddr(), enroll.AgentID)
+	}
+
 	log.Info("Gathering information from client...")
 	if client.GatherClientInfo(s.hashFormat) {
 		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())

@@ -77,6 +77,10 @@ message Envelope {
     // Mesh: link-state routing
     MeshLSA         mesh_lsa         = 65;
     MeshUnreachable mesh_unreachable = 66;
+
+    // Enrollment (PAT / session_token exchange)
+    AgentEnrollRequest  agent_enroll_request  = 70;
+    AgentEnrollResponse agent_enroll_response = 71;
   }
 }
 
@@ -366,4 +370,61 @@ message MeshLSA {
 message MeshUnreachable {
   string target_node = 1;
   string reason      = 2;
+}
+
+// --- Enrollment ---
+//
+// The first envelope an agent sends after TLS handshake is always an
+// AgentEnrollRequest carrying either a PAT (plt_*) or a previously issued
+// session token (sess_*). The server validates it, and on success returns
+// an AgentEnrollResponse with an agent_id and a fresh session_token that
+// the agent persists locally. Every subsequent reconnect uses the session
+// token; the PAT is single-use by default.
+
+message AgentEnrollRequest {
+  // Either a PAT (prefix "plt_") or a session token (prefix "sess_").
+  // The server routes on the prefix — an agent reconnecting with its
+  // session token never needs a new PAT.
+  string credential = 1;
+
+  // Stable machine identifier (/etc/machine-id on Linux, IOPlatformUUID
+  // on macOS, MachineGuid on Windows). May be empty if the agent
+  // couldn't read one.
+  string machine_id = 2;
+  string hostname   = 3;
+
+  // Ed25519 public key — reserved for future mesh/PKI integration so
+  // that enrollment can also issue a mesh identity certificate.
+  bytes pubkey = 4;
+
+  string os      = 5;
+  string arch    = 6;
+  string version = 7;
+}
+
+message AgentEnrollResponse {
+  // Non-empty means enrollment failed. The agent should surface this
+  // and exit; the server side has already recorded the attempt in
+  // pat_redemption_events / agent_connection_events.
+  string error = 1;
+
+  // Stable per-agent identifier, assigned on the first successful PAT
+  // redemption. Unchanged across subsequent session rotations.
+  string agent_id = 2;
+
+  // Long-lived credential for future reconnects. The agent must
+  // persist this to a 0600 file before acknowledging. Format: sess_<id>.<secret>.
+  string session_token      = 3;
+  int64  session_expires_at = 4;
+
+  // Optional mesh bootstrap: if the server has mesh enabled, it hands
+  // the agent a PSK and (eventually) a list of known mesh peers so the
+  // agent can join the overlay without any extra configuration.
+  bytes           mesh_psk   = 5;
+  repeated string mesh_peers = 6;
+
+  // Unix seconds at which the agent is encouraged to rotate — typically
+  // session_expires_at minus a few hours so rotation doesn't race
+  // against expiry during a temporary network partition.
+  int64 recommended_renew_at = 7;
 }

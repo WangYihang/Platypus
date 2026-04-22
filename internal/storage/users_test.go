@@ -19,6 +19,21 @@ func newTestDB(t *testing.T) *storage.DB {
 	return db
 }
 
+// newTestDBFile opens a temp-file SQLite database. Required for tests
+// that exercise multiple connections concurrently — the modernc.org
+// driver's ":memory:" gives each pool connection its own database, so
+// concurrent writes see "no such table" on the unmigrated siblings.
+func newTestDBFile(t *testing.T) *storage.DB {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := storage.Open(dir + "/test.db")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
 func seedUser(t *testing.T, db *storage.DB, username string, role user.Role) *user.User {
 	t.Helper()
 	u := &user.User{

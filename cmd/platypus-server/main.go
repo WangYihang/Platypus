@@ -29,6 +29,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -223,7 +224,14 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		hostsH := api.NewHostsHandler(db)
 		listenersH := api.NewListenersV2Handler(db, core.CoreLiveListeners{})
 		sessionsH := api.NewSessionsV2Handler(db)
+		enrollSvc := enrollment.New(db)
+		patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 		rbac := api.NewRBACWithStorage(tokens, db)
+
+		// Expose the enrollment service globally so the agent-facing TCP
+		// handshake in internal/core can call it without plumbing an
+		// extra parameter through CreateTCPServer.
+		core.SetEnrollment(enrollSvc)
 
 		api.RegisterWebSocketRoutes(rest, auth)
 		api.RegisterV1Routes(rest, auth)
@@ -232,6 +240,7 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1HostsRoutes(rest, hostsH, rbac)
 		api.RegisterV1ProjectListenersRoutes(rest, listenersH, rbac)
 		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
+		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 		api.RegisterSwaggerRoutes(rest)
 
 		log.L.Info("api_ready",
