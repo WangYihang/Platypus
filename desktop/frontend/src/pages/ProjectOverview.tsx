@@ -1,13 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Typography } from "antd";
-import {
-    GatewayOutlined,
-    PlusOutlined,
-    ReloadOutlined,
-    TeamOutlined,
-    ThunderboltOutlined,
-} from "@ant-design/icons";
+import { Loader2, Plus, RotateCw, Router, Users, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+import { Button } from "@/components/ui/button";
 
 import ActivityFeed, { ActivityItem } from "../components/ActivityFeed";
 import BarChartCard, { BarPoint } from "../components/charts/BarChartCard";
@@ -138,27 +133,29 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 actions={
                     <>
                         <Button
-                            size="small"
-                            icon={<ReloadOutlined />}
-                            loading={loading}
+                            size="sm"
+                            variant="outline"
+                            disabled={loading}
                             onClick={() => void refresh()}
                         >
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
                             Refresh
                         </Button>
                         {onOpenMembers && (
-                            <Button
-                                size="small"
-                                icon={<TeamOutlined />}
-                                onClick={onOpenMembers}
-                            >
+                            <Button size="sm" variant="outline" onClick={onOpenMembers}>
+                                <Users className="size-3.5" />
                                 Members
                             </Button>
                         )}
                         <Button
-                            type="primary"
-                            icon={<PlusOutlined />}
+                            size="sm"
                             onClick={() => navigate(`/projects/${project.slug}/listeners`)}
                         >
+                            <Plus className="size-3.5" />
                             New listener
                         </Button>
                     </>
@@ -166,9 +163,18 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {error && (
-                    <Typography.Paragraph type="danger" style={{ marginBottom: space[4] }}>
+                    <div
+                        style={{
+                            marginBottom: space[4],
+                            padding: `${space[3]}px ${space[4]}px`,
+                            border: `1px solid ${palette.danger}`,
+                            borderRadius: 6,
+                            color: palette.danger,
+                            fontSize: 13,
+                        }}
+                    >
                         {error}
-                    </Typography.Paragraph>
+                    </div>
                 )}
 
                 <div
@@ -233,8 +239,9 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                             >
                                 <span>Listeners</span>
                                 <Button
-                                    type="link"
-                                    size="small"
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto p-0 text-text-secondary"
                                     onClick={() =>
                                         navigate(`/projects/${project.slug}/listeners`)
                                     }
@@ -305,20 +312,20 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                         }}
                     >
                         <QuickAction
-                            icon={<GatewayOutlined />}
+                            icon={<Router className="size-4" />}
                             title="Create a listener"
                             description="Bind a host:port to start accepting agent connections."
                             onClick={() => navigate(`/projects/${project.slug}/listeners`)}
                         />
                         <QuickAction
-                            icon={<ThunderboltOutlined />}
+                            icon={<Zap className="size-4" />}
                             title="Run dispatch"
                             description="Run a command on every flagged live session."
                             onClick={() => navigate(`/projects/${project.slug}/dispatch`)}
                         />
                         {onOpenMembers && (
                             <QuickAction
-                                icon={<TeamOutlined />}
+                                icon={<Users className="size-4" />}
                                 title="Invite members"
                                 description="Grant operator or viewer access to other users."
                                 onClick={onOpenMembers}
