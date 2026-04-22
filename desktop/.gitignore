@@ -2,13 +2,15 @@ build/bin
 node_modules
 frontend/dist
 frontend/dist-web
-# Wails regenerates these on `wails generate module` — App.js/runtime.* are
-# desktop-only runtime plumbing, leave them ignored. go/models.ts stays
-# tracked so the web build (which doesn't run wails) has the TS type
-# definitions for api.Session / api.Listener / etc. without a hand-written
-# copy drifting out of sync.
-frontend/wailsjs/go/app
-frontend/wailsjs/runtime
+# Wails regenerates these on `wails generate module`. We track two hand-
+# written stubs — App.ts and runtime/runtime.ts — so `tsc` passes in
+# web-mode builds (where Vite aliases them away) even before wails ever
+# ran. Everything else under those dirs stays ignored, so the generated
+# .js / .d.ts chaff doesn't clutter commits.
+frontend/wailsjs/go/app/*
+!frontend/wailsjs/go/app/App.ts
+frontend/wailsjs/runtime/*
+!frontend/wailsjs/runtime/runtime.ts
 # wails frontend-deps cache marker
 frontend/package.json.md5
 # go build output when invoked from desktop/
