@@ -1,16 +1,20 @@
 import { ReactNode, useState } from "react";
-import { Form, Input, Modal, message } from "antd";
 import { NavLink } from "react-router-dom";
 import {
-    AppstoreOutlined,
-    ClockCircleOutlined,
-    CloudDownloadOutlined,
-    DesktopOutlined,
-    GatewayOutlined,
-    SafetyOutlined,
-    TeamOutlined,
-    ThunderboltOutlined,
-} from "@ant-design/icons";
+    Clock,
+    CloudDownload,
+    LayoutGrid,
+    Loader2,
+    Monitor,
+    Router,
+    ShieldCheck,
+    Users,
+    Zap,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import Brand from "../components/Brand";
 import { Project, createProject } from "../lib/api";
@@ -18,6 +22,37 @@ import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
 import ProjectSwitcher from "./ProjectSwitcher";
 import UserMenu from "./UserMenu";
+
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+
+const projectSchema = z.object({
+    name: z.string().min(1, "project name is required"),
+    slug: z
+        .string()
+        .min(1, "slug is required")
+        .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/, {
+            message: "a-z, 0-9, _ and - only; must start alphanumeric",
+        }),
+});
+type ProjectFormValues = z.infer<typeof projectSchema>;
 
 interface Props {
     user: SessionUser;
@@ -37,7 +72,7 @@ interface NavItem {
 
 // ProjectSidebar is the left rail. Linear/Resend-style: brand at top,
 // project switcher dropdown, flat per-project nav, user menu pinned at
-// the bottom. Replaces the old AppShell + ProfileRail + Sidebar tree.
+// the bottom.
 export default function ProjectSidebar({
     user,
     serverURL,
@@ -46,32 +81,34 @@ export default function ProjectSidebar({
     onProjectsChanged,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
-    const [createForm] = Form.useForm<{ name: string; slug: string }>();
-    const [messageApi, contextHolder] = message.useMessage();
+
+    const createForm = useForm<ProjectFormValues>({
+        resolver: zodResolver(projectSchema),
+        defaultValues: { name: "", slug: "" },
+    });
 
     const items: NavItem[] = [
-        { to: "overview", label: "Overview", icon: <AppstoreOutlined />, requiresProject: true },
-        { to: "hosts", label: "Hosts", icon: <DesktopOutlined />, requiresProject: true },
-        { to: "listeners", label: "Listeners", icon: <GatewayOutlined />, requiresProject: true },
-        { to: "sessions", label: "Sessions", icon: <SafetyOutlined />, requiresProject: true },
-        { to: "activities", label: "Activities", icon: <ClockCircleOutlined />, requiresProject: true },
-        { to: "enrollment", label: "Enrollment", icon: <CloudDownloadOutlined />, requiresProject: true, minRole: "admin" },
-        { to: "dispatch", label: "Dispatch", icon: <ThunderboltOutlined />, requiresProject: true, minRole: "operator" },
-        { to: "members", label: "Members", icon: <TeamOutlined />, requiresProject: true, minRole: "operator" },
+        { to: "overview", label: "Overview", icon: <LayoutGrid className="size-4" />, requiresProject: true },
+        { to: "hosts", label: "Hosts", icon: <Monitor className="size-4" />, requiresProject: true },
+        { to: "listeners", label: "Listeners", icon: <Router className="size-4" />, requiresProject: true },
+        { to: "sessions", label: "Sessions", icon: <ShieldCheck className="size-4" />, requiresProject: true },
+        { to: "activities", label: "Activities", icon: <Clock className="size-4" />, requiresProject: true },
+        { to: "enrollment", label: "Enrollment", icon: <CloudDownload className="size-4" />, requiresProject: true, minRole: "admin" },
+        { to: "dispatch", label: "Dispatch", icon: <Zap className="size-4" />, requiresProject: true, minRole: "operator" },
+        { to: "members", label: "Members", icon: <Users className="size-4" />, requiresProject: true, minRole: "operator" },
     ];
 
     const visible = items.filter((it) => meetsRole(user.role, it.minRole));
 
-    async function handleCreateProject() {
-        const v = await createForm.validateFields();
+    async function handleCreateProject(v: ProjectFormValues) {
         try {
             await createProject(v.name, v.slug);
-            messageApi.success(`Created project ${v.slug}`);
+            toast.success(`Created project ${v.slug}`);
             setCreateOpen(false);
-            createForm.resetFields();
+            createForm.reset({ name: "", slug: "" });
             onProjectsChanged();
         } catch (e) {
-            messageApi.error(`create: ${String(e)}`);
+            toast.error(`create: ${String(e)}`);
         }
     }
 
@@ -87,8 +124,6 @@ export default function ProjectSidebar({
                 flexShrink: 0,
             }}
         >
-            {contextHolder}
-
             <div
                 style={{
                     display: "flex",
@@ -129,7 +164,13 @@ export default function ProjectSidebar({
                                 "pl-nav-link" + (isActive ? " pl-nav-link--active" : "")
                             }
                         >
-                            <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
+                            <span
+                                style={{
+                                    width: 16,
+                                    display: "inline-flex",
+                                    justifyContent: "center",
+                                }}
+                            >
                                 {it.icon}
                             </span>
                             <span>{it.label}</span>
@@ -151,39 +192,79 @@ export default function ProjectSidebar({
 
             <UserMenu user={user} serverURL={serverURL} />
 
-            <Modal
-                title="New project"
+            <Dialog
                 open={createOpen}
-                onOk={handleCreateProject}
-                onCancel={() => setCreateOpen(false)}
-                okText="Create"
-                destroyOnHidden
+                onOpenChange={(o) => {
+                    setCreateOpen(o);
+                    if (!o) createForm.reset({ name: "", slug: "" });
+                }}
             >
-                <Form form={createForm} layout="vertical">
-                    <Form.Item
-                        name="name"
-                        label="Project name"
-                        rules={[{ required: true }]}
-                        extra="Human-friendly — shown in the sidebar header."
-                    >
-                        <Input autoFocus placeholder="Production" />
-                    </Form.Item>
-                    <Form.Item
-                        name="slug"
-                        label="Slug"
-                        rules={[
-                            { required: true },
-                            {
-                                pattern: /^[a-z0-9][a-z0-9_-]{0,62}$/,
-                                message: "a-z, 0-9, _ and - only; must start alphanumeric",
-                            },
-                        ]}
-                        extra="URL-safe id, unique across projects."
-                    >
-                        <Input placeholder="prod" />
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>New project</DialogTitle>
+                        <DialogDescription>
+                            Projects scope every resource (hosts, listeners, sessions, tokens).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...createForm}>
+                        <form
+                            onSubmit={createForm.handleSubmit(handleCreateProject)}
+                            className="space-y-4"
+                        >
+                            <FormField
+                                control={createForm.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Project name</FormLabel>
+                                        <FormControl>
+                                            <Input autoFocus placeholder="Production" {...field} />
+                                        </FormControl>
+                                        <FormDescription>
+                                            Human-friendly — shown in the sidebar header.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={createForm.control}
+                                name="slug"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Slug</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="prod" {...field} />
+                                        </FormControl>
+                                        <FormDescription>
+                                            URL-safe id, unique across projects.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setCreateOpen(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={createForm.formState.isSubmitting}
+                                >
+                                    {createForm.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Create
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
         </aside>
     );
 }

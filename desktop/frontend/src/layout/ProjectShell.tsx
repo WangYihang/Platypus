@@ -1,6 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
-import { Spin } from "antd";
+import { Loader2 } from "lucide-react";
 
 import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
@@ -70,7 +70,7 @@ export default function ProjectShell({ requireProject = false }: Props) {
                 refresh={refresh}
             >
                 <Centered>
-                    <Spin />
+                    <Loader2 className="size-5 animate-spin text-text-muted" />
                 </Centered>
             </ShellChrome>
         );
