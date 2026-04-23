@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -81,13 +82,12 @@ func (c *Client) RecvEnvelope() (*agentpb.Envelope, error) {
 // directly. Nil-safe (callers on the legacy path pass nil and get the
 // old behaviour).
 type ConnectOptions struct {
-	// IdentityDir is where the agent persists its session_token. When
-	// empty, defaults to ~/.platypus/agent.
+	// IdentityDir is where the agent persists its session_token and mesh keys.
+	// When empty, defaults to ~/.platypus/agent.
 	IdentityDir string
 
 	// Mesh bootstrap options for zero-config mesh.
-	MeshIdentityDir string
-	MeshProjectID   string
+	MeshProjectID string
 }
 
 // Connect establishes a TLS connection to the server endpoint and runs
@@ -154,13 +154,16 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 			// don't already have a mesh node running, start one now.
 			if len(er.MeshPSK) > 0 && state.Mesh == nil {
 				log.Info("Bootstrapping mesh overlay from server...")
-				identityDir := ""
-				if opts != nil {
-					identityDir = opts.MeshIdentityDir
+
+				meshDir := ""
+				if identityDir != "" {
+					meshDir = filepath.Join(identityDir, "mesh")
 				}
+
 				cfg := mesh.Config{
-					IdentityDir:       identityDir,
-					PSK:               er.MeshPSK,
+					IdentityDir: meshDir,
+					PSK:         er.MeshPSK,
+
 					ListenAddr:        ":0", // Pick a random port
 					Peers:             er.MeshPeers,
 					Role:              "agent",

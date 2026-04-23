@@ -106,6 +106,13 @@ export default async function globalSetup() {
         },
         update: false,
         openBrowser: false,
+        mesh: {
+            psk_file: path.join(tmpdir, MESH_PSK_FILENAME),
+            identity_dir: path.join(tmpdir, "mesh-server-identity"),
+            listen_addr: "127.0.0.1:17770",
+            discovery_lan: true,
+            project_id: "e2e-project",
+        },
     };
     writeFileSync(configPath, YAML.stringify(config), "utf8");
 

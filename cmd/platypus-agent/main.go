@@ -43,7 +43,7 @@ func main() {
 	// that have not yet been migrated.
 	if opts.MeshPSKFile != "" {
 		cfg := mesh.Config{
-			IdentityDir:       opts.MeshIdentityDir,
+			IdentityDir:       opts.IdentityDir,
 			PSKFile:           opts.MeshPSKFile,
 			ListenAddr:        opts.MeshListen,
 			Peers:             opts.MeshPeers,
@@ -82,8 +82,8 @@ func main() {
 		}
 		logger.Info("connecting to server", slog.String("endpoint", endpoint))
 		return agent.ConnectWithOptions(endpoint, opts.Token, state, &agent.ConnectOptions{
-			MeshIdentityDir: opts.MeshIdentityDir,
-			MeshProjectID:   opts.MeshProjectID,
+			IdentityDir:   opts.IdentityDir,
+			MeshProjectID: opts.MeshProjectID,
 		})
 	}
 

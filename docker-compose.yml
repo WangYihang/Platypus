@@ -1,0 +1,40 @@
+services:
+  platypus-server:
+    build:
+      context: .
+      target: server
+    ports:
+      - "7331:7331"   # REST API & Web UI
+      - "13337:13337" # Agent Listener
+      - "17777:17777" # Mesh Listener
+      - "13340:13340" # Distributor (for Agent downloads)
+    volumes:
+      - platypus_data:/app/data
+      - ./config.docker.yml:/app/config.yml
+    environment:
+      - PLATYPUS_CA_KEK=e2e-kek-do-not-use-in-prod-replace-me-now!!
+    restart: always
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: platypus_admin
+      MINIO_ROOT_PASSWORD: platypus_password
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  platypus_data:
+  minio_data:

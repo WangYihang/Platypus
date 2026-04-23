@@ -51,6 +51,20 @@ connect to the same server simultaneously.
 
 ## Quick start
 
+### One-Click Deployment (Recommended)
+
+The fastest way to get a full Platypus system running (including the Server, Web UI, and a MinIO-backed Agent Distributor) is using Docker Compose:
+
+```bash
+git clone https://github.com/WangYihang/Platypus
+cd Platypus
+docker-compose up -d
+```
+
+*   **Web UI**: Open `http://localhost:7331` in your browser.
+*   **Login**: Use the `bootstrap_secret` printed in the server logs (`docker-compose logs platypus-server`).
+*   **Add Agents**: Click "Add Agent" in the UI to get a one-line `curl` command to deploy agents to your fleet.
+
 ### Build from source
 
 Requires Go 1.24+ and `protoc` (only if you regenerate protobuf code).

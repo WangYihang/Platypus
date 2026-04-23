@@ -12,15 +12,15 @@ type ListenerConfig struct {
 }
 
 type RESTfulConfig struct {
-	Host              string `yaml:"host"              validate:"required_if=Enable true"`
-	Port              uint16 `yaml:"port"              validate:"required_if=Enable true,min=0,max=65535"`
-	Enable            bool   `yaml:"enable"`
-	JWTRefreshKey     string `yaml:"JWTRefreshKey"`
-	JWTAccessKey      string `yaml:"JWTAccessKey"`
-	RefreshExpireTime int    `yaml:"RefreshExpireTime"` // seconds; 0 defaults to 14 days
-	AccessExpireTime  int    `yaml:"AccessExpireTime"`  // seconds; 0 defaults to 15 min
-	DBFile            string `yaml:"DBFile"`            // empty defaults to ./platypus.db
-	Domain            string `yaml:"Domain"`
+	Host              string `yaml:"host"              mapstructure:"host"              validate:"required_if=Enable true"`
+	Port              uint16 `yaml:"port"              mapstructure:"port"              validate:"required_if=Enable true,min=0,max=65535"`
+	Enable            bool   `yaml:"enable"            mapstructure:"enable"`
+	JWTRefreshKey     string `yaml:"JWTRefreshKey"     mapstructure:"JWTRefreshKey"`
+	JWTAccessKey      string `yaml:"JWTAccessKey"      mapstructure:"JWTAccessKey"`
+	RefreshExpireTime int    `yaml:"RefreshExpireTime" mapstructure:"RefreshExpireTime"` // seconds; 0 defaults to 14 days
+	AccessExpireTime  int    `yaml:"AccessExpireTime"  mapstructure:"AccessExpireTime"`  // seconds; 0 defaults to 15 min
+	DBFile            string `yaml:"DBFile"            mapstructure:"DBFile"`            // empty defaults to ./platypus.db
+	Domain            string `yaml:"Domain"            mapstructure:"Domain"`
 }
 
 // AccessTTLOrDefault returns the configured access token lifetime in
@@ -93,15 +93,15 @@ func (c DistributorConfig) ChannelOrDefault() string {
 // generates a persistent mesh identity, accepts inbound mesh links, and
 // can route admin traffic to any reachable agent by NodeID.
 type MeshConfig struct {
-	PSKFile        string   `yaml:"psk_file"`
-	IdentityDir    string   `yaml:"identity_dir"`
-	ListenAddr     string   `yaml:"listen_addr"`
-	AdvertiseAddrs []string `yaml:"advertise_addrs"`
-	Peers          []string `yaml:"peers"`
+	PSKFile        string   `yaml:"psk_file"        mapstructure:"psk_file"`
+	IdentityDir    string   `yaml:"identity_dir"    mapstructure:"identity_dir"`
+	ListenAddr     string   `yaml:"listen_addr"     mapstructure:"listen_addr"`
+	AdvertiseAddrs []string `yaml:"advertise_addrs" mapstructure:"advertise_addrs"`
+	Peers          []string `yaml:"peers"           mapstructure:"peers"`
 
-	DiscoveryLAN      bool   `yaml:"discovery_lan"`
-	DiscoveryInterval int    `yaml:"discovery_interval"`
-	ProjectID         string `yaml:"project_id"`
+	DiscoveryLAN      bool   `yaml:"discovery_lan"      mapstructure:"discovery_lan"`
+	DiscoveryInterval int    `yaml:"discovery_interval" mapstructure:"discovery_interval"`
+	ProjectID         string `yaml:"project_id"         mapstructure:"project_id"`
 }
 
 type Config struct {

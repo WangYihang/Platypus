@@ -14,11 +14,11 @@ type Options struct {
 
 	// Mesh overlay (optional — leaving MeshPSKFile empty keeps the agent
 	// in plain hub-and-spoke mode).
-	MeshListen      string   `long:"mesh-listen" description:"Address to accept inbound mesh links on, e.g. :17777. Empty = no listener, dial-only."`
-	MeshPeers       []string `long:"peers" description:"Bootstrap mesh peer in host:port form. Repeatable."`
-	MeshPSKFile     string   `long:"psk-file" description:"Path to mesh pre-shared key file. Enables mesh mode."`
-	MeshIdentityDir string   `long:"identity-dir" description:"Directory for persistent Ed25519 mesh identity. Default: ~/.platypus/mesh/agent"`
-	MeshAdvertise   []string `long:"mesh-advertise" description:"Override advertised mesh listen address(es). Repeatable."`
+	MeshListen    string   `long:"mesh-listen" description:"Address to accept inbound mesh links on, e.g. :17777. Empty = no listener, dial-only."`
+	MeshPeers     []string `long:"peers" description:"Bootstrap mesh peer in host:port form. Repeatable."`
+	MeshPSKFile   string   `long:"psk-file" description:"Path to mesh pre-shared key file. Enables mesh mode."`
+	IdentityDir   string   `short:"i" long:"identity-dir" description:"Directory for persistent data (token, mesh keys, etc). Defaults to ~/.platypus/agent"`
+	MeshAdvertise []string `long:"mesh-advertise" description:"Override advertised mesh listen address(es). Repeatable."`
 
 	MeshDiscoveryLAN      bool   `long:"mesh-discovery" description:"Enable automatic LAN peer discovery via mDNS."`
 	MeshDiscoveryInterval int    `long:"mesh-discovery-interval" description:"mDNS scan interval in seconds. Default: 30."`

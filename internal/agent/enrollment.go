@@ -341,9 +341,9 @@ func sessionTokenPath(identityDir string) string {
 func defaultIdentityDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(".platypus", "agent")
+		return filepath.Join(".platypus", "agent", "default")
 	}
-	return filepath.Join(home, ".platypus", "agent")
+	return filepath.Join(home, ".platypus", "agent", "default")
 }
 
 // recvWithDeadline applies a read deadline to the underlying TLS conn

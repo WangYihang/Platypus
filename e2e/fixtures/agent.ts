@@ -76,6 +76,61 @@ export async function startMeshAgent(
 // multi-agent behaviour pull in the `liveAgent` fixture; others can
 // call startExtraAgent directly inside beforeAll/afterAll.
 
+// startZeroConfigAgent spawns an agent without any mesh flags. It should
+// bootstrap mesh automatically from the server response.
+export async function startZeroConfigAgent(
+    projectID: string,
+    adminToken: string,
+    opts: {
+        token: string;
+    },
+): Promise<AgentHandle> {
+    const before = await listProjectSessions(backendURL, adminToken, projectID, {
+        live: true,
+    });
+    const agentHome = path.join(
+        os.tmpdir(),
+        `platypus-e2e-zero-agent-${Math.random().toString(36).slice(2)}`,
+    );
+    fs.mkdirSync(agentHome, { recursive: true });
+
+    const proc = spawn(
+        AGENT_BINARY,
+        [
+            "--host",
+            BACKEND_HOST,
+            "--port",
+            String(SEEDED_LISTENER_PORT),
+            "--token",
+            opts.token,
+        ],
+        {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env, HOME: agentHome },
+        },
+    );
+
+    if (!proc.pid) throw new Error("failed to spawn zero-config agent");
+    if (process.env.E2E_VERBOSE_AGENT) {
+        proc.stdout?.on("data", (c: Buffer) => process.stdout.write(`[zero-agent] ${c}`));
+        proc.stderr?.on("data", (c: Buffer) => process.stderr.write(`[zero-agent!] ${c}`));
+    }
+
+    await waitForSessions(backendURL, adminToken, projectID, before.length + 1, 15_000);
+
+    return {
+        pid: proc.pid,
+        proc,
+        async kill() {
+            try {
+                process.kill(proc.pid!, "SIGTERM");
+            } catch {
+                /* gone */
+            }
+        },
+    };
+}
+
 export interface AgentHandle {
     pid: number;
     proc: ChildProcess;

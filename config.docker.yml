@@ -1,0 +1,37 @@
+# Platypus Docker Configuration
+listeners:
+  - host: "0.0.0.0"
+    port: 13337
+    hashFormat: "%i %u %m %o %t"
+    disable_history: true
+    shell_path: "/bin/bash"
+
+restful:
+  host: "0.0.0.0"
+  port: 7331
+  enable: true
+  DBFile: "/app/data/platypus.db"
+
+distributor:
+  host: "0.0.0.0"
+  port: 13340
+  url: "http://localhost:13340"
+  channel: "stable"
+  presigned_ttl: "5m"
+  store:
+    endpoint: "minio:9000"
+    region: "us-east-1"
+    bucket: "platypus-artifacts"
+    prefix: "agent/"
+    access_key_id: "platypus_admin"
+    secret_access_key: "platypus_password"
+    use_ssl: false
+
+mesh:
+  psk_file: "/app/data/mesh.psk"
+  identity_dir: "/app/data/mesh-server-identity"
+  listen_addr: "0.0.0.0:17777"
+  discovery_lan: true
+  project_id: "default"
+
+openBrowser: false
