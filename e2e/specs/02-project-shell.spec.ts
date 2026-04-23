@@ -16,8 +16,9 @@ test.describe("project shell", () => {
 
         // Brand (aria-labelled span in components/Brand.tsx).
         await expect(page.getByLabel("Platypus")).toBeVisible();
-        // All six nav links — the "大气" payoff: every project-scoped
-        // page is a first-class destination, no more nested tree.
+        // All six nav links.
+        await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
+
         for (const label of [
             "Overview",
             "Hosts",

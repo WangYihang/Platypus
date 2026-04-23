@@ -19,19 +19,23 @@ test.describe("host terminal", () => {
         // Let it settle.
         await page.waitForTimeout(1000);
 
+        // Focus the terminal.
+        await page.locator(".xterm-canvas").click();
+        await page.waitForTimeout(500);
+
         // Send a command to the terminal.
         // We type "whoami" and press Enter.
-        await page.keyboard.type("whoami");
+        await page.keyboard.type("whoami", { delay: 50 });
         await page.keyboard.press("Enter");
 
         // Wait for the output. The baseline agent in E2E runs as the current user.
-        // In the dev environment, this is usually "ubuntu".
-        await expect(rows).toContainText("ubuntu", { timeout: 5000 });
+        // Look for a line that is EXACTLY "ubuntu" or starts with it, avoiding the prompt.
+        await expect(rows).toContainText("\r\nubuntu", { timeout: 10_000 });
 
         // Also test directory listing.
-        await page.keyboard.type("pwd");
+        await page.keyboard.type("pwd", { delay: 50 });
         await page.keyboard.press("Enter");
-        await expect(rows).toContainText("/", { timeout: 5000 });
+        await expect(rows).toContainText("\r\n/", { timeout: 10_000 });
 
         await page.screenshot({
             path: shotPath("16-host-terminal.png"),

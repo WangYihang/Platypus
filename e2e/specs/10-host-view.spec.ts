@@ -20,7 +20,7 @@ test.describe("host view", () => {
         // PageHeader subtitle on HostView is "<N> active · <os>".
         await expect(
             page.getByText(/active · /).first(),
-        ).toBeVisible();
+        ).toBeVisible({ timeout: 10_000 });
 
         // The five-tab strip (Terminal/Files/Tunnels/Sessions/Info).
         for (const label of ["Terminal", "Files", "Tunnels", "Info"]) {

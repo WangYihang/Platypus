@@ -474,7 +474,7 @@ func AgentMessageDispatcher(client *AgentClient) {
 			localAddr := fmt.Sprintf("127.0.0.1:%d", freeport.GetPort())
 			remoteAddr := fmt.Sprintf("127.0.0.1:%d", port)
 			log.Success("Mapping remote socks server (%s) into local address (%s)", remoteAddr, localAddr)
-			AddPullTunnelConfig(Ctx.CurrentAgent.(*AgentClient), localAddr, remoteAddr)
+			AddPullTunnelConfig(client, localAddr, remoteAddr)
 		case *agentpb.Envelope_Socks5CreateFailed:
 			log.Error("%s", p.Socks5CreateFailed.Reason)
 

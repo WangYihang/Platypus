@@ -15,141 +15,103 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-
-import { palette } from "../../layout/theme";
 import { TopologyMachine } from "../../lib/api";
-import type { MachineSeries } from "../../pages/hooks/useTopology";
+import { fromNow } from "../../lib/time";
+import { palette } from "../../layout/theme";
 
-export interface MachineDetailPanelProps {
+interface Props {
     machine: TopologyMachine | null;
-    series: MachineSeries | undefined;
+    series: { cpu: Array<{ t: number; v: number }>; mem: Array<{ t: number; v: number }> } | undefined;
     onClose: () => void;
-}
-
-function formatBytes(n?: number): string {
-    if (!n) return "—";
-    const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let v = n;
-    let i = 0;
-    while (v >= 1024 && i < units.length - 1) {
-        v /= 1024;
-        i += 1;
-    }
-    return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
-}
-
-function formatUptime(s?: number): string {
-    if (!s || s < 0) return "—";
-    const d = Math.floor(s / 86400);
-    const h = Math.floor((s % 86400) / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    if (d > 0) return `${d}d ${h}h`;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
 }
 
 export default function MachineDetailPanel({
     machine,
     series,
     onClose,
-}: MachineDetailPanelProps) {
-    const activeSessions = useMemo(
-        () => (machine?.sessions ?? []).filter((s) => s.active),
-        [machine],
-    );
-    const historicalSessions = useMemo(
-        () => (machine?.sessions ?? []).filter((s) => !s.active),
-        [machine],
-    );
+}: Props) {
+    const sys = machine?.sys_info;
+    const isUp = useMemo(() => machine?.sessions.some(s => s.active) ?? false, [machine]);
 
     return (
-        <Sheet open={!!machine} onOpenChange={(o) => !o && onClose()}>
+        <Sheet open={!!machine} onOpenChange={(open) => !open && onClose()}>
             <SheetContent className="w-[420px] sm:max-w-[420px] overflow-y-auto">
                 {machine && (
                     <>
-                        <SheetHeader>
-                            <SheetTitle>{machine.hostname || machine.host_id.slice(0, 12)}</SheetTitle>
-                            <SheetDescription>{machine.os || "unknown OS"}</SheetDescription>
+                        <SheetHeader className="mb-6">
+                            <div className="flex items-center gap-2 mb-1">
+                                <div
+                                    className="size-2.5 rounded-full"
+                                    style={{
+                                        background: isUp
+                                            ? palette.successDot
+                                            : palette.textMuted,
+                                    }}
+                                />
+                                <SheetTitle className="font-mono text-lg">
+                                    {machine.hostname || machine.host_id.slice(0, 12)}
+                                </SheetTitle>
+                            </div>
+                            <SheetDescription className="flex items-center gap-2">
+                                <Badge variant="outline" className="font-mono font-normal">
+                                    {machine.host_id.slice(0, 8)}
+                                </Badge>
+                                <span>•</span>
+                                <span>{machine.sessions.filter(s => s.active).length} active sessions</span>
+                            </SheetDescription>
                         </SheetHeader>
 
-                        <div className="px-4 pb-4 space-y-4 text-sm" style={{ color: palette.textPrimary }}>
+                        <div className="space-y-8">
                             <section>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs" style={{ color: palette.textMuted }}>CPU</span>
-                                    <span>{machine.sys_info?.cpu_percent?.toFixed(1) ?? "—"}%</span>
-                                </div>
-                                <div className="h-10">
-                                    <Sparkline data={series?.cpu ?? []} />
-                                </div>
-                            </section>
-                            <section>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs" style={{ color: palette.textMuted }}>Memory</span>
-                                    <span>
-                                        {machine.sys_info?.mem_percent?.toFixed(1) ?? "—"}%
-                                        <span className="ml-1 text-xs" style={{ color: palette.textMuted }}>
-                                            ({formatBytes(machine.sys_info?.mem_used_bytes)} /{" "}
-                                            {formatBytes(machine.sys_info?.mem_total_bytes)})
-                                        </span>
-                                    </span>
-                                </div>
-                                <div className="h-10">
-                                    <Sparkline data={series?.mem ?? []} />
-                                </div>
-                            </section>
-
-                            <Separator />
-
-                            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                                <Kv k="Distribution" v={machine.sys_info?.os_distribution} />
-                                <Kv k="Kernel" v={machine.sys_info?.kernel_version} />
-                                <Kv k="Uptime" v={formatUptime(machine.sys_info?.uptime_seconds)} />
-                                <Kv k="Machine ID" v={machine.machine_id} mono />
-                                <Kv k="Fingerprint" v={machine.fingerprint} mono />
-                                <Kv k="First seen" v={new Date(machine.first_seen_at).toLocaleString()} />
-                                <Kv k="Last seen" v={new Date(machine.last_seen_at).toLocaleString()} />
-                            </dl>
-
-                            <Separator />
-
-                            <section>
-                                <h4 className="text-xs font-semibold mb-2" style={{ color: palette.textMuted }}>
-                                    Active sessions ({activeSessions.length})
-                                </h4>
-                                {activeSessions.length === 0 && (
-                                    <p className="text-xs" style={{ color: palette.textMuted }}>
-                                        None connected.
-                                    </p>
-                                )}
-                                {activeSessions.map((s) => (
-                                    <div key={s.id} className="flex items-center justify-between py-1">
-                                        <div className="truncate">
-                                            <Badge variant="default">live</Badge>
-                                            <span className="ml-2">{s.user ?? "—"}</span>
-                                            <span className="ml-2 text-xs" style={{ color: palette.textMuted }}>
-                                                {s.remote_addr}
-                                            </span>
+                                <h3 className="text-sm font-medium mb-4">System Stats</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            <span>CPU</span>
+                                            <span>{sys?.cpu_percent?.toFixed(1) ?? 0}%</span>
+                                        </div>
+                                        <div className="h-10 bg-muted/30 rounded-md overflow-hidden">
+                                            <Sparkline data={series?.cpu ?? []} />
                                         </div>
                                     </div>
-                                ))}
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            <span>Memory</span>
+                                            <span>{sys?.mem_percent?.toFixed(1) ?? 0}%</span>
+                                        </div>
+                                        <div className="h-10 bg-muted/30 rounded-md overflow-hidden">
+                                            <Sparkline data={series?.mem ?? []} />
+                                        </div>
+                                    </div>
+                                </div>
                             </section>
 
-                            {historicalSessions.length > 0 && (
-                                <section>
-                                    <h4 className="text-xs font-semibold mb-2" style={{ color: palette.textMuted }}>
-                                        Historical sessions ({historicalSessions.length})
-                                    </h4>
-                                    <div className="max-h-48 overflow-y-auto text-xs space-y-1">
-                                        {historicalSessions.slice(0, 20).map((s) => (
-                                            <div key={s.id} className="flex items-center justify-between">
-                                                <span style={{ color: palette.textMuted }}>
-                                                    {new Date(s.connected_at).toLocaleString()}
-                                                </span>
-                                                <span>{s.user ?? "—"}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
+                            <Separator />
+
+                            <section>
+                                <h3 className="text-sm font-medium mb-4">Host Information</h3>
+                                <dl className="grid grid-cols-[100px_1fr] gap-y-3">
+                                    <Kv k="OS" v={machine.os} />
+                                    <Kv k="Platform" v={sys?.platform} />
+                                    <Kv k="Kernel" v={sys?.kernel_version} />
+                                    <Kv k="Platform Ver" v={sys?.platform_version} />
+                                    <Kv k="Last Seen" v={fromNow(machine.last_seen_at)} />
+                                </dl>
+                            </section>
+
+                            {(sys?.mem_total_bytes ?? 0) > 0 && (
+                                <>
+                                    <Separator />
+                                    <section>
+                                        <h3 className="text-sm font-medium mb-3">
+                                            Hardware
+                                        </h3>
+                                        <dl className="grid grid-cols-[100px_1fr] gap-y-3">
+                                            <Kv k="Total RAM" v={`${((sys?.mem_total_bytes ?? 0) / 1024 / 1024 / 1024).toFixed(1)} GiB`} />
+                                            <Kv k="Uptime" v={`${((sys?.uptime_seconds ?? 0) / 3600).toFixed(1)} hours`} />
+                                        </dl>
+                                    </section>
+                                </>
                             )}
                         </div>
                     </>
@@ -168,8 +130,6 @@ function Kv({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
     );
 }
 
-import ChartContainer from "../charts/ChartContainer";
-...
 function Sparkline({ data }: { data: Array<{ t: number; v: number }> }) {
     if (data.length === 0) {
         return <div className="h-full" style={{ borderLeft: `1px solid ${palette.border}` }} />;

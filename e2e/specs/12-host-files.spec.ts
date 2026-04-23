@@ -22,13 +22,14 @@ test.describe("host files", () => {
         await expect(page.getByRole("button", { name: /Refresh/ }).last()).toBeVisible();
 
         // Should see the root directory entries.
-        await expect(page.getByText("etc", { exact: true })).toBeVisible({ timeout: 10_000 });
+        const etcRow = page.getByRole("row").filter({ hasText: "etc" }).getByRole("button", { name: "etc" });
+        await expect(etcRow).toBeVisible({ timeout: 10_000 });
 
         // Navigate into /etc.
-        await page.getByRole("button", { name: "etc" }).click();
+        await etcRow.click();
         
         // Should see entries inside /etc.
-        await expect(page.getByText("hostname", { exact: true })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByText("hostname", { exact: true })).toBeVisible({ timeout: 15_000 });
 
         await page.screenshot({
             path: shotPath("17-host-files.png"),

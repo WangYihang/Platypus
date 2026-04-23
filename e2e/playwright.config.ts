@@ -20,8 +20,8 @@ export default defineConfig({
     timeout: 60_000,
     use: {
         baseURL,
-        trace: "on-first-retry",
-        video: "on-first-retry",
+        trace: "on",
+        video: "on",
     },
     projects: [
         {

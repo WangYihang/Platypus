@@ -3,7 +3,7 @@ import { ResponsiveContainer } from "recharts";
 
 interface Props {
     children: ReactElement;
-    height?: number | string;
+    height?: number | `${number}%`;
     minHeight?: number;
 }
 
