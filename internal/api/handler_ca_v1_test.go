@@ -64,6 +64,7 @@ func TestCA_InitAndGet(t *testing.T) {
 	block, _ := pem.Decode([]byte(resp.CertPEM))
 	if block == nil {
 		t.Fatal("CertPEM decoded empty")
+		return // satisfy staticcheck
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil || !cert.IsCA {

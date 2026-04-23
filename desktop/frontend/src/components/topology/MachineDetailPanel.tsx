@@ -2,7 +2,9 @@
 // when a compound machine node is selected on the graph.
 
 import { useMemo } from "react";
-import { Line, LineChart, ResponsiveContainer, YAxis } from "recharts";
+import { Line, LineChart, YAxis } from "recharts";
+
+import ChartContainer from "../charts/ChartContainer";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -166,12 +168,14 @@ function Kv({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
     );
 }
 
+import ChartContainer from "../charts/ChartContainer";
+...
 function Sparkline({ data }: { data: Array<{ t: number; v: number }> }) {
     if (data.length === 0) {
         return <div className="h-full" style={{ borderLeft: `1px solid ${palette.border}` }} />;
     }
     return (
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+        <ChartContainer height="100%">
             <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
                 <YAxis hide domain={[0, 100]} />
                 <Line
@@ -183,6 +187,6 @@ function Sparkline({ data }: { data: Array<{ t: number; v: number }> }) {
                     isAnimationActive={false}
                 />
             </LineChart>
-        </ResponsiveContainer>
+        </ChartContainer>
     );
 }

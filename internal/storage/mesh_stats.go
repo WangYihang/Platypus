@@ -64,7 +64,7 @@ func (r *MeshStatsRepo) InsertLinkStats(ctx context.Context, rows []MeshLinkStat
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, row := range rows {
 		a, b := canonicalPair(row.NodeA, row.NodeB)
 		var rtt interface{}
@@ -105,7 +105,7 @@ func (r *MeshStatsRepo) InsertMachineStats(ctx context.Context, rows []MachineSt
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, row := range rows {
 		var cpu, mem interface{}
 		if row.CPUPercent != nil {
@@ -150,7 +150,7 @@ func (r *MeshStatsRepo) ListLinkHistory(ctx context.Context, projectID, nodeA, n
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []MeshLinkStat
 	for rows.Next() {
 		var s MeshLinkStat
@@ -187,7 +187,7 @@ func (r *MeshStatsRepo) ListMachineHistory(ctx context.Context, hostID string, o
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []MachineStat
 	for rows.Next() {
 		var s MachineStat

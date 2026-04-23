@@ -3,7 +3,6 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
-    ResponsiveContainer,
     Tooltip,
     XAxis,
     YAxis,
@@ -11,6 +10,7 @@ import {
 
 import Card from "../Card";
 import EmptyState from "../EmptyState";
+import ChartContainer from "./ChartContainer";
 import { font, palette } from "../../layout/theme";
 
 export interface BarPoint {
@@ -42,7 +42,7 @@ export default function BarChartCard({
                 </div>
             ) : (
                 <div style={{ width: "100%", height }}>
-                    <ResponsiveContainer minWidth={0} minHeight={0}>
+                    <ChartContainer height={height}>
                         <BarChart
                             data={data}
                             layout="vertical"
@@ -82,7 +82,7 @@ export default function BarChartCard({
                             />
                             <Bar dataKey="value" fill={color} radius={[0, 3, 3, 0]} />
                         </BarChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                 </div>
             )}
         </Card>

@@ -188,7 +188,8 @@ func (h *ActivitiesHandler) streamJSONL(c *gin.Context, filter storage.ActivityF
 	for {
 		page, cursor, err := h.db.Activities().List(c.Request.Context(), filter)
 		if err != nil {
-			_, _ = c.Writer.WriteString(fmt.Sprintf("\n{\"error\":%q}\n", err.Error()))
+			_, _ = fmt.Fprintf(c.Writer,
+				"\n{\"error\":%q}\n", err.Error())
 			return
 		}
 		for _, a := range page {
@@ -218,7 +219,8 @@ func (h *ActivitiesHandler) streamCSV(c *gin.Context, filter storage.ActivityFil
 	for {
 		page, cursor, err := h.db.Activities().List(c.Request.Context(), filter)
 		if err != nil {
-			_, _ = c.Writer.WriteString(fmt.Sprintf("\n# error: %s\n", err.Error()))
+			_, _ = fmt.Fprintf(c.Writer,
+				"\n# error: %s\n", err.Error())
 			return
 		}
 		for _, a := range page {

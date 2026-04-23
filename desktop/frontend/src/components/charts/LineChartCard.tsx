@@ -3,7 +3,6 @@ import {
     CartesianGrid,
     Line,
     LineChart,
-    ResponsiveContainer,
     Tooltip,
     XAxis,
     YAxis,
@@ -11,6 +10,7 @@ import {
 
 import Card from "../Card";
 import EmptyState from "../EmptyState";
+import ChartContainer from "./ChartContainer";
 import { font, palette, space } from "../../layout/theme";
 
 export interface LinePoint {
@@ -59,7 +59,7 @@ export default function LineChartCard({
                 </div>
             ) : (
                 <div style={{ width: "100%", height }}>
-                    <ResponsiveContainer minWidth={0} minHeight={0}>
+                    <ChartContainer height={height}>
                         <LineChart
                             data={data}
                             margin={{ top: 4, right: 8, bottom: 0, left: -16 }}
@@ -109,7 +109,7 @@ export default function LineChartCard({
                                 activeDot={{ r: 4, fill: color }}
                             />
                         </LineChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                 </div>
             )}
         </Card>

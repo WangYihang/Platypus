@@ -77,6 +77,7 @@ func TestEnsureCA_IdempotentAndPersistent(t *testing.T) {
 	block, _ := pem.Decode([]byte(first.CertPEM))
 	if block == nil {
 		t.Fatal("CA CertPEM decoded empty")
+		return // satisfy staticcheck
 	}
 	caCert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {

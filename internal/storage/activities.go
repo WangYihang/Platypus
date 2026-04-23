@@ -151,20 +151,20 @@ func (r *ActivityRepo) Record(ctx context.Context, e *Activity) error {
 // pointer to "" (only global events, project_id IS NULL), pointer to a
 // specific id (that project; optionally merge global via IncludeGlobal).
 type ActivityFilter struct {
-	ProjectID      *string
-	IncludeGlobal  bool // when ProjectID is set, also include project_id IS NULL rows
-	Categories     []string
-	Actions        []string
-	ActorUser      string
-	Outcome        string
-	SessionID      string
-	TargetType     string
-	TargetID       string
-	Search         string // free-text LIKE against action / target_label / meta
-	From           time.Time
-	To             time.Time
-	Limit          int
-	Cursor         string // opaque keyset cursor from a prior page
+	ProjectID     *string
+	IncludeGlobal bool // when ProjectID is set, also include project_id IS NULL rows
+	Categories    []string
+	Actions       []string
+	ActorUser     string
+	Outcome       string
+	SessionID     string
+	TargetType    string
+	TargetID      string
+	Search        string // free-text LIKE against action / target_label / meta
+	From          time.Time
+	To            time.Time
+	Limit         int
+	Cursor        string // opaque keyset cursor from a prior page
 }
 
 // DefaultActivityListLimit is applied when Filter.Limit <= 0.
@@ -273,7 +273,7 @@ func (r *ActivityRepo) List(ctx context.Context, f ActivityFilter) ([]*Activity,
 	if err != nil {
 		return nil, "", err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]*Activity, 0, limit)
 	for rows.Next() {

@@ -3,7 +3,9 @@
 // history stats endpoint and renders it with recharts.
 
 import { useState } from "react";
-import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { Line, LineChart, XAxis, YAxis } from "recharts";
+
+import ChartContainer from "../charts/ChartContainer";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -103,7 +105,7 @@ export default function LinkDetailPanel({
                                 </div>
                                 {history && history.length > 0 && (
                                     <div className="h-36">
-                                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                        <ChartContainer height="100%">
                                             <LineChart
                                                 data={history.map((p, i) => {
                                                     if (i === 0) return { t: p.at, rate: 0 };
@@ -124,9 +126,10 @@ export default function LinkDetailPanel({
                                                     dot={false}
                                                     isAnimationActive={false}
                                                 />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                                </LineChart>
+                                                </ChartContainer>
+                                                </div>
+
                                 )}
                                 {history && history.length === 0 && (
                                     <p className="text-xs" style={{ color: palette.textMuted }}>

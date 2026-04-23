@@ -9,10 +9,12 @@ test.describe("projects multi", () => {
         await page.getByRole("button", { name: /Default created/i }).click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Click the project switcher in the sidebar.
-        await page.getByRole("button", { name: /Default/ }).first().click();
-        // Wait for popover animation to fully finish.
-        await page.waitForTimeout(1000);
+        // Click the project switcher in the sidebar. Use a specific locator to
+        // avoid clicking other "Default" text on the overview page.
+        await page.getByRole("complementary").getByRole("button", { name: /Default/ }).first().click();
+        
+        // Wait for popover animation.
+        await page.waitForTimeout(1500);
 
         // Both projects appear in the popover.
         await expect(page.getByText("Projects", { exact: true }).first()).toBeVisible();
