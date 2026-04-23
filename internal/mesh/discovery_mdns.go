@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"strconv"
 	"strings"
@@ -76,17 +77,19 @@ func (n *Node) browse(ctx context.Context) {
 		interval = 30 * time.Second
 	}
 
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
 	n.logger.Info("mdns browsing started", slog.Duration("interval", interval))
 
+	// Initial scan
+	n.doBrowse(ctx)
+
 	for {
-		n.doBrowse(ctx)
+		// Add up to 20% jitter to the interval
+		jitter := time.Duration(float64(interval) * 0.2 * (2.0*rand.Float64() - 1.0))
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
+		case <-time.After(interval + jitter):
+			n.doBrowse(ctx)
 		}
 	}
 }

@@ -15,14 +15,14 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { TopologyMachine } from "../../lib/api";
+import { TopologyMachine, TopologySession } from "../../lib/api";
 import { fromNow } from "../../lib/time";
 import { palette } from "../../layout/theme";
 
 interface Props {
     machine: TopologyMachine | null;
     series: { cpu: Array<{ t: number; v: number }>; mem: Array<{ t: number; v: number }> } | undefined;
-    liveSessions: SessionRow[];
+    liveSessions: TopologySession[];
     onClose: () => void;
 }
 

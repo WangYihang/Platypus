@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from "node:child_process";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import * as YAML from "yaml";
@@ -239,13 +240,24 @@ export default async function globalSetup() {
     // is required by the CLI but unused by Connect (internal/agent/agent.go:52).
     // The connection is TLS+protobuf with InsecureSkipVerify, so no CA
     // setup is needed.
+    const agentHome = path.join(tmpdir, "baseline-agent");
+    fs.mkdirSync(agentHome, { recursive: true });
     const agent = spawn(
         AGENT_BINARY,
-        ["--host", BACKEND_HOST, "--port", String(SEEDED_LISTENER_PORT), "--token", "e2e"],
+        [
+            "--host",
+            BACKEND_HOST,
+            "--port",
+            String(SEEDED_LISTENER_PORT),
+            "--token",
+            "e2e",
+            "--identity-dir",
+            agentHome,
+        ],
         {
             cwd: tmpdir,
             stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env, HOME: tmpdir },
+            env: { ...process.env },
         },
     );
     process.env.PLATYPUS_E2E_AGENT_PID = String(agent.pid);

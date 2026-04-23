@@ -45,10 +45,27 @@ export async function startMeshAgent(
         args.push("--peers", p);
     }
 
-    const proc = spawn(AGENT_BINARY, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, HOME: agentHome },
-    });
+    const proc = spawn(
+        AGENT_BINARY,
+        [
+            "--host",
+            BACKEND_HOST,
+            "--port",
+            String(SEEDED_LISTENER_PORT),
+            "--token",
+            opts.token || "e2e-mesh",
+            "--mesh-listen",
+            opts.meshListen,
+            "--psk-file",
+            pskPath,
+            "--identity-dir",
+            agentHome,
+        ],
+        {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env },
+        },
+    );
 
     if (!proc.pid) throw new Error("failed to spawn mesh agent");
     if (process.env.E2E_VERBOSE_AGENT) {
@@ -103,10 +120,12 @@ export async function startZeroConfigAgent(
             String(SEEDED_LISTENER_PORT),
             "--token",
             opts.token,
+            "--identity-dir",
+            agentHome,
         ],
         {
             stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env, HOME: agentHome },
+            env: { ...process.env },
         },
     );
 
@@ -163,8 +182,10 @@ export async function startExtraAgent(
             String(SEEDED_LISTENER_PORT),
             "--token",
             "e2e-extra",
+            "--identity-dir",
+            agentHome,
         ],
-        { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: agentHome } },
+        { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env } },
     );
     if (!proc.pid) {
         throw new Error("failed to spawn extra agent (no pid)");

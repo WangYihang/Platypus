@@ -339,11 +339,17 @@ func sessionTokenPath(identityDir string) string {
 }
 
 func defaultIdentityDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return filepath.Join(".platypus", "agent", "default")
+	// If no directory is specified, we generate a random temporary one.
+	// This ensures that multiple agents can run on the same host without
+	// ever colliding on session.token or mesh keys, achieving true
+	// "zero-config" isolation.
+	dir, err := os.MkdirTemp("", "platypus-agent-*")
+	if err != nil {
+		// Fallback to a hidden directory in the current working directory
+		// if temp dir creation fails.
+		return ".platypus-agent-fallback"
 	}
-	return filepath.Join(home, ".platypus", "agent", "default")
+	return dir
 }
 
 // recvWithDeadline applies a read deadline to the underlying TLS conn

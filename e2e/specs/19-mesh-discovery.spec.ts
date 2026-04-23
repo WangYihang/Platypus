@@ -27,22 +27,20 @@ test.describe("mesh automatic discovery", () => {
             await page.getByRole("link", { name: /Topology$/ }).click();
             await expect(page).toHaveURL(/\/projects\/default\/topology$/);
 
-            // Give mDNS discovery and mesh links time to form and propagate.
-            // mDNS might take a few seconds to scan and dial.
-            await page.waitForTimeout(10000);
-
-            // The topology page should show at least 3 machines (baseline + A + B).
-            // And since they are meshed, they should be connected in the graph.
-            // We'll check the machine count in the header.
-            await expect(page.getByText(/\d+ machines/)).toBeVisible({ timeout: 30_000 });
+            // Wait for the topology page to show at least 3 machines (baseline + A + B).
+            // We use a longer timeout and polling because mDNS and Topology streams are asynchronous.
+            const machineCountLabel = page.getByText(/\d+ machines/);
+            await expect(machineCountLabel).toBeVisible({ timeout: 45_000 });
             
-            // Extract the number of machines.
-            const headerText = await page.getByText(/\d+ machines/).innerText();
-            const count = parseInt(headerText.split(" ")[0]);
-            expect(count).toBeGreaterThanOrEqual(3);
+            // Periodically check the count until it's at least 3.
+            await expect(async () => {
+                const headerText = await machineCountLabel.innerText();
+                const count = parseInt(headerText.split(" ")[0]);
+                expect(count).toBeGreaterThanOrEqual(3);
+            }).toPass({ timeout: 30_000 });
 
             // If discovery worked, there should be links in the topology data.
-            // We can check if "hub-and-spoke" message is GONE.
+            // In mesh mode, the "hub-and-spoke" warning should be hidden.
             await expect(page.getByText(/hub-and-spoke/)).not.toBeVisible();
 
             await page.screenshot({

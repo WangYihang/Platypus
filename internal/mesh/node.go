@@ -77,21 +77,23 @@ func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 		}
 		cfg.PSK = psk
 	}
-	logger = logger.With(
-		slog.String("component", "mesh"),
-		slog.String("node_id", cfg.Identity.NodeID),
-	)
 	n := &Node{
-		identity:   cfg.Identity,
-		psk:        cfg.PSK,
-		cfg:        cfg,
-		logger:     logger,
+		identity: cfg.Identity,
+		psk:      cfg.PSK,
+		cfg:      cfg,
+		logger: logger.With(
+			slog.String("component", "mesh"),
+			slog.String("node_id", cfg.Identity.NodeID),
+		),
 		registry:   newRegistry(),
 		lsdb:       newLSDB(),
 		routes:     newRouteTable(),
 		links:      map[string]*Link{},
 		peerFloods: map[string]uint64{},
 		stopped:    make(chan struct{}),
+	}
+	if n.cfg.ProjectID == "" {
+		n.cfg.ProjectID = "default"
 	}
 	// Seed the registry with ourselves so other nodes can learn our
 	// public key when they ask for our peer list.
