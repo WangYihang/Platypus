@@ -17,6 +17,9 @@ importers:
       '@codemirror/lang-python':
         specifier: ^6.2.1
         version: 6.2.1
+      '@codemirror/language':
+        specifier: ^6.12.3
+        version: 6.12.3
       '@codemirror/legacy-modes':
         specifier: ^6.5.2
         version: 6.5.2
