@@ -151,7 +151,7 @@ export function useTopology(projectId: string): TopologyState {
                 setSnapshot((prev) => {
                     if (!prev) return prev;
                     const byKey: Record<string, TopologyLink> = {};
-                    for (const l of prev.links) byKey[edgeKey(l.a, l.b)] = l;
+                    for (const l of prev.links ?? []) byKey[edgeKey(l.a, l.b)] = l;
                     for (const l of payload.links) {
                         const k = edgeKey(l.a, l.b);
                         const existing = byKey[k];
@@ -195,7 +195,7 @@ export function useTopology(projectId: string): TopologyState {
                 // without waiting for the next snapshot refresh.
                 setSnapshot((prev) => {
                     if (!prev) return prev;
-                    const machines = prev.machines.map((m) => {
+                    const machines = (prev.machines ?? []).map((m) => {
                         if (m.host_id !== payload.host_id) return m;
                         return {
                             ...m,
@@ -231,7 +231,7 @@ export function useTopology(projectId: string): TopologyState {
                     if (!prev) return prev;
                     return {
                         ...prev,
-                        links: prev.links.map((l) =>
+                        links: (prev.links ?? []).map((l) =>
                             l.a === payload.peer || l.b === payload.peer
                                 ? { ...l, up: false }
                                 : l,

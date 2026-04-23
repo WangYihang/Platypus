@@ -171,7 +171,7 @@ function Sparkline({ data }: { data: Array<{ t: number; v: number }> }) {
         return <div className="h-full" style={{ borderLeft: `1px solid ${palette.border}` }} />;
     }
     return (
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
                 <YAxis hide domain={[0, 100]} />
                 <Line

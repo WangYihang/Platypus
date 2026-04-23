@@ -26,19 +26,19 @@ export default function TopologyPage() {
     const [selectedLink, setSelectedLink] = useState<string | null>(null);
 
     const machine = useMemo(
-        () => state.snapshot?.machines.find((m) => m.host_id === selectedMachine) ?? null,
+        () => (state.snapshot?.machines ?? []).find((m) => m.host_id === selectedMachine) ?? null,
         [state.snapshot, selectedMachine],
     );
     const link = useMemo(() => {
         if (!state.snapshot || !selectedLink) return null;
         const [a, b] = selectedLink.split("|");
-        return state.snapshot.links.find(
+        return (state.snapshot.links ?? []).find(
             (l) => (l.a === a && l.b === b) || (l.a === b && l.b === a),
         ) ?? null;
     }, [state.snapshot, selectedLink]);
 
     const headerMeta = state.snapshot
-        ? `${state.snapshot.machines.length} machine${state.snapshot.machines.length === 1 ? "" : "s"} · ${state.snapshot.links.length} link${state.snapshot.links.length === 1 ? "" : "s"}${state.snapshot.mesh_enabled ? "" : " · hub-and-spoke"}`
+        ? `${(state.snapshot.machines ?? []).length} machine${(state.snapshot.machines ?? []).length === 1 ? "" : "s"} · ${(state.snapshot.links ?? []).length} link${(state.snapshot.links ?? []).length === 1 ? "" : "s"}${state.snapshot.mesh_enabled ? "" : " · hub-and-spoke"}`
         : undefined;
 
     return (
@@ -63,7 +63,7 @@ export default function TopologyPage() {
             {state.snapshot && (
                 <Card>
                     <div style={{ height: "calc(100vh - 220px)", minHeight: 400, position: "relative" }}>
-                        {state.snapshot.machines.length === 0 && state.snapshot.mesh_nodes.length === 0 && (
+                        {(state.snapshot.machines ?? []).length === 0 && (state.snapshot.mesh_nodes ?? []).length === 0 && (
                             <div
                                 style={{
                                     position: "absolute",
@@ -79,9 +79,9 @@ export default function TopologyPage() {
                             </div>
                         )}
                         <MeshGraph
-                            machines={state.snapshot.machines}
-                            meshNodes={state.snapshot.mesh_nodes}
-                            links={state.snapshot.links}
+                            machines={state.snapshot.machines ?? []}
+                            meshNodes={state.snapshot.mesh_nodes ?? []}
+                            links={state.snapshot.links ?? []}
                             linkRates={state.linkRates}
                             onSelectMachine={setSelectedMachine}
                             onSelectLink={setSelectedLink}

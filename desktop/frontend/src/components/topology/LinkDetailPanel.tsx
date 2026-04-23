@@ -103,7 +103,7 @@ export default function LinkDetailPanel({
                                 </div>
                                 {history && history.length > 0 && (
                                     <div className="h-36">
-                                        <ResponsiveContainer width="100%" height="100%">
+                                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                             <LineChart
                                                 data={history.map((p, i) => {
                                                     if (i === 0) return { t: p.at, rate: 0 };
