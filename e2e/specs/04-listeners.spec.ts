@@ -32,6 +32,8 @@ test.describe("listeners", () => {
 
         await page.getByRole("button", { name: /New listener/ }).first().click();
         await expect(page.getByRole("dialog", { name: "New listener" })).toBeVisible();
+        // Wait for modal animation to settle.
+        await page.waitForTimeout(1000);
         // The form has Host + Port fields with sensible defaults.
         await expect(page.getByLabel("Host")).toHaveValue("0.0.0.0");
         await page.screenshot({

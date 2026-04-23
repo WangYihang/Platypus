@@ -29,6 +29,8 @@ test.describe("host tunnels", () => {
         // Open the create modal — defaults to dynamic mode.
         await page.getByRole("button", { name: /New tunnel/ }).click();
         await expect(page.getByRole("dialog", { name: "New tunnel" })).toBeVisible();
+        // Wait for modal animation.
+        await page.waitForTimeout(1000);
         await expect(page.getByText(/Agent runs a SOCKS5 server/)).toBeVisible();
 
         await page.screenshot({

@@ -11,10 +11,17 @@ test.describe("projects multi", () => {
 
         // Click the project switcher in the sidebar.
         await page.getByRole("button", { name: /Default/ }).first().click();
+        // Wait for popover animation to fully finish.
+        await page.waitForTimeout(1000);
+
         // Both projects appear in the popover.
-        const popover = page.getByText("Projects", { exact: true }).first();
-        await expect(popover).toBeVisible();
-        await expect(page.getByRole("button", { name: /Default/ }).first())
+        await expect(page.getByText("Projects", { exact: true }).first()).toBeVisible();
+        
+        // Find buttons specifically inside the popover to avoid trigger-button collision.
+        const list = page.getByRole("button").filter({ hasText: "All projects" })
+            .locator(".."); // Parent container of the list
+
+        await expect(page.getByRole("button", { name: /Default/ }).last())
             .toBeVisible();
         await expect(page.getByRole("button", { name: /Staging/ }))
             .toBeVisible();
