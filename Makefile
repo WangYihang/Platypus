@@ -135,7 +135,7 @@ desktop-dev:
 	cd desktop && $(WAILS) dev -tags "$(WAILS_TAGS)"
 
 desktop-build:
-	cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)"
+	cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)" -ldflags "$(LDFLAGS)"
 
 desktop-test:
 	cd desktop && $(GO) test -race -count=1 -timeout=120s ./internal/...
