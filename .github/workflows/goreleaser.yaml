@@ -14,19 +14,19 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Build snapshot version
         if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: latest
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run GoReleaser for release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: latest
