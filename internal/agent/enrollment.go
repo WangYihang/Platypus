@@ -216,6 +216,7 @@ func deliverRenewalResponse(reqID string, resp *agentpb.SessionRenewResponse) {
 // server rejected us and the connection must be abandoned — see
 // internal/agent/agent.go:Connect for the caller.
 func MaybeEnroll(c *Client, token, identityDir string) (*EnrollmentResult, error) {
+	identityDir = ResolveIdentityDir(identityDir)
 	raw, source, err := chooseCredential(token, identityDir)
 	if err != nil {
 		return &EnrollmentResult{}, err
@@ -277,6 +278,11 @@ func MaybeEnroll(c *Client, token, identityDir string) (*EnrollmentResult, error
 		// Non-fatal — enrollment still happened on the server side,
 		// but the next restart will need another PAT.
 	}
+	if len(r.MeshPsk) > 0 || r.MeshProjectId != "" || len(r.MeshPeers) > 0 {
+		if err := PersistMeshBootstrap(identityDir, r.MeshPsk, r.MeshProjectId, r.MeshPeers); err != nil {
+			log.Warn("Failed to persist mesh bootstrap state (%s): %s", identityDir, err)
+		}
+	}
 	_ = source // source is informative for the log line only
 
 	return &EnrollmentResult{
@@ -297,9 +303,7 @@ func MaybeEnroll(c *Client, token, identityDir string) (*EnrollmentResult, error
 //
 // Anything else → empty (signal: stay legacy).
 func chooseCredential(token, identityDir string) (cred, source string, err error) {
-	if identityDir == "" {
-		identityDir = defaultIdentityDir()
-	}
+	identityDir = ResolveIdentityDir(identityDir)
 	// 1) Session file
 	path := sessionTokenPath(identityDir)
 	if data, err := os.ReadFile(path); err == nil {
@@ -320,9 +324,7 @@ func chooseCredential(token, identityDir string) (cred, source string, err error
 // persistSessionToken writes the session_token to <identityDir>/session.token
 // with mode 0600. Creates the directory with 0700 if it doesn't exist.
 func persistSessionToken(identityDir, token string) error {
-	if identityDir == "" {
-		identityDir = defaultIdentityDir()
-	}
+	identityDir = ResolveIdentityDir(identityDir)
 	if err := os.MkdirAll(identityDir, 0o700); err != nil {
 		return err
 	}
@@ -336,20 +338,6 @@ func persistSessionToken(identityDir, token string) error {
 
 func sessionTokenPath(identityDir string) string {
 	return filepath.Join(identityDir, "session.token")
-}
-
-func defaultIdentityDir() string {
-	// If no directory is specified, we generate a random temporary one.
-	// This ensures that multiple agents can run on the same host without
-	// ever colliding on session.token or mesh keys, achieving true
-	// "zero-config" isolation.
-	dir, err := os.MkdirTemp("", "platypus-agent-*")
-	if err != nil {
-		// Fallback to a hidden directory in the current working directory
-		// if temp dir creation fails.
-		return ".platypus-agent-fallback"
-	}
-	return dir
 }
 
 // recvWithDeadline applies a read deadline to the underlying TLS conn

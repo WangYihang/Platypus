@@ -2,21 +2,32 @@ package mesh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
-const meshStreamChunkSize = 16 * 1024
+const (
+	meshStreamChunkSize    = 16 * 1024
+	meshStreamInboundQueue = 32
+)
 
 type streamKey struct {
 	initiator string
 	id        uint64
+}
+
+type inboundFrame struct {
+	chunk  []byte
+	eof    bool
+	reason string
 }
 
 type streamState struct {
@@ -26,6 +37,8 @@ type streamState struct {
 
 	openCh   chan error
 	opened   bool
+	inbound  chan inboundFrame
+	done     chan struct{}
 	closeMu  sync.Mutex
 	closed   bool
 	closeErr string
@@ -151,16 +164,15 @@ func (m *streamManager) handleData(env *agentpb.Envelope) {
 	if st == nil {
 		return
 	}
+	frame := inboundFrame{eof: msg.Eof}
 	if len(msg.Chunk) > 0 {
-		if _, err := st.conn.Write(msg.Chunk); err != nil {
-			m.node.logger.Debug("mesh stream write failed", slog.String("error", err.Error()))
-			m.closeStream(st, err.Error(), true)
-			return
-		}
+		frame.chunk = append([]byte(nil), msg.Chunk...)
 	}
-	if msg.Eof {
-		closeConn(st.conn)
-		m.drop(key)
+	if !m.enqueueInbound(st, frame) {
+		m.node.logger.Warn("mesh stream inbound queue overflow",
+			slog.String("initiator", key.initiator),
+			slog.Uint64("stream_id", key.id))
+		go m.closeStream(st, "inbound queue overflow", true)
 	}
 }
 
@@ -175,8 +187,7 @@ func (m *streamManager) handleClose(env *agentpb.Envelope) {
 		return
 	}
 	st.closeErr = msg.Reason
-	closeConn(st.conn)
-	m.drop(key)
+	_ = m.enqueueInbound(st, inboundFrame{reason: msg.Reason})
 }
 
 func (m *streamManager) pumpOutbound(st *streamState) {
@@ -197,10 +208,49 @@ func (m *streamManager) pumpOutbound(st *streamState) {
 				m.node.logger.Debug("mesh stream read failed", slog.String("error", err.Error()))
 				m.sendClose(st, err.Error())
 			}
-			closeConn(st.conn)
-			m.drop(st.key)
+			m.closeStream(st, "", false)
 			return
 		}
+	}
+}
+
+func (m *streamManager) pumpInbound(st *streamState) {
+	for {
+		select {
+		case <-st.done:
+			return
+		case frame, ok := <-st.inbound:
+			if !ok {
+				return
+			}
+			if len(frame.chunk) > 0 {
+				if _, err := st.conn.Write(frame.chunk); err != nil {
+					if !isClosedConnErr(err) {
+						m.node.logger.Debug("mesh stream write failed", slog.String("error", err.Error()))
+						m.closeStream(st, err.Error(), true)
+					}
+					return
+				}
+			}
+			if frame.eof || frame.reason != "" {
+				m.closeStream(st, frame.reason, false)
+				return
+			}
+		}
+	}
+}
+
+func (m *streamManager) enqueueInbound(st *streamState, frame inboundFrame) bool {
+	select {
+	case <-st.done:
+		return false
+	default:
+	}
+	select {
+	case st.inbound <- frame:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -209,6 +259,8 @@ func (m *streamManager) newState(key streamKey, peerNode string, conn net.Conn, 
 		key:      key,
 		peerNode: peerNode,
 		conn:     conn,
+		inbound:  make(chan inboundFrame, meshStreamInboundQueue),
+		done:     make(chan struct{}),
 	}
 	if waitAck {
 		st.openCh = make(chan error, 1)
@@ -216,6 +268,7 @@ func (m *streamManager) newState(key streamKey, peerNode string, conn net.Conn, 
 	m.mu.Lock()
 	m.streams[key] = st
 	m.mu.Unlock()
+	go m.pumpInbound(st)
 	return st
 }
 
@@ -245,6 +298,7 @@ func (m *streamManager) closeStream(st *streamState, reason string, notifyPeer b
 		return
 	}
 	st.closed = true
+	close(st.done)
 	st.closeMu.Unlock()
 	if notifyPeer {
 		m.sendClose(st, reason)
@@ -295,17 +349,5 @@ func (m *streamManager) sendClose(st *streamState, reason string) {
 }
 
 func isClosedConnErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	return err == net.ErrClosed
-}
-
-// DialBootstrap opens a routed byte stream to the target mesh node and
-// returns a net.Conn that callers can wrap with TLS.
-func (n *Node) DialBootstrap(ctx context.Context, targetNodeID string) (net.Conn, error) {
-	if n == nil || n.streams == nil {
-		return nil, fmt.Errorf("mesh: node not initialised")
-	}
-	return n.streams.DialBootstrap(ctx, targetNodeID)
+	return err != nil && (errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection"))
 }

@@ -32,6 +32,23 @@ func main() {
 	defer stop()
 
 	state := agent.Init()
+	identityDir := agent.ResolveIdentityDir(opts.IdentityDir)
+	meshPSKFile := opts.MeshPSKFile
+	meshPeers := append([]string(nil), opts.MeshPeers...)
+	meshProjectID := opts.MeshProjectID
+	if persisted, err := agent.LoadPersistedMeshBootstrap(identityDir); err != nil {
+		logger.Warn("load persisted mesh bootstrap", slog.String("error", err.Error()))
+	} else if persisted != nil {
+		if meshPSKFile == "" {
+			meshPSKFile = persisted.PSKFile
+		}
+		if meshProjectID == "" {
+			meshProjectID = persisted.ProjectID
+		}
+		if len(meshPeers) == 0 {
+			meshPeers = append(meshPeers, persisted.Peers...)
+		}
+	}
 	endpoint := fmt.Sprintf("%s:%d", opts.RemoteHost, opts.RemotePort)
 	logger.Info("starting agent",
 		slog.String("endpoint", endpoint),
@@ -41,17 +58,17 @@ func main() {
 	// Mesh overlay is opt-in: enable only when the operator provides a PSK
 	// file. This preserves the legacy hub-and-spoke behaviour for agents
 	// that have not yet been migrated.
-	if opts.MeshPSKFile != "" {
+	if meshPSKFile != "" {
 		cfg := mesh.Config{
-			IdentityDir:       opts.IdentityDir,
-			PSKFile:           opts.MeshPSKFile,
+			IdentityDir:       agent.MeshStateDir(identityDir),
+			PSKFile:           meshPSKFile,
 			ListenAddr:        opts.MeshListen,
-			Peers:             opts.MeshPeers,
+			Peers:             meshPeers,
 			AdvertiseAddrs:    opts.MeshAdvertise,
 			Role:              "agent",
 			DiscoveryLAN:      opts.MeshDiscoveryLAN,
 			DiscoveryInterval: opts.MeshDiscoveryInterval,
-			ProjectID:         opts.MeshProjectID,
+			ProjectID:         meshProjectID,
 		}
 		node, err := mesh.NewNode(cfg, logger)
 		if err != nil {
@@ -82,8 +99,8 @@ func main() {
 		}
 		logger.Info("connecting to server", slog.String("endpoint", endpoint))
 		return agent.ConnectWithOptions(endpoint, opts.Token, state, &agent.ConnectOptions{
-			IdentityDir:   opts.IdentityDir,
-			MeshProjectID: opts.MeshProjectID,
+			IdentityDir:   identityDir,
+			MeshProjectID: meshProjectID,
 		})
 	}
 

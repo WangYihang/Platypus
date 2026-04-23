@@ -2,6 +2,7 @@ package core
 
 import (
 	"net"
+	"sync"
 
 	"github.com/WangYihang/Platypus/internal/protocol"
 )
@@ -12,7 +13,9 @@ import (
 // production callers can't accidentally skip CreateAgentClient.
 func NewAgentClientForTest(conn net.Conn) *AgentClient {
 	return &AgentClient{
-		conn:  conn,
-		codec: protocol.NewProtoCodec(conn),
+		conn:      conn,
+		codec:     protocol.NewProtoCodec(conn),
+		atomLock:  new(sync.Mutex),
+		processes: map[string]*Process{},
 	}
 }

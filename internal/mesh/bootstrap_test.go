@@ -2,8 +2,11 @@ package mesh
 
 import (
 	"log/slog"
+	"net"
 	"testing"
 	"time"
+
+	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 func TestRegistryToNodeInfosIncludesBootstrapMetadata(t *testing.T) {
@@ -61,5 +64,81 @@ func TestFindBootstrapServerPrefersReachableServer(t *testing.T) {
 	}
 	if got != serverID.NodeID {
 		t.Fatalf("FindBootstrapServer = %q, want %q", got, serverID.NodeID)
+	}
+}
+
+func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
+	id := mustIdentity(t)
+	node, err := NewNode(Config{
+		Identity:  id,
+		PSK:       randomPSK(t),
+		Role:      "agent",
+		ProjectID: "proj",
+	}, slog.Default())
+	if err != nil {
+		t.Fatalf("NewNode: %v", err)
+	}
+
+	peer := mustIdentity(t)
+	if !node.registry.Upsert(&PeerRecord{
+		NodeID:           peer.NodeID,
+		PublicKey:        peer.PublicKey,
+		Addresses:        []string{"10.0.0.1:7001"},
+		LastSeen:         time.Now().Add(-time.Minute),
+		Role:             "server",
+		BootstrapService: true,
+	}) {
+		t.Fatal("expected existing peer record")
+	}
+
+	if !node.adoptLink(&Link{PeerNodeID: peer.NodeID, PeerPublicKey: peer.PublicKey, PeerAddresses: []string{"10.0.0.2:7001"}}) {
+		t.Fatal("expected adoptLink to accept peer")
+	}
+
+	got := node.registry.Get(peer.NodeID)
+	if got == nil {
+		t.Fatal("registry lost peer")
+	}
+	if got.Role != "server" || !got.BootstrapService {
+		t.Fatalf("bootstrap metadata was cleared: %+v", got)
+	}
+	if len(got.Addresses) != 2 {
+		t.Fatalf("addresses = %#v, want both existing and direct-link addresses", got.Addresses)
+	}
+}
+
+func TestMeshStreamHandleDataDoesNotBlockLinkLoop(t *testing.T) {
+	id := mustIdentity(t)
+	node, err := NewNode(Config{
+		Identity:  id,
+		PSK:       randomPSK(t),
+		Role:      "agent",
+		ProjectID: "proj",
+	}, slog.Default())
+	if err != nil {
+		t.Fatalf("NewNode: %v", err)
+	}
+
+	streamConn, blockedPeer := net.Pipe()
+	defer blockedPeer.Close()
+	st := node.streams.newState(streamKey{initiator: "peer", id: 1}, "peer", streamConn, false)
+	defer node.streams.closeStream(st, "test done", false)
+
+	done := make(chan struct{})
+	go func() {
+		node.streams.handleData(&agentpb.Envelope{
+			Payload: &agentpb.Envelope_MeshStreamData{MeshStreamData: &agentpb.MeshStreamData{
+				InitiatorNodeId: "peer",
+				StreamId:        1,
+				Chunk:           []byte("hello"),
+			}},
+		})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("handleData blocked on slow stream consumer")
 	}
 }

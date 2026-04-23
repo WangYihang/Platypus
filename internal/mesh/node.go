@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -218,12 +219,14 @@ func (n *Node) adoptLink(l *Link) bool {
 	n.linkMu.Unlock()
 
 	// Record the peer + stop any pending dials to other addresses for them.
-	n.registry.Upsert(&PeerRecord{
-		NodeID:    l.PeerNodeID,
-		PublicKey: l.PeerPublicKey,
-		Addresses: l.PeerAddresses,
-		LastSeen:  time.Now(),
-	})
+	rec := n.registry.Get(l.PeerNodeID)
+	if rec == nil {
+		rec = &PeerRecord{NodeID: l.PeerNodeID, PublicKey: l.PeerPublicKey}
+	}
+	rec.PublicKey = l.PeerPublicKey
+	rec.Addresses = mergeAddresses(rec.Addresses, l.PeerAddresses)
+	rec.LastSeen = time.Now()
+	n.registry.Upsert(rec)
 	if n.dialer != nil {
 		n.dialer.StopPeer(l.PeerNodeID)
 	}
@@ -708,6 +711,14 @@ func (n *Node) EnsurePeer(ctx context.Context, nodeID string, addresses []string
 		return
 	}
 	n.dialer.EnsurePeer(ctx, nodeID, addresses)
+}
+
+// DialBootstrap opens a routed bootstrap stream to the target node.
+func (n *Node) DialBootstrap(ctx context.Context, targetNodeID string) (net.Conn, error) {
+	if n == nil || n.streams == nil {
+		return nil, fmt.Errorf("mesh: stream manager not initialized")
+	}
+	return n.streams.DialBootstrap(ctx, targetNodeID)
 }
 
 // FindBootstrapServer returns a reachable server-capable node if one is known.

@@ -147,7 +147,17 @@ func (c *AgentClient) GatherClientInfo(hashFormat string) bool {
 	c.LockAtom()
 	defer c.UnlockAtom()
 
+	if c.conn != nil {
+		if err := c.conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			log.Error("SetReadDeadline error: %s", err)
+			return false
+		}
+		defer func() { _ = c.conn.SetReadDeadline(time.Time{}) }()
+	}
+
+	reqID := uuid.NewString()
 	err := c.Send(&agentpb.Envelope{
+		RequestId: reqID,
 		Payload: &agentpb.Envelope_GetClientInfoRequest{
 			GetClientInfoRequest: &agentpb.GetClientInfoRequest{},
 		},
@@ -157,51 +167,62 @@ func (c *AgentClient) GatherClientInfo(hashFormat string) bool {
 		return false
 	}
 
-	env, err := c.Recv()
-	if err != nil {
-		log.Error("Recv error: %s", err)
-		return false
-	}
-
-	info := env.GetClientInfoResponse()
-	if info == nil {
-		log.Error("Client sent unexpected message: %v", env)
-		return false
-	}
-
-	c.Version = info.Version
-	log.Info("Client version: v%s", c.Version)
-	c.OS = oss.Parse(info.Os)
-	c.User = info.User
-	c.Python2 = ""
-	c.Python3 = ""
-	for _, lang := range info.AvailableLanguages {
-		if lang == "python2" {
-			c.Python2 = "python2"
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			log.Error("Recv error: %s", err)
+			return false
 		}
-		if lang == "python3" {
-			c.Python3 = "python3"
+		if env.RequestId == reqID {
+			info := env.GetClientInfoResponse()
+			if info == nil {
+				log.Error("Client sent unexpected response for client-info request: %v", env)
+				return false
+			}
+
+			c.Version = info.Version
+			log.Info("Client version: v%s", c.Version)
+			c.OS = oss.Parse(info.Os)
+			c.User = info.User
+			c.Python2 = ""
+			c.Python3 = ""
+			for _, lang := range info.AvailableLanguages {
+				if lang == "python2" {
+					c.Python2 = "python2"
+				}
+				if lang == "python3" {
+					c.Python3 = "python3"
+				}
+			}
+			c.NetworkInterfaces = info.NetworkInterfaces
+			c.MachineID = info.MachineId
+			c.Hostname = info.Hostname
+			c.Hash = c.makeHash(hashFormat)
+
+			if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
+				dist := Ctx.Distributor.(*Distributor)
+				c.Send(&agentpb.Envelope{
+					Payload: &agentpb.Envelope_UpdateRequest{
+						UpdateRequest: &agentpb.UpdateRequest{
+							BaseUrl: dist.Url,
+							Version: update.Version,
+							Channel: dist.Channel,
+						},
+					},
+				})
+				return false
+			}
+			return true
+		}
+
+		switch env.Payload.(type) {
+		case *agentpb.Envelope_SysInfoResponse:
+			log.Debug("Ignoring early SysInfoResponse while waiting for ClientInfoResponse")
+		default:
+			log.Error("Client sent unexpected pre-client-info message: %T", env.Payload)
+			return false
 		}
 	}
-	c.NetworkInterfaces = info.NetworkInterfaces
-	c.MachineID = info.MachineId
-	c.Hostname = info.Hostname
-	c.Hash = c.makeHash(hashFormat)
-
-	if semver.Compare(fmt.Sprintf("v%s", update.Version), fmt.Sprintf("v%s", c.Version)) > 0 {
-		dist := Ctx.Distributor.(*Distributor)
-		c.Send(&agentpb.Envelope{
-			Payload: &agentpb.Envelope_UpdateRequest{
-				UpdateRequest: &agentpb.UpdateRequest{
-					BaseUrl: dist.Url,
-					Version: update.Version,
-					Channel: dist.Channel,
-				},
-			},
-		})
-		return false
-	}
-	return true
 }
 
 func (c *AgentClient) RequestTerminate(key string) {

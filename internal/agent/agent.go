@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -138,9 +137,9 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		// bad/revoked credential must not silently fall back to the
 		// legacy unauthenticated path). On absence, we continue straight
 		// into HandleConnection — legacy compatibility.
-		identityDir := ""
+		identityDir := ResolveIdentityDir("")
 		if opts != nil {
-			identityDir = opts.IdentityDir
+			identityDir = ResolveIdentityDir(opts.IdentityDir)
 		}
 		er, err := MaybeEnroll(c, token, identityDir)
 		if err != nil {
@@ -159,21 +158,30 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 			if len(er.MeshPSK) > 0 && state.Mesh == nil {
 				log.Info("Bootstrapping mesh overlay from server...")
 
-				meshDir := ""
-				if identityDir != "" {
-					meshDir = filepath.Join(identityDir, "mesh")
+				meshState, loadErr := LoadPersistedMeshBootstrap(identityDir)
+				if loadErr != nil {
+					log.Warn("Failed to load persisted mesh bootstrap state: %s", loadErr)
 				}
 
 				cfg := mesh.Config{
-					IdentityDir: meshDir,
-					PSK:         er.MeshPSK,
-
+					IdentityDir:       MeshStateDir(identityDir),
 					ListenAddr:        ":0", // Pick a random port
 					Peers:             er.MeshPeers,
 					Role:              "agent",
 					DiscoveryLAN:      true,
 					DiscoveryInterval: 30,
 					ProjectID:         er.MeshProjectID,
+				}
+				if meshState != nil {
+					cfg.PSKFile = meshState.PSKFile
+					if cfg.ProjectID == "" {
+						cfg.ProjectID = meshState.ProjectID
+					}
+					if len(cfg.Peers) == 0 {
+						cfg.Peers = append(cfg.Peers, meshState.Peers...)
+					}
+				} else {
+					cfg.PSK = er.MeshPSK
 				}
 				// If project-id was provided in options, override the one from
 				// enrollment (user choice wins).
