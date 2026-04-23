@@ -15,8 +15,16 @@ services:
       - PLATYPUS_CA_KEK=e2e-kek-do-not-use-in-prod-replace-me-now!!
     restart: always
     depends_on:
+      init-data:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
+
+  init-data:
+    image: alpine
+    volumes:
+      - platypus_data:/app/data
+    command: ["sh", "-c", "mkdir -p /app/data && chmod 777 /app/data"]
 
   minio:
     image: minio/minio
