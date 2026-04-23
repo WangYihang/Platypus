@@ -116,8 +116,12 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		log.Debug("Connecting to: %s", endpoint)
 		conn, err := tls.Dial("tcp", endpoint, &config)
 		if err != nil {
-			log.Error("client: dial: %s", err)
-			return err
+			log.Warn("client: direct dial to server failed: %s. Attempting neighbor bootstrap...", err)
+			directErr := err
+			conn, err = AttemptNeighborBootstrap(state, &config)
+			if err != nil {
+				return fmt.Errorf("agent: direct dial failed: %w; mesh bootstrap failed: %v", directErr, err)
+			}
 		}
 		defer conn.Close()
 

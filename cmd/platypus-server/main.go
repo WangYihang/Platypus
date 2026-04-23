@@ -65,6 +65,10 @@ func main() {
 	servers := startHTTPServers(cfg)
 
 	if cfg.Mesh.PSKFile != "" {
+		bootstrapTarget := deriveBootstrapTarget(cfg)
+		if bootstrapTarget == "" {
+			log.Info("Mesh bootstrap disabled: no bootstrap_target configured and listener inference was not possible.")
+		}
 		node, err := mesh.NewNode(mesh.Config{
 			IdentityDir:       cfg.Mesh.IdentityDir,
 			PSKFile:           cfg.Mesh.PSKFile,
@@ -75,6 +79,8 @@ func main() {
 			DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
 			DiscoveryInterval: cfg.Mesh.DiscoveryInterval,
 			ProjectID:         cfg.Mesh.ProjectID,
+			BootstrapEnabled:  bootstrapTarget != "",
+			BootstrapTarget:   bootstrapTarget,
 		}, nil)
 		if err != nil {
 			log.Error("mesh init failed: %v", err)
@@ -169,6 +175,20 @@ func formatValidationError(err error) error {
 		msg += fmt.Sprintf("\n  - %s: %s (got %v)", fe.Namespace(), fe.Tag(), fe.Value())
 	}
 	return errors.New(msg)
+}
+
+func deriveBootstrapTarget(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	if cfg.Mesh.BootstrapTarget != "" {
+		return cfg.Mesh.BootstrapTarget
+	}
+	if len(cfg.Listeners) != 1 {
+		return ""
+	}
+	l := cfg.Listeners[0]
+	return fmt.Sprintf("%s:%d", l.Host, l.Port)
 }
 
 // mustRandomHex generates a random hex string of the given byte length.

@@ -46,4 +46,13 @@ type Config struct {
 	// ProjectID is used in mDNS TXT records to isolate agents belonging
 	// to different projects on the same LAN.
 	ProjectID string
+
+	// BootstrapEnabled marks this node as able to terminate bootstrap
+	// streams for agents that cannot reach the server directly.
+	BootstrapEnabled bool
+
+	// BootstrapTarget is the address of the Platypus agent listener
+	// (host:port) this node should dial when a bootstrap stream opens.
+	// Meaningful only when BootstrapEnabled is true.
+	BootstrapTarget string
 }

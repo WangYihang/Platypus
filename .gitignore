@@ -66,3 +66,6 @@ e2e/.playwright/
 
 # config file
 config.yaml
+
+# codex
+.codex

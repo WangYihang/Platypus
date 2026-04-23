@@ -102,6 +102,7 @@ type MeshConfig struct {
 	DiscoveryLAN      bool   `yaml:"discovery_lan"      mapstructure:"discovery_lan"`
 	DiscoveryInterval int    `yaml:"discovery_interval" mapstructure:"discovery_interval"`
 	ProjectID         string `yaml:"project_id"         mapstructure:"project_id"`
+	BootstrapTarget   string `yaml:"bootstrap_target"   mapstructure:"bootstrap_target"`
 }
 
 type Config struct {

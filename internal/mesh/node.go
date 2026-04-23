@@ -38,7 +38,9 @@ type Node struct {
 	links          map[string]*Link  // NodeID -> live Link
 	peerFloods     map[string]uint64 // origin -> highest MeshPeerDelta.seq seen
 	lastLSASeq     uint64            // our own outbound LSA seq
+	lastPeerDelta  atomic.Uint64
 	payloadHandler atomic.Pointer[PayloadHandler]
+	streams        *streamManager
 
 	// Link event observers — called synchronously from onLinkUp /
 	// onLinkDown. Used by higher layers (core.topology_events) to
@@ -92,16 +94,19 @@ func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 		peerFloods: map[string]uint64{},
 		stopped:    make(chan struct{}),
 	}
+	n.streams = newStreamManager(n)
 	if n.cfg.ProjectID == "" {
 		n.cfg.ProjectID = "default"
 	}
 	// Seed the registry with ourselves so other nodes can learn our
 	// public key when they ask for our peer list.
 	n.registry.Upsert(&PeerRecord{
-		NodeID:    n.identity.NodeID,
-		PublicKey: n.identity.PublicKey,
-		Addresses: n.advertisedAddrs(),
-		LastSeen:  time.Now(),
+		NodeID:           n.identity.NodeID,
+		PublicKey:        n.identity.PublicKey,
+		Addresses:        n.advertisedAddrs(),
+		LastSeen:         time.Now(),
+		Role:             n.cfg.Role,
+		BootstrapService: n.cfg.BootstrapEnabled,
 	})
 	return n, nil
 }
@@ -157,6 +162,7 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 
 		go n.lsaLoop(ctx)
+		go n.registryLoop(ctx)
 		go n.reconcileLoop(ctx)
 		go n.runDiscovery(ctx)
 	})
@@ -313,6 +319,11 @@ func (n *Node) directPeerSet() map[string]struct{} {
 // Inbound envelope routing
 
 func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
+	if env.TargetNode != "" && env.TargetNode != n.identity.NodeID {
+		n.forward(from, env)
+		return
+	}
+
 	// Decide: mesh-control payload, locally-destined payload, or forward.
 	switch p := env.Payload.(type) {
 	case *agentpb.Envelope_MeshKeepalive:
@@ -335,10 +346,17 @@ func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
 			slog.String("target", p.MeshUnreachable.TargetNode),
 			slog.String("reason", p.MeshUnreachable.Reason))
 		return
-	}
-
-	if env.TargetNode != "" && env.TargetNode != n.identity.NodeID {
-		n.forward(from, env)
+	case *agentpb.Envelope_MeshStreamOpen:
+		n.streams.handleOpen(env)
+		return
+	case *agentpb.Envelope_MeshStreamOpenAck:
+		n.streams.handleOpenAck(env)
+		return
+	case *agentpb.Envelope_MeshStreamData:
+		n.streams.handleData(env)
+		return
+	case *agentpb.Envelope_MeshStreamClose:
+		n.streams.handleClose(env)
 		return
 	}
 
@@ -397,10 +415,12 @@ func (n *Node) ingestAnnounce(from *Link, ann *agentpb.MeshPeerAnnounce) {
 			continue
 		}
 		rec := &PeerRecord{
-			NodeID:    ni.NodeId,
-			PublicKey: ni.Pubkey,
-			Addresses: ni.Addresses,
-			LastSeen:  time.Unix(ni.LastSeen, 0),
+			NodeID:           ni.NodeId,
+			PublicKey:        ni.Pubkey,
+			Addresses:        ni.Addresses,
+			LastSeen:         time.Unix(ni.LastSeen, 0),
+			Role:             ni.Role,
+			BootstrapService: ni.BootstrapService,
 		}
 		if n.registry.Upsert(rec) && n.dialer != nil {
 			n.dialer.EnsurePeer(context.Background(), rec.NodeID, rec.Addresses)
@@ -427,10 +447,12 @@ func (n *Node) ingestDelta(from *Link, delta *agentpb.MeshPeerDelta) {
 			continue
 		}
 		rec := &PeerRecord{
-			NodeID:    ni.NodeId,
-			PublicKey: ni.Pubkey,
-			Addresses: ni.Addresses,
-			LastSeen:  time.Unix(ni.LastSeen, 0),
+			NodeID:           ni.NodeId,
+			PublicKey:        ni.Pubkey,
+			Addresses:        ni.Addresses,
+			LastSeen:         time.Unix(ni.LastSeen, 0),
+			Role:             ni.Role,
+			BootstrapService: ni.BootstrapService,
 		}
 		if n.registry.Upsert(rec) {
 			changed = true
@@ -545,6 +567,48 @@ func (n *Node) recomputeRoutes() {
 	n.routes.Replace(routes)
 }
 
+func (n *Node) registryLoop(ctx context.Context) {
+	sub := n.registry.Subscribe()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-sub:
+			if ev.NodeID == "" || ev.NodeID == n.identity.NodeID {
+				continue
+			}
+			delta := &agentpb.MeshPeerDelta{
+				OriginNodeId: n.identity.NodeID,
+				Seq:          n.lastPeerDelta.Add(1),
+				Ttl:          maxFloodTTL,
+			}
+			switch ev.Kind {
+			case EventAdded, EventUpdated:
+				if ev.Record == nil {
+					continue
+				}
+				delta.Added = append(delta.Added, &agentpb.NodeInfo{
+					NodeId:           ev.Record.NodeID,
+					Pubkey:           ev.Record.PublicKey,
+					Addresses:        append([]string(nil), ev.Record.Addresses...),
+					LastSeen:         ev.Record.LastSeen.Unix(),
+					Role:             ev.Record.Role,
+					BootstrapService: ev.Record.BootstrapService,
+				})
+			case EventRemoved:
+				delta.RemovedIds = append(delta.RemovedIds, ev.NodeID)
+			default:
+				continue
+			}
+			n.floodToAll(nil, &agentpb.Envelope{
+				Version:   meshProtocolVersion,
+				Timestamp: time.Now().UnixNano(),
+				Payload:   &agentpb.Envelope_MeshPeerDelta{MeshPeerDelta: delta},
+			})
+		}
+	}
+}
+
 // ------------------------------------------------------------------
 // Periodic tasks
 
@@ -626,5 +690,41 @@ func (n *Node) PSK() []byte { return n.psk }
 // ProjectID returns the project ID configured for this node.
 func (n *Node) ProjectID() string { return n.cfg.ProjectID }
 
+// IsServer returns true if this node is a Platypus Server.
+func (n *Node) IsServer() bool { return n.cfg.Role == "server" }
+
+// BootstrapEnabled reports whether this node accepts bootstrap streams.
+func (n *Node) BootstrapEnabled() bool { return n.cfg.BootstrapEnabled }
+
+// BootstrapTarget returns the local server endpoint used for bootstrap streams.
+func (n *Node) BootstrapTarget() string { return n.cfg.BootstrapTarget }
+
 // AdvertisedAddrs returns the list of addresses this node is publishing.
 func (n *Node) AdvertisedAddrs() []string { return n.advertisedAddrs() }
+
+// EnsurePeer schedules outbound dial attempts for a discovered peer.
+func (n *Node) EnsurePeer(ctx context.Context, nodeID string, addresses []string) {
+	if n == nil || n.dialer == nil || nodeID == "" || len(addresses) == 0 {
+		return
+	}
+	n.dialer.EnsurePeer(ctx, nodeID, addresses)
+}
+
+// FindBootstrapServer returns a reachable server-capable node if one is known.
+func (n *Node) FindBootstrapServer() (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	for _, rec := range n.registry.Snapshot() {
+		if rec.NodeID == "" || rec.NodeID == n.NodeID() {
+			continue
+		}
+		if rec.Role != "server" || !rec.BootstrapService {
+			continue
+		}
+		if n.hasLink(rec.NodeID) || n.routes.NextHop(rec.NodeID) != "" {
+			return rec.NodeID, true
+		}
+	}
+	return "", false
+}

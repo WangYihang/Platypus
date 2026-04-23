@@ -57,6 +57,8 @@ func (n *Node) advertise(ctx context.Context, addr string) {
 
 	txt := []string{
 		fmt.Sprintf("project_id=%s", n.cfg.ProjectID),
+		fmt.Sprintf("role=%s", n.cfg.Role),
+		fmt.Sprintf("bootstrap_service=%v", n.cfg.BootstrapEnabled),
 	}
 
 	server, err := zeroconf.Register(n.NodeID(), mdnsService, mdnsDomain, port, txt, nil)

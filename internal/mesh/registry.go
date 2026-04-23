@@ -12,10 +12,12 @@ import (
 // long as any node in the mesh has told us about it recently; it does
 // NOT imply we have a live link.
 type PeerRecord struct {
-	NodeID    string
-	PublicKey ed25519.PublicKey
-	Addresses []string
-	LastSeen  time.Time
+	NodeID           string
+	PublicKey        ed25519.PublicKey
+	Addresses        []string
+	LastSeen         time.Time
+	Role             string
+	BootstrapService bool
 }
 
 // Registry is an in-memory, concurrency-safe peer table. Every node runs
@@ -101,6 +103,8 @@ func (r *Registry) Upsert(rec *PeerRecord) bool {
 		merged := copyPeer(existing)
 		merged.PublicKey = rec.PublicKey
 		merged.Addresses = mergeAddresses(existing.Addresses, rec.Addresses)
+		merged.Role = rec.Role
+		merged.BootstrapService = rec.BootstrapService
 		if rec.LastSeen.After(existing.LastSeen) {
 			merged.LastSeen = rec.LastSeen
 		}
@@ -161,10 +165,12 @@ func copyPeer(p *PeerRecord) *PeerRecord {
 	addrs := make([]string, len(p.Addresses))
 	copy(addrs, p.Addresses)
 	return &PeerRecord{
-		NodeID:    p.NodeID,
-		PublicKey: pub,
-		Addresses: addrs,
-		LastSeen:  p.LastSeen,
+		NodeID:           p.NodeID,
+		PublicKey:        pub,
+		Addresses:        addrs,
+		LastSeen:         p.LastSeen,
+		Role:             p.Role,
+		BootstrapService: p.BootstrapService,
 	}
 }
 
@@ -199,7 +205,7 @@ func peerEqual(a, b *PeerRecord) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if a.NodeID != b.NodeID || len(a.Addresses) != len(b.Addresses) {
+	if a.NodeID != b.NodeID || a.Role != b.Role || a.BootstrapService != b.BootstrapService || len(a.Addresses) != len(b.Addresses) {
 		return false
 	}
 	for i := range a.Addresses {
@@ -221,10 +227,12 @@ func (r *Registry) ToNodeInfos() []*agentpb.NodeInfo {
 			last = 0
 		}
 		out = append(out, &agentpb.NodeInfo{
-			NodeId:    p.NodeID,
-			Pubkey:    p.PublicKey,
-			Addresses: append([]string(nil), p.Addresses...),
-			LastSeen:  last,
+			NodeId:           p.NodeID,
+			Pubkey:           p.PublicKey,
+			Addresses:        append([]string(nil), p.Addresses...),
+			LastSeen:         last,
+			Role:             p.Role,
+			BootstrapService: p.BootstrapService,
 		})
 	}
 	return out

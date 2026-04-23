@@ -88,6 +88,12 @@ message Envelope {
     SessionRenewRequest  session_renew_request  = 72;
     SessionRenewResponse session_renew_response = 73;
 
+    // Mesh: multiplexed byte streams for bootstrap.
+    MeshStreamOpen    mesh_stream_open    = 74;
+    MeshStreamOpenAck mesh_stream_open_ack = 75;
+    MeshStreamData    mesh_stream_data    = 76;
+    MeshStreamClose   mesh_stream_close   = 77;
+
     // RPC: filesystem management (directory listing + metadata ops).
     // Tags 38/39 and 74..109 are intentionally skipped — tunneling (40-49),
     // socks5 (50-55), mesh (60-66), enrollment (70-71) and renewal (72-73)
@@ -407,6 +413,8 @@ message NodeInfo {
   bytes           pubkey     = 2; // 32-byte Ed25519 public key
   repeated string addresses  = 3; // host:port entries the node listens on
   int64           last_seen  = 4; // unix seconds — observer's wall clock
+  string          role       = 5; // "agent", "server", ...
+  bool            bootstrap_service = 6; // true if node accepts bootstrap streams
 }
 
 // MeshHello is the first application-level frame sent on a new mesh link
@@ -497,6 +505,38 @@ message MeshLSA {
 message MeshUnreachable {
   string target_node = 1;
   string reason      = 2;
+}
+
+enum MeshStreamKind {
+  MESH_STREAM_KIND_UNSPECIFIED = 0;
+  MESH_STREAM_KIND_BOOTSTRAP_SERVER = 1;
+}
+
+message MeshStreamOpen {
+  string         initiator_node_id = 1;
+  uint64         stream_id         = 2;
+  string         target_node_id    = 3;
+  MeshStreamKind kind              = 4;
+}
+
+message MeshStreamOpenAck {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  bool   ok                = 3;
+  string error             = 4;
+}
+
+message MeshStreamData {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  bytes  chunk             = 3;
+  bool   eof               = 4;
+}
+
+message MeshStreamClose {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  string reason            = 3;
 }
 
 // --- Enrollment ---
