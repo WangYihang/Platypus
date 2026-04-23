@@ -43,12 +43,15 @@ func main() {
 	// that have not yet been migrated.
 	if opts.MeshPSKFile != "" {
 		cfg := mesh.Config{
-			IdentityDir:    opts.MeshIdentityDir,
-			PSKFile:        opts.MeshPSKFile,
-			ListenAddr:     opts.MeshListen,
-			Peers:          opts.MeshPeers,
-			AdvertiseAddrs: opts.MeshAdvertise,
-			Role:           "agent",
+			IdentityDir:       opts.MeshIdentityDir,
+			PSKFile:           opts.MeshPSKFile,
+			ListenAddr:        opts.MeshListen,
+			Peers:             opts.MeshPeers,
+			AdvertiseAddrs:    opts.MeshAdvertise,
+			Role:              "agent",
+			DiscoveryLAN:      opts.MeshDiscoveryLAN,
+			DiscoveryInterval: opts.MeshDiscoveryInterval,
+			ProjectID:         opts.MeshProjectID,
 		}
 		node, err := mesh.NewNode(cfg, logger)
 		if err != nil {
@@ -78,7 +81,10 @@ func main() {
 			return backoff.Permanent(ctx.Err())
 		}
 		logger.Info("connecting to server", slog.String("endpoint", endpoint))
-		return agent.Connect(endpoint, opts.Token, state)
+		return agent.ConnectWithOptions(endpoint, opts.Token, state, &agent.ConnectOptions{
+			MeshIdentityDir: opts.MeshIdentityDir,
+			MeshProjectID:   opts.MeshProjectID,
+		})
 	}
 
 	if err := backoff.Retry(connect, bo); err != nil {

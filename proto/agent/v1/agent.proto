@@ -547,8 +547,9 @@ message AgentEnrollResponse {
   // Optional mesh bootstrap: if the server has mesh enabled, it hands
   // the agent a PSK and (eventually) a list of known mesh peers so the
   // agent can join the overlay without any extra configuration.
-  bytes           mesh_psk   = 5;
-  repeated string mesh_peers = 6;
+  bytes           mesh_psk        = 5;
+  repeated string mesh_peers      = 6;
+  string          mesh_project_id = 10; // ISO project id for mDNS
 
   // Unix seconds at which the agent is encouraged to rotate — typically
   // session_expires_at minus a few hours so rotation doesn't race

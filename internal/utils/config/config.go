@@ -98,6 +98,10 @@ type MeshConfig struct {
 	ListenAddr     string   `yaml:"listen_addr"`
 	AdvertiseAddrs []string `yaml:"advertise_addrs"`
 	Peers          []string `yaml:"peers"`
+
+	DiscoveryLAN      bool   `yaml:"discovery_lan"`
+	DiscoveryInterval int    `yaml:"discovery_interval"`
+	ProjectID         string `yaml:"project_id"`
 }
 
 type Config struct {

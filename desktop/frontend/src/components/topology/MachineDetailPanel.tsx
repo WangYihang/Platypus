@@ -22,16 +22,18 @@ import { palette } from "../../layout/theme";
 interface Props {
     machine: TopologyMachine | null;
     series: { cpu: Array<{ t: number; v: number }>; mem: Array<{ t: number; v: number }> } | undefined;
+    liveSessions: SessionRow[];
     onClose: () => void;
 }
 
 export default function MachineDetailPanel({
     machine,
     series,
+    liveSessions,
     onClose,
 }: Props) {
     const sys = machine?.sys_info;
-    const isUp = useMemo(() => machine?.sessions.some(s => s.active) ?? false, [machine]);
+    const isUp = useMemo(() => liveSessions.length > 0, [liveSessions]);
 
     return (
         <Sheet open={!!machine} onOpenChange={(open) => !open && onClose()}>
@@ -57,7 +59,7 @@ export default function MachineDetailPanel({
                                     {machine.host_id.slice(0, 8)}
                                 </Badge>
                                 <span>•</span>
-                                <span>{machine.sessions.filter(s => s.active).length} active sessions</span>
+                                <span>{liveSessions.length} active sessions</span>
                             </SheetDescription>
                         </SheetHeader>
 

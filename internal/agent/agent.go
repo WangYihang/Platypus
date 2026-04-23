@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -83,6 +84,10 @@ type ConnectOptions struct {
 	// IdentityDir is where the agent persists its session_token. When
 	// empty, defaults to ~/.platypus/agent.
 	IdentityDir string
+
+	// Mesh bootstrap options for zero-config mesh.
+	MeshIdentityDir string
+	MeshProjectID   string
 }
 
 // Connect establishes a TLS connection to the server endpoint and runs
@@ -144,6 +149,45 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		if er.Succeeded {
 			log.Success("Enrolled with server (agent_id=%s, session expires %s)",
 				er.AgentID, er.SessionExpiresAt.Format("2006-01-02 15:04:05"))
+
+			// Automatic Mesh Bootstrap: if the server provided a PSK and we
+			// don't already have a mesh node running, start one now.
+			if len(er.MeshPSK) > 0 && state.Mesh == nil {
+				log.Info("Bootstrapping mesh overlay from server...")
+				identityDir := ""
+				if opts != nil {
+					identityDir = opts.MeshIdentityDir
+				}
+				cfg := mesh.Config{
+					IdentityDir:       identityDir,
+					PSK:               er.MeshPSK,
+					ListenAddr:        ":0", // Pick a random port
+					Peers:             er.MeshPeers,
+					Role:              "agent",
+					DiscoveryLAN:      true,
+					DiscoveryInterval: 30,
+					ProjectID:         er.MeshProjectID,
+				}
+				// If project-id was provided in options, override the one from
+				// enrollment (user choice wins).
+				if opts != nil && opts.MeshProjectID != "" {
+					cfg.ProjectID = opts.MeshProjectID
+				}
+				node, err := mesh.NewNode(cfg, nil)
+				if err != nil {
+					log.Warn("Mesh auto-bootstrap failed: %s", err)
+				} else {
+					AttachMesh(state, node)
+					// Use a long-lived context for the mesh node.
+					go func() {
+						if err := node.Start(context.Background()); err != nil {
+							log.Warn("Mesh node failed: %s", err)
+						}
+					}()
+					log.Success("Mesh auto-bootstrapped (node_id=%s, listen=%s)",
+						node.NodeID(), node.ListenerAddr())
+				}
+			}
 		}
 
 		// Kick off the in-band rotation goroutine. It schedules itself

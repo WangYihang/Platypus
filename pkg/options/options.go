@@ -20,12 +20,18 @@ type Options struct {
 	MeshIdentityDir string   `long:"identity-dir" description:"Directory for persistent Ed25519 mesh identity. Default: ~/.platypus/mesh/agent"`
 	MeshAdvertise   []string `long:"mesh-advertise" description:"Override advertised mesh listen address(es). Repeatable."`
 
+	MeshDiscoveryLAN      bool   `long:"mesh-discovery" description:"Enable automatic LAN peer discovery via mDNS."`
+	MeshDiscoveryInterval int    `long:"mesh-discovery-interval" description:"mDNS scan interval in seconds. Default: 30."`
+	MeshProjectID         string `long:"project-id" description:"Project ID for isolating mesh discovery on LAN."`
+
 	Version func() `short:"v" long:"version" description:"Print version information and exit"`
 }
 
 // InitOptions initializes the command line options
 func InitOptions() (*Options, error) {
 	var opts = Options{
+		MeshDiscoveryLAN:      true,
+		MeshDiscoveryInterval: 30,
 		Version: func() {
 			version.PrintVersion()
 		},

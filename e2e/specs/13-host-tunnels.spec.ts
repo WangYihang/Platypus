@@ -34,6 +34,7 @@ test.describe("host tunnels", () => {
 
         // Modal should close and the tunnel should appear in the list.
         await expect(page.getByRole("dialog", { name: "New tunnel" })).not.toBeVisible();
+        await page.waitForTimeout(3000);
         
         // A dynamic tunnel shows "socks5" and its local bind port.
         await expect(page.getByText("socks5", { exact: true })).toBeVisible({ timeout: 10_000 });

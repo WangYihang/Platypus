@@ -32,6 +32,9 @@ export const SEEDED_LISTENER_PORT = 13399;
 export const ADMIN_USERNAME = "admin";
 export const ADMIN_PASSWORD = "admin12345";
 
+export const MESH_PSK = "e2e-mesh-psk-must-be-32-chars-long!!";
+export const MESH_PSK_FILENAME = "mesh.psk";
+
 // Two seeded projects.
 export const SEEDED_PROJECTS = [
     { slug: "default", name: "Default" },

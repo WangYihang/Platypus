@@ -10,6 +10,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/storage"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
@@ -117,6 +118,16 @@ func TryEnroll(client *AgentClient) (*EnrollmentOutcome, error) {
 		// isn't configured; agents tolerate the empty-string form.
 		resp.CertPem = result.CertPEM
 		resp.CaPem = result.CAPem
+
+		// Automatic Mesh Bootstrap: if the server has mesh enabled,
+		// tell the agent how to join the overlay.
+		if Ctx != nil && Ctx.Mesh != nil {
+			if m, ok := Ctx.Mesh.(*mesh.Node); ok {
+				resp.MeshPsk = m.PSK()
+				resp.MeshPeers = m.AdvertisedAddrs()
+				resp.MeshProjectId = m.ProjectID() // I need to expose ProjectID() in mesh.Node
+			}
+		}
 	} else {
 		resp.Error = result.Outcome
 	}

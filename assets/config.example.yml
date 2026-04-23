@@ -54,3 +54,15 @@ distributor:
 
 # Open the web UI in a browser on server startup.
 openBrowser: false
+
+# Mesh overlay (optional) — enables the server to participate in the
+# agent-to-agent overlay. Requires a PSK to be shared with all agents.
+mesh:
+  psk_file: "mesh.psk"
+  identity_dir: "~/.platypus/mesh/server"
+  listen_addr: ":17777"
+  advertise_addrs: []
+  peers: []
+  discovery_lan: true        # Enable LAN peer discovery via mDNS
+  discovery_interval: 30     # Interval in seconds between LAN scans
+  project_id: "default"      # Project ID to isolate discovery on LAN

@@ -9,6 +9,8 @@ import {
     AGENT_BINARY,
     BACKEND_HOST,
     BACKEND_PORT,
+    MESH_PSK,
+    MESH_PSK_FILENAME,
     SCREENSHOT_DIR,
     SEEDED_LISTENER_HOST,
     SEEDED_LISTENER_PORT,
@@ -106,6 +108,9 @@ export default async function globalSetup() {
         openBrowser: false,
     };
     writeFileSync(configPath, YAML.stringify(config), "utf8");
+
+    // Write the Mesh PSK file for use by agents.
+    writeFileSync(path.join(tmpdir, MESH_PSK_FILENAME), MESH_PSK, "utf8");
 
     // platypus-server reads config.yml from cwd (no --config flag), so
     // spawn with the tmpdir as cwd. Any artefact files the server writes

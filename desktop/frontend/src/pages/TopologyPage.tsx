@@ -93,6 +93,7 @@ export default function TopologyPage() {
             <MachineDetailPanel
                 machine={machine}
                 series={machine ? state.machineHistory.get(machine.host_id) : undefined}
+                liveSessions={machine?.sessions ?? []}
                 onClose={() => setSelectedMachine(null)}
             />
             <LinkDetailPanel

@@ -66,12 +66,15 @@ func main() {
 
 	if cfg.Mesh.PSKFile != "" {
 		node, err := mesh.NewNode(mesh.Config{
-			IdentityDir:    cfg.Mesh.IdentityDir,
-			PSKFile:        cfg.Mesh.PSKFile,
-			ListenAddr:     cfg.Mesh.ListenAddr,
-			AdvertiseAddrs: cfg.Mesh.AdvertiseAddrs,
-			Peers:          cfg.Mesh.Peers,
-			Role:           "server",
+			IdentityDir:       cfg.Mesh.IdentityDir,
+			PSKFile:           cfg.Mesh.PSKFile,
+			ListenAddr:        cfg.Mesh.ListenAddr,
+			AdvertiseAddrs:    cfg.Mesh.AdvertiseAddrs,
+			Peers:             cfg.Mesh.Peers,
+			Role:              "server",
+			DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
+			DiscoveryInterval: cfg.Mesh.DiscoveryInterval,
+			ProjectID:         cfg.Mesh.ProjectID,
 		}, nil)
 		if err != nil {
 			log.Error("mesh init failed: %v", err)

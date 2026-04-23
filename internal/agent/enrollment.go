@@ -35,6 +35,11 @@ type EnrollmentResult struct {
 	SessionToken     string
 	SessionExpiresAt time.Time
 	ErrorMessage     string
+
+	// Mesh bootstrap fields from the server.
+	MeshPSK       []byte
+	MeshPeers     []string
+	MeshProjectID string
 }
 
 // RenewalContext is handed to StartRenewalLoop so it can rotate the
@@ -280,6 +285,9 @@ func MaybeEnroll(c *Client, token, identityDir string) (*EnrollmentResult, error
 		AgentID:          r.AgentId,
 		SessionToken:     r.SessionToken,
 		SessionExpiresAt: time.Unix(r.SessionExpiresAt, 0),
+		MeshPSK:          r.MeshPsk,
+		MeshPeers:        r.MeshPeers,
+		MeshProjectID:    r.MeshProjectId,
 	}, nil
 }
 

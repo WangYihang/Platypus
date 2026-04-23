@@ -4,8 +4,72 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test as base } from "@playwright/test";
 
-import { AGENT_BINARY, BACKEND_HOST, SEEDED_LISTENER_PORT, backendURL } from "./env";
+import { AGENT_BINARY, BACKEND_HOST, MESH_PSK_FILENAME, SEEDED_LISTENER_PORT, backendURL } from "./env";
 import { listProjectSessions, waitForSessions } from "./api";
+
+// startMeshAgent spawns an agent with mesh networking enabled.
+export async function startMeshAgent(
+    projectID: string,
+    adminToken: string,
+    opts: {
+        meshListen: string;
+        peers?: string[];
+        token?: string;
+    },
+): Promise<AgentHandle> {
+    const before = await listProjectSessions(backendURL, adminToken, projectID, {
+        live: true,
+    });
+    const tmpdir = process.env.PLATYPUS_E2E_TMPDIR!;
+    const pskPath = path.join(tmpdir, MESH_PSK_FILENAME);
+
+    const agentHome = path.join(
+        os.tmpdir(),
+        `platypus-e2e-mesh-agent-${Math.random().toString(36).slice(2)}`,
+    );
+    fs.mkdirSync(agentHome, { recursive: true });
+
+    const args = [
+        "--host",
+        BACKEND_HOST,
+        "--port",
+        String(SEEDED_LISTENER_PORT),
+        "--token",
+        opts.token || "e2e-mesh",
+        "--mesh-listen",
+        opts.meshListen,
+        "--psk-file",
+        pskPath,
+    ];
+    for (const p of opts.peers || []) {
+        args.push("--peers", p);
+    }
+
+    const proc = spawn(AGENT_BINARY, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, HOME: agentHome },
+    });
+
+    if (!proc.pid) throw new Error("failed to spawn mesh agent");
+    if (process.env.E2E_VERBOSE_AGENT) {
+        proc.stdout?.on("data", (c: Buffer) => process.stdout.write(`[mesh-agent] ${c}`));
+        proc.stderr?.on("data", (c: Buffer) => process.stderr.write(`[mesh-agent!] ${c}`));
+    }
+
+    await waitForSessions(backendURL, adminToken, projectID, before.length + 1, 15_000);
+
+    return {
+        pid: proc.pid,
+        proc,
+        async kill() {
+            try {
+                process.kill(proc.pid!, "SIGTERM");
+            } catch {
+                /* gone */
+            }
+        },
+    };
+}
 
 // Per-spec helpers for spawning extra platypus-agent processes beyond
 // the baseline one started in globalSetup. Specs that need to assert

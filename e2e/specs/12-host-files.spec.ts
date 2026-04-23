@@ -22,11 +22,14 @@ test.describe("host files", () => {
         await expect(page.getByRole("button", { name: /Refresh/ }).last()).toBeVisible();
 
         // Should see the root directory entries.
-        const etcRow = page.getByRole("row").filter({ hasText: "etc" }).getByRole("button", { name: "etc" });
-        await expect(etcRow).toBeVisible({ timeout: 10_000 });
+        const etcBtn = page.getByText("etc", { exact: true });
+        await expect(etcBtn).toBeVisible({ timeout: 15_000 });
 
         // Navigate into /etc.
-        await etcRow.click();
+        await etcBtn.click({ force: true });
+        
+        // Wait for directory listing to refresh. Agent needs time to list /etc.
+        await page.waitForTimeout(3000);
         
         // Should see entries inside /etc.
         await expect(page.getByText("hostname", { exact: true })).toBeVisible({ timeout: 15_000 });

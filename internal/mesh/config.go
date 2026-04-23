@@ -34,4 +34,16 @@ type Config struct {
 	// Role is a human-readable tag (e.g. "agent", "server") carried in
 	// logs. Does not affect protocol behaviour.
 	Role string
+
+	// DiscoveryLAN enables automatic peer discovery on the local network
+	// via mDNS. Defaults to false (must be explicitly enabled).
+	DiscoveryLAN bool
+
+	// DiscoveryInterval is the time between mDNS browser refreshes.
+	// Minimum 10s. Default 30s.
+	DiscoveryInterval int
+
+	// ProjectID is used in mDNS TXT records to isolate agents belonging
+	// to different projects on the same LAN.
+	ProjectID string
 }

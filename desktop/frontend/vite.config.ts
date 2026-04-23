@@ -25,11 +25,11 @@ export default defineConfig(({ mode }) => {
     const platformAliases = isWeb
         ? [
               {
-                  find: /.*\/wailsjs\/go\/app\/App$/,
+                  find: /.*wailsjs\/go\/app\/App$/,
                   replacement: path.resolve(__dirname, "src/platform/App.web.ts"),
               },
               {
-                  find: /.*\/wailsjs\/runtime\/runtime$/,
+                  find: /.*wailsjs\/runtime\/runtime$/,
                   replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
               },
           ]

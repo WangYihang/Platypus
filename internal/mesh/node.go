@@ -156,6 +156,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 		go n.lsaLoop(ctx)
 		go n.reconcileLoop(ctx)
+		go n.runDiscovery(ctx)
 	})
 	return startErr
 }
@@ -616,3 +617,12 @@ func defaultIdentityDir(role string) string {
 	}
 	return filepath.Join(home, ".platypus", "mesh", role)
 }
+
+// PSK returns the pre-shared key used by this node.
+func (n *Node) PSK() []byte { return n.psk }
+
+// ProjectID returns the project ID configured for this node.
+func (n *Node) ProjectID() string { return n.cfg.ProjectID }
+
+// AdvertisedAddrs returns the list of addresses this node is publishing.
+func (n *Node) AdvertisedAddrs() []string { return n.advertisedAddrs() }

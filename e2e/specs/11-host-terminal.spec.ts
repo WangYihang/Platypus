@@ -20,7 +20,7 @@ test.describe("host terminal", () => {
         await page.waitForTimeout(1000);
 
         // Focus the terminal.
-        await page.locator(".xterm-canvas").click();
+        await page.getByLabel("Terminal input").focus();
         await page.waitForTimeout(500);
 
         // Send a command to the terminal.
