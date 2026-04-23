@@ -18,7 +18,7 @@ test.describe("auth", () => {
         await loginAsAdmin(page);
         await expect(page).toHaveURL(/\/projects$/);
         // Sidebar brand visible.
-        await expect(page.getByText("Platypus", { exact: true })).toBeVisible();
+        await expect(page.getByText("Platypus", { exact: true }).first()).toBeVisible();
         await page.screenshot({
             path: shotPath("02-projects-landing.png"),
             fullPage: false,

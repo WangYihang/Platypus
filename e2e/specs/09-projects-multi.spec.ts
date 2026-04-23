@@ -10,7 +10,7 @@ test.describe("projects multi", () => {
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
         // Click the project switcher in the sidebar.
-        await page.getByRole("button", { name: /Default default down/i }).click();
+        await page.getByRole("button", { name: /Default/ }).first().click();
         // Both projects appear in the popover.
         const popover = page.getByText("Projects", { exact: true }).first();
         await expect(popover).toBeVisible();

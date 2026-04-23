@@ -16,18 +16,16 @@ test.describe("host files", () => {
         await page.getByRole("tab", { name: "Files" }).click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
 
-        // Form + the three action buttons render.
-        await expect(page.getByText("Transfer")).toBeVisible();
-        await expect(page.getByLabel("Remote path")).toBeVisible();
-        await expect(page.getByRole("button", { name: "Get size" })).toBeVisible();
-        await expect(page.getByRole("button", { name: /Download/ })).toBeVisible();
+        // Toolbar buttons and the initial directory listing render.
+        await expect(page.getByRole("button", { name: /New folder/ })).toBeVisible();
         await expect(page.getByRole("button", { name: /Upload/ })).toBeVisible();
+        await expect(page.getByRole("button", { name: /Download/ })).toBeVisible();
+        await expect(page.getByRole("button", { name: /Refresh/ }).last()).toBeVisible();
 
-        // Pre-fill the path so the screenshot shows what the user
-        // would type, then snapshot. The actual API roundtrip is
-        // covered by the FileSize backend test, not the e2e gallery.
-        await page.getByLabel("Remote path").click();
-        await page.getByLabel("Remote path").pressSequentially("/etc/hostname");
+        // Should see the root directory entries (or "Empty directory" if new).
+        await expect(
+            page.getByText(/entries|Empty directory/),
+        ).toBeVisible();
 
         await page.screenshot({
             path: shotPath("17-host-files.png"),

@@ -59,7 +59,7 @@ export default function LineChartCard({
                 </div>
             ) : (
                 <div style={{ width: "100%", height }}>
-                    <ResponsiveContainer>
+                    <ResponsiveContainer minWidth={0} minHeight={0}>
                         <LineChart
                             data={data}
                             margin={{ top: 4, right: 8, bottom: 0, left: -16 }}

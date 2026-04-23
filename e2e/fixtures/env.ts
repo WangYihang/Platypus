@@ -19,7 +19,7 @@ export const SERVER_BINARY = path.resolve(REPO_ROOT, "build", "platypus-server")
 export const AGENT_BINARY = path.resolve(REPO_ROOT, "build", "platypus-agent");
 
 export const BACKEND_HOST = "127.0.0.1";
-export const BACKEND_PORT = 7331;
+export const BACKEND_PORT = 7332;
 export const FRONTEND_HOST = "127.0.0.1";
 export const FRONTEND_PORT = 5173;
 

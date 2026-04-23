@@ -97,6 +97,10 @@ export default async function globalSetup() {
             host: BACKEND_HOST,
             port: 13340,
             url: `http://${BACKEND_HOST}:13340`,
+            store: {
+                endpoint: "localhost:9000",
+                bucket: "e2e",
+            },
         },
         update: false,
         openBrowser: false,
@@ -129,7 +133,7 @@ export default async function globalSetup() {
 
     let backendBuf = "";
     let bootstrapSecret = "";
-    const secretRegex = /API bootstrap secret:\s*([0-9a-f]+)/i;
+    const secretRegex = /(?:API bootstrap secret:|["']bootstrap_secret["']:\s*["'])([0-9a-f]+)/i;
 
     // The Go server writes the bootstrap secret via the platypus log
     // package which routes through os.Stderr (with a timestamp prefix);
@@ -229,7 +233,7 @@ export default async function globalSetup() {
         {
             cwd: tmpdir,
             stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env },
+            env: { ...process.env, HOME: tmpdir },
         },
     );
     process.env.PLATYPUS_E2E_AGENT_PID = String(agent.pid);

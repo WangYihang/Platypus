@@ -1,4 +1,7 @@
 import { ChildProcess, spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { test as base } from "@playwright/test";
 
 import { AGENT_BINARY, BACKEND_HOST, SEEDED_LISTENER_PORT, backendURL } from "./env";
@@ -25,6 +28,13 @@ export async function startExtraAgent(
     const before = await listProjectSessions(backendURL, adminToken, projectID, {
         live: true,
     });
+    // Give the agent its own temp HOME so it doesn't try to use
+    // ~/.platypus/agent/session.token from the developer's machine.
+    const agentHome = path.join(
+        os.tmpdir(),
+        `platypus-e2e-extra-agent-${Math.random().toString(36).slice(2)}`,
+    );
+    fs.mkdirSync(agentHome, { recursive: true });
     const proc = spawn(
         AGENT_BINARY,
         [
@@ -35,7 +45,7 @@ export async function startExtraAgent(
             "--token",
             "e2e-extra",
         ],
-        { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env } },
+        { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: agentHome } },
     );
     if (!proc.pid) {
         throw new Error("failed to spawn extra agent (no pid)");

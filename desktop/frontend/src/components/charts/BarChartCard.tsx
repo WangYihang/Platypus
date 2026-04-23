@@ -42,7 +42,7 @@ export default function BarChartCard({
                 </div>
             ) : (
                 <div style={{ width: "100%", height }}>
-                    <ResponsiveContainer>
+                    <ResponsiveContainer minWidth={0} minHeight={0}>
                         <BarChart
                             data={data}
                             layout="vertical"

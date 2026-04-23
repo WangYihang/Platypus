@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
@@ -166,7 +167,16 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		// uses it to drive the Topology / Hosts CPU & memory gauges.
 		// Cheap: one gopsutil sample per SysInfoSampleInterval.
 		stopSysInfo := make(chan struct{})
-		StartSysInfoPusher(c, stopSysInfo)
+		if er.Succeeded {
+			StartSysInfoPusher(c, stopSysInfo)
+		} else {
+			// Legacy connection: stay silent for a few seconds so the
+			// server's TryEnroll timeout (2s) can fire and switch to
+			// legacy mode before we push the first sysinfo frame.
+			time.AfterFunc(3*time.Second, func() {
+				StartSysInfoPusher(c, stopSysInfo)
+			})
+		}
 		defer close(stopSysInfo)
 
 		HandleConnection(c, state)

@@ -20,23 +20,28 @@ export default defineConfig(({ mode }) => {
     // wailsjs/go/models is committed (it's pure type definitions auto-
     // generated from the Go structs), so both build modes resolve to the
     // same file. Only App and runtime need a web-mode swap.
+    //
+    // Use regex aliases to match the Wails paths at any import depth.
     const platformAliases = isWeb
-        ? {
-              "../wailsjs/go/app/App": path.resolve(__dirname, "src/platform/App.web.ts"),
-              "../../wailsjs/go/app/App": path.resolve(__dirname, "src/platform/App.web.ts"),
-              "../wailsjs/runtime/runtime": path.resolve(__dirname, "src/platform/runtime.web.ts"),
-              "../../wailsjs/runtime/runtime": path.resolve(__dirname, "src/platform/runtime.web.ts"),
-          }
-        : {};
+        ? [
+              {
+                  find: /.*\/wailsjs\/go\/app\/App$/,
+                  replacement: path.resolve(__dirname, "src/platform/App.web.ts"),
+              },
+              {
+                  find: /.*\/wailsjs\/runtime\/runtime$/,
+                  replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
+              },
+          ]
+        : [];
 
     return {
         plugins: [react(), tailwindcss()],
         resolve: {
-            alias: {
-                ...platformAliases,
-                // shadcn/ui generates components that import with "@/…"
-                "@": path.resolve(__dirname, "src"),
-            },
+            alias: [
+                ...(Array.isArray(platformAliases) ? platformAliases : []),
+                { find: "@", replacement: path.resolve(__dirname, "src") },
+            ],
         },
         build: {
             outDir: isWeb ? "dist-web" : "dist",

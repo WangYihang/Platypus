@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
 import { font, palette, radius, space } from "../../layout/theme";
@@ -35,6 +35,14 @@ export default function TerminalTab({ liveSessions, picked, onPick }: Props) {
         setTabs((prev) => [...prev, tab]);
         setActiveTabId(tab.id);
     }, [picked]);
+
+    // Automatically open first shell if none exist and we have a picked session.
+    // Use an effect so it runs after the initial mount / session resolution.
+    useEffect(() => {
+        if (picked && tabs.length === 0 && !closedTabsRef.current.size) {
+            openShell();
+        }
+    }, [picked, tabs.length, openShell]);
 
     const closeTab = useCallback(
         (tabId: string) => {

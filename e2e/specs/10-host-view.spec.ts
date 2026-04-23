@@ -24,9 +24,7 @@ test.describe("host view", () => {
 
         // The five-tab strip (Terminal/Files/Tunnels/Sessions/Info).
         for (const label of ["Terminal", "Files", "Tunnels", "Info"]) {
-            await expect(
-                page.locator(".ant-tabs-tab", { hasText: label }),
-            ).toBeVisible();
+            await expect(page.getByRole("tab", { name: label })).toBeVisible();
         }
 
         await page.screenshot({
