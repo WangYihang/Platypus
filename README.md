@@ -79,7 +79,7 @@ make pre-commit          # optional: run all hooks against every file now
 Requires Node 22+, Wails CLI dependencies (`wails doctor`), and the platform's WebView libraries (webkit2gtk-4.1 on Linux, WebView2 on Windows, WKWebView on macOS).
 
 ```bash
-make desktop-deps       # one-time: install Wails CLI + npm packages
+make desktop-deps       # one-time: install Wails CLI + pnpm packages
 make desktop-build      # → desktop/build/bin/platypus-desktop
 make desktop-dev        # hot-reload dev mode
 ```

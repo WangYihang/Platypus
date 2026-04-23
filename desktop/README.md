@@ -57,7 +57,7 @@ desktop/
 Desktop (Wails):
 
 ```bash
-make desktop-deps         # one-time: install Wails CLI + npm packages
+make desktop-deps         # one-time: install Wails CLI + pnpm packages
 make desktop-bindings     # any time you add/remove App methods on the Go side
 make desktop-dev          # hot-reload dev mode
 ```

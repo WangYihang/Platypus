@@ -2,9 +2,9 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "platypus-desktop",
   "outputfilename": "desktop",
-  "frontend:install": "npm install",
-  "frontend:build": "npm run build:desktop",
-  "frontend:dev:watcher": "npm run dev:desktop",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build:desktop",
+  "frontend:dev:watcher": "pnpm run dev:desktop",
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "Yihang Wang",

@@ -32,7 +32,7 @@ export default defineConfig({
     globalSetup: "./global-setup.ts",
     globalTeardown: "./global-teardown.ts",
     webServer: {
-        command: `cd ${FRONTEND_DIR} && npm run dev:web -- --host 127.0.0.1 --port 5173 --strictPort`,
+        command: `cd ${FRONTEND_DIR} && pnpm run dev:web -- --host 127.0.0.1 --port 5173 --strictPort`,
         cwd: FRONTEND_DIR,
         url: baseURL,
         timeout: 90_000,

@@ -36,7 +36,7 @@ help:
 	@echo "  clean           Remove build artifacts"
 	@echo ""
 	@echo "Desktop app (./desktop):"
-	@echo "  desktop-deps     Install Wails CLI + frontend npm deps"
+	@echo "  desktop-deps     Install Wails CLI + frontend pnpm deps"
 	@echo "  desktop-bindings Regenerate Wails JS↔Go bindings under desktop/frontend/wailsjs/"
 	@echo "  desktop-dev      Run Wails dev mode (hot reload)"
 	@echo "  desktop-build    Build a native binary for the current platform"
@@ -126,7 +126,7 @@ WAILS      ?= $(subst \,/,$(shell $(GO) env GOPATH))/bin/wails$(shell $(GO) env 
 
 desktop-deps:
 	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
-	cd desktop/frontend && npm install
+	cd desktop/frontend && pnpm install
 
 desktop-bindings:
 	cd desktop && $(WAILS) generate module
@@ -147,7 +147,7 @@ desktop-test:
 # Point it at any running platypus-server via the login form.
 
 web-ui:
-	cd desktop/frontend && npm install && npm run build:web
+	cd desktop/frontend && pnpm install && pnpm run build:web
 
 # ---------- End-to-end tests + screenshot gallery ----------
 #
@@ -158,10 +158,10 @@ web-ui:
 # agent binaries must already be built (`make build`).
 
 e2e-deps:
-	cd e2e && npm install && npx playwright install chromium
+	cd e2e && pnpm install && pnpm exec playwright install chromium
 
 e2e: build e2e-deps
-	cd e2e && npm run e2e
+	cd e2e && pnpm run e2e
 
 screenshots: e2e
 
