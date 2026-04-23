@@ -159,7 +159,7 @@ func (m *streamManager) handleData(env *agentpb.Envelope) {
 		}
 	}
 	if msg.Eof {
-		_ = st.conn.Close()
+		closeConn(st.conn)
 		m.drop(key)
 	}
 }
@@ -175,7 +175,7 @@ func (m *streamManager) handleClose(env *agentpb.Envelope) {
 		return
 	}
 	st.closeErr = msg.Reason
-	_ = st.conn.Close()
+	closeConn(st.conn)
 	m.drop(key)
 }
 
@@ -197,7 +197,7 @@ func (m *streamManager) pumpOutbound(st *streamState) {
 				m.node.logger.Debug("mesh stream read failed", slog.String("error", err.Error()))
 				m.sendClose(st, err.Error())
 			}
-			_ = st.conn.Close()
+			closeConn(st.conn)
 			m.drop(st.key)
 			return
 		}
@@ -249,7 +249,7 @@ func (m *streamManager) closeStream(st *streamState, reason string, notifyPeer b
 	if notifyPeer {
 		m.sendClose(st, reason)
 	}
-	_ = st.conn.Close()
+	closeConn(st.conn)
 	m.drop(st.key)
 }
 
@@ -299,14 +299,6 @@ func isClosedConnErr(err error) bool {
 		return false
 	}
 	return err == net.ErrClosed
-}
-
-func closeConns(conns ...net.Conn) {
-	for _, conn := range conns {
-		if conn != nil {
-			_ = conn.Close()
-		}
-	}
 }
 
 // DialBootstrap opens a routed byte stream to the target mesh node and

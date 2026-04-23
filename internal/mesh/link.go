@@ -136,7 +136,7 @@ func (l *Link) Send(env *agentpb.Envelope) error {
 func (l *Link) Close() {
 	l.closeOnce.Do(func() {
 		close(l.closed)
-		_ = l.conn.Close()
+		closeConn(l.conn)
 	})
 }
 

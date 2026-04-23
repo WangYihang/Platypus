@@ -51,7 +51,9 @@ func (l *Listener) Serve(ctx context.Context) error {
 	l.logger.Info("mesh listener started", slog.String("addr", l.ln.Addr().String()))
 	go func() {
 		<-ctx.Done()
-		_ = l.ln.Close()
+		if l.ln != nil {
+			_ = l.ln.Close()
+		}
 	}()
 	for {
 		conn, err := l.ln.Accept()
@@ -76,7 +78,7 @@ func (l *Listener) handleInbound(ctx context.Context, conn net.Conn) {
 		l.logger.Debug("mesh inbound handshake failed",
 			slog.String("remote", conn.RemoteAddr().String()),
 			slog.String("error", err.Error()))
-		_ = conn.Close()
+		closeConn(conn)
 		return
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
@@ -86,7 +88,7 @@ func (l *Listener) handleInbound(ctx context.Context, conn net.Conn) {
 	link := newLink(conn, codec, result.PeerNodeID, result.PeerPublicKey, result.PeerAddresses, l.node)
 	if !l.node.adoptLink(link) {
 		link.logger.Info("duplicate mesh link, closing inbound")
-		_ = conn.Close()
+		closeConn(conn)
 		return
 	}
 	link.run()

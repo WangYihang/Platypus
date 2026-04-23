@@ -146,7 +146,7 @@ func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
 	}
 	conn := tls.Client(raw, tlsCfg)
 	if err := conn.HandshakeContext(dialCtx); err != nil {
-		_ = raw.Close()
+		closeConn(raw)
 		return fmt.Errorf("tls handshake: %w", err)
 	}
 
@@ -156,11 +156,11 @@ func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
 	codec := protocol.NewProtoCodec(conn)
 	result, err := PerformClientHandshake(ctx, codec, d.node.identity, d.node.psk, d.node.advertisedAddrs())
 	if err != nil {
-		_ = conn.Close()
+		closeConn(conn)
 		return err
 	}
 	if result.PeerNodeID == d.node.identity.NodeID {
-		_ = conn.Close()
+		closeConn(conn)
 		return fmt.Errorf("dialed self")
 	}
 	if t.nodeID != "" && result.PeerNodeID != t.nodeID {
@@ -177,7 +177,7 @@ func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
 	link := newLink(conn, codec, result.PeerNodeID, result.PeerPublicKey, result.PeerAddresses, d.node)
 	if !d.node.adoptLink(link) {
 		// Already had a link to this peer (probably inbound beat us here).
-		_ = conn.Close()
+		closeConn(conn)
 		return nil
 	}
 	go link.run()
