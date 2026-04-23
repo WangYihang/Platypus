@@ -3,6 +3,8 @@ name: Desktop
 on:
   push:
     branches: [main, master]
+    tags:
+      - 'v*'
     paths:
       - "desktop/**"
       - ".github/workflows/desktop.yaml"
@@ -74,6 +76,39 @@ jobs:
 
       - name: Build
         run: make desktop-build
+
+      - name: Package artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd desktop/build/bin
+          ls
+          powershell -Command "Compress-Archive -Path desktop.exe -DestinationPath platypus-desktop-windows-amd64.zip"
+
+      - name: Package artifacts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd desktop/build/bin
+          ls
+          tar -czvf platypus-desktop-linux-amd64.tar.gz desktop
+
+      - name: Package artifacts (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd desktop/build/bin
+          ls -R
+          # Wails on macOS produces a .app bundle
+          # We zip it because .app is a directory
+          zip -r platypus-desktop-macos-universal.zip *.app
+
+      - name: Upload Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/build/bin/*.zip
+            desktop/build/bin/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
