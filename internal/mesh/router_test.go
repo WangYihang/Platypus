@@ -1,11 +1,11 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"testing"
 
-	"google.golang.org/protobuf/proto"
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 
+	"google.golang.org/protobuf/proto"
 )
 
 // buildSignedLSA produces a properly-signed LSA for a fake origin

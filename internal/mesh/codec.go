@@ -34,10 +34,6 @@ func newEnvCodec(rw io.ReadWriter) *envCodec {
 	return &envCodec{r: rw, w: rw}
 }
 
-func newEnvCodecFromParts(r io.Reader, w io.Writer) *envCodec {
-	return &envCodec{r: r, w: w}
-}
-
 // Send marshals and frames one MeshEnvelope. Serialised writes via
 // writeMu so concurrent goroutines (handshake, keepalive, flood) can
 // share one codec safely.

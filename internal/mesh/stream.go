@@ -1,7 +1,6 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 const (

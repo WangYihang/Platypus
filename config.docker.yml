@@ -17,13 +17,13 @@ ingress:
   public_addr: "localhost:9443"
 
 restful:
-  enable: true
-  DBFile: "/app/data/platypus.db"
-  # JWTAccessKey / JWTRefreshKey: leave empty to auto-generate at
+  db_file: "/app/data/platypus.db"
+  # jwt_access_key / jwt_refresh_key: leave empty to auto-generate at
   # startup (tokens won't survive a server restart). Set for prod.
+  # access_expire_time / refresh_expire_time in seconds; 0 = defaults
+  # (15 min / 14 days).
 
 distributor:
-  url: "https://localhost:9443"
   channel: "stable"
   presigned_ttl: "5m"
   store:
@@ -43,5 +43,3 @@ mesh:
   psk_file: "/app/data/mesh.psk"
   project_id: "default"
   discovery_lan: true
-
-openBrowser: false

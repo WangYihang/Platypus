@@ -20,7 +20,7 @@ func TestDiscoveryLAN(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(discardWriter{}, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		cfg := Config{
 			Identity:          mustIdentity(t),
-		TrustedCAs: testCAPool,
+			TrustedCAs:        testCAPool,
 			PSK:               psk,
 			ListenAddr:        "127.0.0.1:0",
 			Role:              "test-discovery",

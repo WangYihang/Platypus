@@ -1,7 +1,6 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -11,8 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 
+	"google.golang.org/protobuf/proto"
 )
 
 // PayloadHandler is invoked for every envelope whose target_node matches
@@ -24,11 +24,11 @@ type PayloadHandler func(peer string, env *v2pb.MeshEnvelope)
 // Node is the top-level mesh participant. Each platypus-agent and
 // platypus-server instance owns exactly one.
 type Node struct {
-	identity  *Identity
-	psk       []byte
+	identity   *Identity
+	psk        []byte
 	trustedCAs *x509.CertPool // optional — nil disables cert-chain verify
-	cfg       Config
-	logger    *slog.Logger
+	cfg        Config
+	logger     *slog.Logger
 
 	dialer   *Dialer
 	registry *Registry
@@ -733,7 +733,6 @@ func (n *Node) advertisedAddrs() []string {
 	}
 	return nil
 }
-
 
 // PSK returns the pre-shared key used by this node.
 func (n *Node) PSK() []byte { return n.psk }

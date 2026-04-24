@@ -1,11 +1,11 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"crypto/ed25519"
 	"sync"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 // PeerRecord is one entry in the known-peer table. A record is kept as

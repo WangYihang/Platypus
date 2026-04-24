@@ -1,7 +1,6 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"crypto/tls"
 	"log/slog"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 // boot starts a Node on a random local port and stands up a minimal

@@ -1,12 +1,12 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"log/slog"
 	"net"
 	"testing"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 func TestRegistryToNodeInfosIncludesBootstrapMetadata(t *testing.T) {
@@ -37,11 +37,11 @@ func TestRegistryToNodeInfosIncludesBootstrapMetadata(t *testing.T) {
 func TestFindBootstrapServerPrefersReachableServer(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
-		Identity:  id,
+		Identity:   id,
 		TrustedCAs: testCAPool,
-		PSK:       randomPSK(t),
-		Role:      "agent",
-		ProjectID: "proj",
+		PSK:        randomPSK(t),
+		Role:       "agent",
+		ProjectID:  "proj",
 	}, slog.Default())
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
@@ -73,11 +73,11 @@ func TestFindBootstrapServerPrefersReachableServer(t *testing.T) {
 func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
-		Identity:  id,
+		Identity:   id,
 		TrustedCAs: testCAPool,
-		PSK:       randomPSK(t),
-		Role:      "agent",
-		ProjectID: "proj",
+		PSK:        randomPSK(t),
+		Role:       "agent",
+		ProjectID:  "proj",
 	}, slog.Default())
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
@@ -115,11 +115,11 @@ func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
 func TestMeshStreamHandleDataDoesNotBlockLinkLoop(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
-		Identity:  id,
+		Identity:   id,
 		TrustedCAs: testCAPool,
-		PSK:       randomPSK(t),
-		Role:      "agent",
-		ProjectID: "proj",
+		PSK:        randomPSK(t),
+		Role:       "agent",
+		ProjectID:  "proj",
 	}, slog.Default())
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)

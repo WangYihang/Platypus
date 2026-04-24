@@ -8,7 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 )
 
 // pipeConn is a minimal in-memory duplex pipe. Each half is an io.Pipe

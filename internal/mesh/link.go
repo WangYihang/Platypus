@@ -1,7 +1,6 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"crypto/ed25519"
 	"io"
 	"log/slog"
@@ -10,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 const (

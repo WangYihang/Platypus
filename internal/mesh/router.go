@@ -1,7 +1,6 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"container/heap"
 	"crypto/ed25519"
 	"crypto/x509"
@@ -9,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 
+	"google.golang.org/protobuf/proto"
 )
 
 const (

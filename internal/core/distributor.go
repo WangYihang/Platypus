@@ -47,7 +47,6 @@ type ManifestArtifact struct {
 // It never serves binary bytes itself — it returns the signed manifest
 // and 302-redirects to short-lived presigned URLs for artifact downloads.
 type Distributor struct {
-	Url          string         `json:"url"`
 	Channel      string         `json:"channel"`
 	PresignedTTL time.Duration  `json:"-"`
 	Store        artifact.Store `json:"-"`
@@ -66,7 +65,6 @@ func RegisterDistributorRoutes(engine *gin.Engine, cfg DistributorArgs) *Distrib
 	gin.DefaultWriter = io.Discard
 
 	d := &Distributor{
-		Url:          cfg.Url,
 		Channel:      cfg.Channel,
 		PresignedTTL: cfg.PresignedTTL,
 		Store:        cfg.Store,
@@ -96,7 +94,6 @@ func RegisterDistributorRoutes(engine *gin.Engine, cfg DistributorArgs) *Distrib
 // DistributorArgs bundles the inputs to RegisterDistributorRoutes so
 // we can grow the surface without churning call sites.
 type DistributorArgs struct {
-	Url          string
 	Channel      string
 	PresignedTTL time.Duration
 	Store        artifact.Store
@@ -279,9 +276,8 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 	// hit for the artifact. Unified ingress always terminates TLS, so
 	// the generated one-liner always uses https. The `-k` on curl
 	// tolerates the default self-signed cert operators typically ship
-	// with; swap it out for a real cert and remove the flag by setting
-	// cfg.Distributor.Url to an https URL (the install script honours
-	// it if present).
+	// with; ship a real cert and the operator can drop the -k flag
+	// from this template.
 	base := "https://" + shellQuoteHostInline(distributorHost)
 	lines := []string{
 		"#!/bin/sh",

@@ -73,10 +73,6 @@ func main() {
 	// Open the persistent store before anything else that needs it
 	// (enrollment, PKI, install tokens). Distributor / REST / agent
 	// all share the same handle.
-	if !cfg.RESTful.Enable {
-		log.Error("RESTful is now the only supported control-plane mode; set restful.enable=true in the config.")
-		os.Exit(1)
-	}
 	dbFile := cfg.RESTful.DBFileOrDefault()
 	db, err := storage.Open(dbFile)
 	if err != nil {
@@ -341,7 +337,6 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 			ttl = 5 * time.Minute
 		}
 		core.RegisterDistributorRoutes(rest, core.DistributorArgs{
-			Url:          cfg.Distributor.Url,
 			Channel:      cfg.Distributor.ChannelOrDefault(),
 			PresignedTTL: ttl,
 			Store:        store,

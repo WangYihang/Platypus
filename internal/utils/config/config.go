@@ -16,10 +16,6 @@ type IngressConfig struct {
 	Cert       string `yaml:"cert"        mapstructure:"cert"`
 	Key        string `yaml:"key"         mapstructure:"key"`
 	PublicAddr string `yaml:"public_addr" mapstructure:"public_addr"`
-
-	HashFormat     string `yaml:"hash_format"     mapstructure:"hash_format"`
-	ShellPath      string `yaml:"shell_path"      mapstructure:"shell_path"`
-	DisableHistory bool   `yaml:"disable_history" mapstructure:"disable_history"`
 }
 
 // PublicAddrOrAddr returns PublicAddr when set, otherwise Addr. This
@@ -32,17 +28,16 @@ func (c IngressConfig) PublicAddrOrAddr() string {
 	return c.Addr
 }
 
-// RESTfulConfig configures the REST/WebSocket admin surface. Since
-// the unified ingress merged every port into cfg.Ingress, only the
-// JWT/storage knobs remain here — the REST engine is mounted onto
-// the ingress dispatcher's virtual HTTP listener.
+// RESTfulConfig configures the JWT/storage knobs of the REST surface.
+// The REST engine itself is mounted onto the unified ingress
+// dispatcher's virtual HTTP listener — there is no per-protocol
+// enable flag because v2 has no other control-plane mode.
 type RESTfulConfig struct {
-	Enable            bool   `yaml:"enable"            mapstructure:"enable"`
-	JWTRefreshKey     string `yaml:"JWTRefreshKey"     mapstructure:"JWTRefreshKey"`
-	JWTAccessKey      string `yaml:"JWTAccessKey"      mapstructure:"JWTAccessKey"`
-	RefreshExpireTime int    `yaml:"RefreshExpireTime" mapstructure:"RefreshExpireTime"` // seconds; 0 defaults to 14 days
-	AccessExpireTime  int    `yaml:"AccessExpireTime"  mapstructure:"AccessExpireTime"`  // seconds; 0 defaults to 15 min
-	DBFile            string `yaml:"DBFile"            mapstructure:"DBFile"`            // empty defaults to ./platypus.db
+	JWTRefreshKey     string `yaml:"jwt_refresh_key"     mapstructure:"jwt_refresh_key"`
+	JWTAccessKey      string `yaml:"jwt_access_key"      mapstructure:"jwt_access_key"`
+	RefreshExpireTime int    `yaml:"refresh_expire_time" mapstructure:"refresh_expire_time"` // seconds; 0 defaults to 14 days
+	AccessExpireTime  int    `yaml:"access_expire_time"  mapstructure:"access_expire_time"`  // seconds; 0 defaults to 15 min
+	DBFile            string `yaml:"db_file"             mapstructure:"db_file"`             // empty defaults to ./platypus.db
 }
 
 // AccessTTLOrDefault returns the configured access token lifetime in
@@ -73,12 +68,11 @@ func (c RESTfulConfig) DBFileOrDefault() string {
 }
 
 // DistributorConfig defines the routes that front the agent release
-// artifact store. The distributor itself serves only a signed manifest
-// and redirects to presigned object-store URLs for artifact
-// downloads — the binaries live in Store. The HTTP routes are mounted
-// on the same gin engine the REST API runs on; no dedicated port.
+// artifact store. The HTTP routes are mounted on the unified ingress;
+// no dedicated port. The public base URL is derived from
+// IngressConfig.PublicAddrOrAddr at runtime — operators don't need
+// to repeat it here.
 type DistributorConfig struct {
-	Url          string              `yaml:"url"           mapstructure:"url"`
 	Channel      string              `yaml:"channel"       mapstructure:"channel"`       // default release channel; "stable" if empty
 	PresignedTTL string              `yaml:"presigned_ttl" mapstructure:"presigned_ttl"` // duration, e.g. "5m"; defaults to 5 minutes
 	Store        ArtifactStoreConfig `yaml:"store"         mapstructure:"store"`
@@ -105,14 +99,13 @@ func (c DistributorConfig) ChannelOrDefault() string {
 	return "stable"
 }
 
-// MeshConfig opts the server into the agent overlay. When PSKFile is
-// empty the server stays in pure hub-and-spoke mode; otherwise it
-// generates a persistent mesh identity, accepts inbound mesh links, and
-// can route admin traffic to any reachable agent by NodeID.
+// MeshConfig opts the server into the agent overlay. Identity is
+// self-issued at startup against the named project's CA (see
+// cmd/platypus-server/main.go::tryStartServerMesh); the listener is
+// the unified ingress, so neither identity-on-disk nor a separate
+// mesh listen address belongs in this struct.
 type MeshConfig struct {
 	PSKFile        string   `yaml:"psk_file"        mapstructure:"psk_file"`
-	IdentityDir    string   `yaml:"identity_dir"    mapstructure:"identity_dir"`
-	ListenAddr     string   `yaml:"listen_addr"     mapstructure:"listen_addr"`
 	AdvertiseAddrs []string `yaml:"advertise_addrs" mapstructure:"advertise_addrs"`
 	Peers          []string `yaml:"peers"           mapstructure:"peers"`
 
@@ -127,5 +120,4 @@ type Config struct {
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
 	Mesh        MeshConfig        `yaml:"mesh"`
-	OpenBrowser bool              `yaml:"openBrowser"`
 }
