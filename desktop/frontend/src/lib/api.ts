@@ -1,5 +1,5 @@
 // Typed wrappers over the /api/v1 surface introduced by the redesign
-// (Projects, Hosts, Sessions, Dispatch). Thin on purpose — each
+// (Projects, Hosts, Sessions). Thin on purpose — each
 // function is one authJSON call. Response shapes mirror the Go
 // handler_*_v2.go structs so a rename on either side will surface at
 // compile time.
@@ -196,13 +196,6 @@ export interface ProjectMember {
     role: "admin" | "operator" | "viewer";
 }
 
-export interface DispatchResult {
-    session_hash: string;
-    host_id: string;
-    output: string;
-    error?: string;
-}
-
 // --- Projects --------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {
@@ -290,7 +283,7 @@ export async function listHostSessions(pid: string, hid: string): Promise<Sessio
 }
 
 // listProjectSessions returns sessions across the whole project, newest
-// first. Powers SessionsPage and the dashboard time-series chart.
+// first. Powers SessionsPanel and the dashboard time-series chart.
 export interface SessionListOpts {
     live?: boolean;
     since?: Date;
@@ -309,24 +302,6 @@ export async function listProjectSessions(
     const path = `/api/v1/projects/${pid}/sessions${qs ? "?" + qs : ""}`;
     const j = await authJSON<{ sessions: SessionRow[] }>(path);
     return j.sessions;
-}
-
-// --- Dispatch --------------------------------------------------------
-
-export async function dispatchCommand(
-    pid: string,
-    command: string,
-    timeout = 3,
-): Promise<DispatchResult[]> {
-    const j = await authJSON<{ count: number; results: DispatchResult[] }>(
-        `/api/v1/projects/${pid}/dispatch`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ command, timeout }),
-        },
-    );
-    return j.results;
 }
 
 // --- Users (admin only) ---------------------------------------------

@@ -6,23 +6,21 @@ import {
     Layers,
     Loader2,
     Monitor,
-    RotateCw,
     Search,
     Server,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-import Card from "../components/Card";
-import EmptyState from "../components/EmptyState";
-import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
-import StatusDot from "../components/StatusDot";
-import Toolbar from "../components/Toolbar";
-import { useCurrentProject } from "../layout/ProjectShell";
-import { palette, space } from "../layout/theme";
-import { Host, listHosts } from "../lib/api";
-import { fromNow, isOnline } from "../lib/time";
+import Card from "../../components/Card";
+import EmptyState from "../../components/EmptyState";
+import Mono from "../../components/Mono";
+import StatusDot from "../../components/StatusDot";
+import Toolbar from "../../components/Toolbar";
+import { useCurrentProject } from "../../layout/ProjectShell";
+import { palette, space } from "../../layout/theme";
+import { Host, listHosts } from "../../lib/api";
+import { fromNow, isOnline } from "../../lib/time";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,11 +33,12 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-// HostsPage is the cross-host list for a project. Solves the IA gap
-// where hosts were only reachable via sidebar tree expansion. Always
-// landable, always shows the empty-state path to creating a listener
-// (which is how new hosts arrive).
-export default function HostsPage() {
+// HostsPanel is the Fleet page's table view. It was previously a
+// standalone HostsPage — the page chrome (PageHeader / route entry)
+// moved out because Fleet hosts it alongside Sessions / Topology,
+// all three mounted with display:none to preserve state across view
+// toggles.
+export default function HostsPanel() {
     const project = useCurrentProject();
     const navigate = useNavigate();
     const [hosts, setHosts] = useState<Host[] | null>(null);
@@ -79,24 +78,6 @@ export default function HostsPage() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Hosts"
-                subtitle={
-                    hosts === null
-                        ? "Loading…"
-                        : `${hosts.length} total · ${onlineCount} online`
-                }
-                actions={
-                    <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                        {loading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                            <RotateCw className="size-3.5" />
-                        )}
-                        Refresh
-                    </Button>
-                }
-            />
             <Toolbar
                 left={
                     <div className="relative max-w-[360px] w-full">
@@ -108,6 +89,19 @@ export default function HostsPage() {
                             className="h-8 pl-8"
                         />
                     </div>
+                }
+                right={
+                    <span style={{ color: palette.textMuted, fontSize: 12 }}>
+                        {hosts === null
+                            ? "Loading…"
+                            : `${hosts.length} total · ${onlineCount} online`}
+                        {loading && hosts !== null && (
+                            <Loader2
+                                className="size-3.5 animate-spin inline-block ml-2"
+                                style={{ verticalAlign: "middle" }}
+                            />
+                        )}
+                    </span>
                 }
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
@@ -132,9 +126,9 @@ export default function HostsPage() {
                         description="Hosts register themselves when an agent connects to one of your listeners. Create a listener first, then run the agent on a target machine."
                         action={
                             <Button
-                                onClick={() => navigate(`/projects/${project.slug}/listeners`)}
+                                onClick={() => navigate(`/projects/${project.slug}/enrollment`)}
                             >
-                                Manage listeners
+                                Manage enrollment
                             </Button>
                         }
                     />
@@ -173,7 +167,7 @@ export default function HostsPage() {
                                             className="cursor-pointer"
                                             onClick={() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/hosts/${h.id}/terminal`,
+                                                    `/projects/${project.slug}/hosts/${h.id}/info`,
                                                 )
                                             }
                                         >
@@ -194,9 +188,7 @@ export default function HostsPage() {
                                                     </span>
                                                 </div>
                                             </TableCell>
-                                            <TableCell>
-                                                {renderOSCell(h)}
-                                            </TableCell>
+                                            <TableCell>{renderOSCell(h)}</TableCell>
                                             <TableCell>
                                                 {h.arch ? (
                                                     <Mono>{h.arch}</Mono>
@@ -255,8 +247,6 @@ function renderOSCell(h: Host) {
     return <span>{parts.join(" · ")}</span>;
 }
 
-// formatMem collapses a byte count into a compact GB/TB label for
-// the hosts list column. Hosts with unknown memory show "—".
 function formatMem(n?: number): string {
     if (!n || n <= 0) return "—";
     const gb = n / (1024 * 1024 * 1024);
@@ -265,9 +255,6 @@ function formatMem(n?: number): string {
     return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
 }
 
-// machineTypeLegend explains the icon column in a hover tooltip so
-// operators don't need to guess which icon means what. Kept as a
-// plain string so it lives in the header's title attribute.
 const machineTypeLegend =
     "Machine type — container / VM / bare metal / laptop / desktop";
 

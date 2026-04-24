@@ -6,6 +6,12 @@ import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
 import { Project, listProjects } from "../lib/api";
 import { getSessionUser, getSession } from "../lib/auth";
+import {
+    GlobalTerminalProvider,
+    useGlobalTerminal,
+} from "../terminal/GlobalTerminalContext";
+import TerminalDrawer from "../terminal/TerminalDrawer";
+import CommandPalette from "./CommandPalette";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
 
@@ -82,23 +88,25 @@ export default function ProjectShell({ requireProject = false }: Props) {
 
     return (
         <ProjectShellContext.Provider value={{ projects, project, refresh }}>
-            <ShellChrome
-                user={user}
-                serverURL={serverURL}
-                projects={projects}
-                currentSlug={params.projectSlug}
-                refresh={refresh}
-            >
-                {requireProject && !project ? (
-                    <EmptyState
-                        title="Project not found"
-                        description={`No project with slug "${params.projectSlug}". It may have been deleted, or you may have lost access.`}
-                        fill
-                    />
-                ) : (
-                    <Outlet />
-                )}
-            </ShellChrome>
+            <GlobalTerminalProvider>
+                <ShellChrome
+                    user={user}
+                    serverURL={serverURL}
+                    projects={projects}
+                    currentSlug={params.projectSlug}
+                    refresh={refresh}
+                >
+                    {requireProject && !project ? (
+                        <EmptyState
+                            title="Project not found"
+                            description={`No project with slug "${params.projectSlug}". It may have been deleted, or you may have lost access.`}
+                            fill
+                        />
+                    ) : (
+                        <Outlet />
+                    )}
+                </ShellChrome>
+            </GlobalTerminalProvider>
         </ProjectShellContext.Provider>
     );
 }
@@ -118,6 +126,7 @@ function ShellChrome({
     refresh: () => Promise<void>;
     children: ReactNode;
 }) {
+    useGlobalTerminalHotkey();
     return (
         <div
             style={{
@@ -146,9 +155,27 @@ function ShellChrome({
                 />
                 <main style={{ flex: 1, minWidth: 0, overflow: "auto" }}>{children}</main>
             </div>
+            <TerminalDrawer />
             <StatusBar />
+            <CommandPalette />
         </div>
     );
+}
+
+// Ctrl+` / Cmd+` toggles the global terminal drawer (VSCode parity).
+// Registered at the shell level so the binding is alive on every page.
+function useGlobalTerminalHotkey() {
+    const { toggleDrawer } = useGlobalTerminal();
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "`") {
+                e.preventDefault();
+                toggleDrawer();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [toggleDrawer]);
 }
 
 function Centered({ children }: { children: ReactNode }) {

@@ -1,24 +1,19 @@
-// TopologyPage — the /projects/:slug/topology route.
-//
-// Composes the useTopology hook with the MeshGraph component and
-// two selection-driven detail panels (MachineDetailPanel,
-// LinkDetailPanel). The page itself is thin — all state lives in
-// the hook so reconnects don't force a remount of the graph.
-
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import Card from "../components/Card";
-import PageHeader from "../components/PageHeader";
-import { useCurrentProject } from "../layout/ProjectShell";
-import { palette, space } from "../layout/theme";
+import Card from "../../components/Card";
+import { useCurrentProject } from "../../layout/ProjectShell";
+import { palette, space } from "../../layout/theme";
 
-import MeshGraph from "../components/topology/MeshGraph";
-import MachineDetailPanel from "../components/topology/MachineDetailPanel";
-import LinkDetailPanel from "../components/topology/LinkDetailPanel";
-import { useTopology } from "./hooks/useTopology";
+import MeshGraph from "../../components/topology/MeshGraph";
+import MachineDetailPanel from "../../components/topology/MachineDetailPanel";
+import LinkDetailPanel from "../../components/topology/LinkDetailPanel";
+import { useTopology } from "../hooks/useTopology";
 
-export default function TopologyPage() {
+// TopologyPanel is the Fleet page's graph view. Kept mounted under
+// FleetPage so the Cytoscape layout and user-pan/zoom state survive
+// a detour into Table/Timeline and back.
+export default function TopologyPanel() {
     const project = useCurrentProject();
     const state = useTopology(project.id);
 
@@ -37,17 +32,27 @@ export default function TopologyPage() {
         ) ?? null;
     }, [state.snapshot, selectedLink]);
 
-    const headerMeta = state.snapshot
-        ? `${(state.snapshot.machines ?? []).length} machine${(state.snapshot.machines ?? []).length === 1 ? "" : "s"} · ${(state.snapshot.links ?? []).length} link${(state.snapshot.links ?? []).length === 1 ? "" : "s"}${state.snapshot.mesh_enabled ? "" : " · hub-and-spoke"}`
-        : undefined;
-
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: space[4], height: "100%" }}>
-            <PageHeader title="Topology" subtitle={headerMeta ?? "Loading topology…"} />
-
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: space[4],
+                height: "100%",
+                padding: space[6],
+            }}
+        >
             {state.loading && !state.snapshot && (
                 <Card>
-                    <div style={{ display: "flex", alignItems: "center", gap: space[2], padding: space[6], color: palette.textMuted }}>
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: space[2],
+                            padding: space[6],
+                            color: palette.textMuted,
+                        }}
+                    >
                         <Loader2 className="size-4 animate-spin" />
                         <span>Fetching mesh snapshot…</span>
                     </div>
@@ -62,22 +67,29 @@ export default function TopologyPage() {
 
             {state.snapshot && (
                 <Card>
-                    <div style={{ height: "calc(100vh - 220px)", minHeight: 400, position: "relative" }}>
-                        {(state.snapshot.machines ?? []).length === 0 && (state.snapshot.mesh_nodes ?? []).length === 0 && (
-                            <div
-                                style={{
-                                    position: "absolute",
-                                    inset: 0,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    color: palette.textMuted,
-                                    fontSize: 13,
-                                }}
-                            >
-                                No agents currently connected to this project.
-                            </div>
-                        )}
+                    <div
+                        style={{
+                            height: "calc(100vh - 260px)",
+                            minHeight: 400,
+                            position: "relative",
+                        }}
+                    >
+                        {(state.snapshot.machines ?? []).length === 0 &&
+                            (state.snapshot.mesh_nodes ?? []).length === 0 && (
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        inset: 0,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        color: palette.textMuted,
+                                        fontSize: 13,
+                                    }}
+                                >
+                                    No agents currently connected to this project.
+                                </div>
+                            )}
                         <MeshGraph
                             machines={state.snapshot.machines ?? []}
                             meshNodes={state.snapshot.mesh_nodes ?? []}

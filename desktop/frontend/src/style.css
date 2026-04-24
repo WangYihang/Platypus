@@ -261,3 +261,42 @@ main {
     border: 2px solid transparent;
 }
 
+/* Command palette (cmdk) -------------------------------------------------- */
+.pl-cmdk-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 80;
+    animation: pl-fade-in 120ms ease-out;
+}
+.pl-cmdk-content {
+    position: fixed;
+    top: 18vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - 32px));
+    background: var(--color-main);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 10px;
+    box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    z-index: 90;
+    animation: pl-fade-in 140ms ease-out;
+}
+.pl-cmdk-item[data-selected="true"] {
+    background: var(--color-surface-hover);
+}
+.pl-cmdk-item[data-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+[cmdk-group-heading] {
+    padding: 8px 12px 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+}
+

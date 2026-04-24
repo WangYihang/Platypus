@@ -1,15 +1,13 @@
 import { ReactNode, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
     Clock,
     CloudDownload,
     LayoutGrid,
     Loader2,
     Monitor,
-    Network,
-    ShieldCheck,
+    Settings2,
     Users,
-    Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
@@ -18,7 +16,6 @@ import { z } from "zod";
 
 import Brand from "../components/Brand";
 import { Project, createProject } from "../lib/api";
-import { featureFlags } from "../lib/featureFlags";
 import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
 import ProjectSwitcher from "./ProjectSwitcher";
@@ -82,6 +79,7 @@ export default function ProjectSidebar({
     onProjectsChanged,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
+    const { pathname } = useLocation();
 
     const createForm = useForm<ProjectFormValues>({
         resolver: zodResolver(projectSchema),
@@ -90,15 +88,11 @@ export default function ProjectSidebar({
 
     const items: NavItem[] = [
         { to: "overview", label: "Overview", icon: <LayoutGrid className="size-4" />, requiresProject: true },
-        { to: "hosts", label: "Hosts", icon: <Monitor className="size-4" />, requiresProject: true },
-        { to: "sessions", label: "Sessions", icon: <ShieldCheck className="size-4" />, requiresProject: true },
-        ...(featureFlags.topology
-            ? [{ to: "topology", label: "Topology", icon: <Network className="size-4" />, requiresProject: true }]
-            : []),
+        { to: "fleet", label: "Fleet", icon: <Monitor className="size-4" />, requiresProject: true },
         { to: "activities", label: "Activities", icon: <Clock className="size-4" />, requiresProject: true },
         { to: "enrollment", label: "Enrollment", icon: <CloudDownload className="size-4" />, requiresProject: true, minRole: "admin" },
-        { to: "dispatch", label: "Dispatch", icon: <Zap className="size-4" />, requiresProject: true, minRole: "operator" },
         { to: "members", label: "Members", icon: <Users className="size-4" />, requiresProject: true, minRole: "operator" },
+        { to: "settings", label: "Settings", icon: <Settings2 className="size-4" />, requiresProject: true, minRole: "admin" },
     ];
 
     const visible = items.filter((it) => meetsRole(user.role, it.minRole));
@@ -163,9 +157,16 @@ export default function ProjectSidebar({
                         <NavLink
                             key={it.to}
                             to={`/projects/${currentSlug}/${it.to}`}
-                            className={({ isActive }) =>
-                                "pl-nav-link" + (isActive ? " pl-nav-link--active" : "")
-                            }
+                            className={({ isActive }) => {
+                                // Host detail pages live at /hosts/:id/:tab
+                                // but conceptually belong under Fleet, so
+                                // highlight Fleet there too.
+                                const forced =
+                                    it.to === "fleet" &&
+                                    pathname.startsWith(`/projects/${currentSlug}/hosts/`);
+                                const active = isActive || forced;
+                                return "pl-nav-link" + (active ? " pl-nav-link--active" : "");
+                            }}
                         >
                             <span
                                 style={{

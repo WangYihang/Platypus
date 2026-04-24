@@ -13,16 +13,14 @@ import ProjectShell from "./layout/ProjectShell";
 const LoginRoute = lazy(() => import("./routes/LoginRoute"));
 const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
-const HostsPage = lazy(() => import("./pages/HostsPage"));
+const FleetPage = lazy(() => import("./pages/FleetPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
-const SessionsPage = lazy(() => import("./pages/SessionsPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
-const DispatchRoute = lazy(() => import("./routes/DispatchRoute"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
+const ProjectSettings = lazy(() => import("./pages/ProjectSettings"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
-const TopologyPage = lazy(() => import("./pages/TopologyPage"));
 
 // routeFallback is the placeholder each lazy route renders while its
 // chunk is fetched. Centred spinner over the main surface so it doesn't
@@ -145,18 +143,16 @@ export const router = createBrowserRouter([
                 children: [
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
-                    { path: "hosts", element: withSuspense(<HostsPage />) },
+                    { path: "fleet", element: withSuspense(<FleetPage />) },
                     {
                         path: "hosts/:hostId",
-                        element: <Navigate to="terminal" replace />,
+                        element: <Navigate to="info" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
-                    { path: "sessions", element: withSuspense(<SessionsPage />) },
-                    { path: "topology", element: withSuspense(<TopologyPage />) },
                     { path: "activities", element: withSuspense(<ActivitiesPage />) },
                     { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
-                    { path: "dispatch", element: withSuspense(<DispatchRoute />) },
                     { path: "members", element: withSuspense(<MembersRoute />) },
+                    { path: "settings", element: withSuspense(<ProjectSettings />) },
                 ],
             },
             // Catch-all → projects landing.

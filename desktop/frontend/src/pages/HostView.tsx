@@ -9,6 +9,7 @@ import {
     Monitor,
     RotateCw,
     Server,
+    TerminalSquare,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -31,9 +32,9 @@ import {
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
+import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 import FilesTab from "./host/FilesTab";
 import ProcessesTab from "./host/ProcessesTab";
-import TerminalTab from "./host/TerminalTab";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,14 +52,15 @@ interface Props {
     hostID: string;
 }
 
-const TABS = ["terminal", "files", "sessions", "info", "processes"] as const;
+const TABS = ["info", "files", "sessions", "processes"] as const;
 type TabKey = (typeof TABS)[number];
 
 // HostView is the main-panel view when a Host is selected. Four tabs
-// (Terminal, Files, Sessions, Info) live under the page header —
-// shadcn Tabs for the bar, but the panels render ourselves so the
-// underlying tab components (Terminal with persistent xterm state) can
-// mount once and stay alive across tab switches.
+// (Info, Files, Sessions, Processes) live under the page header —
+// shadcn Tabs for the bar, but the panels render ourselves so each
+// tab stays mounted across switches. The shell surface moved out of
+// this page into the global bottom drawer; operators open it via the
+// "Open terminal" action in the header.
 export default function HostView({ projectID, hostID }: Props) {
     const [host, setHost] = useState<Host | null>(null);
     const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -80,10 +82,11 @@ export default function HostView({ projectID, hostID }: Props) {
 
     const project = useCurrentProject();
     const navigate = useNavigate();
+    const { openShell } = useGlobalTerminal();
     const { tab: tabParam } = useParams<{ tab?: string }>();
     const activeTab: TabKey = (TABS as readonly string[]).includes(tabParam ?? "")
         ? (tabParam as TabKey)
-        : "terminal";
+        : "info";
     const setActiveTab = (key: string) =>
         navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
 
@@ -200,13 +203,34 @@ export default function HostView({ projectID, hostID }: Props) {
     const tabBar = (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-9">
-                <TabsTrigger value="terminal">Terminal</TabsTrigger>
+                <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
-                <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="processes">Processes</TabsTrigger>
             </TabsList>
         </Tabs>
+    );
+
+    const canOpenShell = liveCount > 0 && !!host.agent_id;
+    const openTerminalAction = (
+        <Button
+            size="sm"
+            variant="outline"
+            disabled={!canOpenShell}
+            onClick={() => {
+                if (!host.agent_id) return;
+                openShell({
+                    projectSlug: project.slug,
+                    hostId: hostID,
+                    sessionHash: host.agent_id,
+                    label: primary,
+                });
+            }}
+            title={canOpenShell ? "Open a shell in the bottom panel" : "No live agent session"}
+        >
+            <TerminalSquare className="size-3.5" />
+            Open terminal
+        </Button>
     );
 
     return (
@@ -228,14 +252,17 @@ export default function HostView({ projectID, hostID }: Props) {
                     </span>
                 }
                 actions={
-                    <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                        {loading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                            <RotateCw className="size-3.5" />
-                        )}
-                        Refresh
-                    </Button>
+                    <span style={{ display: "inline-flex", gap: space[2] }}>
+                        {openTerminalAction}
+                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
+                            Refresh
+                        </Button>
+                    </span>
                 }
                 tabs={tabBar}
             />
@@ -246,22 +273,9 @@ export default function HostView({ projectID, hostID }: Props) {
                     padding: space[6],
                 }}
             >
-                {/* Each tab panel stays mounted (via display:none) so xterm
-                    instances in TerminalTab don't get re-created on tab
-                    switch — the persistent websocket / scrollback state is
-                    expensive to rebuild. */}
-                <div
-                    style={{
-                        display: activeTab === "terminal" ? "block" : "none",
-                        height: "100%",
-                    }}
-                >
-                    <TerminalTab
-                        liveSessions={liveSessions}
-                        picked={pickedSessionID}
-                        onPick={setPickedSessionID}
-                    />
-                </div>
+                {/* Each tab panel stays mounted (via display:none) so
+                    expensive children (Files tree, Processes poller,
+                    etc.) don't rebuild state on tab switch. */}
                 <div style={{ display: activeTab === "files" ? "block" : "none" }}>
                     {pickedSessionID ? (
                         <FilesTab sessionHash={pickedSessionID} />

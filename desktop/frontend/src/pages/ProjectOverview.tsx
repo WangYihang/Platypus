@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCw, Users, Zap } from "lucide-react";
+import { Loader2, Monitor, RotateCw, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 verb: s.disconnected_at ? "closed on" : "opened on",
                 target: <span style={{ color: palette.textPrimary }}>{hostLabel(s.host_id)}</span>,
                 onClick: () =>
-                    navigate(`/projects/${project.slug}/hosts/${s.host_id}/terminal`),
+                    navigate(`/projects/${project.slug}/hosts/${s.host_id}/info`),
             }));
     }, [sessions24h, hosts, navigate, project.slug]);
 
@@ -260,10 +260,10 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                         }}
                     >
                         <QuickAction
-                            icon={<Zap className="size-4" />}
-                            title="Run dispatch"
-                            description="Run a command on every flagged live session."
-                            onClick={() => navigate(`/projects/${project.slug}/dispatch`)}
+                            icon={<Monitor className="size-4" />}
+                            title="Open Fleet"
+                            description="Table, timeline, and topology views of every host in this project."
+                            onClick={() => navigate(`/projects/${project.slug}/fleet`)}
                         />
                         {onOpenMembers && (
                             <QuickAction

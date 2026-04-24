@@ -52,6 +52,13 @@ export default function Terminal({ sessionHash, onClose }: Props) {
     const xtermRef = useRef<Xterm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
     const termIDRef = useRef<string>("");
+    // onClose is forwarded through a ref so re-renders that only change the
+    // callback identity (e.g. parent state updates) don't re-run the xterm
+    // setup effect and tear down the WebSocket.
+    const onCloseRef = useRef(onClose);
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -103,7 +110,7 @@ export default function Terminal({ sessionHash, onClose }: Props) {
                 });
                 EventsOn(`terminal:closed:${id}`, () => {
                     xterm.write("\r\n[connection closed]\r\n");
-                    onClose?.();
+                    onCloseRef.current?.();
                 });
                 cleanupFns.push(() => {
                     EventsOff(`terminal:output:${id}`);
@@ -126,7 +133,7 @@ export default function Terminal({ sessionHash, onClose }: Props) {
             }
             xterm.dispose();
         };
-    }, [sessionHash, onClose]);
+    }, [sessionHash]);
 
     return (
         <div

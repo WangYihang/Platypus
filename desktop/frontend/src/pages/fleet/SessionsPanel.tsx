@@ -1,25 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCw, Search, ShieldCheck } from "lucide-react";
+import { Loader2, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-import Card from "../components/Card";
-import EmptyState from "../components/EmptyState";
-import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
-import StatusPill from "../components/StatusPill";
-import Toolbar from "../components/Toolbar";
-import { useCurrentProject } from "../layout/ProjectShell";
-import { palette, space } from "../layout/theme";
+import Card from "../../components/Card";
+import EmptyState from "../../components/EmptyState";
+import Mono from "../../components/Mono";
+import StatusPill from "../../components/StatusPill";
+import Toolbar from "../../components/Toolbar";
+import { useCurrentProject } from "../../layout/ProjectShell";
+import { palette, space } from "../../layout/theme";
 import {
     Host,
     SessionRow,
     listHosts,
     listProjectSessions,
-} from "../lib/api";
-import { fromNow } from "../lib/time";
+} from "../../lib/api";
+import { fromNow } from "../../lib/time";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Table,
@@ -33,13 +31,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type FilterMode = "live" | "all";
 
-// SessionsPage is the cross-host project sessions list at
-// /projects/:slug/sessions. Live + historical view with a toggle
-// filter and free-text search over id/user/remote/host/ingress. Row
-// click jumps to the host's terminal tab. Data is server-paginated
-// (one unbounded fetch — sessions typically number in the dozens),
-// so we filter client-side rather than round-tripping each keystroke.
-export default function SessionsPage() {
+// SessionsPanel is the Fleet page's timeline view. Lives under
+// FleetPage along with HostsPanel and TopologyPanel; Fleet toggles
+// visibility with display:none so re-opening Timeline is instant and
+// filter/search state is preserved across the switch.
+export default function SessionsPanel() {
     const project = useCurrentProject();
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<SessionRow[] | null>(null);
@@ -97,24 +93,6 @@ export default function SessionsPage() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Sessions"
-                subtitle={
-                    sessions === null
-                        ? "Loading…"
-                        : `${sessions.length} ${filter === "live" ? "live" : "total"}`
-                }
-                actions={
-                    <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                        {loading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                            <RotateCw className="size-3.5" />
-                        )}
-                        Refresh
-                    </Button>
-                }
-            />
             <Toolbar
                 left={
                     <>
@@ -140,6 +118,19 @@ export default function SessionsPage() {
                             />
                         </div>
                     </>
+                }
+                right={
+                    <span style={{ color: palette.textMuted, fontSize: 12 }}>
+                        {sessions === null
+                            ? "Loading…"
+                            : `${sessions.length} ${filter === "live" ? "live" : "total"}`}
+                        {loading && sessions !== null && (
+                            <Loader2
+                                className="size-3.5 animate-spin inline-block ml-2"
+                                style={{ verticalAlign: "middle" }}
+                            />
+                        )}
+                    </span>
                 }
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
@@ -206,7 +197,7 @@ export default function SessionsPage() {
                                             className="cursor-pointer"
                                             onClick={() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/hosts/${s.host_id}/terminal`,
+                                                    `/projects/${project.slug}/hosts/${s.host_id}/info`,
                                                 )
                                             }
                                         >
