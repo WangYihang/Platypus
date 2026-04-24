@@ -111,6 +111,22 @@ func (r *SessionRepo) MarkDisconnected(ctx context.Context, id string) error {
 	return err
 }
 
+// MarkAllLiveDisconnected stamps disconnected_at on every row whose
+// disconnected_at is currently NULL. Run from main.go on server
+// startup: any session that survived a previous boot can't actually
+// still be live, since the server was the WS endpoint and a crash /
+// SIGKILL prevents the per-link defer from running. Returns the
+// number of rows swept so the caller can log a heads-up.
+func (r *SessionRepo) MarkAllLiveDisconnected(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE sessions SET disconnected_at = ? WHERE disconnected_at IS NULL`,
+		time.Now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // SetGroupDispatch flips the group_dispatch flag on a session row. The
 // runtime object in core keeps its own mirror; this persists the choice
 // so it survives restart.

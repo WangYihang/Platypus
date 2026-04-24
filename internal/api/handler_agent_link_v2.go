@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
@@ -133,6 +134,16 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		heartbeatCtx, stopHeartbeat := context.WithCancel(c.Request.Context())
 		defer stopHeartbeat()
 		go h.heartbeatHostLastSeen(heartbeatCtx, agentID)
+
+		// Materialise a sessions row so the per-host UI mounts its
+		// Terminal / Files tabs (TerminalTab gates on a live session
+		// and renders "No live session" otherwise) and the project-
+		// wide Sessions list shows the linked agent. Stamped
+		// disconnected_at on the deferred path below so historical
+		// queries reflect actual disconnect time, not "still live".
+		if sessionID := h.startLiveSession(c, agentID, projectID); sessionID != "" {
+			defer h.endLiveSession(sessionID)
+		}
 	}
 
 	for {
@@ -150,6 +161,57 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 			return
 		}
 		go h.dispatchStream(agentID, hdr, stream)
+	}
+}
+
+// startLiveSession resolves the host row backing this agent and
+// inserts a sessions row with disconnected_at=NULL. Returns the new
+// session_id (or "" on any failure — failures are logged and don't
+// affect the link, since the live session is purely a UI affordance:
+// the actual RPC plumbing keys off agent_id via AgentLinkService).
+//
+// Two failure paths to be aware of:
+//   - host row missing: enroll-time Upsert may not have settled.
+//     Skip the insert; the next reconnect picks it up.
+//   - session insert fails: log and continue. The link still works,
+//     just without UI surfacing.
+func (h *AgentLinkHandler) startLiveSession(c *gin.Context, agentID, projectID string) string {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	host, err := h.db.Hosts().GetByAgentID(ctx, agentID)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			log.Warn("agent link: lookup host for session insert (agent=%s): %v", agentID, err)
+		}
+		return ""
+	}
+
+	sess := &storage.Session{
+		ID:          uuid.NewString(),
+		ProjectID:   projectID,
+		IngressAddr: PublicAddr,
+		HostID:      host.ID,
+		RemoteAddr:  c.Request.RemoteAddr,
+		Version:     "v2",
+		ConnectedAt: time.Now().UTC(),
+	}
+	if err := h.db.Sessions().Insert(ctx, sess); err != nil {
+		log.Warn("agent link: insert session (agent=%s host=%s): %v", agentID, host.ID, err)
+		return ""
+	}
+	return sess.ID
+}
+
+// endLiveSession stamps disconnected_at on the session row started by
+// startLiveSession. Decoupled from the request context so a quick
+// shutdown (server SIGTERM) still records the disconnect — uses a
+// fresh background context with a short bound.
+func (h *AgentLinkHandler) endLiveSession(sessionID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.db.Sessions().MarkDisconnected(ctx, sessionID); err != nil {
+		log.Warn("agent link: mark session disconnected (id=%s): %v", sessionID, err)
 	}
 }
 

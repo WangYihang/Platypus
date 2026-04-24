@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
@@ -71,13 +70,18 @@ func ServeLink(ctx context.Context, sess *link.Session, deps AgentHandlerDeps) e
 	for {
 		hdr, stream, err := sess.Accept()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			// Own-Close raced the Accept; treat as clean.
+			// Operator-initiated shutdown (Ctrl+C / SIGTERM) is the
+			// only "we meant for this to happen" path — exit cleanly
+			// so the CLI returns 0 and any process supervisor doesn't
+			// flap-restart us.
 			if ctx.Err() != nil {
 				return nil
 			}
+			// Anything else (server hangup → io.EOF, yamux session
+			// teardown, network blip) is an unintended drop. Return a
+			// non-nil error so the BackoffRetry loop in main.go
+			// reconnects with exponential backoff + jitter rather
+			// than treating it as success and exiting the process.
 			return fmt.Errorf("agent: ServeLink accept: %w", err)
 		}
 		go dispatchAgentStream(ctx, hdr, stream, deps)

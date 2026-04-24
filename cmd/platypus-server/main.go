@@ -108,6 +108,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Sweep any sessions row left in "live" state by a previous
+	// instance: a SIGKILL / OOM kill prevents the per-link defer in
+	// handler_agent_link_v2 from stamping disconnected_at, leaving
+	// dangling rows that the project-Sessions list would otherwise
+	// surface as currently-online. Connected agents reconnect after
+	// our backoff and create fresh rows; the only loss is the exact
+	// disconnect timestamp on the leaked rows, which we approximate
+	// as "now" (when the server came back).
+	if n, err := db.Sessions().MarkAllLiveDisconnected(ctx); err != nil {
+		log.L.Warn("startup_session_sweep_failed", "error", err.Error())
+	} else if n > 0 {
+		log.L.Info("startup_session_sweep", "swept", n,
+			"hint", "previous instance exited without graceful shutdown — these rows are best-effort historical")
+	}
+
 	ingressAddr := cfg.Ingress.Addr
 	if ingressAddr == "" {
 		ingressAddr = defaultIngressAddr
