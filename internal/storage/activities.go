@@ -298,6 +298,19 @@ func (r *ActivityRepo) List(ctx context.Context, f ActivityFilter) ([]*Activity,
 
 // Count returns the total matching rows, ignoring Limit/Cursor. Useful
 // for the header count; callers may skip it on hot paths.
+// DeleteOlderThan removes every activity row with at < cutoff and
+// returns the number of rows deleted. Used by the retention reaper
+// to keep the audit log bounded when admins configure a non-zero
+// retention window.
+func (r *ActivityRepo) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM activities WHERE at < ?`, cutoff.UTC())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *ActivityRepo) Count(ctx context.Context, f ActivityFilter) (int64, error) {
 	// Strip pagination from the filter and reuse the WHERE builder by
 	// doing a micro duplication (the subset below is intentionally

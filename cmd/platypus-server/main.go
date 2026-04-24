@@ -32,6 +32,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
@@ -185,6 +186,11 @@ func main() {
 	}
 
 	rest := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg)
+
+	// Audit retention reaper: sweeps every hour, consults settings
+	// for the live retention window. A zero window keeps everything
+	// forever and the sweep is a no-op.
+	go activity.NewReaper(db, settingsReg, log.L).Run(ctx)
 
 	go func() {
 		if err := dispatcher.Serve(ctx, listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

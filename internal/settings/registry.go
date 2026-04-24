@@ -122,6 +122,15 @@ func (r *Registry) MeshDiscoveryInterval() time.Duration {
 	})
 }
 
+// AuditRetentionDays is the number of days the audit log keeps
+// entries. Zero = retain forever. Stored as a plain JSON integer
+// (not seconds) because the UI edits a "days" number directly.
+func (r *Registry) AuditRetentionDays() int {
+	return r.getInt(KeyAuditRetentionDays, func() int {
+		return DefaultAuditRetentionDays
+	})
+}
+
 // ------------------- resolution helpers -------------------
 
 func (r *Registry) getDuration(key string, fallback func() time.Duration) time.Duration {
@@ -160,6 +169,27 @@ func (r *Registry) getBool(key string, fallback func() bool) bool {
 	b := fallback()
 	r.cache.Store(key, &cacheEntry{value: b})
 	return b
+}
+
+// getInt handles plain-integer settings (audit.retention_days is the
+// first). The typeInt descriptor tag flows into the same JSON-number
+// wire encoding; we just skip the seconds→duration conversion.
+func (r *Registry) getInt(key string, fallback func() int) int {
+	if v, ok := r.cacheLoad(key); ok {
+		if n, ok := v.(int); ok {
+			return n
+		}
+	}
+	if raw, ok := r.dbRaw(key); ok {
+		var n int64
+		if err := json.Unmarshal([]byte(raw), &n); err == nil {
+			r.cache.Store(key, &cacheEntry{value: int(n)})
+			return int(n)
+		}
+	}
+	n := fallback()
+	r.cache.Store(key, &cacheEntry{value: n})
+	return n
 }
 
 func (r *Registry) getString(key string, fallback func() string) string {

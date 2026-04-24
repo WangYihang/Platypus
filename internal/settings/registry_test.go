@@ -90,7 +90,7 @@ func TestRegistry_YAMLFallbackWinsOverDefault(t *testing.T) {
 		t.Errorf("MeshDiscoveryLAN yaml = true, want false")
 	}
 	if got := reg.MeshDiscoveryInterval(); got != 77*time.Second {
-		t.Errorf("MeshDiscoveryInterval yaml = %v, want 77s", got)
+		t.Errorf("MeshDiscoveryInterval yaml = %v, want 87s", got)
 	}
 }
 
@@ -214,8 +214,8 @@ func TestRegistry_DescribeAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DescribeAll: %v", err)
 	}
-	if len(descs) != 7 {
-		t.Fatalf("len = %d, want 7", len(descs))
+	if len(descs) != 8 {
+		t.Fatalf("len = %d, want 8", len(descs))
 	}
 
 	byKey := map[string]settings.SettingDescriptor{}

@@ -88,6 +88,13 @@ var allDescriptors = []descriptorMeta{
 		Label:       "Discovery interval",
 		Description: "Seconds between mesh mDNS discovery cycles.",
 	},
+	{
+		Key:         KeyAuditRetentionDays,
+		Type:        typeInt,
+		Section:     "audit",
+		Label:       "Retention (days)",
+		Description: "Delete audit entries older than this many days. 0 = keep forever.",
+	},
 }
 
 func descriptor(key string) (descriptorMeta, bool) {
@@ -147,6 +154,8 @@ func (r *Registry) describeDefault(m descriptorMeta) any {
 		return DefaultMeshDiscoveryLAN
 	case KeyMeshDiscoveryIntervalSec:
 		return int64(DefaultMeshDiscoveryIntSecs)
+	case KeyAuditRetentionDays:
+		return int64(DefaultAuditRetentionDays)
 	}
 	return nil
 }
@@ -240,6 +249,8 @@ func (r *Registry) describeEffective(m descriptorMeta) any {
 		return r.MeshDiscoveryLAN()
 	case KeyMeshDiscoveryIntervalSec:
 		return int64(r.MeshDiscoveryInterval().Seconds())
+	case KeyAuditRetentionDays:
+		return int64(r.AuditRetentionDays())
 	}
 	return nil
 }

@@ -33,6 +33,7 @@ const (
 	KeyDistributorPresignedTTL  = "distributor.presigned_ttl"
 	KeyMeshDiscoveryLAN         = "mesh.discovery_lan"
 	KeyMeshDiscoveryIntervalSec = "mesh.discovery_interval_seconds"
+	KeyAuditRetentionDays       = "audit.retention_days"
 )
 
 // Hardcoded defaults — the last line of the resolution chain. Must
@@ -46,6 +47,10 @@ const (
 	DefaultPresignedTTL         = 5 * time.Minute
 	DefaultMeshDiscoveryLAN     = true
 	DefaultMeshDiscoveryIntSecs = 30
+	// 0 = keep forever. Default is conservative: don't silently
+	// delete user audit data. Admins can set a finite value when
+	// disk / compliance constraints require it.
+	DefaultAuditRetentionDays = 0
 )
 
 // valueType tags determine how the registry and HTTP layer serialise
