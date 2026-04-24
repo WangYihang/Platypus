@@ -105,11 +105,19 @@ message NodeInfo {
 // HandshakePayload is the application data wrapped inside the
 // Noise handshake from HelloAck onward. It is encrypted + MAC'd
 // by the Noise session.
+//
+// The peer's project-CA-signed leaf is included here so the
+// receiver can bind the Noise X25519 session to a cert-verified
+// Ed25519 identity at handshake time — not just at the first
+// gossip message. SAN ↔ node_id and cert SPKI ↔ ed25519_pubkey
+// are enforced locally; chain verification happens against the
+// receiving node's TrustedCAs pool.
 message HandshakePayload {
-  string node_id          = 1;
-  bytes  ed25519_pubkey   = 2; // must hash to node_id via DeriveNodeID
-  uint32 protocol         = 3; // mesh protocol version (current = 1)
+  string node_id           = 1;
+  bytes  ed25519_pubkey    = 2; // must equal the cert's SPKI
+  uint32 protocol          = 3; // mesh protocol version (current = 1)
   repeated string addresses = 4; // advertised listen addresses
+  bytes  cert_pem          = 5; // project-CA-signed leaf; non-empty
 }
 
 // MeshHello = Noise message 1 (initiator → responder). Just the

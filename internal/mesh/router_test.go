@@ -8,8 +8,11 @@ import (
 
 )
 
-// buildSignedLSA produces a properly-signed LSA for a fake origin so we
-// can test Ingest + routing without standing up real Nodes.
+// buildSignedLSA produces a properly-signed LSA for a fake origin
+// so we can test Ingest + routing without standing up real Nodes.
+// When origin has a CertPEM (the common case with the cert-bound
+// mustIdentity helper) it's included in OriginCertPem so verifiers
+// take the cert-bound identity check path.
 func buildSignedLSA(t *testing.T, origin *Identity, seq uint64, links ...string) *v2pb.MeshLSA {
 	t.Helper()
 	linkMsgs := make([]*v2pb.MeshLSA_Link, 0, len(links))
@@ -17,10 +20,11 @@ func buildSignedLSA(t *testing.T, origin *Identity, seq uint64, links ...string)
 		linkMsgs = append(linkMsgs, &v2pb.MeshLSA_Link{NodeId: l, Cost: 1})
 	}
 	lsa := &v2pb.MeshLSA{
-		OriginNodeId: origin.NodeID,
-		Seq:          seq,
-		Links:        linkMsgs,
-		Pubkey:       origin.PublicKey,
+		OriginNodeId:  origin.NodeID,
+		Seq:           seq,
+		Links:         linkMsgs,
+		Pubkey:        origin.PublicKey,
+		OriginCertPem: append([]byte(nil), origin.CertPEM...),
 	}
 	canon, err := proto.Marshal(lsa)
 	if err != nil {

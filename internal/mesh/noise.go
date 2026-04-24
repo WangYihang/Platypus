@@ -207,10 +207,14 @@ func runNoiseResponder(
 	return peer, nil
 }
 
-// parseAndVerifyPayload unmarshals a HandshakePayload, checks the
-// mesh protocol version, and verifies that the claimed NodeID is
-// consistent with the Ed25519 pubkey. Callers surface any error as
-// an opaque "handshake failed" to the network — no leaky details.
+// parseAndVerifyPayload unmarshals a HandshakePayload and enforces
+// cert-bound identity: the peer must ship a cert, the cert's SAN
+// must match the claimed NodeID, and the cert's SPKI must match
+// the claimed Ed25519 pubkey. Chain verification against the
+// local TrustedCAs pool is the caller's job (see node.AcceptRaw /
+// dialer.dial) so tests without a PKI can run the local check
+// alone. Callers surface any error as an opaque "handshake
+// failed" to the network — no leaky details.
 func parseAndVerifyPayload(raw []byte) (*HandshakeResult, error) {
 	var p v2pb.HandshakePayload
 	if err := proto.Unmarshal(raw, &p); err != nil {
@@ -222,8 +226,14 @@ func parseAndVerifyPayload(raw []byte) (*HandshakeResult, error) {
 	if len(p.Ed25519Pubkey) != 32 {
 		return nil, fmt.Errorf("bad ed25519 pubkey length %d", len(p.Ed25519Pubkey))
 	}
-	if DeriveNodeID(p.Ed25519Pubkey) != p.NodeId {
-		return nil, errors.New("node_id does not match ed25519 pubkey")
+	if p.NodeId == "" {
+		return nil, errors.New("empty node_id")
+	}
+	if len(p.CertPem) == 0 {
+		return nil, errors.New("empty cert_pem")
+	}
+	if err := verifyCertIdentityLocal(p.CertPem, p.Ed25519Pubkey, p.NodeId); err != nil {
+		return nil, fmt.Errorf("handshake identity: %w", err)
 	}
 	return &HandshakeResult{
 		PeerNodeID:    p.NodeId,

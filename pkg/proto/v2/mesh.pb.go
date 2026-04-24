@@ -500,12 +500,20 @@ func (x *NodeInfo) GetCertPem() []byte {
 // HandshakePayload is the application data wrapped inside the
 // Noise handshake from HelloAck onward. It is encrypted + MAC'd
 // by the Noise session.
+//
+// The peer's project-CA-signed leaf is included here so the
+// receiver can bind the Noise X25519 session to a cert-verified
+// Ed25519 identity at handshake time — not just at the first
+// gossip message. SAN ↔ node_id and cert SPKI ↔ ed25519_pubkey
+// are enforced locally; chain verification happens against the
+// receiving node's TrustedCAs pool.
 type HandshakePayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Ed25519Pubkey []byte                 `protobuf:"bytes,2,opt,name=ed25519_pubkey,json=ed25519Pubkey,proto3" json:"ed25519_pubkey,omitempty"` // must hash to node_id via DeriveNodeID
+	Ed25519Pubkey []byte                 `protobuf:"bytes,2,opt,name=ed25519_pubkey,json=ed25519Pubkey,proto3" json:"ed25519_pubkey,omitempty"` // must equal the cert's SPKI
 	Protocol      uint32                 `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"`                               // mesh protocol version (current = 1)
 	Addresses     []string               `protobuf:"bytes,4,rep,name=addresses,proto3" json:"addresses,omitempty"`                              // advertised listen addresses
+	CertPem       []byte                 `protobuf:"bytes,5,opt,name=cert_pem,json=certPem,proto3" json:"cert_pem,omitempty"`                   // project-CA-signed leaf; non-empty
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -564,6 +572,13 @@ func (x *HandshakePayload) GetProtocol() uint32 {
 func (x *HandshakePayload) GetAddresses() []string {
 	if x != nil {
 		return x.Addresses
+	}
+	return nil
+}
+
+func (x *HandshakePayload) GetCertPem() []byte {
+	if x != nil {
+		return x.CertPem
 	}
 	return nil
 }
@@ -1499,12 +1514,13 @@ const file_mesh_proto_rawDesc = "" +
 	"\tlast_seen\x18\x04 \x01(\x03R\blastSeen\x12\x12\n" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12+\n" +
 	"\x11bootstrap_service\x18\x06 \x01(\bR\x10bootstrapService\x12\x19\n" +
-	"\bcert_pem\x18\a \x01(\fR\acertPem\"\x8c\x01\n" +
+	"\bcert_pem\x18\a \x01(\fR\acertPem\"\xa7\x01\n" +
 	"\x10HandshakePayload\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12%\n" +
 	"\x0eed25519_pubkey\x18\x02 \x01(\fR\red25519Pubkey\x12\x1a\n" +
 	"\bprotocol\x18\x03 \x01(\rR\bprotocol\x12\x1c\n" +
-	"\taddresses\x18\x04 \x03(\tR\taddresses\"(\n" +
+	"\taddresses\x18\x04 \x03(\tR\taddresses\x12\x19\n" +
+	"\bcert_pem\x18\x05 \x01(\fR\acertPem\"(\n" +
 	"\tMeshHello\x12\x1b\n" +
 	"\tnoise_msg\x18\x01 \x01(\fR\bnoiseMsg\"+\n" +
 	"\fMeshHelloAck\x12\x1b\n" +

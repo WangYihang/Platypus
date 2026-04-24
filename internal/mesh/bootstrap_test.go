@@ -15,6 +15,7 @@ func TestRegistryToNodeInfosIncludesBootstrapMetadata(t *testing.T) {
 	rec := &PeerRecord{
 		NodeID:           id.NodeID,
 		PublicKey:        id.PublicKey,
+		CertPEM:          append([]byte(nil), id.CertPEM...),
 		Addresses:        []string{"127.0.0.1:7001"},
 		LastSeen:         time.Unix(123, 0),
 		Role:             "server",
@@ -49,6 +50,7 @@ func TestFindBootstrapServerPrefersReachableServer(t *testing.T) {
 	if !node.registry.Upsert(&PeerRecord{
 		NodeID:           serverID.NodeID,
 		PublicKey:        serverID.PublicKey,
+		CertPEM:          append([]byte(nil), serverID.CertPEM...),
 		Addresses:        []string{"127.0.0.1:7443"},
 		LastSeen:         time.Now(),
 		Role:             "server",
@@ -83,6 +85,7 @@ func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
 	if !node.registry.Upsert(&PeerRecord{
 		NodeID:           peer.NodeID,
 		PublicKey:        peer.PublicKey,
+		CertPEM:          append([]byte(nil), peer.CertPEM...),
 		Addresses:        []string{"10.0.0.1:7001"},
 		LastSeen:         time.Now().Add(-time.Minute),
 		Role:             "server",

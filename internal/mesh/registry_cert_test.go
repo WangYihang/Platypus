@@ -120,6 +120,7 @@ func TestRegistry_LegacySelfCertStillAccepted(t *testing.T) {
 	rec := &PeerRecord{
 		NodeID:    id.NodeID, // DeriveNodeID(pubkey)
 		PublicKey: id.PublicKey,
+		CertPEM:          append([]byte(nil), id.CertPEM...),
 		LastSeen:  time.Now(),
 	}
 	if !r.Upsert(rec) {

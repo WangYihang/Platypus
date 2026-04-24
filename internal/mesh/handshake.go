@@ -76,13 +76,16 @@ func PerformServerHandshake(
 
 // buildPayload fills the HandshakePayload we advertise on our side
 // of the Noise handshake. Kept local so the three callers stay in
-// sync on field population.
+// sync on field population. A cert-bound Identity always carries
+// CertPEM; the payload publishes it so the peer can bind our
+// Ed25519 identity to a project-CA-signed cert at handshake time.
 func buildPayload(id *Identity, addresses []string) *v2pb.HandshakePayload {
 	return &v2pb.HandshakePayload{
 		NodeId:        id.NodeID,
 		Ed25519Pubkey: append([]byte(nil), id.PublicKey...),
 		Protocol:      meshProtocolVersion,
 		Addresses:     append([]string(nil), addresses...),
+		CertPem:       append([]byte(nil), id.CertPEM...),
 	}
 }
 

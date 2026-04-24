@@ -29,11 +29,17 @@ func newDuplex() (*pipeConn, *pipeConn) {
 	return &pipeConn{r: ar, w: aw}, &pipeConn{r: br, w: bw}
 }
 
+// mustIdentity mints a fresh cert-bound mesh Identity for a test.
+// The leaf cert is signed by the package-shared test CA (see
+// testhelpers_ca_test.go), so the full production cert-binding
+// path (LoadIdentityFromCert + CertPEM + SAN-derived NodeID) is
+// exercised by every mesh test that constructs an Identity.
 func mustIdentity(t *testing.T) *Identity {
 	t.Helper()
-	id, err := NewIdentity()
+	certPEM, keyPEM := mintLeafFromTestCA(t, randAgentID(t))
+	id, err := LoadIdentityFromCert(certPEM, keyPEM)
 	if err != nil {
-		t.Fatalf("NewIdentity: %v", err)
+		t.Fatalf("LoadIdentityFromCert: %v", err)
 	}
 	return id
 }
