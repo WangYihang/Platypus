@@ -40,7 +40,7 @@ func TestLSDBIngestRejectsBadSignature(t *testing.T) {
 	// Tamper with links after signing.
 	lsa.Links[0].NodeId = "attacker-inserted"
 	db := newLSDB()
-	if _, err := db.Ingest(lsa, nil); err == nil {
+	if _, err := db.Ingest(lsa, testCAPool); err == nil {
 		t.Fatal("expected signature verification failure")
 	}
 }
@@ -51,7 +51,7 @@ func TestLSDBIngestRejectsPubkeyMismatch(t *testing.T) {
 	lsa := buildSignedLSA(t, alice, 1, "peer")
 	lsa.Pubkey = bob.PublicKey // Now origin NodeID doesn't match pubkey.
 	db := newLSDB()
-	if _, err := db.Ingest(lsa, nil); err == nil {
+	if _, err := db.Ingest(lsa, testCAPool); err == nil {
 		t.Fatal("expected pubkey/origin mismatch to be rejected")
 	}
 }
@@ -59,10 +59,10 @@ func TestLSDBIngestRejectsPubkeyMismatch(t *testing.T) {
 func TestLSDBIngestIgnoresOlderSeq(t *testing.T) {
 	alice := mustIdentity(t)
 	db := newLSDB()
-	if _, err := db.Ingest(buildSignedLSA(t, alice, 5, "p1"), nil); err != nil {
+	if _, err := db.Ingest(buildSignedLSA(t, alice, 5, "p1"), testCAPool); err != nil {
 		t.Fatalf("ingest 5: %v", err)
 	}
-	changed, err := db.Ingest(buildSignedLSA(t, alice, 3, "p1"), nil)
+	changed, err := db.Ingest(buildSignedLSA(t, alice, 3, "p1"), testCAPool)
 	if err != nil {
 		t.Fatalf("ingest 3: %v", err)
 	}
@@ -80,11 +80,11 @@ func TestComputeRoutesLinearChain(t *testing.T) {
 
 	lsdb := newLSDB()
 	// B's LSA says B is connected to A and C.
-	if _, err := lsdb.Ingest(buildSignedLSA(t, b, 1, a.NodeID, c.NodeID), nil); err != nil {
+	if _, err := lsdb.Ingest(buildSignedLSA(t, b, 1, a.NodeID, c.NodeID), testCAPool); err != nil {
 		t.Fatalf("ingest B: %v", err)
 	}
 	// C's LSA says C is connected to B.
-	if _, err := lsdb.Ingest(buildSignedLSA(t, c, 1, b.NodeID), nil); err != nil {
+	if _, err := lsdb.Ingest(buildSignedLSA(t, c, 1, b.NodeID), testCAPool); err != nil {
 		t.Fatalf("ingest C: %v", err)
 	}
 

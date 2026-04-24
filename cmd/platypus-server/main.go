@@ -93,43 +93,16 @@ func main() {
 	}
 	api.PublicAddr = publicAddr
 
-	// Mesh node (optional). When enabled it publishes PublicAddr so
-	// peers can dial through the ingress dispatcher; inbound mesh
-	// connections arrive via dispatcher → Node.AcceptRaw.
+	// Mesh node (optional). Now that mesh identity is strictly
+	// cert-bound, the server needs a project-CA-signed leaf cert
+	// for itself before it can join the overlay. That wiring —
+	// self-issuing via internal/pki at startup + seeding the
+	// TrustedCAs pool with the matching project CA — is deferred
+	// to a follow-up commit. Until then, server-side mesh is
+	// disabled regardless of config.
 	var meshNode *mesh.Node
 	if cfg.Mesh.PSKFile != "" {
-		bootstrapTarget := cfg.Mesh.BootstrapTarget
-		if bootstrapTarget == "" {
-			bootstrapTarget = publicAddr
-		}
-		advertise := cfg.Mesh.AdvertiseAddrs
-		if len(advertise) == 0 && publicAddr != "" {
-			advertise = []string{publicAddr}
-		}
-		node, err := mesh.NewNode(mesh.Config{
-			IdentityDir:       cfg.Mesh.IdentityDir,
-			PSKFile:           cfg.Mesh.PSKFile,
-			ListenAddr:        "", // listener is the unified ingress
-			AdvertiseAddrs:    advertise,
-			Peers:             cfg.Mesh.Peers,
-			Role:              "server",
-			DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
-			DiscoveryInterval: cfg.Mesh.DiscoveryInterval,
-			ProjectID:         cfg.Mesh.ProjectID,
-			BootstrapEnabled:  bootstrapTarget != "",
-			BootstrapTarget:   bootstrapTarget,
-		}, nil)
-		if err != nil {
-			log.Error("mesh init failed: %v", err)
-			os.Exit(1)
-		}
-		if err := node.Start(ctx); err != nil {
-			log.Error("mesh start failed: %v", err)
-			os.Exit(1)
-		}
-		core.Ctx.Mesh = node
-		meshNode = node
-		log.Success("Mesh enabled: node_id=%s advertise=%v", node.NodeID(), advertise)
+		log.Info("Mesh requested but server cert plumbing not wired yet; skipping")
 	}
 
 	tlsCfg, err := ingress.BuildTLSConfig(ingress.CertSource{

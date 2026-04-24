@@ -58,58 +58,16 @@ func main() {
 		slog.String("token", opts.Token),
 	)
 
-	// Mesh overlay is opt-in: enable only when the operator provides a PSK
-	// file. This preserves the legacy hub-and-spoke behaviour for agents
-	// that have not yet been migrated.
+	// Mesh overlay is opt-in: enable when the operator provides a
+	// PSK file. Requires the agent to already be enrolled — the
+	// cert-bound mesh identity comes from the same disk files as
+	// the v2 dial identity. Fresh installs need to complete
+	// BootstrapV2 (and restart the agent) before mesh starts.
 	if meshPSKFile != "" {
-		cfg := mesh.Config{
-			IdentityDir:       agent.MeshStateDir(identityDir),
-			PSKFile:           meshPSKFile,
-			ListenAddr:        opts.MeshListen,
-			Peers:             meshPeers,
-			AdvertiseAddrs:    opts.MeshAdvertise,
-			Role:              "agent",
-			DiscoveryLAN:      opts.MeshDiscoveryLAN,
-			DiscoveryInterval: opts.MeshDiscoveryInterval,
-			ProjectID:         meshProjectID,
+		node := tryStartMesh(ctx, logger, identityDir, meshPSKFile, meshPeers, meshProjectID, opts)
+		if node != nil {
+			agent.AttachMesh(state, node)
 		}
-		// Prefer the cert-bound mesh identity when the agent has
-		// already been enrolled: NodeID = cert SAN id, and gossip
-		// from peers is verified against the project CA loaded from
-		// disk alongside the cert. On a fresh install (no cert yet)
-		// we fall through to the self-certifying mesh.Identity path
-		// — the next restart, after BootstrapV2 persists the cert,
-		// will pick up the cert-bound identity automatically.
-		if id, err := agent.LoadIdentity(identityDir); err == nil {
-			if meshID, mErr := meshIdentityFromAgentID(id); mErr != nil {
-				logger.Warn("mesh: build cert-bound identity failed, falling back to self-cert",
-					slog.String("error", mErr.Error()))
-			} else {
-				cfg.Identity = meshID
-				if pool, pErr := certPoolFromPEM(id.CAPEM); pErr != nil {
-					logger.Warn("mesh: parse project CA failed, cert verification disabled",
-						slog.String("error", pErr.Error()))
-				} else {
-					cfg.TrustedCAs = pool
-				}
-			}
-		} else if !errors.Is(err, agent.ErrIdentityNotFound) {
-			logger.Warn("mesh: load agent identity failed, falling back to self-cert",
-				slog.String("error", err.Error()))
-		}
-		node, err := mesh.NewNode(cfg, logger)
-		if err != nil {
-			logger.Error("mesh init", slog.String("error", err.Error()))
-			os.Exit(1)
-		}
-		agent.AttachMesh(state, node)
-		if err := node.Start(ctx); err != nil {
-			logger.Error("mesh start", slog.String("error", err.Error()))
-			os.Exit(1)
-		}
-		logger.Info("mesh enabled",
-			slog.String("node_id", node.NodeID()),
-			slog.String("listen", node.ListenerAddr()))
 	}
 
 	bo := backoff.WithContext(
@@ -183,10 +141,61 @@ func main() {
 	logger.Info("agent stopped")
 }
 
+// tryStartMesh loads the enrolled cert material, builds a cert-
+// bound mesh.Identity + project-CA pool, and starts mesh. Any
+// step failing is logged and returns nil — the agent continues in
+// pure hub-and-spoke mode. A fresh-install agent hits the
+// ErrIdentityNotFound branch (no cert on disk yet) and will only
+// join the mesh after the next restart following BootstrapV2.
+func tryStartMesh(ctx context.Context, logger *slog.Logger, identityDir, pskFile string, peers []string, projectID string, opts *options.Options) *mesh.Node {
+	agentID, err := agent.LoadIdentity(identityDir)
+	if err != nil {
+		if errors.Is(err, agent.ErrIdentityNotFound) {
+			logger.Info("mesh: deferred — agent not yet enrolled; retry after first BootstrapV2 success")
+		} else {
+			logger.Error("mesh: load agent identity", slog.String("error", err.Error()))
+		}
+		return nil
+	}
+	meshID, err := meshIdentityFromAgentID(agentID)
+	if err != nil {
+		logger.Error("mesh: build cert-bound identity", slog.String("error", err.Error()))
+		return nil
+	}
+	pool, err := certPoolFromPEM(agentID.CAPEM)
+	if err != nil {
+		logger.Error("mesh: parse project CA", slog.String("error", err.Error()))
+		return nil
+	}
+	node, err := mesh.NewNode(mesh.Config{
+		PSKFile:           pskFile,
+		Identity:          meshID,
+		TrustedCAs:        pool,
+		ListenAddr:        opts.MeshListen,
+		Peers:             peers,
+		AdvertiseAddrs:    opts.MeshAdvertise,
+		Role:              "agent",
+		DiscoveryLAN:      opts.MeshDiscoveryLAN,
+		DiscoveryInterval: opts.MeshDiscoveryInterval,
+		ProjectID:         projectID,
+	}, logger)
+	if err != nil {
+		logger.Error("mesh init", slog.String("error", err.Error()))
+		return nil
+	}
+	if err := node.Start(ctx); err != nil {
+		logger.Error("mesh start", slog.String("error", err.Error()))
+		return nil
+	}
+	logger.Info("mesh enabled",
+		slog.String("node_id", node.NodeID()),
+		slog.String("listen", node.ListenerAddr()))
+	return node
+}
+
 // meshIdentityFromAgentID turns the enrolled agent.Identity (cert
 // PEM + parsed Ed25519 key) into a mesh.Identity by re-marshalling
 // the key to PKCS#8 PEM and feeding both into LoadIdentityFromCert.
-// The round-trip is cheap and lets mesh own the parsing contract.
 func meshIdentityFromAgentID(id *agent.Identity) (*mesh.Identity, error) {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(id.PrivateKey)
 	if err != nil {
@@ -197,8 +206,7 @@ func meshIdentityFromAgentID(id *agent.Identity) (*mesh.Identity, error) {
 }
 
 // certPoolFromPEM builds an x509.CertPool from one or more
-// concatenated CERTIFICATE PEM blocks. Used to trust the agent's
-// project CA when verifying cert-bound mesh gossip.
+// concatenated CERTIFICATE PEM blocks.
 func certPoolFromPEM(caPEM []byte) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(caPEM) {

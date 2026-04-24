@@ -22,6 +22,7 @@ func boot(t *testing.T, ctx context.Context, psk []byte, seeds []string) (*Node,
 	cfg := Config{
 		Identity:       mustIdentity(t),
 		PSK:            psk,
+		TrustedCAs:     testCAPool,
 		ListenAddr:     "", // ingress is managed by the test harness
 		AdvertiseAddrs: nil,
 		Peers:          seeds,

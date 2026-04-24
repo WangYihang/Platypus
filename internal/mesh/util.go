@@ -106,36 +106,20 @@ func verifyPeerDelta(delta *v2pb.MeshPeerDelta, trustedCAs *x509.CertPool) error
 	return nil
 }
 
-// verifyGossipOrigin picks the right identity check for a signed
-// gossip payload. Three cases:
-//
-//  1. certPEM present + pool configured — full chain-verify
-//     against pool + SAN/SPKI binding (cert-bound mode).
-//  2. certPEM present + no pool — SAN/SPKI binding only (TOFU-
-//     style: still strictly more evidence than the legacy hash
-//     check, just without CA-chain anchoring). Lets nodes that
-//     haven't been configured with a pool coexist in a cert-
-//     bound mesh without hard-failing every inbound message.
-//  3. No certPEM — legacy self-certifying DeriveNodeID check.
-//
+// verifyGossipOrigin enforces cert-bound identity on a signed
+// gossip payload: the origin MUST ship a project-CA-signed leaf
+// cert, and the receiver MUST have a trusted CA pool to chain it
+// against. Locally: cert SAN == nodeID, cert SPKI == pubkey.
 // prefix is purely for error-message readability.
 func verifyGossipOrigin(prefix string, certPEM []byte, pubkey ed25519.PublicKey, nodeID string, trustedCAs *x509.CertPool) error {
-	if len(certPEM) > 0 {
-		if trustedCAs != nil {
-			if err := verifyCertBoundIdentity(certPEM, trustedCAs, pubkey, nodeID); err != nil {
-				return fmt.Errorf("%s: %w", prefix, err)
-			}
-			return nil
-		}
-		// Pool not configured locally; verify what we can without
-		// it. This branch is the mixed-mode migration aid.
-		if err := verifyCertIdentityLocal(certPEM, pubkey, nodeID); err != nil {
-			return fmt.Errorf("%s: %w", prefix, err)
-		}
-		return nil
+	if len(certPEM) == 0 {
+		return fmt.Errorf("%s: missing cert_pem", prefix)
 	}
-	if DeriveNodeID(pubkey) != nodeID {
-		return fmt.Errorf("%s: pubkey/origin mismatch", prefix)
+	if trustedCAs == nil {
+		return fmt.Errorf("%s: no trusted CA pool configured", prefix)
+	}
+	if err := verifyCertBoundIdentity(certPEM, trustedCAs, pubkey, nodeID); err != nil {
+		return fmt.Errorf("%s: %w", prefix, err)
 	}
 	return nil
 }

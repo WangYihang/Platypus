@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,19 +56,23 @@ type Node struct {
 
 // NewNode constructs and initialises a Node from cfg. It does NOT start
 // any network activity — call Start for that.
+//
+// cfg.Identity is required (non-nil). It MUST have been produced by
+// LoadIdentityFromCert so NodeID is SAN-bound and cert-verifiable
+// — there is no legacy self-certifying fallback.
+// cfg.TrustedCAs is required for gossip chain verification.
 func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	if cfg.Identity == nil {
-		if cfg.IdentityDir == "" {
-			cfg.IdentityDir = defaultIdentityDir(cfg.Role)
-		}
-		id, err := LoadOrCreateIdentity(cfg.IdentityDir)
-		if err != nil {
-			return nil, err
-		}
-		cfg.Identity = id
+		return nil, fmt.Errorf("mesh: cfg.Identity is required (use LoadIdentityFromCert)")
+	}
+	if len(cfg.Identity.CertPEM) == 0 {
+		return nil, fmt.Errorf("mesh: cfg.Identity must be cert-bound (CertPEM empty)")
+	}
+	if cfg.TrustedCAs == nil {
+		return nil, fmt.Errorf("mesh: cfg.TrustedCAs is required")
 	}
 	if len(cfg.PSK) == 0 {
 		if cfg.PSKFile == "" {
@@ -731,18 +734,6 @@ func (n *Node) advertisedAddrs() []string {
 	return nil
 }
 
-// defaultIdentityDir picks a sensible default under the user's home dir.
-// Falls back to ".platypus-mesh/<role>" in the cwd if HOME isn't set.
-func defaultIdentityDir(role string) string {
-	if role == "" {
-		role = "node"
-	}
-	home, err := userHomeDir()
-	if err != nil || home == "" {
-		return filepath.Join(".platypus-mesh", role)
-	}
-	return filepath.Join(home, ".platypus", "mesh", role)
-}
 
 // PSK returns the pre-shared key used by this node.
 func (n *Node) PSK() []byte { return n.psk }

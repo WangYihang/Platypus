@@ -107,23 +107,18 @@ func TestRegistry_RejectsCertPubkeyMismatch(t *testing.T) {
 	}
 }
 
-// TestRegistry_LegacySelfCertStillAccepted confirms peers without a
-// cert still round-trip through Upsert with the old DeriveNodeID
-// sanity check. This is the migration-compat case until all nodes
-// run the cert-bound identity.
-func TestRegistry_LegacySelfCertStillAccepted(t *testing.T) {
-	id, err := NewIdentity()
-	if err != nil {
-		t.Fatalf("NewIdentity: %v", err)
-	}
+// TestRegistry_RejectsRecordWithoutCert: cert-binding is the only
+// accepted mode; a PeerRecord without CertPEM must be refused.
+func TestRegistry_RejectsRecordWithoutCert(t *testing.T) {
+	id := mustIdentity(t) // cert-bound
 	r := newRegistry()
 	rec := &PeerRecord{
-		NodeID:    id.NodeID, // DeriveNodeID(pubkey)
+		NodeID:    id.NodeID,
 		PublicKey: id.PublicKey,
-		CertPEM:          append([]byte(nil), id.CertPEM...),
-		LastSeen:  time.Now(),
+		// CertPEM intentionally empty
+		LastSeen: time.Now(),
 	}
-	if !r.Upsert(rec) {
-		t.Fatal("Upsert rejected a legacy self-cert PeerRecord")
+	if r.Upsert(rec) {
+		t.Fatal("Upsert should reject a record without CertPEM")
 	}
 }

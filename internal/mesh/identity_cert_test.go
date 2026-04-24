@@ -67,10 +67,9 @@ func TestLoadIdentityFromCert_HappyPath(t *testing.T) {
 	if id.X25519Private == zero || id.X25519Public == zero {
 		t.Fatal("X25519 keys not populated")
 	}
-	// DeriveNodeID(PublicKey) is NOT the NodeID here — that's the
-	// whole point of cert-binding. Confirm they diverge.
-	if DeriveNodeID(id.PublicKey) == id.NodeID {
-		t.Fatal("cert-bound NodeID accidentally equals DeriveNodeID(pubkey)")
+	// NodeID must come from the cert SAN — prefix sanity check.
+	if id.NodeID != "agent-abc123" {
+		t.Fatalf("NodeID = %q, want agent-abc123", id.NodeID)
 	}
 }
 

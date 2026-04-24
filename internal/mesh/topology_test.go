@@ -20,10 +20,10 @@ func TestTopologyFromLSDBOnly(t *testing.T) {
 	}
 
 	// A advertises a link to B; B advertises a link to A.
-	if _, err := n.lsdb.Ingest(buildSignedLSA(t, a, 1, b.NodeID), nil); err != nil {
+	if _, err := n.lsdb.Ingest(buildSignedLSA(t, a, 1, b.NodeID), testCAPool); err != nil {
 		t.Fatalf("ingest A: %v", err)
 	}
-	if _, err := n.lsdb.Ingest(buildSignedLSA(t, b, 1, a.NodeID), nil); err != nil {
+	if _, err := n.lsdb.Ingest(buildSignedLSA(t, b, 1, a.NodeID), testCAPool); err != nil {
 		t.Fatalf("ingest B: %v", err)
 	}
 
@@ -64,7 +64,7 @@ func TestTopologyEdgeDedup(t *testing.T) {
 	}
 
 	// Seed LSDB: peer advertises a link to self.
-	if _, err := n.lsdb.Ingest(buildSignedLSA(t, peer, 1, self.NodeID), nil); err != nil {
+	if _, err := n.lsdb.Ingest(buildSignedLSA(t, peer, 1, self.NodeID), testCAPool); err != nil {
 		t.Fatalf("ingest peer: %v", err)
 	}
 

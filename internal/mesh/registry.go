@@ -96,18 +96,13 @@ func (r *Registry) Upsert(rec *PeerRecord) bool {
 	if rec == nil || rec.NodeID == "" {
 		return false
 	}
-	// Sanity check pubkey ↔ node_id coupling. Two valid shapes:
-	//   - legacy self-cert: DeriveNodeID(pubkey) == node_id
-	//   - cert-bound:        cert SAN agent id == node_id AND the
-	//                        cert's pubkey matches rec.PublicKey
-	// Anything else is rejected outright. Cert-chain verification
-	// against a trusted CA pool happens later at the gossip-sig
-	// layer; here we just check internal consistency.
-	if len(rec.CertPEM) > 0 {
-		if err := verifyCertIdentityLocal(rec.CertPEM, rec.PublicKey, rec.NodeID); err != nil {
-			return false
-		}
-	} else if DeriveNodeID(rec.PublicKey) != rec.NodeID {
+	// Every peer must ship a cert. Local check only: SAN id ==
+	// node_id and cert SPKI == pubkey. Chain verification against
+	// a trusted CA pool happens at the gossip-sig layer on ingest.
+	if len(rec.CertPEM) == 0 {
+		return false
+	}
+	if err := verifyCertIdentityLocal(rec.CertPEM, rec.PublicKey, rec.NodeID); err != nil {
 		return false
 	}
 

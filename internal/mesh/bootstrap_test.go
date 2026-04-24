@@ -38,6 +38,7 @@ func TestFindBootstrapServerPrefersReachableServer(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
 		Identity:  id,
+		TrustedCAs: testCAPool,
 		PSK:       randomPSK(t),
 		Role:      "agent",
 		ProjectID: "proj",
@@ -73,6 +74,7 @@ func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
 		Identity:  id,
+		TrustedCAs: testCAPool,
 		PSK:       randomPSK(t),
 		Role:      "agent",
 		ProjectID: "proj",
@@ -114,6 +116,7 @@ func TestMeshStreamHandleDataDoesNotBlockLinkLoop(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
 		Identity:  id,
+		TrustedCAs: testCAPool,
 		PSK:       randomPSK(t),
 		Role:      "agent",
 		ProjectID: "proj",
