@@ -94,12 +94,46 @@ export default function Terminal({ sessionHash, onClose }: Props) {
                 xterm.onData((data) => {
                     SendTerminalInput(id, Array.from(encoder.encode(data)));
                 });
-                const onResize = () => {
-                    fit.fit();
+
+                // The xterm viewport must track the container element, not
+                // just the window: the terminal is hosted in a drag-resizable
+                // drawer (TerminalDrawer) and in tabs whose layout can change
+                // without firing window.resize. A ResizeObserver on the host
+                // element catches every case; window resizes come along for
+                // free because they also resize the container.
+                let lastCols = xterm.cols;
+                let lastRows = xterm.rows;
+                let rafHandle: number | null = null;
+                const applyResize = () => {
+                    rafHandle = null;
+                    try {
+                        fit.fit();
+                    } catch {
+                        // Container has no layout yet (0×0); the observer
+                        // will fire again once it does.
+                        return;
+                    }
+                    if (xterm.cols === lastCols && xterm.rows === lastRows) {
+                        return;
+                    }
+                    lastCols = xterm.cols;
+                    lastRows = xterm.rows;
                     ResizeTerminal(id, xterm.cols, xterm.rows);
                 };
-                window.addEventListener("resize", onResize);
-                cleanupFns.push(() => window.removeEventListener("resize", onResize));
+                const scheduleResize = () => {
+                    if (rafHandle !== null) return;
+                    rafHandle = requestAnimationFrame(applyResize);
+                };
+                const ro = new ResizeObserver(scheduleResize);
+                if (containerRef.current) {
+                    ro.observe(containerRef.current);
+                }
+                cleanupFns.push(() => {
+                    ro.disconnect();
+                    if (rafHandle !== null) {
+                        cancelAnimationFrame(rafHandle);
+                    }
+                });
 
                 EventsOn(`terminal:output:${id}`, (b64: string) => {
                     try {
