@@ -19,7 +19,7 @@ FROM gcr.io/distroless/static-debian12:nonroot AS server
 WORKDIR /app
 COPY --from=builder /out/platypus-server /usr/local/bin/platypus-server
 USER nonroot:nonroot
-EXPOSE 7331 13337
+EXPOSE 9443
 ENTRYPOINT ["/usr/local/bin/platypus-server"]
 
 # Stage 3: Agent runtime

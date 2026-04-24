@@ -4,10 +4,7 @@ services:
       context: .
       target: server
     ports:
-      - "7331:7331"   # REST API & Web UI
-      - "13337:13337" # Agent Listener
-      - "17777:17777" # Mesh Listener
-      - "13340:13340" # Distributor (for Agent downloads)
+      - "9443:9443" # Unified TLS ingress (REST + agent link + mesh + installer)
     volumes:
       - platypus_data:/app/data
       - ./config.docker.yml:/app/config.yml

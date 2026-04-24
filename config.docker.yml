@@ -1,21 +1,29 @@
 # Platypus Docker Configuration
-listeners:
-  - host: "0.0.0.0"
-    port: 13337
-    hashFormat: "%i %u %m %o %t"
-    disable_history: true
-    shell_path: "/bin/bash"
+#
+# Single TLS ingress port (cfg.Ingress.Addr) carries every protocol:
+#   - h2 / http/1.1   → REST + WebSocket (agent link, terminal, etc.)
+#   - ptps-mesh ALPN  → mesh peers
+# The installer / artifact distributor mount on the same port. Agents
+# bootstrap with `curl -k https://<host>:9443/install/<token> | sh`.
+
+ingress:
+  addr: "0.0.0.0:9443"
+  # cert / key empty → server generates a self-signed leaf at startup.
+  # In prod, point these at real PEM files (e.g. /app/data/server.crt).
+  cert: ""
+  key: ""
+  # public_addr is what install scripts + mesh peers see; defaults to
+  # `addr` when empty. Set this to the externally reachable host:port.
+  public_addr: "localhost:9443"
 
 restful:
-  host: "0.0.0.0"
-  port: 7331
   enable: true
   DBFile: "/app/data/platypus.db"
+  # JWTAccessKey / JWTRefreshKey: leave empty to auto-generate at
+  # startup (tokens won't survive a server restart). Set for prod.
 
 distributor:
-  host: "0.0.0.0"
-  port: 13340
-  url: "http://localhost:13340"
+  url: "https://localhost:9443"
   channel: "stable"
   presigned_ttl: "5m"
   store:
@@ -27,11 +35,13 @@ distributor:
     secret_access_key: "platypus_password"
     use_ssl: false
 
+# Mesh overlay (optional). Leave psk_file empty to disable. The
+# server self-issues its own cert-bound mesh identity from the
+# project CA named below; agents in the same project trust the
+# same chain.
 mesh:
   psk_file: "/app/data/mesh.psk"
-  identity_dir: "/app/data/mesh-server-identity"
-  listen_addr: "0.0.0.0:17777"
-  discovery_lan: true
   project_id: "default"
+  discovery_lan: true
 
 openBrowser: false
