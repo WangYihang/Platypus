@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/storage"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -34,10 +36,23 @@ type CertPoolFunc func() *x509.CertPool
 type AgentLinkHandler struct {
 	svc      *core.AgentLinkService
 	caPoolFn CertPoolFunc
+	// db is optional; when set, the handler refreshes the matching
+	// hosts row with the agent's latest SysInfo snapshot shortly
+	// after each successful link connect. Kept optional so tests
+	// that exercise the auth / ws plumbing don't need a DB.
+	db *storage.DB
 }
 
 func NewAgentLinkHandler(svc *core.AgentLinkService, caPoolFn CertPoolFunc) *AgentLinkHandler {
 	return &AgentLinkHandler{svc: svc, caPoolFn: caPoolFn}
+}
+
+// WithDB enables post-connect host info refresh. Call this during
+// bootstrap when the DB is available; repeated calls replace the
+// handle so wiring is idempotent.
+func (h *AgentLinkHandler) WithDB(db *storage.DB) *AgentLinkHandler {
+	h.db = db
+	return h
 }
 
 // Handle is the Gin handler.
@@ -103,6 +118,14 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 
 	log.Success("agent link: %s (project=%s) connected", agentID, projectID)
 
+	// Fire-and-forget: fetch a fresh SysInfo snapshot and upsert the
+	// host row so the Web UI reflects this reconnect within a few
+	// seconds. Errors are logged but don't affect the link — the
+	// agent is already serving RPCs to end users.
+	if h.db != nil {
+		go h.refreshHostFromSysInfo(agentID, projectID)
+	}
+
 	for {
 		hdr, stream, err := sess.Accept()
 		if err != nil {
@@ -166,4 +189,70 @@ func parseAgentSANs(leaf *x509.Certificate) (string, string, error) {
 // the mTLS chain IS the credential, and it's verified in-handler.
 func RegisterV2AgentLinkRoute(engine *gin.Engine, h *AgentLinkHandler) {
 	engine.GET("/api/v1/agent/link", h.Handle)
+}
+
+// refreshHostFromSysInfo asks the freshly-connected agent for its
+// SysInfo snapshot and merges the result into the hosts row. The
+// call is bounded (5s) so a misbehaving agent can't leak a goroutine
+// forever. If no host row exists yet for this agent (fresh
+// enrollment on an older server, or the enroll-time upsert is still
+// in flight) the Upsert will fall through to the insert path.
+func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := core.CallAgentRPC(ctx, h.svc, agentID, &v2pb.RpcRequest{
+		Payload: &v2pb.RpcRequest_SysInfo{SysInfo: &v2pb.SysInfoRequest{}},
+	})
+	if err != nil {
+		log.Debug("agent link: sys info refresh failed for %s: %v", agentID, err)
+		return
+	}
+	s := resp.GetSysInfo()
+	if s == nil {
+		return
+	}
+
+	machineID := s.MachineId
+	fingerprint := s.MachineId
+	if fingerprint == "" {
+		fingerprint = "fp-agent-" + agentID
+		machineID = ""
+	} else if strings.HasPrefix(fingerprint, "fp-") {
+		machineID = ""
+	}
+
+	ident := &storage.HostIdentity{
+		ProjectID:       projectID,
+		MachineID:       machineID,
+		Fingerprint:     fingerprint,
+		Hostname:        s.Hostname,
+		OS:              coalesce(s.Platform, s.Os),
+		SeenAt:          time.Now().UTC(),
+		AgentID:         agentID,
+		Arch:            s.Arch,
+		Platform:        s.Platform,
+		PlatformFamily:  s.PlatformFamily,
+		PlatformVersion: s.PlatformVersion,
+		KernelVersion:   s.KernelVersion,
+		CPUModel:        s.CpuModel,
+		NumCPU:          int(s.NumCpu),
+		MemTotalBytes:   int64(s.MemTotal),
+		CurrentUser:     s.CurrentUser,
+		Timezone:        s.Timezone,
+		PrimaryIP:       s.PrimaryIp,
+		PrimaryMAC:      s.PrimaryMac,
+		BootTimeUnix:    int64(s.BootTimeUnix),
+		AgentVersion:    s.AgentVersion,
+	}
+	if _, err := h.db.Hosts().Upsert(ctx, ident); err != nil {
+		log.Warn("agent link: host upsert failed: agent=%s err=%v", agentID, err)
+	}
+}
+
+func coalesce(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

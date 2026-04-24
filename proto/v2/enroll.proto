@@ -28,6 +28,26 @@ message EnrollRequest {
   string hostname    = 3;
   string machine_id  = 4;
   string agent_version = 5;
+
+  // Optional agent-reported system info, captured once at enroll
+  // time and persisted alongside the host row so the Web UI has
+  // something to show even when the agent is offline. Server treats
+  // these as advisory only; they are never used as security
+  // boundaries.
+  string os               = 20;
+  string arch             = 21;
+  string platform         = 22;
+  string platform_family  = 23;
+  string platform_version = 24;
+  string kernel_version   = 25;
+  uint32 num_cpu          = 26;
+  uint64 mem_total        = 27;
+  string cpu_model        = 28;
+  string current_user     = 29;
+  string timezone         = 30;
+  string primary_ip       = 31;
+  string primary_mac      = 32;
+  uint64 boot_time_unix   = 33;
 }
 
 message EnrollResponse {

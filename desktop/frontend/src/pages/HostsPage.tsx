@@ -140,7 +140,11 @@ export default function HostsPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Host</TableHead>
-                                    <TableHead className="w-[140px]">OS</TableHead>
+                                    <TableHead className="w-[180px]">OS · platform</TableHead>
+                                    <TableHead className="w-[100px]">Arch</TableHead>
+                                    <TableHead className="w-[140px]">Primary IP</TableHead>
+                                    <TableHead className="w-[90px]">CPU</TableHead>
+                                    <TableHead className="w-[110px]">Memory</TableHead>
                                     <TableHead className="w-[160px]">Machine ID</TableHead>
                                     <TableHead className="w-[140px]">Last seen</TableHead>
                                 </TableRow>
@@ -177,9 +181,27 @@ export default function HostsPage() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                {h.os || (
+                                                {renderOSCell(h)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.arch ? (
+                                                    <Mono>{h.arch}</Mono>
+                                                ) : (
                                                     <span className="text-text-muted">—</span>
                                                 )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {h.primary_ip ? (
+                                                    <Mono>{h.primary_ip}</Mono>
+                                                ) : (
+                                                    <span className="text-text-muted">—</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-text-secondary">
+                                                {h.num_cpu ? `${h.num_cpu}×` : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-text-secondary">
+                                                {formatMem(h.mem_total_bytes)}
                                             </TableCell>
                                             <TableCell>
                                                 {h.machine_id ? (
@@ -201,4 +223,30 @@ export default function HostsPage() {
             </div>
         </div>
     );
+}
+
+// renderOSCell picks the richest label we have — "ubuntu 22.04" beats
+// just "linux" — and falls back to "—" when the agent never reported
+// anything. Called inline in the table body to keep the row JSX tidy.
+function renderOSCell(h: Host) {
+    const parts: string[] = [];
+    if (h.platform) {
+        parts.push(h.platform + (h.platform_version ? ` ${h.platform_version}` : ""));
+    } else if (h.os) {
+        parts.push(h.os);
+    }
+    if (parts.length === 0) {
+        return <span className="text-text-muted">—</span>;
+    }
+    return <span>{parts.join(" · ")}</span>;
+}
+
+// formatMem collapses a byte count into a compact GB/TB label for
+// the hosts list column. Hosts with unknown memory show "—".
+function formatMem(n?: number): string {
+    if (!n || n <= 0) return "—";
+    const gb = n / (1024 * 1024 * 1024);
+    if (gb < 1) return `${Math.round(n / (1024 * 1024))} MB`;
+    if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`;
+    return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
 }

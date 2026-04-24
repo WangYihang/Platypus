@@ -90,6 +90,42 @@ message ChmodResponse { string error = 1; }
 
 // --- System info (one-shot; periodic push uses EVENT stream) ---
 message SysInfoRequest  {}
+
+// NetworkInterface describes a single NIC as seen by the agent.
+// Addresses are in CIDR form (e.g. "192.168.1.10/24"); Mac is the
+// hardware address (empty on loopback / virtual); Flags mirror the
+// Go net.Interface.Flags string ("up|broadcast|multicast").
+message NetworkInterface {
+  string name           = 1;
+  string mac            = 2;
+  repeated string addrs = 3;
+  string flags          = 4;
+  uint64 mtu            = 5;
+  bool   is_up          = 6;
+  bool   is_loopback    = 7;
+}
+
+// DiskPartition is a single filesystem mount point. TotalBytes /
+// UsedBytes reflect the underlying storage; FsType is the kernel's
+// filesystem name (ext4, xfs, apfs, NTFS, ...).
+message DiskPartition {
+  string device      = 1;
+  string mountpoint  = 2;
+  string fstype      = 3;
+  uint64 total_bytes = 4;
+  uint64 used_bytes  = 5;
+}
+
+// UserSession identifies a currently-logged-in user. Empty on
+// platforms where the enumeration isn't available (some embedded
+// systems, sandboxed containers).
+message UserSession {
+  string user        = 1;
+  string terminal    = 2;
+  string host        = 3;
+  int64  started_at  = 4;
+}
+
 message SysInfoResponse {
   string os              = 1;
   string arch            = 2;
@@ -100,6 +136,64 @@ message SysInfoResponse {
   uint64 mem_used        = 7;
   uint64 disk_total      = 8;
   uint64 disk_used       = 9;
+  // Deprecated: prefer `interfaces`. Kept for wire compat: keyed by
+  // interface name, value is a comma-separated CIDR list.
   map<string, string> network_interfaces = 10;
   string error = 11;
+
+  // --- Extended fields (all optional; agents on older builds leave
+  // these zero/empty). The server and UI treat missing values as
+  // "unknown" rather than failing. ---
+
+  // Platform identification.
+  string platform         = 20; // "ubuntu", "darwin", "windows", ...
+  string platform_family  = 21; // "debian", "rhel", "bsd", ...
+  string platform_version = 22; // "22.04", "14.1", "10.0.19045", ...
+  string virtualization   = 23; // "kvm", "docker", "wsl", "" (bare metal)
+  string timezone         = 24; // IANA tz name, e.g. "Asia/Shanghai"
+
+  // Hardware.
+  uint32 num_cpu          = 30; // logical CPU count
+  uint32 num_cpu_physical = 31; // physical core count (0 if unknown)
+  string cpu_model        = 32; // brand string of CPU 0
+  double cpu_mhz          = 33;
+
+  // Memory breakdown.
+  uint64 mem_available    = 40;
+  uint64 mem_free         = 41;
+  uint64 swap_total       = 42;
+  uint64 swap_used        = 43;
+
+  // Uptime / boot.
+  uint64 boot_time_unix   = 50;
+  uint64 uptime_seconds   = 51;
+
+  // Load (Linux/macOS). Zero on Windows.
+  double load1            = 60;
+  double load5            = 61;
+  double load15           = 62;
+
+  // Process / user session count.
+  uint32 process_count    = 70;
+
+  // Identity.
+  string current_user     = 80; // e.g. "ubuntu", "root", "DESKTOP\\alice"
+  string agent_version    = 81;
+  string machine_id       = 82;
+
+  // Networking (rich).
+  string default_gateway  = 90;
+  string primary_ip       = 91; // source IP chosen for an outbound route
+  string primary_mac      = 92;
+  string public_ip        = 93; // best-effort (resolver-based); empty if unavailable
+  repeated NetworkInterface interfaces = 94;
+
+  // Disks (rich).
+  repeated DiskPartition disks = 100;
+
+  // Logged-in users.
+  repeated UserSession users   = 110;
+
+  // When the snapshot was captured, agent-side wall clock.
+  int64 sampled_at_unix = 120;
 }

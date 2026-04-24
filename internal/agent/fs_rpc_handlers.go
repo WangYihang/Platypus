@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -116,19 +115,15 @@ func HandleChmod(_ context.Context, req *v2pb.ChmodRequest) *v2pb.ChmodResponse 
 	return &v2pb.ChmodResponse{}
 }
 
-// HandleSysInfo returns static-ish info about the agent host.
-// Live metrics (CPU %, memory, network throughput) go through
-// the EVENT stream once that lands — this RPC is the snapshot
-// variant used at enrollment / admin UI refresh.
-func HandleSysInfo(_ context.Context, _ *v2pb.SysInfoRequest) *v2pb.SysInfoResponse {
-	hostname, _ := os.Hostname()
-	resp := &v2pb.SysInfoResponse{
-		Os:                runtime.GOOS,
-		Arch:              runtime.GOARCH,
-		Hostname:          hostname,
-		NetworkInterfaces: map[string]string{},
-	}
-	return resp
+// HandleSysInfo returns a rich snapshot of the agent host. The
+// heavy lifting lives in CollectSysInfo; this wrapper exists so the
+// RPC dispatcher's handler signature matches and so tests can stub
+// the collector. Agent admins call this on-demand from the Web UI
+// to refresh the Info panel. Live metrics (CPU %, memory) are
+// sampled inline; static fields (kernel, platform, CPU model) are
+// cheap to re-fetch so we always return a fresh snapshot.
+func HandleSysInfo(ctx context.Context, _ *v2pb.SysInfoRequest) *v2pb.SysInfoResponse {
+	return CollectSysInfo(ctx)
 }
 
 // fileEntryFromInfo packages an os.FileInfo into the proto shape.

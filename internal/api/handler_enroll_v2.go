@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
@@ -10,6 +13,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/pki"
+	"github.com/WangYihang/Platypus/internal/storage"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -29,6 +33,11 @@ import (
 type EnrollV2Handler struct {
 	enroll *enrollment.Service
 	pki    *pki.Service
+	// db is optional; when set, the handler upserts a hosts row on
+	// every successful enrollment so the Web UI has something to
+	// render even before the agent opens its first link. Keeping it
+	// optional preserves the no-DB test paths in enroll_v2_test.go.
+	db *storage.DB
 }
 
 // ContentTypeEnrollV2 is the MIME the endpoint accepts and
@@ -43,6 +52,14 @@ const maxEnrollRequestBytes = 64 * 1024
 
 func NewEnrollV2Handler(enroll *enrollment.Service, pkiSvc *pki.Service) *EnrollV2Handler {
 	return &EnrollV2Handler{enroll: enroll, pki: pkiSvc}
+}
+
+// WithDB attaches a storage handle so the handler can upsert a hosts
+// row on successful enrollment. Idempotent; passing nil disables the
+// upsert (tests that don't care about hosts just skip calling it).
+func (h *EnrollV2Handler) WithDB(db *storage.DB) *EnrollV2Handler {
+	h.db = db
+	return h
 }
 
 // Enroll is the POST handler. Request body is a protobuf
@@ -121,6 +138,17 @@ func (h *EnrollV2Handler) Enroll(c *gin.Context) {
 		return
 	}
 
+	// Persist a host row keyed on (project, agent_id) so the Web UI
+	// immediately sees the fresh machine's hardware / OS details.
+	// We swallow DB errors — a transient SQLite hiccup should not
+	// break enrollment; the next agent reconnect will retry the
+	// upsert via the link handler.
+	if h.db != nil {
+		if err := upsertHostFromEnroll(c.Request.Context(), h.db, redeemed, &req); err != nil {
+			log.Warn("enroll: host upsert failed: agent=%s err=%v", redeemed.AgentID, err)
+		}
+	}
+
 	resp := &v2pb.EnrollResponse{
 		CertPem:         []byte(issued.CertPEM),
 		CaPem:           []byte(issued.CAPem),
@@ -142,4 +170,57 @@ func (h *EnrollV2Handler) Enroll(c *gin.Context) {
 // that accepts a renewal with client cert + fresh CSR.
 func RegisterV2AgentEnrollRoute(engine *gin.Engine, h *EnrollV2Handler) {
 	engine.POST("/api/v1/agents/enroll", h.Enroll)
+}
+
+// upsertHostFromEnroll turns the agent's EnrollRequest into a
+// HostIdentity and pushes it through HostRepo.Upsert. The agent may
+// report a platform machine_id (/etc/machine-id on Linux, IOPlatform
+// UUID on macOS, MachineGuid on Windows) or a fallback "fp-…" hash;
+// we distinguish by the "fp-" prefix so the UI can still show a
+// "fingerprint fallback" badge on opaque hosts.
+func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollment.RedeemResult, req *v2pb.EnrollRequest) error {
+	reported := req.GetMachineId()
+	machineID := reported
+	fingerprint := reported
+	if strings.HasPrefix(reported, "fp-") {
+		machineID = "" // fallback: no stable platform id
+	}
+	if fingerprint == "" {
+		// Defend against an agent that sent neither — use the cert's
+		// agent id so we still get a unique row per enrollment.
+		fingerprint = "fp-agent-" + redeemed.AgentID
+	}
+
+	os := req.GetOs()
+	if os == "" {
+		// Older agents only send hostname; keep the column populated
+		// with the platform family so the UI doesn't show "—".
+		os = req.GetPlatform()
+	}
+
+	ident := &storage.HostIdentity{
+		ProjectID:       redeemed.ProjectID,
+		MachineID:       machineID,
+		Fingerprint:     fingerprint,
+		Hostname:        req.GetHostname(),
+		OS:              os,
+		SeenAt:          time.Now().UTC(),
+		AgentID:         redeemed.AgentID,
+		Arch:            req.GetArch(),
+		Platform:        req.GetPlatform(),
+		PlatformFamily:  req.GetPlatformFamily(),
+		PlatformVersion: req.GetPlatformVersion(),
+		KernelVersion:   req.GetKernelVersion(),
+		CPUModel:        req.GetCpuModel(),
+		NumCPU:          int(req.GetNumCpu()),
+		MemTotalBytes:   int64(req.GetMemTotal()),
+		CurrentUser:     req.GetCurrentUser(),
+		Timezone:        req.GetTimezone(),
+		PrimaryIP:       req.GetPrimaryIp(),
+		PrimaryMAC:      req.GetPrimaryMac(),
+		BootTimeUnix:    int64(req.GetBootTimeUnix()),
+		AgentVersion:    req.GetAgentVersion(),
+	}
+	_, err := db.Hosts().Upsert(ctx, ident)
+	return err
 }

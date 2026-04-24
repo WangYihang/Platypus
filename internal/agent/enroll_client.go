@@ -37,6 +37,12 @@ type EnrollOptions struct {
 	ProjectCA          *x509.CertPool
 	InsecureSkipVerify bool
 	HTTPClient         *http.Client
+
+	// SysInfo is an optional agent-collected system snapshot the
+	// server persists on the hosts row so the Web UI has something
+	// to show even when the agent is offline. Nil → server stores
+	// only the legacy hostname / machine_id / agent_version fields.
+	SysInfo *v2pb.SysInfoResponse
 }
 
 // EnrollResult is what Enroll returns on success: the freshly-
@@ -81,13 +87,33 @@ func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
 		return nil, fmt.Errorf("agent: Enroll generate CSR: %w", err)
 	}
 
-	reqBody, err := proto.Marshal(&v2pb.EnrollRequest{
+	enrollReq := &v2pb.EnrollRequest{
 		Pat:          opts.PAT,
 		CsrPem:       csrPEM,
 		Hostname:     opts.Hostname,
 		MachineId:    opts.MachineID,
 		AgentVersion: opts.AgentVersion,
-	})
+	}
+	if s := opts.SysInfo; s != nil {
+		// Server persists these as advisory fields on the hosts row.
+		// Match only the stable subset so the server doesn't have to
+		// validate dynamic metrics it won't use.
+		enrollReq.Os = s.Os
+		enrollReq.Arch = s.Arch
+		enrollReq.Platform = s.Platform
+		enrollReq.PlatformFamily = s.PlatformFamily
+		enrollReq.PlatformVersion = s.PlatformVersion
+		enrollReq.KernelVersion = s.KernelVersion
+		enrollReq.NumCpu = s.NumCpu
+		enrollReq.MemTotal = s.MemTotal
+		enrollReq.CpuModel = s.CpuModel
+		enrollReq.CurrentUser = s.CurrentUser
+		enrollReq.Timezone = s.Timezone
+		enrollReq.PrimaryIp = s.PrimaryIp
+		enrollReq.PrimaryMac = s.PrimaryMac
+		enrollReq.BootTimeUnix = s.BootTimeUnix
+	}
+	reqBody, err := proto.Marshal(enrollReq)
 	if err != nil {
 		return nil, fmt.Errorf("agent: Enroll marshal request: %w", err)
 	}

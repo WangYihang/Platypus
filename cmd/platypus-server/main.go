@@ -322,12 +322,12 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
 	usersH := api.NewUsersHandler(db)
 	projectsH := api.NewProjectsHandler(db)
-	hostsH := api.NewHostsHandler(db)
 
 	// Agent link service registers live v2 agents by agent_id; every
 	// downstream handler that needs to reach an agent (sessionsH's
 	// dispatch, terminal, file REST, RPC REST) looks it up here.
 	agentLinkSvc := core.NewAgentLinkService()
+	hostsH := api.NewHostsHandler(db).WithAgentLinks(agentLinkSvc)
 	sessionsH := api.NewSessionsV2Handler(db, agentLinkSvc)
 
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
@@ -339,12 +339,12 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// install links copy straight into `curl -k ... | sh`.
 	distributorBase := "https://" + api.PublicAddr
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
-	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc)
+	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc).WithDB(db)
 
 	// v2 agent link handler (yamux-over-WebSocket, mTLS-auth'd).
 	// agentLinkSvc was constructed upstream because SessionsV2Handler
 	// also depends on it for project-dispatch.
-	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db))
+	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db)).WithDB(db)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db)

@@ -24,11 +24,32 @@ type Host struct {
 	OS                  string
 	FirstSeenAt         time.Time
 	LastSeenAt          time.Time
+
+	// --- Rich agent-reported system info (all optional). Populated
+	// on enroll and refreshed on every agent reconnect. The UI uses
+	// these to show "what's on the box" even when the agent is
+	// offline. ---
+	AgentID         string
+	Arch            string
+	Platform        string
+	PlatformFamily  string
+	PlatformVersion string
+	KernelVersion   string
+	CPUModel        string
+	NumCPU          int
+	MemTotalBytes   int64
+	CurrentUser     string
+	Timezone        string
+	PrimaryIP       string
+	PrimaryMAC      string
+	BootTimeUnix    int64
+	AgentVersion    string
 }
 
 // HostIdentity carries the agent-reported identity we upsert into the
 // hosts table. SeenAt is used for both first_seen_at (on insert) and
-// last_seen_at (always).
+// last_seen_at (always). Rich fields mirror Host and are optional —
+// callers leave them zero when only the minimal identity is known.
 type HostIdentity struct {
 	ProjectID   string
 	MachineID   string
@@ -36,6 +57,22 @@ type HostIdentity struct {
 	Hostname    string
 	OS          string
 	SeenAt      time.Time
+
+	AgentID         string
+	Arch            string
+	Platform        string
+	PlatformFamily  string
+	PlatformVersion string
+	KernelVersion   string
+	CPUModel        string
+	NumCPU          int
+	MemTotalBytes   int64
+	CurrentUser     string
+	Timezone        string
+	PrimaryIP       string
+	PrimaryMAC      string
+	BootTimeUnix    int64
+	AgentVersion    string
 }
 
 func (db *DB) Hosts() *HostRepo { return &HostRepo{db: db.DB} }
@@ -44,13 +81,24 @@ type HostRepo struct {
 	db *sql.DB
 }
 
+// hostAllCols is the canonical ordered projection used by every
+// scanHost* helper. Change it in one place and every query that
+// feeds into scanHostRow keeps working.
+const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallback,
+       hostname, primary_alias, os, first_seen_at, last_seen_at,
+       agent_id, arch, platform, platform_family, platform_version,
+       kernel_version, cpu_model, num_cpu, mem_total_bytes,
+       current_user, timezone, primary_ip, primary_mac,
+       boot_time_unix, agent_version`
+
 // Upsert merges the given identity into the hosts table. Matching order:
 //
-//  1. If (project_id, machine_id) exists and machine_id != "", update it.
-//  2. Else if (project_id, fingerprint) exists, update it — and if the new
+//  1. If ident carries an AgentID and a row with that agent_id exists, update it.
+//  2. Else if (project_id, machine_id) exists and machine_id != "", update it.
+//  3. Else if (project_id, fingerprint) exists, update it — and if the new
 //     identity has a non-empty machine_id, backfill it and clear
 //     fingerprint_fallback.
-//  3. Else insert a new row.
+//  4. Else insert a new row.
 //
 // Returns the resulting Host, always with FirstSeenAt preserved across
 // updates and LastSeenAt set to SeenAt.
@@ -66,24 +114,31 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		}
 	}()
 
-	// 1) Lookup by machine_id.
 	var existing *Host
-	if ident.MachineID != "" {
+
+	// 1) Lookup by agent_id (preferred for v2 link reconnects where
+	// the server already knows the issuing cert's agent id).
+	if ident.AgentID != "" {
 		existing, err = scanHostSingle(tx.QueryRowContext(ctx,
-			`SELECT id, project_id, machine_id, fingerprint, fingerprint_fallback,
-			        hostname, primary_alias, os, first_seen_at, last_seen_at
-			   FROM hosts WHERE project_id = ? AND machine_id = ?`,
+			`SELECT `+hostAllCols+` FROM hosts WHERE agent_id = ?`,
+			ident.AgentID))
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+	// 2) Lookup by machine_id.
+	if existing == nil && ident.MachineID != "" {
+		existing, err = scanHostSingle(tx.QueryRowContext(ctx,
+			`SELECT `+hostAllCols+` FROM hosts WHERE project_id = ? AND machine_id = ?`,
 			ident.ProjectID, ident.MachineID))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 	}
-	// 2) Lookup by fingerprint as fallback / upgrade path.
+	// 3) Lookup by fingerprint as fallback / upgrade path.
 	if existing == nil {
 		existing, err = scanHostSingle(tx.QueryRowContext(ctx,
-			`SELECT id, project_id, machine_id, fingerprint, fingerprint_fallback,
-			        hostname, primary_alias, os, first_seen_at, last_seen_at
-			   FROM hosts WHERE project_id = ? AND fingerprint = ?`,
+			`SELECT `+hostAllCols+` FROM hosts WHERE project_id = ? AND fingerprint = ?`,
 			ident.ProjectID, ident.Fingerprint))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -91,47 +146,55 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 	}
 
 	if existing != nil {
-		// Update the row in place.
+		// Update the row in place. For optional rich fields we take
+		// the new value when non-zero but otherwise keep the existing
+		// one — a reconnecting agent that can't re-collect (e.g.
+		// gopsutil denied /proc) shouldn't wipe historical info.
 		newMachineID := existing.MachineID
 		newFallback := existing.FingerprintFallback
 		if ident.MachineID != "" {
 			newMachineID = ident.MachineID
 			newFallback = false
 		}
+		merged := mergeHost(existing, ident)
+		merged.MachineID = newMachineID
+		merged.FingerprintFallback = newFallback
+		merged.Hostname = ident.Hostname
+		merged.OS = coalesceString(ident.OS, existing.OS)
+		merged.Fingerprint = ident.Fingerprint
+		merged.LastSeenAt = ident.SeenAt.UTC()
+
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE hosts
-			   SET machine_id = ?,
-			       fingerprint = ?,
-			       fingerprint_fallback = ?,
-			       hostname = ?,
-			       os = ?,
-			       last_seen_at = ?
+			   SET machine_id = ?, fingerprint = ?, fingerprint_fallback = ?,
+			       hostname = ?, os = ?, last_seen_at = ?,
+			       agent_id = ?, arch = ?, platform = ?, platform_family = ?,
+			       platform_version = ?, kernel_version = ?, cpu_model = ?,
+			       num_cpu = ?, mem_total_bytes = ?, current_user = ?,
+			       timezone = ?, primary_ip = ?, primary_mac = ?,
+			       boot_time_unix = ?, agent_version = ?
 			 WHERE id = ?`,
-			nullIfEmpty(newMachineID),
-			ident.Fingerprint,
-			newFallback,
-			ident.Hostname,
-			ident.OS,
-			ident.SeenAt.UTC(),
+			nullIfEmpty(merged.MachineID), merged.Fingerprint, merged.FingerprintFallback,
+			merged.Hostname, merged.OS, merged.LastSeenAt,
+			nullIfEmpty(merged.AgentID), nullIfEmpty(merged.Arch), nullIfEmpty(merged.Platform),
+			nullIfEmpty(merged.PlatformFamily), nullIfEmpty(merged.PlatformVersion),
+			nullIfEmpty(merged.KernelVersion), nullIfEmpty(merged.CPUModel),
+			nullIfInt(merged.NumCPU), nullIfInt64(merged.MemTotalBytes),
+			nullIfEmpty(merged.CurrentUser), nullIfEmpty(merged.Timezone),
+			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
+			nullIfInt64(merged.BootTimeUnix), nullIfEmpty(merged.AgentVersion),
 			existing.ID,
 		); err != nil {
 			return nil, err
 		}
-		existing.MachineID = newMachineID
-		existing.Fingerprint = ident.Fingerprint
-		existing.FingerprintFallback = newFallback
-		existing.Hostname = ident.Hostname
-		existing.OS = ident.OS
-		existing.LastSeenAt = ident.SeenAt.UTC()
-
 		rollback = false
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return existing, nil
+		return merged, nil
 	}
 
-	// 3) Insert fresh.
+	// 4) Insert fresh.
 	h := &Host{
 		ID:                  uuid.NewString(),
 		ProjectID:           ident.ProjectID,
@@ -142,15 +205,42 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		OS:                  ident.OS,
 		FirstSeenAt:         ident.SeenAt.UTC(),
 		LastSeenAt:          ident.SeenAt.UTC(),
+		AgentID:             ident.AgentID,
+		Arch:                ident.Arch,
+		Platform:            ident.Platform,
+		PlatformFamily:      ident.PlatformFamily,
+		PlatformVersion:     ident.PlatformVersion,
+		KernelVersion:       ident.KernelVersion,
+		CPUModel:            ident.CPUModel,
+		NumCPU:              ident.NumCPU,
+		MemTotalBytes:       ident.MemTotalBytes,
+		CurrentUser:         ident.CurrentUser,
+		Timezone:            ident.Timezone,
+		PrimaryIP:           ident.PrimaryIP,
+		PrimaryMAC:          ident.PrimaryMAC,
+		BootTimeUnix:        ident.BootTimeUnix,
+		AgentVersion:        ident.AgentVersion,
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO hosts
 		  (id, project_id, machine_id, fingerprint, fingerprint_fallback,
-		   hostname, primary_alias, os, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   hostname, primary_alias, os, first_seen_at, last_seen_at,
+		   agent_id, arch, platform, platform_family, platform_version,
+		   kernel_version, cpu_model, num_cpu, mem_total_bytes,
+		   current_user, timezone, primary_ip, primary_mac,
+		   boot_time_unix, agent_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.ID, h.ProjectID, nullIfEmpty(h.MachineID), h.Fingerprint,
 		h.FingerprintFallback, h.Hostname, h.PrimaryAlias, h.OS,
 		h.FirstSeenAt, h.LastSeenAt,
+		nullIfEmpty(h.AgentID), nullIfEmpty(h.Arch), nullIfEmpty(h.Platform),
+		nullIfEmpty(h.PlatformFamily), nullIfEmpty(h.PlatformVersion),
+		nullIfEmpty(h.KernelVersion), nullIfEmpty(h.CPUModel),
+		nullIfInt(h.NumCPU), nullIfInt64(h.MemTotalBytes),
+		nullIfEmpty(h.CurrentUser), nullIfEmpty(h.Timezone),
+		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
+		nullIfInt64(h.BootTimeUnix), nullIfEmpty(h.AgentVersion),
 	); err != nil {
 		return nil, err
 	}
@@ -161,10 +251,69 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 	return h, nil
 }
 
+// mergeHost returns a copy of existing with optional fields overwritten
+// by any non-zero values in ident. Fields carrying identity (ID,
+// ProjectID, FirstSeenAt) are never changed here.
+func mergeHost(existing *Host, ident *HostIdentity) *Host {
+	h := *existing
+	if ident.AgentID != "" {
+		h.AgentID = ident.AgentID
+	}
+	if ident.Arch != "" {
+		h.Arch = ident.Arch
+	}
+	if ident.Platform != "" {
+		h.Platform = ident.Platform
+	}
+	if ident.PlatformFamily != "" {
+		h.PlatformFamily = ident.PlatformFamily
+	}
+	if ident.PlatformVersion != "" {
+		h.PlatformVersion = ident.PlatformVersion
+	}
+	if ident.KernelVersion != "" {
+		h.KernelVersion = ident.KernelVersion
+	}
+	if ident.CPUModel != "" {
+		h.CPUModel = ident.CPUModel
+	}
+	if ident.NumCPU != 0 {
+		h.NumCPU = ident.NumCPU
+	}
+	if ident.MemTotalBytes != 0 {
+		h.MemTotalBytes = ident.MemTotalBytes
+	}
+	if ident.CurrentUser != "" {
+		h.CurrentUser = ident.CurrentUser
+	}
+	if ident.Timezone != "" {
+		h.Timezone = ident.Timezone
+	}
+	if ident.PrimaryIP != "" {
+		h.PrimaryIP = ident.PrimaryIP
+	}
+	if ident.PrimaryMAC != "" {
+		h.PrimaryMAC = ident.PrimaryMAC
+	}
+	if ident.BootTimeUnix != 0 {
+		h.BootTimeUnix = ident.BootTimeUnix
+	}
+	if ident.AgentVersion != "" {
+		h.AgentVersion = ident.AgentVersion
+	}
+	return &h
+}
+
+func coalesceString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 func (r *HostRepo) ListByProject(ctx context.Context, projectID string) ([]*Host, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, project_id, machine_id, fingerprint, fingerprint_fallback,
-		       hostname, primary_alias, os, first_seen_at, last_seen_at
+		SELECT `+hostAllCols+`
 		  FROM hosts WHERE project_id = ?
 		 ORDER BY hostname ASC`, projectID)
 	if err != nil {
@@ -185,9 +334,22 @@ func (r *HostRepo) ListByProject(ctx context.Context, projectID string) ([]*Host
 
 func (r *HostRepo) GetByID(ctx context.Context, id string) (*Host, error) {
 	h, err := scanHostSingle(r.db.QueryRowContext(ctx, `
-		SELECT id, project_id, machine_id, fingerprint, fingerprint_fallback,
-		       hostname, primary_alias, os, first_seen_at, last_seen_at
-		  FROM hosts WHERE id = ?`, id))
+		SELECT `+hostAllCols+` FROM hosts WHERE id = ?`, id))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return h, nil
+}
+
+// GetByAgentID looks up a host by its associated agent_id. Returns
+// ErrNotFound when no row has claimed that agent (yet) — callers
+// typically fall back to the Upsert path.
+func (r *HostRepo) GetByAgentID(ctx context.Context, agentID string) (*Host, error) {
+	h, err := scanHostSingle(r.db.QueryRowContext(ctx, `
+		SELECT `+hostAllCols+` FROM hosts WHERE agent_id = ?`, agentID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -200,13 +362,32 @@ func (r *HostRepo) GetByID(ctx context.Context, id string) (*Host, error) {
 // scanHostRow scans a single row from *sql.Rows or *sql.Row via rowScanner.
 func scanHostRow(s rowScanner) (*Host, error) {
 	var (
-		h         Host
-		machineID sql.NullString
-		primary   sql.NullString
+		h               Host
+		machineID       sql.NullString
+		primary         sql.NullString
+		agentID         sql.NullString
+		arch            sql.NullString
+		platform        sql.NullString
+		platformFamily  sql.NullString
+		platformVersion sql.NullString
+		kernelVersion   sql.NullString
+		cpuModel        sql.NullString
+		numCPU          sql.NullInt64
+		memTotalBytes   sql.NullInt64
+		currentUser     sql.NullString
+		timezone        sql.NullString
+		primaryIP       sql.NullString
+		primaryMAC      sql.NullString
+		bootTimeUnix    sql.NullInt64
+		agentVersion    sql.NullString
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
 		&h.Hostname, &primary, &h.OS, &h.FirstSeenAt, &h.LastSeenAt,
+		&agentID, &arch, &platform, &platformFamily, &platformVersion,
+		&kernelVersion, &cpuModel, &numCPU, &memTotalBytes,
+		&currentUser, &timezone, &primaryIP, &primaryMAC,
+		&bootTimeUnix, &agentVersion,
 	)
 	if err != nil {
 		return nil, err
@@ -216,6 +397,51 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	}
 	if primary.Valid {
 		h.PrimaryAlias = primary.String
+	}
+	if agentID.Valid {
+		h.AgentID = agentID.String
+	}
+	if arch.Valid {
+		h.Arch = arch.String
+	}
+	if platform.Valid {
+		h.Platform = platform.String
+	}
+	if platformFamily.Valid {
+		h.PlatformFamily = platformFamily.String
+	}
+	if platformVersion.Valid {
+		h.PlatformVersion = platformVersion.String
+	}
+	if kernelVersion.Valid {
+		h.KernelVersion = kernelVersion.String
+	}
+	if cpuModel.Valid {
+		h.CPUModel = cpuModel.String
+	}
+	if numCPU.Valid {
+		h.NumCPU = int(numCPU.Int64)
+	}
+	if memTotalBytes.Valid {
+		h.MemTotalBytes = memTotalBytes.Int64
+	}
+	if currentUser.Valid {
+		h.CurrentUser = currentUser.String
+	}
+	if timezone.Valid {
+		h.Timezone = timezone.String
+	}
+	if primaryIP.Valid {
+		h.PrimaryIP = primaryIP.String
+	}
+	if primaryMAC.Valid {
+		h.PrimaryMAC = primaryMAC.String
+	}
+	if bootTimeUnix.Valid {
+		h.BootTimeUnix = bootTimeUnix.Int64
+	}
+	if agentVersion.Valid {
+		h.AgentVersion = agentVersion.String
 	}
 	return &h, nil
 }
@@ -238,4 +464,21 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// nullIfInt / nullIfInt64 do the same for numeric columns — a zero
+// means "not reported", which we want to persist as NULL rather than
+// as a genuine 0 value.
+func nullIfInt(n int) any {
+	if n == 0 {
+		return nil
+	}
+	return int64(n)
+}
+
+func nullIfInt64(n int64) any {
+	if n == 0 {
+		return nil
+	}
+	return n
 }

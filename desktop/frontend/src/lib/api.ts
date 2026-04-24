@@ -27,6 +27,96 @@ export interface Host {
     os?: string;
     first_seen_at: string;
     last_seen_at: string;
+
+    // Rich agent-reported system info. All fields optional — older
+    // agents or minimal hosts may leave most of them unset.
+    agent_id?: string;
+    arch?: string;
+    platform?: string;
+    platform_family?: string;
+    platform_version?: string;
+    kernel_version?: string;
+    cpu_model?: string;
+    num_cpu?: number;
+    mem_total_bytes?: number;
+    current_user?: string;
+    timezone?: string;
+    primary_ip?: string;
+    primary_mac?: string;
+    boot_time_unix?: number;
+    agent_version?: string;
+}
+
+// HostSysInfo mirrors v2pb.SysInfoResponse — a full, live snapshot
+// the agent returns on demand. Populated by getHostSysInfo; unlike
+// `Host` (DB-cached), this includes the dynamic metrics (CPU %,
+// memory used, load average, etc.).
+export interface HostSysInfoInterface {
+    name: string;
+    mac?: string;
+    addrs?: string[];
+    flags?: string;
+    mtu?: number;
+    is_up?: boolean;
+    is_loopback?: boolean;
+}
+
+export interface HostSysInfoDisk {
+    device?: string;
+    mountpoint?: string;
+    fstype?: string;
+    total_bytes?: number;
+    used_bytes?: number;
+}
+
+export interface HostSysInfoUser {
+    user?: string;
+    terminal?: string;
+    host?: string;
+    started_at?: number;
+}
+
+export interface HostSysInfo {
+    os?: string;
+    arch?: string;
+    hostname?: string;
+    kernel_version?: string;
+    cpu_percent?: number;
+    mem_total?: number;
+    mem_used?: number;
+    mem_available?: number;
+    mem_free?: number;
+    swap_total?: number;
+    swap_used?: number;
+    disk_total?: number;
+    disk_used?: number;
+    platform?: string;
+    platform_family?: string;
+    platform_version?: string;
+    virtualization?: string;
+    timezone?: string;
+    num_cpu?: number;
+    num_cpu_physical?: number;
+    cpu_model?: string;
+    cpu_mhz?: number;
+    boot_time_unix?: number;
+    uptime_seconds?: number;
+    load1?: number;
+    load5?: number;
+    load15?: number;
+    process_count?: number;
+    current_user?: string;
+    agent_version?: string;
+    machine_id?: string;
+    default_gateway?: string;
+    primary_ip?: string;
+    primary_mac?: string;
+    public_ip?: string;
+    interfaces?: HostSysInfoInterface[];
+    disks?: HostSysInfoDisk[];
+    users?: HostSysInfoUser[];
+    sampled_at_unix?: number;
+    error?: string;
 }
 
 export interface SessionRow {
@@ -105,6 +195,14 @@ export async function listHosts(pid: string): Promise<Host[]> {
 
 export async function getHost(pid: string, hid: string): Promise<Host> {
     return authJSON<Host>(`/api/v1/projects/${pid}/hosts/${hid}`);
+}
+
+// getHostSysInfo asks the server to call the agent's SysInfo RPC
+// and forward the raw response. Expected to 404 when the agent is
+// offline; callers should handle that gracefully (show cached
+// static fields from Host instead).
+export async function getHostSysInfo(pid: string, hid: string): Promise<HostSysInfo> {
+    return authJSON<HostSysInfo>(`/api/v1/projects/${pid}/hosts/${hid}/sysinfo`);
 }
 
 export async function listHostSessions(pid: string, hid: string): Promise<SessionRow[]> {

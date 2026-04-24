@@ -84,6 +84,11 @@ func enrollAndPersist(ctx context.Context, opts BootstrapV2Options) (*Identity, 
 	if opts.EnrollURL == "" {
 		return nil, errors.New("agent: BootstrapV2: EnrollURL required when enrolling")
 	}
+	// Capture a warm system snapshot once so the enrollment record
+	// carries hardware / OS / network details. The server persists
+	// these into the hosts row; future on-demand refreshes go via
+	// the SysInfo RPC.
+	snap := CollectSysInfo(ctx)
 	res, err := Enroll(ctx, EnrollOptions{
 		ServerURL:    opts.EnrollURL,
 		PAT:          opts.PAT,
@@ -91,6 +96,7 @@ func enrollAndPersist(ctx context.Context, opts BootstrapV2Options) (*Identity, 
 		MachineID:    opts.MachineID,
 		AgentVersion: opts.AgentVersion,
 		ProjectCA:    opts.ProjectCA,
+		SysInfo:      snap,
 	})
 	if err != nil {
 		return nil, err
