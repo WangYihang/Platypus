@@ -3,9 +3,13 @@ package platypus.v2;
 option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 
 // FileReadRequest opens a STREAM_TYPE_FILE_READ stream. After the
-// FileReadResponse ack, the agent streams raw file bytes on the
-// stream until EOF, then half-closes. Reader backpressure is the
-// yamux flow window — no chunking needed at the app layer.
+// FileReadResponse ack, the agent streams the file content as a
+// sequence of FileChunk frames, the last one carrying eof=true.
+// Chunk size is agent-chosen, capped by FrameMaxBytes.
+//
+// When reading fails after the header (permission lost, disk error)
+// the final chunk carries eof=true AND a non-empty error; previous
+// chunks may have delivered partial data.
 message FileReadRequest {
   string path = 1;
 
@@ -25,6 +29,20 @@ message FileReadResponse {
   // Unix mode bits of the source file, for round-tripping on the
   // copy-to-another-agent workflow.
   uint32 mode = 2;
+
+  // Populated on open failure (missing file, permission denied).
+  // When non-empty the stream closes immediately after this frame
+  // with no FileChunk frames.
+  string error = 3;
+}
+
+// FileChunk is one chunk of file bytes. Sender emits as many as
+// it likes, setting eof=true on the final chunk. A chunk may have
+// eof=true AND an error to report a mid-transfer failure.
+message FileChunk {
+  bytes data = 1;
+  bool eof = 2;
+  string error = 3;
 }
 
 // FileWriteRequest opens a STREAM_TYPE_FILE_WRITE stream. The

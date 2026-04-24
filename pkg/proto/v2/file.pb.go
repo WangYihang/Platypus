@@ -22,9 +22,13 @@ const (
 )
 
 // FileReadRequest opens a STREAM_TYPE_FILE_READ stream. After the
-// FileReadResponse ack, the agent streams raw file bytes on the
-// stream until EOF, then half-closes. Reader backpressure is the
-// yamux flow window — no chunking needed at the app layer.
+// FileReadResponse ack, the agent streams the file content as a
+// sequence of FileChunk frames, the last one carrying eof=true.
+// Chunk size is agent-chosen, capped by FrameMaxBytes.
+//
+// When reading fails after the header (permission lost, disk error)
+// the final chunk carries eof=true AND a non-empty error; previous
+// chunks may have delivered partial data.
 type FileReadRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
@@ -95,7 +99,11 @@ type FileReadResponse struct {
 	Size int64 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
 	// Unix mode bits of the source file, for round-tripping on the
 	// copy-to-another-agent workflow.
-	Mode          uint32 `protobuf:"varint,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	Mode uint32 `protobuf:"varint,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Populated on open failure (missing file, permission denied).
+	// When non-empty the stream closes immediately after this frame
+	// with no FileChunk frames.
+	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -144,6 +152,76 @@ func (x *FileReadResponse) GetMode() uint32 {
 	return 0
 }
 
+func (x *FileReadResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// FileChunk is one chunk of file bytes. Sender emits as many as
+// it likes, setting eof=true on the final chunk. A chunk may have
+// eof=true AND an error to report a mid-transfer failure.
+type FileChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Eof           bool                   `protobuf:"varint,2,opt,name=eof,proto3" json:"eof,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileChunk) Reset() {
+	*x = FileChunk{}
+	mi := &file_file_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileChunk) ProtoMessage() {}
+
+func (x *FileChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_file_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileChunk.ProtoReflect.Descriptor instead.
+func (*FileChunk) Descriptor() ([]byte, []int) {
+	return file_file_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *FileChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *FileChunk) GetEof() bool {
+	if x != nil {
+		return x.Eof
+	}
+	return false
+}
+
+func (x *FileChunk) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 // FileWriteRequest opens a STREAM_TYPE_FILE_WRITE stream. The
 // server sends FileWriteHeader, agent responds with
 // FileWriteResponse (ack), server streams raw bytes, then
@@ -164,7 +242,7 @@ type FileWriteRequest struct {
 
 func (x *FileWriteRequest) Reset() {
 	*x = FileWriteRequest{}
-	mi := &file_file_proto_msgTypes[2]
+	mi := &file_file_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -176,7 +254,7 @@ func (x *FileWriteRequest) String() string {
 func (*FileWriteRequest) ProtoMessage() {}
 
 func (x *FileWriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_file_proto_msgTypes[2]
+	mi := &file_file_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -189,7 +267,7 @@ func (x *FileWriteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileWriteRequest.ProtoReflect.Descriptor instead.
 func (*FileWriteRequest) Descriptor() ([]byte, []int) {
-	return file_file_proto_rawDescGZIP(), []int{2}
+	return file_file_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *FileWriteRequest) GetPath() string {
@@ -228,7 +306,7 @@ type FileWriteResponse struct {
 
 func (x *FileWriteResponse) Reset() {
 	*x = FileWriteResponse{}
-	mi := &file_file_proto_msgTypes[3]
+	mi := &file_file_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -240,7 +318,7 @@ func (x *FileWriteResponse) String() string {
 func (*FileWriteResponse) ProtoMessage() {}
 
 func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_file_proto_msgTypes[3]
+	mi := &file_file_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -253,7 +331,7 @@ func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileWriteResponse.ProtoReflect.Descriptor instead.
 func (*FileWriteResponse) Descriptor() ([]byte, []int) {
-	return file_file_proto_rawDescGZIP(), []int{3}
+	return file_file_proto_rawDescGZIP(), []int{4}
 }
 
 // FileWriteResult is the final summary message sent by the agent
@@ -269,7 +347,7 @@ type FileWriteResult struct {
 
 func (x *FileWriteResult) Reset() {
 	*x = FileWriteResult{}
-	mi := &file_file_proto_msgTypes[4]
+	mi := &file_file_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +359,7 @@ func (x *FileWriteResult) String() string {
 func (*FileWriteResult) ProtoMessage() {}
 
 func (x *FileWriteResult) ProtoReflect() protoreflect.Message {
-	mi := &file_file_proto_msgTypes[4]
+	mi := &file_file_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +372,7 @@ func (x *FileWriteResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileWriteResult.ProtoReflect.Descriptor instead.
 func (*FileWriteResult) Descriptor() ([]byte, []int) {
-	return file_file_proto_rawDescGZIP(), []int{4}
+	return file_file_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FileWriteResult) GetBytesWritten() int64 {
@@ -320,10 +398,15 @@ const file_file_proto_rawDesc = "" +
 	"\x0fFileReadRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06length\x18\x03 \x01(\x03R\x06length\":\n" +
+	"\x06length\x18\x03 \x01(\x03R\x06length\"P\n" +
 	"\x10FileReadResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
-	"\x04mode\x18\x02 \x01(\rR\x04mode\"j\n" +
+	"\x04mode\x18\x02 \x01(\rR\x04mode\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"G\n" +
+	"\tFileChunk\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x10\n" +
+	"\x03eof\x18\x02 \x01(\bR\x03eof\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"j\n" +
 	"\x10FileWriteRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
 	"\x06append\x18\x02 \x01(\bR\x06append\x12\x12\n" +
@@ -346,13 +429,14 @@ func file_file_proto_rawDescGZIP() []byte {
 	return file_file_proto_rawDescData
 }
 
-var file_file_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_file_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_file_proto_goTypes = []any{
 	(*FileReadRequest)(nil),   // 0: platypus.v2.FileReadRequest
 	(*FileReadResponse)(nil),  // 1: platypus.v2.FileReadResponse
-	(*FileWriteRequest)(nil),  // 2: platypus.v2.FileWriteRequest
-	(*FileWriteResponse)(nil), // 3: platypus.v2.FileWriteResponse
-	(*FileWriteResult)(nil),   // 4: platypus.v2.FileWriteResult
+	(*FileChunk)(nil),         // 2: platypus.v2.FileChunk
+	(*FileWriteRequest)(nil),  // 3: platypus.v2.FileWriteRequest
+	(*FileWriteResponse)(nil), // 4: platypus.v2.FileWriteResponse
+	(*FileWriteResult)(nil),   // 5: platypus.v2.FileWriteResult
 }
 var file_file_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -373,7 +457,7 @@ func file_file_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_file_proto_rawDesc), len(file_file_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
