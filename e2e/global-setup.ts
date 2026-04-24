@@ -89,37 +89,29 @@ export default async function globalSetup() {
 
     const dbPath = path.join(tmpdir, "platypus.db");
     const configPath = path.join(tmpdir, "config.yml");
+    // Matches internal/utils/config/config.go (snake_case yaml tags).
+    // Listeners / distributor / mesh listen_addr all moved onto the
+    // unified ingress; distributor.store endpoint left empty so the
+    // installer routes are disabled (no MinIO dependency in e2e).
+    // mesh.project_id is "default" to align with the system-seeded
+    // project row (storage.DefaultProjectID) — using any other value
+    // would fail project_ca's FK on startup.
     const config = {
-        // Empty listeners — we'll create our own via the REST API once
-        // the server is up, on a port that won't collide with config.yml.
-        listeners: [],
+        ingress: {
+            addr: `${BACKEND_HOST}:${BACKEND_PORT}`,
+            public_addr: `${BACKEND_HOST}:${BACKEND_PORT}`,
+        },
         restful: {
-            host: BACKEND_HOST,
-            port: BACKEND_PORT,
-            enable: true,
-            DBFile: dbPath,
+            db_file: dbPath,
             // Stable JWT keys mean the run is reproducible; otherwise
             // every cold start mints fresh keys and tokens churn.
-            JWTAccessKey: "e2e-access-key-do-not-use-in-prod",
-            JWTRefreshKey: "e2e-refresh-key-do-not-use-in-prod",
+            jwt_access_key: "e2e-access-key-do-not-use-in-prod",
+            jwt_refresh_key: "e2e-refresh-key-do-not-use-in-prod",
         },
-        distributor: {
-            host: BACKEND_HOST,
-            port: 13340,
-            url: `http://${BACKEND_HOST}:13340`,
-            store: {
-                endpoint: "localhost:9000",
-                bucket: "e2e",
-            },
-        },
-        update: false,
-        openBrowser: false,
         mesh: {
             psk_file: path.join(tmpdir, MESH_PSK_FILENAME),
-            identity_dir: path.join(tmpdir, "mesh-server-identity"),
-            listen_addr: "127.0.0.1:17770",
             discovery_lan: true,
-            project_id: "e2e-project",
+            project_id: "default",
         },
     };
     writeFileSync(configPath, YAML.stringify(config), "utf8");
