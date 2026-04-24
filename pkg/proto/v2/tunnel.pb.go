@@ -131,7 +131,11 @@ type TunnelPullResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Local address the agent actually dialed (after resolution);
 	// useful for audit logs. Empty on non-TCP or unsupported.
-	ResolvedAddr  string `protobuf:"bytes,1,opt,name=resolved_addr,json=resolvedAddr,proto3" json:"resolved_addr,omitempty"`
+	ResolvedAddr string `protobuf:"bytes,1,opt,name=resolved_addr,json=resolvedAddr,proto3" json:"resolved_addr,omitempty"`
+	// Populated when the agent could not establish the connection
+	// (DNS failure, refused, timeout). When non-empty the stream
+	// closes immediately after this frame; no byte stream follows.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,6 +173,13 @@ func (*TunnelPullResponse) Descriptor() ([]byte, []int) {
 func (x *TunnelPullResponse) GetResolvedAddr() string {
 	if x != nil {
 		return x.ResolvedAddr
+	}
+	return ""
+}
+
+func (x *TunnelPullResponse) GetError() string {
+	if x != nil {
+		return x.Error
 	}
 	return ""
 }
@@ -235,7 +246,11 @@ func (x *TunnelPushRequest) GetPeerAddr() string {
 type TunnelPushResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Address the server dialed locally, for audit.
-	ResolvedAddr  string `protobuf:"bytes,1,opt,name=resolved_addr,json=resolvedAddr,proto3" json:"resolved_addr,omitempty"`
+	ResolvedAddr string `protobuf:"bytes,1,opt,name=resolved_addr,json=resolvedAddr,proto3" json:"resolved_addr,omitempty"`
+	// Populated when the server could not dial its pre-configured
+	// local target (config id missing, connect refused). Agent
+	// closes the stream after this frame.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -273,6 +288,13 @@ func (*TunnelPushResponse) Descriptor() ([]byte, []int) {
 func (x *TunnelPushResponse) GetResolvedAddr() string {
 	if x != nil {
 		return x.ResolvedAddr
+	}
+	return ""
+}
+
+func (x *TunnelPushResponse) GetError() string {
+	if x != nil {
+		return x.Error
 	}
 	return ""
 }
@@ -396,14 +418,16 @@ const file_tunnel_proto_rawDesc = "" +
 	"\ftunnel.proto\x12\vplatypus.v2\"S\n" +
 	"\x11TunnelPullRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12&\n" +
-	"\x0fdial_timeout_ms\x18\x02 \x01(\rR\rdialTimeoutMs\"9\n" +
+	"\x0fdial_timeout_ms\x18\x02 \x01(\rR\rdialTimeoutMs\"O\n" +
 	"\x12TunnelPullResponse\x12#\n" +
-	"\rresolved_addr\x18\x01 \x01(\tR\fresolvedAddr\"Z\n" +
+	"\rresolved_addr\x18\x01 \x01(\tR\fresolvedAddr\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"Z\n" +
 	"\x11TunnelPushRequest\x12(\n" +
 	"\x10listen_config_id\x18\x01 \x01(\tR\x0elistenConfigId\x12\x1b\n" +
-	"\tpeer_addr\x18\x02 \x01(\tR\bpeerAddr\"9\n" +
+	"\tpeer_addr\x18\x02 \x01(\tR\bpeerAddr\"O\n" +
 	"\x12TunnelPushResponse\x12#\n" +
-	"\rresolved_addr\x18\x01 \x01(\tR\fresolvedAddr\"\xcf\x01\n" +
+	"\rresolved_addr\x18\x01 \x01(\tR\fresolvedAddr\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xcf\x01\n" +
 	"\x10Socks5CtlRequest\x12<\n" +
 	"\x06action\x18\x01 \x01(\x0e2$.platypus.v2.Socks5CtlRequest.ActionR\x06action\x12\x1b\n" +
 	"\ttunnel_id\x18\x02 \x01(\tR\btunnelId\x12\x1b\n" +

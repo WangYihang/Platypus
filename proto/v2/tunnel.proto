@@ -17,6 +17,11 @@ message TunnelPullResponse {
   // Local address the agent actually dialed (after resolution);
   // useful for audit logs. Empty on non-TCP or unsupported.
   string resolved_addr = 1;
+
+  // Populated when the agent could not establish the connection
+  // (DNS failure, refused, timeout). When non-empty the stream
+  // closes immediately after this frame; no byte stream follows.
+  string error = 2;
 }
 
 // TunnelPushRequest opens a remote-to-local tunnel (agent->server).
@@ -35,6 +40,11 @@ message TunnelPushRequest {
 message TunnelPushResponse {
   // Address the server dialed locally, for audit.
   string resolved_addr = 1;
+
+  // Populated when the server could not dial its pre-configured
+  // local target (config id missing, connect refused). Agent
+  // closes the stream after this frame.
+  string error = 2;
 }
 
 // Socks5CtlRequest is the STREAM_TYPE_SOCKS5_CTL header metadata.
