@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Monitor, RotateCw, Search } from "lucide-react";
+import {
+    Boxes,
+    HelpCircle,
+    Laptop,
+    Layers,
+    Loader2,
+    Monitor,
+    RotateCw,
+    Search,
+    Server,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -139,6 +149,7 @@ export default function HostsPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-[40px]" title={machineTypeLegend} />
                                     <TableHead>Host</TableHead>
                                     <TableHead className="w-[180px]">OS · platform</TableHead>
                                     <TableHead className="w-[100px]">Arch</TableHead>
@@ -166,6 +177,9 @@ export default function HostsPage() {
                                                 )
                                             }
                                         >
+                                            <TableCell title={machineTypeLabel(h.machine_type)}>
+                                                {renderMachineTypeIcon(h.machine_type)}
+                                            </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     <StatusDot
@@ -249,4 +263,36 @@ function formatMem(n?: number): string {
     if (gb < 1) return `${Math.round(n / (1024 * 1024))} MB`;
     if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`;
     return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
+}
+
+// machineTypeLegend explains the icon column in a hover tooltip so
+// operators don't need to guess which icon means what. Kept as a
+// plain string so it lives in the header's title attribute.
+const machineTypeLegend =
+    "Machine type — container / VM / bare metal / laptop / desktop";
+
+const machineTypeIcons: Record<
+    string,
+    { label: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+    container: { label: "container", Icon: Boxes },
+    vm: { label: "virtual machine", Icon: Layers },
+    bare_metal: { label: "bare metal", Icon: Server },
+    laptop: { label: "laptop", Icon: Laptop },
+    desktop: { label: "desktop", Icon: Monitor },
+    unknown: { label: "unknown", Icon: HelpCircle },
+};
+
+function machineTypeLabel(type?: string): string {
+    if (!type) return "unclassified";
+    return machineTypeIcons[type]?.label || type;
+}
+
+function renderMachineTypeIcon(type?: string) {
+    const meta = type ? machineTypeIcons[type] : undefined;
+    if (!meta) {
+        return <span className="text-text-muted">—</span>;
+    }
+    const { Icon } = meta;
+    return <Icon className="size-4 text-text-secondary" />;
 }

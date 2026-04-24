@@ -9,14 +9,15 @@ option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 // keepalive (short-lived by construction).
 message RpcRequest {
   oneof payload {
-    ExecRequest    exec     = 10;
-    ListDirRequest list_dir = 20;
-    StatRequest    stat     = 21;
-    DeleteRequest  delete   = 22;
-    RenameRequest  rename   = 23;
-    MkdirRequest   mkdir    = 24;
-    ChmodRequest   chmod    = 25;
-    SysInfoRequest sys_info = 30;
+    ExecRequest         exec         = 10;
+    ListDirRequest      list_dir     = 20;
+    StatRequest         stat         = 21;
+    DeleteRequest       delete       = 22;
+    RenameRequest       rename       = 23;
+    MkdirRequest        mkdir        = 24;
+    ChmodRequest        chmod        = 25;
+    SysInfoRequest      sys_info     = 30;
+    ProcessListRequest  process_list = 31;
   }
 }
 
@@ -27,14 +28,15 @@ message RpcResponse {
   string error = 1;
 
   oneof payload {
-    ExecResponse    exec     = 10;
-    ListDirResponse list_dir = 20;
-    StatResponse    stat     = 21;
-    DeleteResponse  delete   = 22;
-    RenameResponse  rename   = 23;
-    MkdirResponse   mkdir    = 24;
-    ChmodResponse   chmod    = 25;
-    SysInfoResponse sys_info = 30;
+    ExecResponse         exec         = 10;
+    ListDirResponse      list_dir     = 20;
+    StatResponse         stat         = 21;
+    DeleteResponse       delete       = 22;
+    RenameResponse       rename       = 23;
+    MkdirResponse        mkdir        = 24;
+    ChmodResponse        chmod        = 25;
+    SysInfoResponse      sys_info     = 30;
+    ProcessListResponse  process_list = 31;
   }
 }
 
@@ -196,4 +198,79 @@ message SysInfoResponse {
 
   // When the snapshot was captured, agent-side wall clock.
   int64 sampled_at_unix = 120;
+
+  // --- Hardware / chassis / machine classification (all optional) ---
+
+  // Coarse classification of what the agent runs on. One of:
+  // "container" | "vm" | "bare_metal" | "laptop" | "desktop" | "unknown".
+  // Derived agent-side from container markers (cgroup, /.dockerenv),
+  // gopsutil's VirtualizationSystem, and the SMBIOS chassis type.
+  string machine_type      = 130;
+  // Raw SMBIOS chassis type as a string (DMTF spec 3.3.4.1), e.g. "10"
+  // (Notebook), "23" (Rack Mount). Empty when unavailable.
+  string chassis_type      = 131;
+  string product_vendor    = 132; // e.g. "Dell Inc.", "Apple Inc."
+  string product_name      = 133; // e.g. "PowerEdge R740", "MacBookPro18,1"
+  string bios_vendor       = 134;
+  string bios_version      = 135;
+  // Container runtime when machine_type=="container": "docker" |
+  // "kubepods" | "containerd" | "lxc" | "podman" | "wsl" | "".
+  string container_runtime = 136;
+
+  // Graphics adapters. Static fields populated via /sys or WMI on all
+  // platforms; runtime stats (utilization, VRAM used) come from
+  // nvidia-smi when it's on PATH.
+  repeated GPUInfo gpus    = 140;
+}
+
+// GPUInfo is a single graphics adapter. All fields are optional;
+// zero/empty means "not reported" (which the UI renders as "—").
+// Runtime stats (VramUsedBytes, UtilizationPct) require a vendor tool
+// — today only nvidia-smi is consulted. Static fields (vendor/model/
+// driver/VramTotal) come from the kernel (Linux /sys/class/drm) or
+// WMI (Windows).
+message GPUInfo {
+  string vendor           = 1;   // "NVIDIA" | "AMD" | "Intel" | "Apple" | ...
+  string model            = 2;   // brand / product name
+  string driver           = 3;   // driver module name, e.g. "nvidia", "amdgpu"
+  string driver_version   = 4;
+  uint64 vram_total_bytes = 5;   // 0 = unknown
+  uint64 vram_used_bytes  = 6;   // 0 = unknown
+  double utilization_pct  = 7;   // 0 = unknown
+  string bus_id           = 8;   // PCI bus id where applicable
+  string uuid             = 9;   // vendor-provided uuid if any
+  uint32 index            = 10;  // vendor-local ordinal (nvidia-smi index)
+}
+
+// ProcessInfo is a single OS process snapshot. Returned by the
+// ProcessList RPC (populating the dedicated Processes tab in the UI).
+// cmdline is truncated to 512 bytes agent-side to bound payload size.
+message ProcessInfo {
+  uint32 pid             = 1;
+  uint32 ppid            = 2;
+  string user            = 3;
+  string name            = 4;
+  string cmdline         = 5;
+  string status          = 6;   // gopsutil Status() string, e.g. "S", "R"
+  double cpu_percent     = 7;
+  double mem_percent     = 8;
+  uint64 rss_bytes       = 9;
+  uint32 num_threads     = 10;
+  int64  created_at_unix = 11;
+}
+
+// ProcessListRequest selects how many processes to return and how to
+// sort them. The agent does the sort so top_n is meaningful. top_n=0
+// means "all", capped at 500 server-side to keep the payload bounded.
+message ProcessListRequest {
+  uint32 top_n   = 1;
+  string sort_by = 2;   // "cpu" (default) | "mem" | "rss" | "pid"
+}
+
+message ProcessListResponse {
+  repeated ProcessInfo processes = 1;
+  // Total process count before top_n slicing; useful for the UI to
+  // show "30 of 412 processes".
+  uint32 total_count             = 2;
+  string error                   = 3;
 }

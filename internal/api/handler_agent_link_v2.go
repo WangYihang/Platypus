@@ -244,6 +244,13 @@ func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
 		PrimaryMAC:      s.PrimaryMac,
 		BootTimeUnix:    int64(s.BootTimeUnix),
 		AgentVersion:    s.AgentVersion,
+		MachineType:     s.MachineType,
+		ChassisType:     s.ChassisType,
+		ProductVendor:   s.ProductVendor,
+		ProductName:     s.ProductName,
+		BIOSVendor:      s.BiosVendor,
+		BIOSVersion:     s.BiosVersion,
+		GPUSummary:      summarizeGPUs(s.Gpus),
 	}
 	if _, err := h.db.Hosts().Upsert(ctx, ident); err != nil {
 		log.Warn("agent link: host upsert failed: agent=%s err=%v", agentID, err)
@@ -255,4 +262,28 @@ func coalesce(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// summarizeGPUs builds a short "vendor model; vendor model" blurb
+// from the first few GPUInfo entries. Empty slices return "". The
+// full live list stays in the SysInfo RPC — this denormalized string
+// only exists so the hosts list can render a GPU column without
+// issuing a per-row RPC.
+func summarizeGPUs(gpus []*v2pb.GPUInfo) string {
+	const maxEntries = 3
+	parts := make([]string, 0, maxEntries)
+	for _, g := range gpus {
+		if g == nil {
+			continue
+		}
+		label := strings.TrimSpace(strings.TrimSpace(g.Vendor) + " " + strings.TrimSpace(g.Model))
+		if label == "" {
+			continue
+		}
+		parts = append(parts, label)
+		if len(parts) >= maxEntries {
+			break
+		}
+	}
+	return strings.Join(parts, "; ")
 }

@@ -220,6 +220,12 @@ func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollm
 		PrimaryMAC:      req.GetPrimaryMac(),
 		BootTimeUnix:    int64(req.GetBootTimeUnix()),
 		AgentVersion:    req.GetAgentVersion(),
+		MachineType:     req.GetMachineType(),
+		ChassisType:     req.GetChassisType(),
+		ProductVendor:   req.GetProductVendor(),
+		ProductName:     req.GetProductName(),
+		BIOSVendor:      req.GetBiosVendor(),
+		BIOSVersion:     req.GetBiosVersion(),
 	}
 	_, err := db.Hosts().Upsert(ctx, ident)
 	return err

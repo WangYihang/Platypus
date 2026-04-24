@@ -112,6 +112,12 @@ func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
 		enrollReq.PrimaryIp = s.PrimaryIp
 		enrollReq.PrimaryMac = s.PrimaryMac
 		enrollReq.BootTimeUnix = s.BootTimeUnix
+		enrollReq.MachineType = s.MachineType
+		enrollReq.ChassisType = s.ChassisType
+		enrollReq.ProductVendor = s.ProductVendor
+		enrollReq.ProductName = s.ProductName
+		enrollReq.BiosVendor = s.BiosVendor
+		enrollReq.BiosVersion = s.BiosVersion
 	}
 	reqBody, err := proto.Marshal(enrollReq)
 	if err != nil {

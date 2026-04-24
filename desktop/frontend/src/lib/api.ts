@@ -45,6 +45,18 @@ export interface Host {
     primary_mac?: string;
     boot_time_unix?: number;
     agent_version?: string;
+
+    // Hardware / chassis classification (migration 000012). All
+    // optional; machine_type is the coarse category (container / vm /
+    // bare_metal / laptop / desktop / unknown). gpu_summary is a
+    // short "NVIDIA RTX 4090; Intel UHD 770" blurb for list rendering.
+    machine_type?: string;
+    chassis_type?: string;
+    product_vendor?: string;
+    product_name?: string;
+    bios_vendor?: string;
+    bios_version?: string;
+    gpu_summary?: string;
 }
 
 // HostSysInfo mirrors v2pb.SysInfoResponse — a full, live snapshot
@@ -74,6 +86,42 @@ export interface HostSysInfoUser {
     terminal?: string;
     host?: string;
     started_at?: number;
+}
+
+export interface HostSysInfoGPU {
+    vendor?: string;
+    model?: string;
+    driver?: string;
+    driver_version?: string;
+    vram_total_bytes?: number;
+    vram_used_bytes?: number;
+    utilization_pct?: number;
+    bus_id?: string;
+    uuid?: string;
+    index?: number;
+}
+
+// HostProcess mirrors v2pb.ProcessInfo. Populated by listHostProcesses
+// (live RPC; never cached on the server). rss_bytes is resident-set
+// size; mem_percent is gopsutil's calculation (RSS / total RAM).
+export interface HostProcess {
+    pid: number;
+    ppid?: number;
+    user?: string;
+    name?: string;
+    cmdline?: string;
+    status?: string;
+    cpu_percent?: number;
+    mem_percent?: number;
+    rss_bytes?: number;
+    num_threads?: number;
+    created_at_unix?: number;
+}
+
+export interface HostProcessList {
+    processes?: HostProcess[];
+    total_count?: number;
+    error?: string;
 }
 
 export interface HostSysInfo {
@@ -117,6 +165,15 @@ export interface HostSysInfo {
     users?: HostSysInfoUser[];
     sampled_at_unix?: number;
     error?: string;
+
+    machine_type?: string;
+    chassis_type?: string;
+    product_vendor?: string;
+    product_name?: string;
+    bios_vendor?: string;
+    bios_version?: string;
+    container_runtime?: string;
+    gpus?: HostSysInfoGPU[];
 }
 
 export interface SessionRow {
@@ -203,6 +260,26 @@ export async function getHost(pid: string, hid: string): Promise<Host> {
 // static fields from Host instead).
 export async function getHostSysInfo(pid: string, hid: string): Promise<HostSysInfo> {
     return authJSON<HostSysInfo>(`/api/v1/projects/${pid}/hosts/${hid}/sysinfo`);
+}
+
+// listHostProcesses proxies the agent's ProcessList RPC. Same 404
+// semantics as getHostSysInfo when the agent is offline. top=0 means
+// "as many as the server cap allows" (500).
+export interface ListHostProcessesOpts {
+    top?: number;
+    sort?: "cpu" | "mem" | "rss" | "pid";
+}
+export async function listHostProcesses(
+    pid: string,
+    hid: string,
+    opts: ListHostProcessesOpts = {},
+): Promise<HostProcessList> {
+    const params = new URLSearchParams();
+    if (opts.top != null) params.set("top", String(opts.top));
+    if (opts.sort) params.set("sort", opts.sort);
+    const qs = params.toString();
+    const url = `/api/v1/projects/${pid}/hosts/${hid}/processes${qs ? `?${qs}` : ""}`;
+    return authJSON<HostProcessList>(url);
 }
 
 export async function listHostSessions(pid: string, hid: string): Promise<SessionRow[]> {

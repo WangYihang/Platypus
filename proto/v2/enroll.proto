@@ -48,6 +48,17 @@ message EnrollRequest {
   string primary_ip       = 31;
   string primary_mac      = 32;
   uint64 boot_time_unix   = 33;
+
+  // Hardware / chassis classification (optional; captured once at
+  // enroll so the host list already shows a machine-type icon
+  // before the first agent reconnect triggers the full SysInfo
+  // refresh).
+  string machine_type     = 40;
+  string chassis_type     = 41;
+  string product_vendor   = 42;
+  string product_name     = 43;
+  string bios_vendor      = 44;
+  string bios_version     = 45;
 }
 
 message EnrollResponse {

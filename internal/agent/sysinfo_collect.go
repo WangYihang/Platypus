@@ -50,7 +50,9 @@ func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 		resp.CurrentUser = u.Username
 	}
 
+	var hostStat *hostinfo.InfoStat
 	if info, err := hostinfo.InfoWithContext(ctx); err == nil && info != nil {
+		hostStat = info
 		if info.Hostname != "" {
 			resp.Hostname = info.Hostname
 		}
@@ -118,6 +120,23 @@ func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 
 	resp.DefaultGateway = detectDefaultGateway()
 	resp.PublicIp = detectPublicIP(ctx)
+
+	// Hardware / chassis / machine classification. Pulled after the
+	// gopsutil host probe so we can reuse its VirtualizationSystem
+	// field without a second read.
+	mach := collectMachineSnapshot(hostStat)
+	resp.MachineType = mach.MachineType
+	resp.ContainerRuntime = mach.ContainerRuntime
+	resp.ChassisType = mach.ChassisType
+	resp.ProductVendor = mach.ProductVendor
+	resp.ProductName = mach.ProductName
+	resp.BiosVendor = mach.BIOSVendor
+	resp.BiosVersion = mach.BIOSVersion
+
+	// GPU enumeration is opt-in via ghw; nvidia-smi runtime stats
+	// are added best-effort on top. Deliberately *not* blocking on
+	// the 1s nvidia-smi timeout — collectGPUs already caps it.
+	resp.Gpus = collectGPUs(ctx)
 
 	return resp
 }
