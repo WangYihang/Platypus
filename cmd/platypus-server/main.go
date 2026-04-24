@@ -437,7 +437,13 @@ func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Co
 		log.Error("mesh: generate server identity key: %v", err)
 		return nil
 	}
-	certPEM, caPEM, err := pkiSvc.IssueForAgent(ctx, projectID, "server", pub, "mesh-self")
+	// issued_certs.issued_reason CHECK constraint (migration 000005)
+	// accepts enroll | rotation | reissue | admin. "admin" is the
+	// closest fit for a server-originated, non-enrollment self-issue
+	// — the server is acting on its own authority to mint a mesh
+	// identity. Use it rather than introducing a new enum value,
+	// which would need a SQLite-flavour table-recreate migration.
+	certPEM, caPEM, err := pkiSvc.IssueForAgent(ctx, projectID, "server", pub, "admin")
 	if err != nil || certPEM == "" {
 		log.Error("mesh: self-issue server leaf: %v", err)
 		return nil
