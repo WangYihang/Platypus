@@ -3,7 +3,6 @@ package api
 import (
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
@@ -30,10 +29,6 @@ import (
 type EnrollV2Handler struct {
 	enroll *enrollment.Service
 	pki    *pki.Service
-
-	// certTTL lets tests inject a short-lived expiry without the
-	// default 30-day constant.
-	certTTL time.Duration
 }
 
 // ContentTypeEnrollV2 is the MIME the endpoint accepts and
@@ -127,11 +122,11 @@ func (h *EnrollV2Handler) Enroll(c *gin.Context) {
 	}
 
 	resp := &v2pb.EnrollResponse{
-		CertPem:          []byte(issued.CertPEM),
-		CaPem:            []byte(issued.CAPem),
-		AgentId:          redeemed.AgentID,
-		ProjectId:        redeemed.ProjectID,
-		CertExpiresUnix:  issued.NotAfter.Unix(),
+		CertPem:         []byte(issued.CertPEM),
+		CaPem:           []byte(issued.CAPem),
+		AgentId:         redeemed.AgentID,
+		ProjectId:       redeemed.ProjectID,
+		CertExpiresUnix: issued.NotAfter.Unix(),
 	}
 	out, err := proto.Marshal(resp)
 	if err != nil {
