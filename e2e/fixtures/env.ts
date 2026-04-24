@@ -42,7 +42,11 @@ export const SEEDED_PROJECTS = [
 ] as const;
 
 export const baseURL = `http://${FRONTEND_HOST}:${FRONTEND_PORT}`;
-export const backendURL = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
+// Backend ingress is HTTPS with a self-signed cert. Node-side fetches
+// skip verification via NODE_TLS_REJECT_UNAUTHORIZED=0 (set in
+// global-setup); browser-side fetches tolerate it via
+// playwright.config.ts' ignoreHTTPSErrors.
+export const backendURL = `https://${BACKEND_HOST}:${BACKEND_PORT}`;
 
 // makeTmpdir creates a unique temp directory used by the test run for
 // the temp config + SQLite + backend logs. Returned path is set into

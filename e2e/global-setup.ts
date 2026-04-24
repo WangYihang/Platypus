@@ -4,6 +4,13 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import * as YAML from "yaml";
 
+// Backend ingress serves a self-signed TLS cert on dev / first-boot.
+// Node's built-in fetch refuses those by default; since this is the
+// e2e harness we explicitly opt out of verification for the whole
+// process. The browser-side equivalent lives in playwright.config.ts
+// (`use: { ignoreHTTPSErrors: true }`).
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 import {
     ADMIN_PASSWORD,
     ADMIN_USERNAME,

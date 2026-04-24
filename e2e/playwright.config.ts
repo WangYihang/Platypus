@@ -22,6 +22,10 @@ export default defineConfig({
         baseURL,
         trace: "on",
         video: "on",
+        // Backend ingress uses a self-signed cert when no real cert is
+        // wired up (the docker/dev default). Without this flag the
+        // browser blocks every HTTPS fetch the SPA makes to the API.
+        ignoreHTTPSErrors: true,
     },
     projects: [
         {
