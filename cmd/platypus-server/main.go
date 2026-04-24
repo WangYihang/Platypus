@@ -327,7 +327,6 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	// agentLinkSvc was constructed upstream because SessionsV2Handler
 	// also depends on it for project-dispatch.
 	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db))
-	agentSessionsH := api.NewAgentSessionsHandler(db)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db)
@@ -382,7 +381,6 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.RegisterV2TerminalRoute(rest, agentLinkSvc)
 	api.RegisterV2FileRoutes(rest, agentLinkSvc)
 	api.RegisterV2AgentRPCRoutes(rest, agentLinkSvc)
-	api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
