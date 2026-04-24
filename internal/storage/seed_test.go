@@ -88,6 +88,45 @@ func TestEnsureDefaultProject_FKAndIdempotent(t *testing.T) {
 	}
 }
 
+// The bootstrap endpoint uses Users().Count() > 0 to decide whether
+// the admin has been created yet. Seeding the system user must not
+// flip that check — if it did, the /bootstrap tab would 409 on a
+// brand-new install.
+func TestSystemUserHiddenFromListAndCount(t *testing.T) {
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	ctx := context.Background()
+	if _, err := storage.EnsureSystemUser(ctx, db); err != nil {
+		t.Fatalf("EnsureSystemUser: %v", err)
+	}
+
+	n, err := db.Users().Count(ctx)
+	if err != nil {
+		t.Fatalf("Count: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("Count = %d; want 0 (system user must not be counted as a human user)", n)
+	}
+
+	users, err := db.Users().List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(users) != 0 {
+		t.Fatalf("List length = %d; want 0 (system user must not appear in human user listings)", len(users))
+	}
+
+	// Direct GetByID still works — the filter is scoped to
+	// List/Count, not to targeted lookups.
+	if _, err := db.Users().GetByID(ctx, storage.SystemUserID); err != nil {
+		t.Fatalf("GetByID(system): %v", err)
+	}
+}
+
 // Sanity check: ErrNotFound is what GetByID returns for a missing row,
 // which EnsureSystemUser/EnsureDefaultProject rely on to distinguish
 // "create it" from "real error" branches.

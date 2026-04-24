@@ -44,10 +44,14 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*user.Us
 		   FROM users WHERE username = ?`, username)
 }
 
+// List returns human users — the "system" pseudo-user seeded at
+// startup for FK targets is always filtered out so UI listings and
+// bootstrap-gate checks don't have to know about the implementation
+// detail. If a caller genuinely needs the row, use GetByID(SystemUserID).
 func (r *UserRepo) List(ctx context.Context) ([]*user.User, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, username, password_hash, role, created_at, last_login_at
-		   FROM users ORDER BY username ASC`)
+		   FROM users WHERE id != ? ORDER BY username ASC`, SystemUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +68,14 @@ func (r *UserRepo) List(ctx context.Context) ([]*user.User, error) {
 	return out, rows.Err()
 }
 
+// Count returns the number of human users, matching List's filter.
+// The bootstrap endpoint uses this to decide whether the admin account
+// has been created yet — without the filter the seeded system user
+// would make it look already-bootstrapped on a fresh install.
 func (r *UserRepo) Count(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE id != ?`, SystemUserID).Scan(&n)
 	return n, err
 }
 
