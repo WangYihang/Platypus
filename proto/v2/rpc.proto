@@ -1,0 +1,105 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// RpcRequest is the StreamHeader.metadata for STREAM_TYPE_RPC.
+// The agent reads exactly one RpcRequest, sends exactly one
+// RpcResponse, then closes the stream. Timeouts are delivered via
+// context cancellation on both sides; the stream itself has no
+// keepalive (short-lived by construction).
+message RpcRequest {
+  oneof payload {
+    ExecRequest    exec     = 10;
+    ListDirRequest list_dir = 20;
+    StatRequest    stat     = 21;
+    DeleteRequest  delete   = 22;
+    RenameRequest  rename   = 23;
+    MkdirRequest   mkdir    = 24;
+    ChmodRequest   chmod    = 25;
+    SysInfoRequest sys_info = 30;
+  }
+}
+
+message RpcResponse {
+  // Populated on transport- or framework-level errors (e.g. unknown
+  // request type, agent-side panic recovered). Service-level
+  // failures go in the per-payload `error` fields.
+  string error = 1;
+
+  oneof payload {
+    ExecResponse    exec     = 10;
+    ListDirResponse list_dir = 20;
+    StatResponse    stat     = 21;
+    DeleteResponse  delete   = 22;
+    RenameResponse  rename   = 23;
+    MkdirResponse   mkdir    = 24;
+    ChmodResponse   chmod    = 25;
+    SysInfoResponse sys_info = 30;
+  }
+}
+
+// --- One-shot exec ---
+message ExecRequest {
+  string command = 1;
+  repeated string args = 2;
+  string cwd = 3;
+  map<string, string> env = 4;
+  // Max wait in milliseconds; 0 = no deadline beyond context.
+  uint32 timeout_ms = 5;
+}
+
+message ExecResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 exit_code = 3;
+  string error = 4;
+}
+
+// --- Filesystem metadata ---
+message FileEntry {
+  string name = 1;
+  uint32 mode = 2;
+  int64 size = 3;
+  int64 mtime_unix_nano = 4;
+  string symlink_target = 5;
+}
+
+message ListDirRequest  { string path = 1; }
+message ListDirResponse {
+  repeated FileEntry entries = 1;
+  string error = 2;
+}
+
+message StatRequest  { string path = 1; }
+message StatResponse {
+  FileEntry entry = 1;
+  string error = 2;
+}
+
+message DeleteRequest  { string path = 1; bool recursive = 2; }
+message DeleteResponse { string error = 1; }
+
+message RenameRequest  { string from = 1; string to = 2; }
+message RenameResponse { string error = 1; }
+
+message MkdirRequest  { string path = 1; uint32 mode = 2; bool mkdirs = 3; }
+message MkdirResponse { string error = 1; }
+
+message ChmodRequest  { string path = 1; uint32 mode = 2; }
+message ChmodResponse { string error = 1; }
+
+// --- System info (one-shot; periodic push uses EVENT stream) ---
+message SysInfoRequest  {}
+message SysInfoResponse {
+  string os              = 1;
+  string arch            = 2;
+  string hostname        = 3;
+  string kernel_version  = 4;
+  double cpu_percent     = 5;
+  uint64 mem_total       = 6;
+  uint64 mem_used        = 7;
+  uint64 disk_total      = 8;
+  uint64 disk_used       = 9;
+  map<string, string> network_interfaces = 10;
+  string error = 11;
+}

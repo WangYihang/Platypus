@@ -1,0 +1,52 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// Enroll messages are exchanged over a normal HTTPS POST to
+// /api/v1/agents/enroll, not over the yamux link. An agent that
+// does not yet hold a valid client certificate authenticates with
+// a PAT; once it holds a cert, renewals reuse the same endpoint
+// but authenticate via mTLS.
+//
+// Request/response bodies are protobuf-encoded to stay consistent
+// with the link protocol; content-type is
+// application/x-protobuf-platypus-v2.
+
+message EnrollRequest {
+  // One of `pat` or mTLS (out-of-band, from the TLS layer) proves
+  // who the caller is. When both are empty, server rejects.
+  string pat = 1;
+
+  // PEM-encoded PKCS#10 certificate signing request. The subject
+  // is ignored; server rewrites it with the final agent_id and
+  // project id.
+  bytes csr_pem = 2;
+
+  // Optional agent-reported identifying info (stamped into the
+  // cert SAN / audit log). The server trusts PAT-bound project
+  // over agent-reported fields.
+  string hostname    = 3;
+  string machine_id  = 4;
+  string agent_version = 5;
+}
+
+message EnrollResponse {
+  // PEM-encoded agent leaf certificate, signed by the project CA.
+  bytes cert_pem = 1;
+
+  // PEM-encoded chain of issuer certs ending at the project root.
+  // Agents must store this and use it as ClientCAs when they
+  // later want to verify peer certs (e.g. in mesh).
+  bytes ca_pem = 2;
+
+  // Stable agent id the server bound the cert to. Also appears in
+  // the cert CN.
+  string agent_id = 3;
+
+  // Project id; also appears in the cert SAN.
+  string project_id = 4;
+
+  // Unix seconds at which the cert expires. Agents should schedule
+  // a renewal before this.
+  int64 cert_expires_unix = 5;
+}

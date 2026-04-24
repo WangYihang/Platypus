@@ -1,0 +1,70 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// Event is the payload carried on a STREAM_TYPE_EVENT stream.
+// Event streams are opened by the agent on demand; the server
+// reads Events until the agent closes the stream. There is no ack
+// per event — at-most-once delivery, acceptable for audit/metrics
+// where the underlying DB has its own durability guarantees.
+message Event {
+  // Opaque id the agent assigns for dedup / correlation.
+  string id = 1;
+
+  // Agent-side wall clock at the moment the event was generated.
+  int64 timestamp_unix_nano = 2;
+
+  // Correlation id echoed from whatever StreamHeader.correlation_id
+  // caused this event (e.g. a PROCESS_OPEN that later exited).
+  // Empty for unsolicited events (periodic metrics).
+  string correlation_id = 3;
+
+  oneof payload {
+    ProcessExited process_exited = 10;
+    TunnelClosed  tunnel_closed  = 11;
+    SysMetrics    sys_metrics    = 12;
+    Log           log            = 13;
+  }
+}
+
+// ProcessExited is emitted after the agent's PTY stream closes and
+// the child process has been reaped.
+message ProcessExited {
+  int64  pid       = 1;
+  int32  exit_code = 2;
+  string signal    = 3; // non-empty if killed by signal
+}
+
+// TunnelClosed is emitted for both pull and push tunnels when the
+// underlying TCP conn is torn down.
+message TunnelClosed {
+  // Not the stream id — this is the operator-visible tunnel id
+  // (e.g. from Socks5CtlRequest.tunnel_id).
+  string tunnel_id = 1;
+  string reason    = 2;
+}
+
+// SysMetrics is periodic system telemetry. Cadence is agent-side
+// policy (currently 1/s); operators should rate-limit ingestion.
+message SysMetrics {
+  double cpu_percent = 1;
+  uint64 mem_used    = 2;
+  uint64 mem_total   = 3;
+  uint64 net_rx_bps  = 4;
+  uint64 net_tx_bps  = 5;
+}
+
+// Log is a structured log line forwarded from the agent to the
+// server for centralised audit. Severity mirrors standard syslog.
+message Log {
+  enum Level {
+    LEVEL_UNSPECIFIED = 0;
+    LEVEL_DEBUG = 1;
+    LEVEL_INFO  = 2;
+    LEVEL_WARN  = 3;
+    LEVEL_ERROR = 4;
+  }
+  Level level = 1;
+  string message = 2;
+  map<string, string> fields = 3;
+}

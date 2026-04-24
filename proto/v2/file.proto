@@ -1,0 +1,57 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// FileReadRequest opens a STREAM_TYPE_FILE_READ stream. After the
+// FileReadResponse ack, the agent streams raw file bytes on the
+// stream until EOF, then half-closes. Reader backpressure is the
+// yamux flow window — no chunking needed at the app layer.
+message FileReadRequest {
+  string path = 1;
+
+  // Optional byte offset to start from. 0 = beginning.
+  int64 offset = 2;
+
+  // Maximum bytes to deliver. 0 = until EOF.
+  int64 length = 3;
+}
+
+message FileReadResponse {
+  // File size at the moment the stream opened. Useful for the
+  // consumer to size a progress bar; not authoritative (file may
+  // grow during the stream).
+  int64 size = 1;
+
+  // Unix mode bits of the source file, for round-tripping on the
+  // copy-to-another-agent workflow.
+  uint32 mode = 2;
+}
+
+// FileWriteRequest opens a STREAM_TYPE_FILE_WRITE stream. The
+// server sends FileWriteHeader, agent responds with
+// FileWriteResponse (ack), server streams raw bytes, then
+// half-closes; agent responds with FileWriteResult (summary).
+message FileWriteRequest {
+  string path = 1;
+
+  // If true, bytes are appended to an existing file; otherwise the
+  // file is created or truncated.
+  bool append = 2;
+
+  // Unix mode for newly-created files. 0 = 0o644.
+  uint32 mode = 3;
+
+  // Create parent directories if missing.
+  bool mkdirs = 4;
+}
+
+message FileWriteResponse {
+}
+
+// FileWriteResult is the final summary message sent by the agent
+// once the write stream has been fully consumed. Arrives as the
+// last protobuf message on the stream before it closes.
+message FileWriteResult {
+  int64 bytes_written = 1;
+  string error = 2;
+}

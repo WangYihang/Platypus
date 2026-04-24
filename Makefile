@@ -2,8 +2,10 @@ GO         ?= go
 LDFLAGS    := -s -w
 BUILD_DIR  := build
 BINS       := platypus-server platypus-agent
-PROTO_SRC  := proto/agent/v1/agent.proto
-PROTO_OUT  := pkg/proto/agent/v1/agent.pb.go
+PROTO_SRC    := proto/agent/v1/agent.proto
+PROTO_OUT    := pkg/proto/agent/v1/agent.pb.go
+PROTO_V2_SRC := $(wildcard proto/v2/*.proto)
+PROTO_V2_OUT := pkg/proto/v2/common.pb.go
 
 # AGENT_SIGNING_PUBKEY is the base64-encoded Ed25519 public key baked
 # into the platypus-agent binary. The release pipeline signs the update
@@ -58,7 +60,14 @@ $(PROTO_OUT): $(PROTO_SRC)
 	  --go_opt=paths=source_relative \
 	  agent.proto
 
-proto: $(PROTO_OUT)
+$(PROTO_V2_OUT): $(PROTO_V2_SRC)
+	protoc \
+	  --proto_path=proto/v2 \
+	  --go_out=pkg/proto/v2 \
+	  --go_opt=paths=source_relative \
+	  $(notdir $(PROTO_V2_SRC))
+
+proto: $(PROTO_OUT) $(PROTO_V2_OUT)
 
 build: proto
 	@mkdir -p $(BUILD_DIR)

@@ -1,0 +1,36 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// ProcessOpenRequest is the StreamHeader.metadata for a
+// STREAM_TYPE_PROCESS_OPEN stream. The agent acks with
+// ProcessOpenResponse; after that, raw PTY frames flow with a
+// 1-byte opcode prefix (not protobuf): see internal/protocol/v2.
+message ProcessOpenRequest {
+  // Command to exec. Empty means default shell (heuristic on agent).
+  string command = 1;
+  repeated string args = 2;
+
+  // Working directory. Empty = agent home.
+  string cwd = 3;
+
+  // Extra environment. Merged with agent's environment; agent-side
+  // entries take precedence for PATH/HOME/etc.
+  map<string, string> env = 4;
+
+  // Initial PTY window size. 0 means don't set (use OS default).
+  uint32 cols = 5;
+  uint32 rows = 6;
+
+  // If true, allocate a PTY (default). If false, exec without a PTY
+  // and pipe stdout/stderr separately; the 1B-opcode framing still
+  // applies but only 0/1/2/4 opcodes are used.
+  bool pty = 7;
+}
+
+message ProcessOpenResponse {
+  // Agent-side process id. Purely informational (for logs and
+  // audit); the stream itself identifies the process for the
+  // server.
+  int64 pid = 1;
+}

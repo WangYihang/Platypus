@@ -1,0 +1,80 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// StreamType identifies how the peer should route a newly accepted
+// yamux stream. The initiator MUST send a StreamHeader with the
+// correct type as the first protobuf message on the stream; the
+// receiver MUST reply with StreamAccept or StreamReject before any
+// service-specific frame flows.
+enum StreamType {
+  STREAM_TYPE_UNSPECIFIED = 0;
+
+  // Bidirectional PTY session. server->agent.
+  // Service-specific frames after header use a 1-byte opcode prefix
+  // (see internal/protocol/v2/process): 0=stdin, 1=stdout, 2=stderr,
+  // 3=resize, 4=exit.
+  STREAM_TYPE_PROCESS_OPEN = 1;
+
+  // Local-to-remote forwarding (pull). server->agent.
+  // Payload after header is raw TCP bytes, bidirectional.
+  STREAM_TYPE_TUNNEL_PULL = 2;
+
+  // Remote-to-local forwarding (push). agent->server.
+  // Agent accepted an inbound TCP conn; server dials a local target.
+  STREAM_TYPE_TUNNEL_PUSH = 3;
+
+  // Dynamic SOCKS5 proxy control. server->agent.
+  // Agent starts/stops a local SOCKS5 listener on behalf of server.
+  STREAM_TYPE_SOCKS5_CTL = 4;
+
+  // Streaming file read. server->agent (agent is file source).
+  STREAM_TYPE_FILE_READ = 5;
+
+  // Streaming file write. server->agent (agent is file sink).
+  STREAM_TYPE_FILE_WRITE = 6;
+
+  // One-shot RPCs. Request message first, response message back,
+  // stream closes immediately after. Which RPC is in the metadata
+  // field of StreamHeader.
+  STREAM_TYPE_RPC = 7;
+
+  // Async events from agent->server. Opened by agent on demand
+  // (process_exited, tunnel_closed, sys_metrics, etc.).
+  STREAM_TYPE_EVENT = 8;
+}
+
+// StreamHeader is the first protobuf message on every new yamux
+// stream. It tells the receiver how to dispatch the rest of the
+// stream. `metadata` carries a service-specific marshalled message
+// (e.g. ProcessOpenRequest for STREAM_TYPE_PROCESS_OPEN).
+message StreamHeader {
+  StreamType type = 1;
+
+  // Service-specific request, marshalled. The schema is decided by
+  // `type`: e.g. ProcessOpenRequest, TunnelPullRequest, RpcRequest.
+  // The receiver must attempt to unmarshal and reject on parse error.
+  bytes metadata = 2;
+
+  // Correlation id for logging; opaque to the protocol. The server
+  // will echo this in any resulting Event.correlation_id so
+  // operators can trace a stream end-to-end.
+  string correlation_id = 3;
+}
+
+// StreamAccept is the receiver's positive acknowledgement. Sent
+// right after the first valid StreamHeader was parsed and the
+// service-specific handler is ready to consume frames.
+message StreamAccept {
+}
+
+// StreamReject is the receiver's negative acknowledgement. The
+// sender must close the stream immediately after reading it; no
+// service-specific frames have flowed.
+message StreamReject {
+  // Machine-readable error kind. Values reserved:
+  //   "unsupported_type", "malformed_metadata", "unauthorized",
+  //   "resource_exhausted", "internal".
+  string code = 1;
+  string message = 2;
+}
