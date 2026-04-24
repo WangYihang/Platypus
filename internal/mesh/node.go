@@ -195,9 +195,7 @@ func (n *Node) ListenerAddr() string {
 // AcceptRaw runs the inbound mesh handshake on an already-TLS'd
 // net.Conn and registers the resulting link. This is the entry point
 // the unified-ingress dispatcher (internal/ingress) uses once it has
-// determined a connection negotiated "ptps-mesh". mesh.Listener's
-// accept loop also delegates here once PR-E retires the standalone
-// listener, but during the transition they coexist.
+// determined a connection negotiated "ptps-mesh".
 //
 // Blocks until the link is fully torn down (or the handshake is
 // rejected). Caller must launch it in its own goroutine.

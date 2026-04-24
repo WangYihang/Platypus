@@ -324,29 +324,38 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.SetActivityRecorder(api.NewActivityRecorder(db))
 	core.SetEnrollment(enrollSvc)
 
-	store, err := artifact.NewS3Store(artifact.S3Config{
-		Endpoint:        cfg.Distributor.Store.Endpoint,
-		Region:          cfg.Distributor.Store.Region,
-		Bucket:          cfg.Distributor.Store.Bucket,
-		Prefix:          cfg.Distributor.Store.Prefix,
-		AccessKeyID:     cfg.Distributor.Store.AccessKeyID,
-		SecretAccessKey: cfg.Distributor.Store.SecretAccessKey,
-		UseSSL:          cfg.Distributor.Store.UseSSL,
-	})
-	if err != nil {
-		log.Error("distributor: init artifact store: %v", err)
-		os.Exit(1)
+	// Distributor (manifest + installer) is optional: if no S3
+	// endpoint is configured we skip it. Dev servers and pre-release
+	// deployments can run the full admin surface without wiring an
+	// object store first; operators who later configure one just add
+	// the endpoint and restart.
+	if cfg.Distributor.Store.Endpoint != "" {
+		store, err := artifact.NewS3Store(artifact.S3Config{
+			Endpoint:        cfg.Distributor.Store.Endpoint,
+			Region:          cfg.Distributor.Store.Region,
+			Bucket:          cfg.Distributor.Store.Bucket,
+			Prefix:          cfg.Distributor.Store.Prefix,
+			AccessKeyID:     cfg.Distributor.Store.AccessKeyID,
+			SecretAccessKey: cfg.Distributor.Store.SecretAccessKey,
+			UseSSL:          cfg.Distributor.Store.UseSSL,
+		})
+		if err != nil {
+			log.Error("distributor: init artifact store: %v", err)
+			os.Exit(1)
+		}
+		ttl, err := time.ParseDuration(cfg.Distributor.PresignedTTL)
+		if err != nil || ttl <= 0 {
+			ttl = 5 * time.Minute
+		}
+		core.RegisterDistributorRoutes(rest, core.DistributorArgs{
+			Url:          cfg.Distributor.Url,
+			Channel:      cfg.Distributor.ChannelOrDefault(),
+			PresignedTTL: ttl,
+			Store:        store,
+		})
+	} else {
+		log.Info("Distributor disabled: configure distributor.store.endpoint to enable installer downloads.")
 	}
-	ttl, err := time.ParseDuration(cfg.Distributor.PresignedTTL)
-	if err != nil || ttl <= 0 {
-		ttl = 5 * time.Minute
-	}
-	core.RegisterDistributorRoutes(rest, core.DistributorArgs{
-		Url:          cfg.Distributor.Url,
-		Channel:      cfg.Distributor.ChannelOrDefault(),
-		PresignedTTL: ttl,
-		Store:        store,
-	})
 
 	api.RegisterWebSocketRoutes(rest, auth)
 	api.RegisterV1Routes(rest, auth)
