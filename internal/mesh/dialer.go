@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/protocol"
 )
 
 const (
@@ -153,7 +152,7 @@ func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
 	// Bounded deadline for the app-level mesh handshake.
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 
-	codec := protocol.NewProtoCodec(conn)
+	codec := newEnvCodec(conn)
 	result, err := PerformClientHandshake(ctx, codec, d.node.identity, d.node.psk, d.node.advertisedAddrs())
 	if err != nil {
 		closeConn(conn)

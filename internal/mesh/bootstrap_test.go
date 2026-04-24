@@ -1,12 +1,12 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"log/slog"
 	"net"
 	"testing"
 	"time"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 func TestRegistryToNodeInfosIncludesBootstrapMetadata(t *testing.T) {
@@ -126,8 +126,8 @@ func TestMeshStreamHandleDataDoesNotBlockLinkLoop(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		node.streams.handleData(&agentpb.Envelope{
-			Payload: &agentpb.Envelope_MeshStreamData{MeshStreamData: &agentpb.MeshStreamData{
+		node.streams.handleData(&v2pb.MeshEnvelope{
+			Payload: &v2pb.MeshEnvelope_StreamData{StreamData: &v2pb.MeshStreamData{
 				InitiatorNodeId: "peer",
 				StreamId:        1,
 				Chunk:           []byte("hello"),

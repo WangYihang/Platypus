@@ -1,22 +1,22 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // buildSignedLSA produces a properly-signed LSA for a fake origin so we
 // can test Ingest + routing without standing up real Nodes.
-func buildSignedLSA(t *testing.T, origin *Identity, seq uint64, links ...string) *agentpb.MeshLSA {
+func buildSignedLSA(t *testing.T, origin *Identity, seq uint64, links ...string) *v2pb.MeshLSA {
 	t.Helper()
-	linkMsgs := make([]*agentpb.MeshLSA_Link, 0, len(links))
+	linkMsgs := make([]*v2pb.MeshLSA_Link, 0, len(links))
 	for _, l := range links {
-		linkMsgs = append(linkMsgs, &agentpb.MeshLSA_Link{NodeId: l, Cost: 1})
+		linkMsgs = append(linkMsgs, &v2pb.MeshLSA_Link{NodeId: l, Cost: 1})
 	}
-	lsa := &agentpb.MeshLSA{
+	lsa := &v2pb.MeshLSA{
 		OriginNodeId: origin.NodeID,
 		Seq:          seq,
 		Links:        linkMsgs,

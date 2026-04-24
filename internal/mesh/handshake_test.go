@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/protocol"
 )
 
 // pipeConn is a minimal in-memory duplex pipe. Each half is an io.Pipe
@@ -55,8 +54,8 @@ func runHandshake(t *testing.T, clientID, serverID *Identity, clientPSK, serverP
 	defer clientConn.Close()
 	defer serverConn.Close()
 
-	clientCodec := protocol.NewProtoCodec(clientConn)
-	serverCodec := protocol.NewProtoCodec(serverConn)
+	clientCodec := newEnvCodec(clientConn)
+	serverCodec := newEnvCodec(serverConn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

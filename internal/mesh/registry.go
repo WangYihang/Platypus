@@ -1,11 +1,11 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"crypto/ed25519"
 	"sync"
 	"time"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // PeerRecord is one entry in the known-peer table. A record is kept as
@@ -218,15 +218,15 @@ func peerEqual(a, b *PeerRecord) bool {
 
 // ToNodeInfos converts registry records to wire-format NodeInfos, using
 // the given "now" as last_seen when a record has none.
-func (r *Registry) ToNodeInfos() []*agentpb.NodeInfo {
+func (r *Registry) ToNodeInfos() []*v2pb.NodeInfo {
 	snap := r.Snapshot()
-	out := make([]*agentpb.NodeInfo, 0, len(snap))
+	out := make([]*v2pb.NodeInfo, 0, len(snap))
 	for _, p := range snap {
 		last := p.LastSeen.Unix()
 		if last < 0 {
 			last = 0
 		}
-		out = append(out, &agentpb.NodeInfo{
+		out = append(out, &v2pb.NodeInfo{
 			NodeId:           p.NodeID,
 			Pubkey:           p.PublicKey,
 			Addresses:        append([]string(nil), p.Addresses...),

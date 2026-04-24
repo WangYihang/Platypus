@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"container/heap"
 	"crypto/ed25519"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const (
@@ -29,17 +29,17 @@ const (
 // concurrency-safe.
 type LSDB struct {
 	mu    sync.RWMutex
-	byOrg map[string]*agentpb.MeshLSA
+	byOrg map[string]*v2pb.MeshLSA
 }
 
 func newLSDB() *LSDB {
-	return &LSDB{byOrg: map[string]*agentpb.MeshLSA{}}
+	return &LSDB{byOrg: map[string]*v2pb.MeshLSA{}}
 }
 
 // Ingest stores lsa if its seq is strictly greater than the current
 // value for its origin, and its signature verifies. Returns true if the
 // LSDB changed.
-func (db *LSDB) Ingest(lsa *agentpb.MeshLSA) (bool, error) {
+func (db *LSDB) Ingest(lsa *v2pb.MeshLSA) (bool, error) {
 	if lsa == nil || lsa.OriginNodeId == "" {
 		return false, fmt.Errorf("empty lsa")
 	}
@@ -51,7 +51,7 @@ func (db *LSDB) Ingest(lsa *agentpb.MeshLSA) (bool, error) {
 	}
 	sig := lsa.Sig
 	// Verify against a copy with Sig blanked to a canonical empty value.
-	lsaCopy := proto.Clone(lsa).(*agentpb.MeshLSA)
+	lsaCopy := proto.Clone(lsa).(*v2pb.MeshLSA)
 	lsaCopy.Sig = nil
 	lsaCopy.FloodTtl = 0
 	canon, err := proto.Marshal(lsaCopy)
@@ -68,7 +68,7 @@ func (db *LSDB) Ingest(lsa *agentpb.MeshLSA) (bool, error) {
 	if existing != nil && existing.Seq >= lsa.Seq {
 		return false, nil
 	}
-	db.byOrg[lsa.OriginNodeId] = proto.Clone(lsa).(*agentpb.MeshLSA)
+	db.byOrg[lsa.OriginNodeId] = proto.Clone(lsa).(*v2pb.MeshLSA)
 	return true, nil
 }
 
@@ -94,12 +94,12 @@ func (db *LSDB) PurgeExpired(now time.Time) []string {
 }
 
 // Snapshot returns a defensive copy of every LSA in the DB.
-func (db *LSDB) Snapshot() []*agentpb.MeshLSA {
+func (db *LSDB) Snapshot() []*v2pb.MeshLSA {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	out := make([]*agentpb.MeshLSA, 0, len(db.byOrg))
+	out := make([]*v2pb.MeshLSA, 0, len(db.byOrg))
 	for _, lsa := range db.byOrg {
-		out = append(out, proto.Clone(lsa).(*agentpb.MeshLSA))
+		out = append(out, proto.Clone(lsa).(*v2pb.MeshLSA))
 	}
 	return out
 }

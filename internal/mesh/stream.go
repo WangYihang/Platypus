@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const (
@@ -70,16 +70,16 @@ func (m *streamManager) DialBootstrap(ctx context.Context, targetNodeID string) 
 		id:        m.nextStreamID(),
 	}, targetNodeID, internal, true)
 
-	open := &agentpb.MeshStreamOpen{
+	open := &v2pb.MeshStreamOpen{
 		InitiatorNodeId: m.node.NodeID(),
 		StreamId:        st.key.id,
 		TargetNodeId:    targetNodeID,
-		Kind:            agentpb.MeshStreamKind_MESH_STREAM_KIND_BOOTSTRAP_SERVER,
+		Kind:            v2pb.MeshStreamKind_MESH_STREAM_KIND_BOOTSTRAP_SERVER,
 	}
-	if err := m.node.SendTo(targetNodeID, &agentpb.Envelope{
+	if err := m.node.SendTo(targetNodeID, &v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload:   &agentpb.Envelope_MeshStreamOpen{MeshStreamOpen: open},
+		Payload:   &v2pb.MeshEnvelope_StreamOpen{StreamOpen: open},
 	}); err != nil {
 		closeConns(local, internal)
 		m.drop(st.key)
@@ -103,12 +103,12 @@ func (m *streamManager) DialBootstrap(ctx context.Context, targetNodeID string) 
 	return local, nil
 }
 
-func (m *streamManager) handleOpen(env *agentpb.Envelope) {
-	msg := env.GetMeshStreamOpen()
+func (m *streamManager) handleOpen(env *v2pb.MeshEnvelope) {
+	msg := env.GetStreamOpen()
 	if msg == nil {
 		return
 	}
-	if msg.Kind != agentpb.MeshStreamKind_MESH_STREAM_KIND_BOOTSTRAP_SERVER {
+	if msg.Kind != v2pb.MeshStreamKind_MESH_STREAM_KIND_BOOTSTRAP_SERVER {
 		m.sendOpenAck(msg.InitiatorNodeId, msg.StreamId, false, "unsupported stream kind")
 		return
 	}
@@ -134,8 +134,8 @@ func (m *streamManager) handleOpen(env *agentpb.Envelope) {
 	go m.pumpOutbound(st)
 }
 
-func (m *streamManager) handleOpenAck(env *agentpb.Envelope) {
-	msg := env.GetMeshStreamOpenAck()
+func (m *streamManager) handleOpenAck(env *v2pb.MeshEnvelope) {
+	msg := env.GetStreamOpenAck()
 	if msg == nil {
 		return
 	}
@@ -154,8 +154,8 @@ func (m *streamManager) handleOpenAck(env *agentpb.Envelope) {
 	st.opened = msg.Ok
 }
 
-func (m *streamManager) handleData(env *agentpb.Envelope) {
-	msg := env.GetMeshStreamData()
+func (m *streamManager) handleData(env *v2pb.MeshEnvelope) {
+	msg := env.GetStreamData()
 	if msg == nil {
 		return
 	}
@@ -176,8 +176,8 @@ func (m *streamManager) handleData(env *agentpb.Envelope) {
 	}
 }
 
-func (m *streamManager) handleClose(env *agentpb.Envelope) {
-	msg := env.GetMeshStreamClose()
+func (m *streamManager) handleClose(env *v2pb.MeshEnvelope) {
+	msg := env.GetStreamClose()
 	if msg == nil {
 		return
 	}
@@ -311,10 +311,10 @@ func (m *streamManager) sendOpenAck(initiator string, streamID uint64, ok bool, 
 	if initiator == "" {
 		return
 	}
-	_ = m.node.SendTo(initiator, &agentpb.Envelope{
+	_ = m.node.SendTo(initiator, &v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload: &agentpb.Envelope_MeshStreamOpenAck{MeshStreamOpenAck: &agentpb.MeshStreamOpenAck{
+		Payload: &v2pb.MeshEnvelope_StreamOpenAck{StreamOpenAck: &v2pb.MeshStreamOpenAck{
 			InitiatorNodeId: initiator,
 			StreamId:        streamID,
 			Ok:              ok,
@@ -324,10 +324,10 @@ func (m *streamManager) sendOpenAck(initiator string, streamID uint64, ok bool, 
 }
 
 func (m *streamManager) sendData(st *streamState, chunk []byte, eof bool) error {
-	return m.node.SendTo(st.peerNode, &agentpb.Envelope{
+	return m.node.SendTo(st.peerNode, &v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload: &agentpb.Envelope_MeshStreamData{MeshStreamData: &agentpb.MeshStreamData{
+		Payload: &v2pb.MeshEnvelope_StreamData{StreamData: &v2pb.MeshStreamData{
 			InitiatorNodeId: st.key.initiator,
 			StreamId:        st.key.id,
 			Chunk:           chunk,
@@ -337,10 +337,10 @@ func (m *streamManager) sendData(st *streamState, chunk []byte, eof bool) error 
 }
 
 func (m *streamManager) sendClose(st *streamState, reason string) {
-	_ = m.node.SendTo(st.peerNode, &agentpb.Envelope{
+	_ = m.node.SendTo(st.peerNode, &v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload: &agentpb.Envelope_MeshStreamClose{MeshStreamClose: &agentpb.MeshStreamClose{
+		Payload: &v2pb.MeshEnvelope_StreamClose{StreamClose: &v2pb.MeshStreamClose{
 			InitiatorNodeId: st.key.initiator,
 			StreamId:        st.key.id,
 			Reason:          reason,

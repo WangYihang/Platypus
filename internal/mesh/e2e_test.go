@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"crypto/tls"
 	"log/slog"
@@ -9,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // boot starts a Node on a random local port and stands up a minimal
@@ -108,7 +108,7 @@ func TestE2EThreeNodeRouting(t *testing.T) {
 
 	// Install a payload handler on C so we can observe delivery.
 	received := make(chan struct{}, 1)
-	c.SetPayloadHandler(func(peer string, env *agentpb.Envelope) {
+	c.SetPayloadHandler(func(peer string, env *v2pb.MeshEnvelope) {
 		// The peer that actually delivered may be B (forwarder), but the
 		// envelope's SourceNode must be A.
 		if env.SourceNode == a.NodeID() {
@@ -119,12 +119,12 @@ func TestE2EThreeNodeRouting(t *testing.T) {
 		}
 	})
 
-	// Send a ping envelope (any payload works — we reuse ExecRequest as
-	// a harmless canary here).
-	err := a.SendTo(c.NodeID(), &agentpb.Envelope{
-		Payload: &agentpb.Envelope_ExecRequest{
-			ExecRequest: &agentpb.ExecRequest{Command: "e2e-ping"},
-		},
+	// Send a ping envelope. The Opaque oneof member is intentionally
+	// ignored by the mesh-control dispatch and forwarded straight to
+	// the payload handler — exactly the routing semantic we want to
+	// verify.
+	err := a.SendTo(c.NodeID(), &v2pb.MeshEnvelope{
+		Payload: &v2pb.MeshEnvelope_Opaque{Opaque: []byte("e2e-ping")},
 	})
 	if err != nil {
 		t.Fatalf("SendTo: %v", err)

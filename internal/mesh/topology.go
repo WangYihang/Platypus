@@ -1,10 +1,10 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"sort"
 	"time"
 
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // MeshNodeInfo is the topology-facing record for a single participant
@@ -81,7 +81,7 @@ func (n *Node) Topology() *MeshTopology {
 	edges := map[[2]string]*MeshEdgeInfo{}
 	// LSDB.Snapshot returns a slice; rekey it by origin_node_id
 	// for easier iteration below.
-	lsdbByOrigin := make(map[string]*agentpb.MeshLSA, len(lsdbSnap))
+	lsdbByOrigin := make(map[string]*v2pb.MeshLSA, len(lsdbSnap))
 	for _, lsa := range lsdbSnap {
 		lsdbByOrigin[lsa.OriginNodeId] = lsa
 	}

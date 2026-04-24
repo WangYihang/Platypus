@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"crypto/ed25519"
 	"io"
 	"log/slog"
@@ -9,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/protocol"
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const (
@@ -28,7 +27,7 @@ type Link struct {
 	PeerAddresses []string
 
 	conn  net.Conn
-	codec *protocol.ProtoCodec
+	codec *envCodec
 	node  *Node
 
 	closeOnce sync.Once
@@ -90,7 +89,7 @@ func (l *Link) Stats() LinkStats {
 // MeshKeepalive arrives. It updates RTT (if the peer echoed our last
 // outbound keepalive's send time through in-flight timing) and
 // captures the peer's reported lifetime counters.
-func (l *Link) observeInboundKeepalive(ka *agentpb.MeshKeepalive) {
+func (l *Link) observeInboundKeepalive(ka *v2pb.MeshKeepalive) {
 	if last := l.lastOutboundKeepaliveNs.Load(); last != 0 {
 		rtt := time.Now().UnixNano() - last
 		if rtt > 0 {
@@ -105,7 +104,7 @@ func (l *Link) observeInboundKeepalive(ka *agentpb.MeshKeepalive) {
 
 func newLink(
 	conn net.Conn,
-	codec *protocol.ProtoCodec,
+	codec *envCodec,
 	peer string,
 	peerPub ed25519.PublicKey,
 	peerAddrs []string,
@@ -128,7 +127,7 @@ func newLink(
 
 // Send serialises an envelope onto the link. It is safe to call from
 // multiple goroutines (ProtoCodec guards writes with a mutex).
-func (l *Link) Send(env *agentpb.Envelope) error {
+func (l *Link) Send(env *v2pb.MeshEnvelope) error {
 	return l.codec.Send(env)
 }
 
@@ -195,11 +194,11 @@ func (l *Link) keepaliveLoop(stop chan struct{}) {
 			// measurement on the reply is never negative even if
 			// the peer ack'd it sub-microsecond.
 			l.lastOutboundKeepaliveNs.Store(now)
-			err := l.Send(&agentpb.Envelope{
+			err := l.Send(&v2pb.MeshEnvelope{
 				Version:   meshProtocolVersion,
 				Timestamp: now,
-				Payload: &agentpb.Envelope_MeshKeepalive{
-					MeshKeepalive: &agentpb.MeshKeepalive{
+				Payload: &v2pb.MeshEnvelope_Keepalive{
+					Keepalive: &v2pb.MeshKeepalive{
 						SentAt:           now,
 						LifetimeBytesIn:  l.codec.BytesRecv(),
 						LifetimeBytesOut: l.codec.BytesSent(),

@@ -1,0 +1,190 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// Mesh protocol messages. Platypus agents + server form a self-
+// organising overlay: each node has an Ed25519 long-term identity key,
+// NodeID = base32(SHA256(pubkey))[:32] (self-certifying). Links are
+// gated by an application-level handshake (MeshHello / MeshHelloAck)
+// over an already-established TLS transport, and a network-wide PSK
+// proves both sides belong to the same overlay. Once a link is up,
+// nodes exchange known-peer tables (MeshPeerAnnounce / Delta) and
+// link-state advertisements (MeshLSA); every node runs Dijkstra on
+// its LSDB and installs a next-hop table for forwarding.
+//
+// Wire format on each TLS connection: [4B BE length][MeshEnvelope
+// proto bytes]. The receiver unmarshals the envelope, dispatches on
+// the oneof, and decrements TTL + forwards when target_node is set
+// and doesn't match the local NodeID.
+//
+// These messages used to live in pkg/proto/agent/v1/agent.proto as
+// part of the catch-all Envelope oneof. They moved here as part of
+// Phase IV (Mesh hardening) so the v1 proto package can be deleted.
+
+// MeshEnvelope is the top-level mesh frame. One envelope per send.
+message MeshEnvelope {
+  uint32 version    = 1; // mesh protocol version (current = 1)
+  string request_id = 2; // UUID for request/response correlation
+  int64  timestamp  = 3; // unix nanoseconds
+
+  // Routing fields. target_node empty means "for the immediate
+  // peer on this link"; otherwise the receiver forwards along its
+  // routing table toward that node, decrementing ttl.
+  string source_node = 4;
+  string target_node = 5;
+  uint32 ttl         = 6;
+
+  oneof payload {
+    // Link handshake + keepalive
+    MeshHello     hello     = 10;
+    MeshHelloAck  hello_ack = 11;
+    MeshKeepalive keepalive = 12;
+
+    // Peer-table gossip
+    MeshPeerAnnounce peer_announce = 20;
+    MeshPeerDelta    peer_delta    = 21;
+
+    // Link-state routing
+    MeshLSA         lsa         = 30;
+    MeshUnreachable unreachable = 31;
+
+    // Multiplexed byte streams for bootstrap
+    MeshStreamOpen    stream_open     = 40;
+    MeshStreamOpenAck stream_open_ack = 41;
+    MeshStreamData    stream_data     = 42;
+    MeshStreamClose   stream_close    = 43;
+
+    // Opaque payload: reserved for non-mesh-control data that still
+    // wants to ride the routing layer (end-to-end app messages,
+    // routing-reachability tests). The node dispatcher hands these
+    // off to the application-level PayloadHandler rather than
+    // interpreting them.
+    bytes opaque = 50;
+  }
+}
+
+// NodeInfo is the minimal peer-table record: enough to attempt a
+// connection plus the pubkey so recipients can re-derive + verify
+// the node_id locally.
+message NodeInfo {
+  string node_id    = 1; // base32(sha256(pubkey))[:32]
+  bytes  pubkey     = 2; // 32-byte Ed25519 public key
+  repeated string addresses = 3; // host:port entries the node listens on
+  int64  last_seen  = 4; // unix seconds — observer's wall clock
+  string role       = 5; // "agent", "server", ...
+  bool   bootstrap_service = 6; // true if node accepts bootstrap streams
+}
+
+// MeshHello is the first application-level frame on a new mesh link
+// (dialer sends it, listener replies with MeshHelloAck).
+message MeshHello {
+  string node_id  = 1;
+  bytes  pubkey   = 2; // 32-byte Ed25519 public key
+  bytes  nonce    = 3; // 32 random bytes
+  bytes  psk_mac  = 4; // HMAC-SHA256(PSK, "platypus-mesh-hello"||pubkey||nonce)
+  uint32 protocol = 5; // mesh protocol version (current = 1)
+  repeated string addresses = 6; // advertised listen addresses
+}
+
+// MeshHelloAck is the reply. sig proves the responder holds the
+// private key matching pubkey by signing the concatenated nonces +
+// peer node_id (prevents replay and identity swap).
+message MeshHelloAck {
+  string node_id  = 1;
+  bytes  pubkey   = 2;
+  bytes  nonce    = 3;
+  bytes  psk_mac  = 4; // HMAC-SHA256(PSK, "platypus-mesh-hello-ack"||pubkey||nonce)
+  bytes  sig      = 5; // Ed25519_sign(priv, peer_nonce||own_nonce||peer_node_id)
+  uint32 protocol = 6;
+  repeated string addresses = 7;
+}
+
+// MeshKeepalive is a periodic heartbeat. Either side may send one;
+// links with no traffic for ~90s are torn down. It doubles as the
+// traffic-counter piggyback so the topology aggregator can light
+// up edge weights and derive throughput via successive-tick deltas.
+message MeshKeepalive {
+  int64  sent_at            = 1; // unix nanos, for RTT measurement
+  uint64 lifetime_bytes_in  = 2;
+  uint64 lifetime_bytes_out = 3;
+  uint64 lifetime_msgs_in   = 4;
+  uint64 lifetime_msgs_out  = 5;
+}
+
+// MeshPeerAnnounce: sent once per direction after a handshake
+// completes, carrying the sender's full known-peer table so the
+// other side can quickly learn the wider mesh.
+message MeshPeerAnnounce {
+  repeated NodeInfo nodes = 1;
+}
+
+// MeshPeerDelta: incremental update broadcast to every directly-
+// connected neighbour when the sender's known-peer set changes.
+// seq is monotonic per origin_node_id so receivers deduplicate
+// across flooding paths.
+message MeshPeerDelta {
+  string origin_node_id = 1;
+  uint64 seq            = 2;
+  repeated NodeInfo added = 3;
+  repeated string removed_ids = 4;
+  uint32 ttl            = 5; // flood TTL, distinct from envelope.ttl
+}
+
+// MeshLSA: link-state advertisement. Each node periodically (and on
+// adjacency change) signs and floods a description of its directly
+// connected neighbours. Only the node identified by origin_node_id
+// can produce a valid signature; receivers discard duplicates by
+// (origin_node_id, seq).
+message MeshLSA {
+  message Link {
+    string node_id = 1; // neighbour's node_id
+    uint32 cost    = 2; // abstract cost (1 by default; RTT-based later)
+  }
+
+  string origin_node_id = 1;
+  uint64 seq            = 2; // monotonic per origin
+  int64  expires_at     = 3; // unix seconds
+  repeated Link links   = 4;
+  bytes  pubkey         = 5; // for convenience; must match origin_node_id
+  bytes  sig            = 6; // Ed25519_sign(priv, canonical(lsa without sig))
+  uint32 flood_ttl      = 7;
+}
+
+// MeshUnreachable: sent back along the reverse path when a
+// forwarding node has no route for an envelope's target_node.
+message MeshUnreachable {
+  string target_node = 1;
+  string reason      = 2;
+}
+
+enum MeshStreamKind {
+  MESH_STREAM_KIND_UNSPECIFIED = 0;
+  MESH_STREAM_KIND_BOOTSTRAP_SERVER = 1;
+}
+
+message MeshStreamOpen {
+  string         initiator_node_id = 1;
+  uint64         stream_id         = 2;
+  string         target_node_id    = 3;
+  MeshStreamKind kind              = 4;
+}
+
+message MeshStreamOpenAck {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  bool   ok                = 3;
+  string error             = 4;
+}
+
+message MeshStreamData {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  bytes  chunk             = 3;
+  bool   eof               = 4;
+}
+
+message MeshStreamClose {
+  string initiator_node_id = 1;
+  uint64 stream_id         = 2;
+  string reason            = 3;
+}

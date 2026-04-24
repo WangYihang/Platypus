@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,15 +13,13 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/WangYihang/Platypus/internal/protocol"
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 // PayloadHandler is invoked for every envelope whose target_node matches
 // the local NodeID (i.e. addressed to us, not to be forwarded). The
 // mesh package deliberately knows nothing about process/tunnel/exec
 // semantics — upper layers plug their existing dispatcher in here.
-type PayloadHandler func(peer string, env *agentpb.Envelope)
+type PayloadHandler func(peer string, env *v2pb.MeshEnvelope)
 
 // Node is the top-level mesh participant. Each platypus-agent and
 // platypus-server instance owns exactly one.
@@ -160,7 +159,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 // SendTo routes env toward dst, filling in source_node/target_node/ttl.
 // Returns an error if there's no path to dst.
-func (n *Node) SendTo(dst string, env *agentpb.Envelope) error {
+func (n *Node) SendTo(dst string, env *v2pb.MeshEnvelope) error {
 	if env == nil {
 		return fmt.Errorf("mesh: nil envelope")
 	}
@@ -204,7 +203,7 @@ func (n *Node) AcceptRaw(ctx context.Context, conn net.Conn) {
 	// it once keepalive is driving the liveness check.
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 
-	codec := protocol.NewProtoCodec(conn)
+	codec := newEnvCodec(conn)
 	result, err := PerformServerHandshake(ctx, codec, n.identity, n.psk, n.advertisedAddrs())
 	if err != nil {
 		n.logger.Debug("mesh inbound handshake failed",
@@ -262,11 +261,11 @@ func (n *Node) onLinkUp(l *Link) {
 	n.notifyObservers(func(o LinkObserver) { o.OnLinkUp(l.PeerNodeID, l.RemoteAddr) })
 	// Kick off a full announce to the new neighbour so it learns our
 	// known peers right away.
-	announce := &agentpb.MeshPeerAnnounce{Nodes: n.registry.ToNodeInfos()}
-	_ = l.Send(&agentpb.Envelope{
+	announce := &v2pb.MeshPeerAnnounce{Nodes: n.registry.ToNodeInfos()}
+	_ = l.Send(&v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload:   &agentpb.Envelope_MeshPeerAnnounce{MeshPeerAnnounce: announce},
+		Payload:   &v2pb.MeshEnvelope_PeerAnnounce{PeerAnnounce: announce},
 	})
 	// And re-broadcast our LSA to incorporate the new neighbour.
 	n.publishLocalLSA()
@@ -343,7 +342,7 @@ func (n *Node) directPeerSet() map[string]struct{} {
 // ------------------------------------------------------------------
 // Inbound envelope routing
 
-func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
+func (n *Node) handleIncoming(from *Link, env *v2pb.MeshEnvelope) {
 	if env.TargetNode != "" && env.TargetNode != n.identity.NodeID {
 		n.forward(from, env)
 		return
@@ -351,36 +350,36 @@ func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
 
 	// Decide: mesh-control payload, locally-destined payload, or forward.
 	switch p := env.Payload.(type) {
-	case *agentpb.Envelope_MeshKeepalive:
+	case *v2pb.MeshEnvelope_Keepalive:
 		// Updates the link's RTT from our last outbound keepalive
 		// timestamp and captures the peer-reported lifetime
 		// counters for cross-checking against the local codec.
-		from.observeInboundKeepalive(p.MeshKeepalive)
+		from.observeInboundKeepalive(p.Keepalive)
 		return
-	case *agentpb.Envelope_MeshPeerAnnounce:
-		n.ingestAnnounce(from, p.MeshPeerAnnounce)
+	case *v2pb.MeshEnvelope_PeerAnnounce:
+		n.ingestAnnounce(from, p.PeerAnnounce)
 		return
-	case *agentpb.Envelope_MeshPeerDelta:
-		n.ingestDelta(from, p.MeshPeerDelta)
+	case *v2pb.MeshEnvelope_PeerDelta:
+		n.ingestDelta(from, p.PeerDelta)
 		return
-	case *agentpb.Envelope_MeshLsa:
-		n.ingestLSA(from, p.MeshLsa)
+	case *v2pb.MeshEnvelope_Lsa:
+		n.ingestLSA(from, p.Lsa)
 		return
-	case *agentpb.Envelope_MeshUnreachable:
+	case *v2pb.MeshEnvelope_Unreachable:
 		n.logger.Info("mesh unreachable notice",
-			slog.String("target", p.MeshUnreachable.TargetNode),
-			slog.String("reason", p.MeshUnreachable.Reason))
+			slog.String("target", p.Unreachable.TargetNode),
+			slog.String("reason", p.Unreachable.Reason))
 		return
-	case *agentpb.Envelope_MeshStreamOpen:
+	case *v2pb.MeshEnvelope_StreamOpen:
 		n.streams.handleOpen(env)
 		return
-	case *agentpb.Envelope_MeshStreamOpenAck:
+	case *v2pb.MeshEnvelope_StreamOpenAck:
 		n.streams.handleOpenAck(env)
 		return
-	case *agentpb.Envelope_MeshStreamData:
+	case *v2pb.MeshEnvelope_StreamData:
 		n.streams.handleData(env)
 		return
-	case *agentpb.Envelope_MeshStreamClose:
+	case *v2pb.MeshEnvelope_StreamClose:
 		n.streams.handleClose(env)
 		return
 	}
@@ -393,7 +392,7 @@ func (n *Node) handleIncoming(from *Link, env *agentpb.Envelope) {
 	}
 }
 
-func (n *Node) forward(from *Link, env *agentpb.Envelope) {
+func (n *Node) forward(from *Link, env *v2pb.MeshEnvelope) {
 	if env.Ttl == 0 {
 		return
 	}
@@ -401,14 +400,14 @@ func (n *Node) forward(from *Link, env *agentpb.Envelope) {
 	next := n.routes.NextHop(env.TargetNode)
 	if next == "" {
 		// Tell the originator there's no path.
-		unreachable := &agentpb.Envelope{
+		unreachable := &v2pb.MeshEnvelope{
 			Version:    meshProtocolVersion,
 			Timestamp:  time.Now().UnixNano(),
 			SourceNode: n.identity.NodeID,
 			TargetNode: env.SourceNode,
 			Ttl:        maxEnvelopeTTL,
-			Payload: &agentpb.Envelope_MeshUnreachable{
-				MeshUnreachable: &agentpb.MeshUnreachable{
+			Payload: &v2pb.MeshEnvelope_Unreachable{
+				Unreachable: &v2pb.MeshUnreachable{
 					TargetNode: env.TargetNode,
 					Reason:     "no route",
 				},
@@ -434,7 +433,7 @@ func (n *Node) forward(from *Link, env *agentpb.Envelope) {
 // ------------------------------------------------------------------
 // Gossip ingest
 
-func (n *Node) ingestAnnounce(from *Link, ann *agentpb.MeshPeerAnnounce) {
+func (n *Node) ingestAnnounce(from *Link, ann *v2pb.MeshPeerAnnounce) {
 	for _, ni := range ann.GetNodes() {
 		if ni == nil || ni.NodeId == n.identity.NodeID {
 			continue
@@ -453,7 +452,7 @@ func (n *Node) ingestAnnounce(from *Link, ann *agentpb.MeshPeerAnnounce) {
 	}
 }
 
-func (n *Node) ingestDelta(from *Link, delta *agentpb.MeshPeerDelta) {
+func (n *Node) ingestDelta(from *Link, delta *v2pb.MeshPeerDelta) {
 	if delta.OriginNodeId == "" {
 		return
 	}
@@ -492,19 +491,19 @@ func (n *Node) ingestDelta(from *Link, delta *agentpb.MeshPeerDelta) {
 	}
 	// Re-flood if this node wasn't the origin and we still have hops left.
 	if delta.Ttl > 1 {
-		relay := proto.Clone(delta).(*agentpb.MeshPeerDelta)
+		relay := proto.Clone(delta).(*v2pb.MeshPeerDelta)
 		relay.Ttl--
-		out := &agentpb.Envelope{
+		out := &v2pb.MeshEnvelope{
 			Version:   meshProtocolVersion,
 			Timestamp: time.Now().UnixNano(),
-			Payload:   &agentpb.Envelope_MeshPeerDelta{MeshPeerDelta: relay},
+			Payload:   &v2pb.MeshEnvelope_PeerDelta{PeerDelta: relay},
 		}
 		n.floodToAll(from, out)
 	}
 	_ = changed
 }
 
-func (n *Node) ingestLSA(from *Link, lsa *agentpb.MeshLSA) {
+func (n *Node) ingestLSA(from *Link, lsa *v2pb.MeshLSA) {
 	changed, err := n.lsdb.Ingest(lsa)
 	if err != nil {
 		n.logger.Debug("lsa rejected", slog.String("error", err.Error()))
@@ -515,12 +514,12 @@ func (n *Node) ingestLSA(from *Link, lsa *agentpb.MeshLSA) {
 	}
 	n.recomputeRoutes()
 	if lsa.FloodTtl > 1 {
-		relay := proto.Clone(lsa).(*agentpb.MeshLSA)
+		relay := proto.Clone(lsa).(*v2pb.MeshLSA)
 		relay.FloodTtl--
-		out := &agentpb.Envelope{
+		out := &v2pb.MeshEnvelope{
 			Version:   meshProtocolVersion,
 			Timestamp: time.Now().UnixNano(),
-			Payload:   &agentpb.Envelope_MeshLsa{MeshLsa: relay},
+			Payload:   &v2pb.MeshEnvelope_Lsa{Lsa: relay},
 		}
 		n.floodToAll(from, out)
 	}
@@ -528,7 +527,7 @@ func (n *Node) ingestLSA(from *Link, lsa *agentpb.MeshLSA) {
 
 // floodToAll sends env to every direct peer except except (which is
 // usually the link the frame came in on, to avoid a trivial bounce-back).
-func (n *Node) floodToAll(except *Link, env *agentpb.Envelope) {
+func (n *Node) floodToAll(except *Link, env *v2pb.MeshEnvelope) {
 	for _, l := range n.linkSnapshot() {
 		if l == except {
 			continue
@@ -552,11 +551,11 @@ func (n *Node) publishLocalLSA() {
 	seq := n.lastLSASeq
 	n.linkMu.Unlock()
 
-	links := make([]*agentpb.MeshLSA_Link, 0, 4)
+	links := make([]*v2pb.MeshLSA_Link, 0, 4)
 	for peer := range n.directPeerSet() {
-		links = append(links, &agentpb.MeshLSA_Link{NodeId: peer, Cost: 1})
+		links = append(links, &v2pb.MeshLSA_Link{NodeId: peer, Cost: 1})
 	}
-	lsa := &agentpb.MeshLSA{
+	lsa := &v2pb.MeshLSA{
 		OriginNodeId: n.identity.NodeID,
 		Seq:          seq,
 		ExpiresAt:    time.Now().Add(lsaExpiry).Unix(),
@@ -565,7 +564,7 @@ func (n *Node) publishLocalLSA() {
 		FloodTtl:     maxFloodTTL,
 	}
 	// Sign over the canonical wire form without the sig or flood_ttl.
-	canonCopy := proto.Clone(lsa).(*agentpb.MeshLSA)
+	canonCopy := proto.Clone(lsa).(*v2pb.MeshLSA)
 	canonCopy.Sig = nil
 	canonCopy.FloodTtl = 0
 	canon, err := proto.Marshal(canonCopy)
@@ -579,10 +578,10 @@ func (n *Node) publishLocalLSA() {
 		n.logger.Error("self-lsa rejected", slog.String("error", err.Error()))
 	}
 	n.recomputeRoutes()
-	env := &agentpb.Envelope{
+	env := &v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
-		Payload:   &agentpb.Envelope_MeshLsa{MeshLsa: lsa},
+		Payload:   &v2pb.MeshEnvelope_Lsa{Lsa: lsa},
 	}
 	n.floodToAll(nil, env)
 }
@@ -602,7 +601,7 @@ func (n *Node) registryLoop(ctx context.Context) {
 			if ev.NodeID == "" || ev.NodeID == n.identity.NodeID {
 				continue
 			}
-			delta := &agentpb.MeshPeerDelta{
+			delta := &v2pb.MeshPeerDelta{
 				OriginNodeId: n.identity.NodeID,
 				Seq:          n.lastPeerDelta.Add(1),
 				Ttl:          maxFloodTTL,
@@ -612,7 +611,7 @@ func (n *Node) registryLoop(ctx context.Context) {
 				if ev.Record == nil {
 					continue
 				}
-				delta.Added = append(delta.Added, &agentpb.NodeInfo{
+				delta.Added = append(delta.Added, &v2pb.NodeInfo{
 					NodeId:           ev.Record.NodeID,
 					Pubkey:           ev.Record.PublicKey,
 					Addresses:        append([]string(nil), ev.Record.Addresses...),
@@ -625,10 +624,10 @@ func (n *Node) registryLoop(ctx context.Context) {
 			default:
 				continue
 			}
-			n.floodToAll(nil, &agentpb.Envelope{
+			n.floodToAll(nil, &v2pb.MeshEnvelope{
 				Version:   meshProtocolVersion,
 				Timestamp: time.Now().UnixNano(),
-				Payload:   &agentpb.Envelope_MeshPeerDelta{MeshPeerDelta: delta},
+				Payload:   &v2pb.MeshEnvelope_PeerDelta{PeerDelta: delta},
 			})
 		}
 	}

@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
 	"crypto/ed25519"
 	"crypto/hmac"
@@ -11,8 +12,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/protocol"
-	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
 const (
@@ -103,7 +102,7 @@ func validateHelloCommon(
 // returns the peer's identity.
 func PerformClientHandshake(
 	ctx context.Context,
-	codec *protocol.ProtoCodec,
+	codec *envCodec,
 	id *Identity,
 	psk []byte,
 	advertisedAddrs []string,
@@ -116,7 +115,7 @@ func PerformClientHandshake(
 		return nil, handshakeError("nonce_gen", err.Error())
 	}
 
-	hello := &agentpb.MeshHello{
+	hello := &v2pb.MeshHello{
 		NodeId:    id.NodeID,
 		Pubkey:    id.PublicKey,
 		Nonce:     helloNonce,
@@ -124,10 +123,10 @@ func PerformClientHandshake(
 		Protocol:  meshProtocolVersion,
 		Addresses: advertisedAddrs,
 	}
-	if err := sendWithCtx(ctx, codec, &agentpb.Envelope{
+	if err := sendWithCtx(ctx, codec, &v2pb.MeshEnvelope{
 		Timestamp: time.Now().UnixNano(),
 		Version:   meshProtocolVersion,
-		Payload:   &agentpb.Envelope_MeshHello{MeshHello: hello},
+		Payload:   &v2pb.MeshEnvelope_Hello{Hello: hello},
 	}); err != nil {
 		return nil, handshakeError("send_hello", err.Error())
 	}
@@ -136,11 +135,11 @@ func PerformClientHandshake(
 	if err != nil {
 		return nil, handshakeError("recv_ack", err.Error())
 	}
-	ack, ok := env.Payload.(*agentpb.Envelope_MeshHelloAck)
+	ack, ok := env.Payload.(*v2pb.MeshEnvelope_HelloAck)
 	if !ok {
 		return nil, handshakeError("recv_ack", "unexpected payload")
 	}
-	a := ack.MeshHelloAck
+	a := ack.HelloAck
 	if err := validateHelloCommon(psk, pskDomainHelloAck, a.NodeId, a.Pubkey, a.Nonce, a.PskMac, a.Protocol); err != nil {
 		return nil, err
 	}
@@ -160,7 +159,7 @@ func PerformClientHandshake(
 // MeshHelloAck.
 func PerformServerHandshake(
 	ctx context.Context,
-	codec *protocol.ProtoCodec,
+	codec *envCodec,
 	id *Identity,
 	psk []byte,
 	advertisedAddrs []string,
@@ -172,11 +171,11 @@ func PerformServerHandshake(
 	if err != nil {
 		return nil, handshakeError("recv_hello", err.Error())
 	}
-	hello, ok := env.Payload.(*agentpb.Envelope_MeshHello)
+	hello, ok := env.Payload.(*v2pb.MeshEnvelope_Hello)
 	if !ok {
 		return nil, handshakeError("recv_hello", "unexpected payload")
 	}
-	h := hello.MeshHello
+	h := hello.Hello
 	if err := validateHelloCommon(psk, pskDomainHello, h.NodeId, h.Pubkey, h.Nonce, h.PskMac, h.Protocol); err != nil {
 		return nil, err
 	}
@@ -189,7 +188,7 @@ func PerformServerHandshake(
 		return nil, handshakeError("nonce_gen", err.Error())
 	}
 	sig := ed25519.Sign(id.PrivateKey, sigMessage(h.Nonce, ackNonce, h.NodeId))
-	ack := &agentpb.MeshHelloAck{
+	ack := &v2pb.MeshHelloAck{
 		NodeId:    id.NodeID,
 		Pubkey:    id.PublicKey,
 		Nonce:     ackNonce,
@@ -198,10 +197,10 @@ func PerformServerHandshake(
 		Protocol:  meshProtocolVersion,
 		Addresses: advertisedAddrs,
 	}
-	if err := sendWithCtx(ctx, codec, &agentpb.Envelope{
+	if err := sendWithCtx(ctx, codec, &v2pb.MeshEnvelope{
 		Timestamp: time.Now().UnixNano(),
 		Version:   meshProtocolVersion,
-		Payload:   &agentpb.Envelope_MeshHelloAck{MeshHelloAck: ack},
+		Payload:   &v2pb.MeshEnvelope_HelloAck{HelloAck: ack},
 	}); err != nil {
 		return nil, handshakeError("send_ack", err.Error())
 	}
@@ -216,7 +215,7 @@ func PerformServerHandshake(
 // handshake honours context cancellation. The ProtoCodec itself blocks
 // on its underlying ReadWriter, which doesn't accept a deadline, so we
 // wrap it.
-func sendWithCtx(ctx context.Context, codec *protocol.ProtoCodec, env *agentpb.Envelope) error {
+func sendWithCtx(ctx context.Context, codec *envCodec, env *v2pb.MeshEnvelope) error {
 	done := make(chan error, 1)
 	go func() { done <- codec.Send(env) }()
 	select {
@@ -227,9 +226,9 @@ func sendWithCtx(ctx context.Context, codec *protocol.ProtoCodec, env *agentpb.E
 	}
 }
 
-func recvWithCtx(ctx context.Context, codec *protocol.ProtoCodec) (*agentpb.Envelope, error) {
+func recvWithCtx(ctx context.Context, codec *envCodec) (*v2pb.MeshEnvelope, error) {
 	type result struct {
-		env *agentpb.Envelope
+		env *v2pb.MeshEnvelope
 		err error
 	}
 	done := make(chan result, 1)
