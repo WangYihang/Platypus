@@ -105,13 +105,28 @@ export async function PickSaveLocation(_title: string, defaultName: string): Pro
     return id;
 }
 
+// All file operations target the v2 agent RPC surface. `sessionHash` is
+// carried as the legacy parameter name but its value is actually the v2
+// agent_id (which is also the session id — see internal/core.AgentLinkService).
+//
+// v2 REST contract (internal/api/handler_file_v2.go + handler_rpc_v2.go):
+//   GET    /api/v1/agents/:id/fs/read?path=&offset=&length=   → octet-stream
+//   PUT    /api/v1/agents/:id/fs/write?path=&append=&mkdirs=  → { bytes_written }
+//   GET    /api/v1/agents/:id/fs/list?path=                   → { entries }
+//   GET    /api/v1/agents/:id/fs/stat?path=                   → { entry }
+//   DELETE /api/v1/agents/:id/fs/remove?path=&recursive=      → 200 or 502
+//   POST   /api/v1/agents/:id/fs/rename?from=&to=             → 200 or 502
+//   POST   /api/v1/agents/:id/fs/mkdir?path=&mkdirs=&mode=    → 200 or 502
+//   PATCH  /api/v1/agents/:id/fs/mode?path=&mode=             → 200 or 502
+// Errors surface as HTTP 4xx/5xx bodies; authFetch throws those automatically.
+
+function fsURL(agentID: string, suffix: string): string {
+    return `/api/v1/agents/${encodeURIComponent(agentID)}/fs/${suffix}`;
+}
+
 export async function FileSize(sessionHash: string, path: string): Promise<number> {
-    const q = new URLSearchParams({ path });
-    const resp = await apiJSON<{ status: boolean; size?: number; error?: string }>(
-        `/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/size?${q}`,
-    );
-    if (!resp.status) throw new Error(resp.error || "size failed");
-    return resp.size || 0;
+    const entry = await StatFile(sessionHash, path);
+    return entry.size || 0;
 }
 
 const CHUNK_SIZE = 256 * 1024;
@@ -125,9 +140,9 @@ export async function ReadFile(
     const q = new URLSearchParams({
         path,
         offset: String(offset),
-        size: String(size),
+        length: String(size),
     });
-    const r = await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`);
+    const r = await apiFetch(fsURL(sessionHash, `read?${q}`));
     const buf = new Uint8Array(await r.arrayBuffer());
     return Array.from(buf);
 }
@@ -139,8 +154,8 @@ export async function WriteFile(
     appendMode: boolean,
 ): Promise<void> {
     const q = new URLSearchParams({ path, append: String(appendMode) });
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
-        method: "POST",
+    await apiFetch(fsURL(sessionHash, `write?${q}`), {
+        method: "PUT",
         headers: { "Content-Type": "application/octet-stream" },
         body: new Uint8Array(data),
     });
@@ -154,25 +169,13 @@ export async function DownloadFile(
     const name = pendingDownloadNames.get(localPath) || "download.bin";
     pendingDownloadNames.delete(localPath);
 
-    const total = await FileSize(sessionHash, remotePath);
-    if (total === 0) throw new Error("remote file is empty or unreadable");
+    // v2 fs/read streams the whole file in a single HTTP response when
+    // offset=0 & length=0 — the server sets Content-Length on full
+    // downloads so the browser gets a proper progress bar.
+    const q = new URLSearchParams({ path: remotePath, offset: "0", length: "0" });
+    const r = await apiFetch(fsURL(sessionHash, `read?${q}`));
+    const blob = await r.blob();
 
-    // BlobPart[] (not Uint8Array[]) so TS 6+ accepts SharedArrayBuffer-
-    // backed byte arrays when passing to new Blob(...).
-    const parts: BlobPart[] = [];
-    for (let off = 0; off < total; off += CHUNK_SIZE) {
-        const want = Math.min(CHUNK_SIZE, total - off);
-        const q = new URLSearchParams({
-            path: remotePath,
-            offset: String(off),
-            size: String(want),
-        });
-        const r = await apiFetch(
-            `/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`,
-        );
-        parts.push(new Uint8Array(await r.arrayBuffer()));
-    }
-    const blob = new Blob(parts, { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -194,6 +197,16 @@ export async function UploadFile(
     pendingUploads.delete(localPath);
 
     const bytes = new Uint8Array(await f.arrayBuffer());
+    // Empty file: truncate the destination with an empty payload.
+    if (bytes.length === 0) {
+        const q = new URLSearchParams({ path: remotePath, append: "false" });
+        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+            method: "PUT",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: new Uint8Array(0),
+        });
+        return;
+    }
     // First chunk truncates, rest append — matches Go WriteFile semantics.
     for (let off = 0; off < bytes.length; off += CHUNK_SIZE) {
         const slice = bytes.subarray(off, Math.min(off + CHUNK_SIZE, bytes.length));
@@ -201,8 +214,8 @@ export async function UploadFile(
             path: remotePath,
             append: String(off > 0),
         });
-        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
-            method: "POST",
+        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+            method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: slice,
         });
@@ -231,39 +244,59 @@ export interface ListDirResult {
     eof: boolean;
 }
 
+// v2 wire shape for FileEntry (proto json tags from pkg/proto/v2/rpc.proto).
+// Directory / symlink type bits are encoded in the Go FileMode; we derive
+// the booleans the UI expects here so existing call sites keep working.
+interface V2FileEntry {
+    name: string;
+    mode: number;
+    size: number;
+    mtime_unix_nano: number;
+    symlink_target?: string;
+}
+
+// Go os.FileMode type bits (see src/os/types.go in the Go source):
+//   ModeDir      = 1 << 31
+//   ModeSymlink  = 1 << 27
+const GO_MODE_DIR = 1 << 31;
+const GO_MODE_SYMLINK = 1 << 27;
+
+function adaptEntry(e: V2FileEntry): FileEntryDTO {
+    return {
+        name: e.name,
+        size: e.size ?? 0,
+        mode: e.mode ?? 0,
+        modTimeUnix: e.mtime_unix_nano ?? 0,
+        isDir: ((e.mode ?? 0) & GO_MODE_DIR) !== 0,
+        isSymlink: ((e.mode ?? 0) & GO_MODE_SYMLINK) !== 0,
+        symlinkTarget: e.symlink_target,
+    };
+}
+
 export async function ListDir(
     sessionHash: string,
     path: string,
-    offset: number,
-    limit: number,
+    _offset: number,
+    _limit: number,
 ): Promise<ListDirResult> {
-    const q = new URLSearchParams({
-        path,
-        offset: String(offset),
-        limit: String(limit),
-    });
-    const resp = await apiJSON<{
-        status: boolean;
-        entries?: FileEntryDTO[];
-        total?: number;
-        eof?: boolean;
-        error?: string;
-    }>(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/list?${q}`);
-    if (!resp.status) throw new Error(resp.error || "list failed");
-    return {
-        entries: resp.entries || [],
-        total: resp.total || 0,
-        eof: !!resp.eof,
-    };
+    // v2 fs/list returns the full directory in a single call; offset/limit
+    // are ignored server-side. The desktop signature is kept so callers
+    // don't need to branch.
+    const q = new URLSearchParams({ path });
+    const resp = await apiJSON<{ entries?: V2FileEntry[] }>(
+        fsURL(sessionHash, `list?${q}`),
+    );
+    const entries = (resp.entries || []).map(adaptEntry);
+    return { entries, total: entries.length, eof: true };
 }
 
 export async function StatFile(sessionHash: string, path: string): Promise<FileEntryDTO> {
     const q = new URLSearchParams({ path });
-    const resp = await apiJSON<{ status: boolean; entry?: FileEntryDTO; error?: string }>(
-        `/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/stat?${q}`,
+    const resp = await apiJSON<{ entry?: V2FileEntry }>(
+        fsURL(sessionHash, `stat?${q}`),
     );
-    if (!resp.status || !resp.entry) throw new Error(resp.error || "stat failed");
-    return resp.entry;
+    if (!resp.entry) throw new Error("stat: empty entry");
+    return adaptEntry(resp.entry);
 }
 
 export async function DeleteFile(
@@ -272,17 +305,12 @@ export async function DeleteFile(
     recursive: boolean,
 ): Promise<void> {
     const q = new URLSearchParams({ path, recursive: String(recursive) });
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
-        method: "DELETE",
-    });
+    await apiFetch(fsURL(sessionHash, `remove?${q}`), { method: "DELETE" });
 }
 
 export async function RenameFile(sessionHash: string, from: string, to: string): Promise<void> {
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/rename`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to }),
-    });
+    const q = new URLSearchParams({ from, to });
+    await apiFetch(fsURL(sessionHash, `rename?${q}`), { method: "POST" });
 }
 
 export async function Mkdir(
@@ -291,18 +319,16 @@ export async function Mkdir(
     parents: boolean,
     mode: number,
 ): Promise<void> {
-    const q = new URLSearchParams({ path, parents: String(parents) });
-    if (mode && mode !== 0) q.set("mode", mode.toString(8));
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/mkdir?${q}`, {
-        method: "POST",
-    });
+    // v2 takes decimal mode (strconv.ParseUint base 10); callers pass a
+    // numeric FileMode like 0o755, which stringifies to "493" — correct.
+    const q = new URLSearchParams({ path, mkdirs: String(parents) });
+    if (mode && mode !== 0) q.set("mode", String(mode));
+    await apiFetch(fsURL(sessionHash, `mkdir?${q}`), { method: "POST" });
 }
 
 export async function Chmod(sessionHash: string, path: string, mode: number): Promise<void> {
-    const q = new URLSearchParams({ path, mode: mode.toString(8) });
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files/chmod?${q}`, {
-        method: "POST",
-    });
+    const q = new URLSearchParams({ path, mode: String(mode) });
+    await apiFetch(fsURL(sessionHash, `mode?${q}`), { method: "PATCH" });
 }
 
 // UploadBrowserFile streams a File object directly (no synthetic token
@@ -318,8 +344,8 @@ export async function UploadBrowserFile(
     if (bytes.length === 0) {
         // Empty file: truncate the destination with an empty payload.
         const q = new URLSearchParams({ path: remotePath, append: "false" });
-        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
-            method: "POST",
+        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+            method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: new Uint8Array(0),
         });
@@ -331,8 +357,8 @@ export async function UploadBrowserFile(
             path: remotePath,
             append: String(off > 0),
         });
-        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/files?${q}`, {
-            method: "POST",
+        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+            method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: slice,
         });
