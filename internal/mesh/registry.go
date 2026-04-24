@@ -18,6 +18,14 @@ type PeerRecord struct {
 	LastSeen         time.Time
 	Role             string
 	BootstrapService bool
+
+	// CertPEM is the project-CA-signed leaf cert this peer
+	// advertised. Empty when the peer runs in legacy self-certifying
+	// mode (NodeID = DeriveNodeID(pubkey)) or predates the cert-bound
+	// identity migration. When non-empty, verifiers chain the cert to
+	// a trusted project CA pool and key identity off the cert's URI
+	// SAN instead of the hash-of-pubkey convention.
+	CertPEM []byte
 }
 
 // Registry is an in-memory, concurrency-safe peer table. Every node runs
@@ -88,7 +96,18 @@ func (r *Registry) Upsert(rec *PeerRecord) bool {
 	if rec == nil || rec.NodeID == "" {
 		return false
 	}
-	if DeriveNodeID(rec.PublicKey) != rec.NodeID {
+	// Sanity check pubkey ↔ node_id coupling. Two valid shapes:
+	//   - legacy self-cert: DeriveNodeID(pubkey) == node_id
+	//   - cert-bound:        cert SAN agent id == node_id AND the
+	//                        cert's pubkey matches rec.PublicKey
+	// Anything else is rejected outright. Cert-chain verification
+	// against a trusted CA pool happens later at the gossip-sig
+	// layer; here we just check internal consistency.
+	if len(rec.CertPEM) > 0 {
+		if err := verifyCertIdentityLocal(rec.CertPEM, rec.PublicKey, rec.NodeID); err != nil {
+			return false
+		}
+	} else if DeriveNodeID(rec.PublicKey) != rec.NodeID {
 		return false
 	}
 
@@ -105,6 +124,9 @@ func (r *Registry) Upsert(rec *PeerRecord) bool {
 		merged.Addresses = mergeAddresses(existing.Addresses, rec.Addresses)
 		merged.Role = rec.Role
 		merged.BootstrapService = rec.BootstrapService
+		if len(rec.CertPEM) > 0 {
+			merged.CertPEM = append([]byte(nil), rec.CertPEM...)
+		}
 		if rec.LastSeen.After(existing.LastSeen) {
 			merged.LastSeen = rec.LastSeen
 		}
@@ -164,6 +186,10 @@ func copyPeer(p *PeerRecord) *PeerRecord {
 	copy(pub, p.PublicKey)
 	addrs := make([]string, len(p.Addresses))
 	copy(addrs, p.Addresses)
+	var cert []byte
+	if len(p.CertPEM) > 0 {
+		cert = append([]byte(nil), p.CertPEM...)
+	}
 	return &PeerRecord{
 		NodeID:           p.NodeID,
 		PublicKey:        pub,
@@ -171,6 +197,7 @@ func copyPeer(p *PeerRecord) *PeerRecord {
 		LastSeen:         p.LastSeen,
 		Role:             p.Role,
 		BootstrapService: p.BootstrapService,
+		CertPEM:          cert,
 	}
 }
 
@@ -233,6 +260,7 @@ func (r *Registry) ToNodeInfos() []*v2pb.NodeInfo {
 			LastSeen:         last,
 			Role:             p.Role,
 			BootstrapService: p.BootstrapService,
+			CertPem:          append([]byte(nil), p.CertPEM...),
 		})
 	}
 	return out

@@ -57,3 +57,44 @@ func ed25519PublicKeyFromCert(cert *x509.Certificate) (ed25519.PublicKey, error)
 	}
 	return pub, nil
 }
+
+// verifyCertIdentityLocal checks that a cert PEM is internally
+// consistent with a claimed (pubkey, nodeID): pubkey matches the
+// cert's SPKI, and the cert's "platypus://agent/<id>" SAN equals
+// nodeID. Does NOT chain the cert to a CA — callers that need chain
+// verification pass through verifyCertChain (step 4).
+func verifyCertIdentityLocal(certPEM, claimedPubkey ed25519.PublicKey, claimedNodeID string) error {
+	cert, err := parseAgentLeafCert(certPEM)
+	if err != nil {
+		return err
+	}
+	certPub, err := ed25519PublicKeyFromCert(cert)
+	if err != nil {
+		return err
+	}
+	if !ed25519EqualPub(certPub, claimedPubkey) {
+		return fmt.Errorf("mesh: cert pubkey does not match claimed pubkey")
+	}
+	id, err := agentIDFromCert(cert)
+	if err != nil {
+		return err
+	}
+	if id != claimedNodeID {
+		return fmt.Errorf("mesh: cert SAN id %q != claimed node_id %q", id, claimedNodeID)
+	}
+	return nil
+}
+
+// ed25519EqualPub is a byte-wise equality check that tolerates nil
+// public keys (treated as "not equal" rather than panicking).
+func ed25519EqualPub(a, b ed25519.PublicKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

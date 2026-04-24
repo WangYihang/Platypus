@@ -392,14 +392,28 @@ func (*MeshEnvelope_Opaque) isMeshEnvelope_Payload() {}
 // NodeInfo is the minimal peer-table record: enough to attempt a
 // connection plus the pubkey so recipients can re-derive + verify
 // the node_id locally.
+//
+// Two identity modes coexist on the wire:
+//
+//   - self-certifying (legacy): node_id = DeriveNodeID(pubkey),
+//     cert_pem empty. Receiver verifies via the hash relation.
+//
+//   - cert-bound     (v2):      node_id = the "platypus://agent/<id>"
+//     SAN from cert_pem, and pubkey matches cert_pem's public key.
+//     Receiver verifies the cert against a trusted project-CA pool
+//     and reads the SAN.
+//
+// Both modes carry the same pubkey so LSA/gossip signatures verify
+// identically; the only difference is where node_id comes from.
 type NodeInfo struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	NodeId           string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`                                // base32(sha256(pubkey))[:32]
+	NodeId           string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`                                // cert-bound: SAN id; legacy: base32(sha256(pubkey))[:32]
 	Pubkey           []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`                                              // 32-byte Ed25519 public key
 	Addresses        []string               `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`                                        // host:port entries the node listens on
 	LastSeen         int64                  `protobuf:"varint,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`                         // unix seconds — observer's wall clock
 	Role             string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`                                                  // "agent", "server", ...
 	BootstrapService bool                   `protobuf:"varint,6,opt,name=bootstrap_service,json=bootstrapService,proto3" json:"bootstrap_service,omitempty"` // true if node accepts bootstrap streams
+	CertPem          []byte                 `protobuf:"bytes,7,opt,name=cert_pem,json=certPem,proto3" json:"cert_pem,omitempty"`                             // project-CA-signed leaf; empty = legacy self-cert
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -474,6 +488,13 @@ func (x *NodeInfo) GetBootstrapService() bool {
 		return x.BootstrapService
 	}
 	return false
+}
+
+func (x *NodeInfo) GetCertPem() []byte {
+	if x != nil {
+		return x.CertPem
+	}
+	return nil
 }
 
 // HandshakePayload is the application data wrapped inside the
@@ -1438,14 +1459,15 @@ const file_mesh_proto_rawDesc = "" +
 	"streamData\x12A\n" +
 	"\fstream_close\x18+ \x01(\v2\x1c.platypus.v2.MeshStreamCloseH\x00R\vstreamClose\x12\x18\n" +
 	"\x06opaque\x182 \x01(\fH\x00R\x06opaqueB\t\n" +
-	"\apayload\"\xb7\x01\n" +
+	"\apayload\"\xd2\x01\n" +
 	"\bNodeInfo\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
 	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x1c\n" +
 	"\taddresses\x18\x03 \x03(\tR\taddresses\x12\x1b\n" +
 	"\tlast_seen\x18\x04 \x01(\x03R\blastSeen\x12\x12\n" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12+\n" +
-	"\x11bootstrap_service\x18\x06 \x01(\bR\x10bootstrapService\"\x8c\x01\n" +
+	"\x11bootstrap_service\x18\x06 \x01(\bR\x10bootstrapService\x12\x19\n" +
+	"\bcert_pem\x18\a \x01(\fR\acertPem\"\x8c\x01\n" +
 	"\x10HandshakePayload\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12%\n" +
 	"\x0eed25519_pubkey\x18\x02 \x01(\fR\red25519Pubkey\x12\x1a\n" +

@@ -107,6 +107,7 @@ func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 		LastSeen:         time.Now(),
 		Role:             n.cfg.Role,
 		BootstrapService: n.cfg.BootstrapEnabled,
+		CertPEM:          append([]byte(nil), n.identity.CertPEM...),
 	})
 	return n, nil
 }
@@ -465,6 +466,7 @@ func (n *Node) ingestAnnounce(from *Link, ann *v2pb.MeshPeerAnnounce) {
 			LastSeen:         time.Unix(ni.LastSeen, 0),
 			Role:             ni.Role,
 			BootstrapService: ni.BootstrapService,
+			CertPEM:          append([]byte(nil), ni.CertPem...),
 		}
 		if n.registry.Upsert(rec) && n.dialer != nil {
 			n.dialer.EnsurePeer(context.Background(), rec.NodeID, rec.Addresses)
@@ -506,6 +508,7 @@ func (n *Node) ingestDelta(from *Link, delta *v2pb.MeshPeerDelta) {
 			LastSeen:         time.Unix(ni.LastSeen, 0),
 			Role:             ni.Role,
 			BootstrapService: ni.BootstrapService,
+			CertPEM:          append([]byte(nil), ni.CertPem...),
 		}
 		if n.registry.Upsert(rec) {
 			changed = true
@@ -648,6 +651,7 @@ func (n *Node) registryLoop(ctx context.Context) {
 					LastSeen:         ev.Record.LastSeen.Unix(),
 					Role:             ev.Record.Role,
 					BootstrapService: ev.Record.BootstrapService,
+					CertPem:          append([]byte(nil), ev.Record.CertPEM...),
 				})
 			case EventRemoved:
 				delta.RemovedIds = append(delta.RemovedIds, ev.NodeID)

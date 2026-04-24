@@ -70,13 +70,27 @@ message MeshEnvelope {
 // NodeInfo is the minimal peer-table record: enough to attempt a
 // connection plus the pubkey so recipients can re-derive + verify
 // the node_id locally.
+//
+// Two identity modes coexist on the wire:
+//
+//   - self-certifying (legacy): node_id = DeriveNodeID(pubkey),
+//     cert_pem empty. Receiver verifies via the hash relation.
+//
+//   - cert-bound     (v2):      node_id = the "platypus://agent/<id>"
+//     SAN from cert_pem, and pubkey matches cert_pem's public key.
+//     Receiver verifies the cert against a trusted project-CA pool
+//     and reads the SAN.
+//
+// Both modes carry the same pubkey so LSA/gossip signatures verify
+// identically; the only difference is where node_id comes from.
 message NodeInfo {
-  string node_id    = 1; // base32(sha256(pubkey))[:32]
+  string node_id    = 1; // cert-bound: SAN id; legacy: base32(sha256(pubkey))[:32]
   bytes  pubkey     = 2; // 32-byte Ed25519 public key
   repeated string addresses = 3; // host:port entries the node listens on
   int64  last_seen  = 4; // unix seconds — observer's wall clock
   string role       = 5; // "agent", "server", ...
   bool   bootstrap_service = 6; // true if node accepts bootstrap streams
+  bytes  cert_pem   = 7; // project-CA-signed leaf; empty = legacy self-cert
 }
 
 // Mesh handshake is Noise_XXpsk3 over Curve25519/ChaChaPoly/BLAKE2b:
