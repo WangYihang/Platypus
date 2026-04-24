@@ -194,6 +194,59 @@ export async function deleteUser(id: string): Promise<void> {
     await authFetch(`/api/v1/users/${id}`, { method: "DELETE" });
 }
 
+// --- Admin settings (admin only) -----------------------------------
+//
+// The server exposes a small set of runtime-tunable policy knobs
+// (token TTLs, release channel, presigned TTL, mesh discovery) via
+// GET/PUT/DELETE on /api/v1/admin/settings/:key. Values cross the
+// wire as typed JSON — number for durations/ints, bool, string.
+
+export type SettingType = "duration_seconds" | "bool" | "string" | "int";
+
+// SettingDescriptor mirrors internal/settings.SettingDescriptor. The
+// effective value is what the server is currently using; db/yaml hold
+// the raw override / fallback values for the UI to show "source"
+// hints next to each row.
+export interface SettingDescriptor {
+    key: string;
+    type: SettingType;
+    section: string;
+    label: string;
+    description: string;
+    default: unknown;
+    yaml?: unknown;
+    db?: unknown;
+    effective: unknown;
+    source: "db" | "yaml" | "default";
+}
+
+export async function listSettings(): Promise<SettingDescriptor[]> {
+    const j = await authJSON<{ settings: SettingDescriptor[] }>(
+        "/api/v1/admin/settings",
+    );
+    return j.settings;
+}
+
+// updateSetting sends the *typed* value (the caller has already
+// converted a form string to a number / bool). The server re-validates
+// against the registered type.
+export async function updateSetting(
+    key: string,
+    value: unknown,
+): Promise<void> {
+    await authFetch(`/api/v1/admin/settings/${encodeURIComponent(key)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value }),
+    });
+}
+
+export async function resetSetting(key: string): Promise<void> {
+    await authFetch(`/api/v1/admin/settings/${encodeURIComponent(key)}`, {
+        method: "DELETE",
+    });
+}
+
 // --- Server info ----------------------------------------------------
 // A thin roll-up of build metadata + live counts. Backed by
 // GET /api/v1/info on the server; intended for low-frequency polling

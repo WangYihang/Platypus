@@ -135,17 +135,30 @@ export default function UserMenu({ user, serverURL }: Props) {
                         </div>
                     </div>
                     {user.role === "admin" && (
-                        <button
-                            type="button"
-                            className="pl-popover-btn"
-                            onClick={() => {
-                                setMenuOpen(false);
-                                navigate("/admin/users");
-                            }}
-                        >
-                            <Settings className="size-3.5" />
-                            <span>Manage users</span>
-                        </button>
+                        <>
+                            <button
+                                type="button"
+                                className="pl-popover-btn"
+                                onClick={() => {
+                                    setMenuOpen(false);
+                                    navigate("/admin/users");
+                                }}
+                            >
+                                <Settings className="size-3.5" />
+                                <span>Manage users</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="pl-popover-btn"
+                                onClick={() => {
+                                    setMenuOpen(false);
+                                    navigate("/admin/settings");
+                                }}
+                            >
+                                <Settings className="size-3.5" />
+                                <span>Server settings</span>
+                            </button>
+                        </>
                     )}
                     <button
                         type="button"

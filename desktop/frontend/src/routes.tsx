@@ -21,6 +21,7 @@ const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
 const DispatchRoute = lazy(() => import("./routes/DispatchRoute"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 const TopologyPage = lazy(() => import("./pages/TopologyPage"));
 
 // routeFallback is the placeholder each lazy route renders while its
@@ -135,6 +136,7 @@ export const router = createBrowserRouter([
                 children: [
                     { path: "/projects", element: withSuspense(<ProjectsLanding />) },
                     { path: "/admin/users", element: withSuspense(<AdminUsers />) },
+                    { path: "/admin/settings", element: withSuspense(<AdminSettings />) },
                 ],
             },
             {
