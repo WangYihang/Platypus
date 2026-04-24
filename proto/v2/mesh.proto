@@ -150,26 +150,36 @@ message MeshKeepalive {
 // other side can quickly learn the wider mesh. Signed by the
 // sender (origin_node_id) so the receiver can reject a forged
 // announce from a relay that compromised an upstream link.
+//
+// origin_cert_pem is the sender's project-CA-signed leaf cert
+// (when the sender runs in cert-bound mode). Receivers with a
+// TrustedCAs pool configured chain this against the pool and
+// read the SAN to verify origin_node_id; receivers without a
+// pool (and legacy senders without the field) fall back to the
+// DeriveNodeID(pubkey) == origin_node_id check.
 message MeshPeerAnnounce {
   repeated NodeInfo nodes = 1;
   string origin_node_id   = 2;
-  bytes  pubkey           = 3; // must match origin_node_id
+  bytes  pubkey           = 3; // must match origin_node_id (legacy) or cert SPKI
   bytes  sig              = 4; // Ed25519_sign(priv, canonical(announce without sig))
+  bytes  origin_cert_pem  = 5; // project-CA-signed leaf; empty = legacy self-cert
 }
 
 // MeshPeerDelta: incremental update broadcast to every directly-
 // connected neighbour when the sender's known-peer set changes.
 // seq is monotonic per origin_node_id so receivers deduplicate
 // across flooding paths. Signed by origin so floods can't be
-// forged by intermediate hops.
+// forged by intermediate hops. See MeshPeerAnnounce for the
+// cert-mode vs. legacy semantics of origin_cert_pem.
 message MeshPeerDelta {
   string origin_node_id = 1;
   uint64 seq            = 2;
   repeated NodeInfo added = 3;
   repeated string removed_ids = 4;
   uint32 ttl            = 5; // flood TTL, distinct from envelope.ttl
-  bytes  pubkey         = 6; // must match origin_node_id
+  bytes  pubkey         = 6; // must match origin_node_id (legacy) or cert SPKI
   bytes  sig            = 7; // Ed25519_sign(priv, canonical(delta without sig + ttl))
+  bytes  origin_cert_pem = 8; // project-CA-signed leaf; empty = legacy self-cert
 }
 
 // MeshLSA: link-state advertisement. Each node periodically (and on
@@ -187,9 +197,10 @@ message MeshLSA {
   uint64 seq            = 2; // monotonic per origin
   int64  expires_at     = 3; // unix seconds
   repeated Link links   = 4;
-  bytes  pubkey         = 5; // for convenience; must match origin_node_id
+  bytes  pubkey         = 5; // must match origin_node_id (legacy) or cert SPKI
   bytes  sig            = 6; // Ed25519_sign(priv, canonical(lsa without sig))
   uint32 flood_ttl      = 7;
+  bytes  origin_cert_pem = 8; // project-CA-signed leaf; empty = legacy self-cert
 }
 
 // MeshUnreachable: sent back along the reverse path when a

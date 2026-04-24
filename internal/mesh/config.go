@@ -1,5 +1,7 @@
 package mesh
 
+import "crypto/x509"
+
 // Config collects the runtime knobs for a mesh Node. All fields are
 // optional except PSK and Identity; zero values get safe defaults.
 type Config struct {
@@ -55,4 +57,12 @@ type Config struct {
 	// (host:port) this node should dial when a bootstrap stream opens.
 	// Meaningful only when BootstrapEnabled is true.
 	BootstrapTarget string
+
+	// TrustedCAs is the pool of CAs that will be used to verify
+	// cert_pem fields on incoming gossip (MeshLSA, MeshPeerAnnounce,
+	// MeshPeerDelta) and on incoming NodeInfo entries. When nil,
+	// cert_pem fields on the wire are ignored and verification falls
+	// back to the legacy DeriveNodeID(pubkey) self-cert check —
+	// useful for pure-mesh tests that don't have a PKI.
+	TrustedCAs *x509.CertPool
 }

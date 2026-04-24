@@ -23,7 +23,7 @@ func TestPeerAnnounce_SignAndVerify_RoundTrip(t *testing.T) {
 		},
 	}
 	signPeerAnnounce(priv, ann)
-	if err := verifyPeerAnnounce(ann); err != nil {
+	if err := verifyPeerAnnounce(ann, nil); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
 }
@@ -42,7 +42,7 @@ func TestPeerAnnounce_RejectsTampered(t *testing.T) {
 	signPeerAnnounce(priv, ann)
 	// Sneak in an extra node post-signing.
 	ann.Nodes = append(ann.Nodes, &v2pb.NodeInfo{NodeId: "forged"})
-	if err := verifyPeerAnnounce(ann); err == nil {
+	if err := verifyPeerAnnounce(ann, nil); err == nil {
 		t.Fatal("expected verify to fail on tampered announce")
 	}
 }
@@ -61,7 +61,7 @@ func TestPeerAnnounce_RejectsPubkeyOriginMismatch(t *testing.T) {
 	ann.Sig = nil
 	canon, _ := canonicalBytesForSig(ann)
 	ann.Sig = ed25519.Sign(priv1, canon)
-	if err := verifyPeerAnnounce(ann); err == nil {
+	if err := verifyPeerAnnounce(ann, nil); err == nil {
 		t.Fatal("expected verify to fail when sig doesn't match pubkey")
 	}
 }
@@ -81,7 +81,7 @@ func TestPeerDelta_SignAndVerify_RoundTrip(t *testing.T) {
 	signPeerDelta(priv, delta)
 	// Simulate a flood hop decrementing TTL.
 	delta.Ttl--
-	if err := verifyPeerDelta(delta); err != nil {
+	if err := verifyPeerDelta(delta, nil); err != nil {
 		t.Fatalf("verify after hop: %v", err)
 	}
 }
@@ -99,7 +99,7 @@ func TestPeerDelta_RejectsTamperedAdded(t *testing.T) {
 	}
 	signPeerDelta(priv, delta)
 	delta.Added = append(delta.Added, &v2pb.NodeInfo{NodeId: "forged"})
-	if err := verifyPeerDelta(delta); err == nil {
+	if err := verifyPeerDelta(delta, nil); err == nil {
 		t.Fatal("expected verify to fail on tampered delta")
 	}
 }
@@ -111,7 +111,7 @@ func TestPeerDelta_RejectsBadPubkeyLength(t *testing.T) {
 		OriginNodeId: "short-id",
 		Pubkey:       []byte("not-32-bytes"),
 	}
-	if err := verifyPeerDelta(delta); err == nil {
+	if err := verifyPeerDelta(delta, nil); err == nil {
 		t.Fatal("expected verify to reject bad pubkey length")
 	}
 }

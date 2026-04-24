@@ -4,6 +4,7 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"container/heap"
 	"crypto/ed25519"
+	"crypto/x509"
 	"fmt"
 	"sync"
 	"time"
@@ -37,17 +38,24 @@ func newLSDB() *LSDB {
 }
 
 // Ingest stores lsa if its seq is strictly greater than the current
-// value for its origin, and its signature verifies. Returns true if the
-// LSDB changed.
-func (db *LSDB) Ingest(lsa *v2pb.MeshLSA) (bool, error) {
+// value for its origin, and its signature verifies. Returns true if
+// the LSDB changed.
+//
+// trustedCAs may be nil. When non-nil AND lsa.OriginCertPem is
+// populated, the LSA's cert is chain-verified against the pool and
+// the origin identity is read from the cert SAN (cert-bound mode).
+// Otherwise verification falls back to the legacy
+// DeriveNodeID(pubkey) == origin self-cert check — pure-mesh tests
+// without a PKI continue to work.
+func (db *LSDB) Ingest(lsa *v2pb.MeshLSA, trustedCAs *x509.CertPool) (bool, error) {
 	if lsa == nil || lsa.OriginNodeId == "" {
 		return false, fmt.Errorf("empty lsa")
 	}
 	if len(lsa.Pubkey) != ed25519.PublicKeySize {
 		return false, fmt.Errorf("bad pubkey")
 	}
-	if DeriveNodeID(lsa.Pubkey) != lsa.OriginNodeId {
-		return false, fmt.Errorf("pubkey/origin mismatch")
+	if err := verifyGossipOrigin("lsa", lsa.OriginCertPem, lsa.Pubkey, lsa.OriginNodeId, trustedCAs); err != nil {
+		return false, err
 	}
 	sig := lsa.Sig
 	// Verify against a copy with Sig blanked to a canonical empty value.

@@ -3,6 +3,7 @@ package mesh
 import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
@@ -24,10 +25,11 @@ type PayloadHandler func(peer string, env *v2pb.MeshEnvelope)
 // Node is the top-level mesh participant. Each platypus-agent and
 // platypus-server instance owns exactly one.
 type Node struct {
-	identity *Identity
-	psk      []byte
-	cfg      Config
-	logger   *slog.Logger
+	identity  *Identity
+	psk       []byte
+	trustedCAs *x509.CertPool // optional — nil disables cert-chain verify
+	cfg       Config
+	logger    *slog.Logger
 
 	dialer   *Dialer
 	registry *Registry
@@ -80,9 +82,10 @@ func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 		cfg.PSK = psk
 	}
 	n := &Node{
-		identity: cfg.Identity,
-		psk:      cfg.PSK,
-		cfg:      cfg,
+		identity:   cfg.Identity,
+		psk:        cfg.PSK,
+		trustedCAs: cfg.TrustedCAs,
+		cfg:        cfg,
 		logger: logger.With(
 			slog.String("component", "mesh"),
 			slog.String("node_id", cfg.Identity.NodeID),
@@ -265,9 +268,10 @@ func (n *Node) onLinkUp(l *Link) {
 	// the nodes list if the Announce gets relayed end-to-end instead
 	// of staying link-local (future optimisation).
 	announce := &v2pb.MeshPeerAnnounce{
-		Nodes:        n.registry.ToNodeInfos(),
-		OriginNodeId: n.identity.NodeID,
-		Pubkey:       n.identity.PublicKey,
+		Nodes:         n.registry.ToNodeInfos(),
+		OriginNodeId:  n.identity.NodeID,
+		Pubkey:        n.identity.PublicKey,
+		OriginCertPem: append([]byte(nil), n.identity.CertPEM...),
 	}
 	signPeerAnnounce(n.identity.PrivateKey, announce)
 	_ = l.Send(&v2pb.MeshEnvelope{
@@ -447,7 +451,7 @@ func (n *Node) ingestAnnounce(from *Link, ann *v2pb.MeshPeerAnnounce) {
 	// backward-compatible during rollout, but reject a populated
 	// origin whose signature doesn't verify.
 	if ann.GetOriginNodeId() != "" {
-		if err := verifyPeerAnnounce(ann); err != nil {
+		if err := verifyPeerAnnounce(ann, n.trustedCAs); err != nil {
 			n.logger.Warn("mesh peer announce sig rejected",
 				slog.String("peer", from.PeerNodeID),
 				slog.String("origin", ann.OriginNodeId),
@@ -480,7 +484,7 @@ func (n *Node) ingestDelta(from *Link, delta *v2pb.MeshPeerDelta) {
 	}
 	// Deltas flood; every hop MUST verify so a compromised
 	// intermediate can't inject fake peer adds/removes.
-	if err := verifyPeerDelta(delta); err != nil {
+	if err := verifyPeerDelta(delta, n.trustedCAs); err != nil {
 		n.logger.Warn("mesh peer delta sig rejected",
 			slog.String("peer", from.PeerNodeID),
 			slog.String("origin", delta.OriginNodeId),
@@ -536,7 +540,7 @@ func (n *Node) ingestDelta(from *Link, delta *v2pb.MeshPeerDelta) {
 }
 
 func (n *Node) ingestLSA(from *Link, lsa *v2pb.MeshLSA) {
-	changed, err := n.lsdb.Ingest(lsa)
+	changed, err := n.lsdb.Ingest(lsa, n.trustedCAs)
 	if err != nil {
 		n.logger.Debug("lsa rejected", slog.String("error", err.Error()))
 		return
@@ -588,12 +592,13 @@ func (n *Node) publishLocalLSA() {
 		links = append(links, &v2pb.MeshLSA_Link{NodeId: peer, Cost: 1})
 	}
 	lsa := &v2pb.MeshLSA{
-		OriginNodeId: n.identity.NodeID,
-		Seq:          seq,
-		ExpiresAt:    time.Now().Add(lsaExpiry).Unix(),
-		Links:        links,
-		Pubkey:       n.identity.PublicKey,
-		FloodTtl:     maxFloodTTL,
+		OriginNodeId:  n.identity.NodeID,
+		Seq:           seq,
+		ExpiresAt:     time.Now().Add(lsaExpiry).Unix(),
+		Links:         links,
+		Pubkey:        n.identity.PublicKey,
+		FloodTtl:      maxFloodTTL,
+		OriginCertPem: append([]byte(nil), n.identity.CertPEM...),
 	}
 	// Sign over the canonical wire form without the sig or flood_ttl.
 	canonCopy := proto.Clone(lsa).(*v2pb.MeshLSA)
@@ -606,7 +611,7 @@ func (n *Node) publishLocalLSA() {
 	}
 	lsa.Sig = signBytes(n.identity.PrivateKey, canon)
 
-	if _, err := n.lsdb.Ingest(lsa); err != nil {
+	if _, err := n.lsdb.Ingest(lsa, n.trustedCAs); err != nil {
 		n.logger.Error("self-lsa rejected", slog.String("error", err.Error()))
 	}
 	n.recomputeRoutes()
@@ -634,10 +639,11 @@ func (n *Node) registryLoop(ctx context.Context) {
 				continue
 			}
 			delta := &v2pb.MeshPeerDelta{
-				OriginNodeId: n.identity.NodeID,
-				Seq:          n.lastPeerDelta.Add(1),
-				Ttl:          maxFloodTTL,
-				Pubkey:       n.identity.PublicKey,
+				OriginNodeId:  n.identity.NodeID,
+				Seq:           n.lastPeerDelta.Add(1),
+				Ttl:           maxFloodTTL,
+				Pubkey:        n.identity.PublicKey,
+				OriginCertPem: append([]byte(nil), n.identity.CertPEM...),
 			}
 			switch ev.Kind {
 			case EventAdded, EventUpdated:

@@ -62,7 +62,7 @@ func ed25519PublicKeyFromCert(cert *x509.Certificate) (ed25519.PublicKey, error)
 // consistent with a claimed (pubkey, nodeID): pubkey matches the
 // cert's SPKI, and the cert's "platypus://agent/<id>" SAN equals
 // nodeID. Does NOT chain the cert to a CA — callers that need chain
-// verification pass through verifyCertChain (step 4).
+// verification go through verifyCertChain.
 func verifyCertIdentityLocal(certPEM, claimedPubkey ed25519.PublicKey, claimedNodeID string) error {
 	cert, err := parseAgentLeafCert(certPEM)
 	if err != nil {
@@ -83,6 +83,43 @@ func verifyCertIdentityLocal(certPEM, claimedPubkey ed25519.PublicKey, claimedNo
 		return fmt.Errorf("mesh: cert SAN id %q != claimed node_id %q", id, claimedNodeID)
 	}
 	return nil
+}
+
+// verifyCertChain chains the leaf in certPEM against the trusted
+// CA pool. Returns nil on a valid chain; propagates the underlying
+// x509.Verify error otherwise. Used by the gossip signature
+// verifiers when origin_cert_pem is populated AND the local Node
+// has a TrustedCAs pool configured — if the pool is nil this
+// function is not called and the verifier falls back to the
+// legacy DeriveNodeID identity check.
+func verifyCertChain(certPEM []byte, pool *x509.CertPool) error {
+	if pool == nil {
+		return errors.New("mesh: trusted CA pool is nil")
+	}
+	cert, err := parseAgentLeafCert(certPEM)
+	if err != nil {
+		return err
+	}
+	opts := x509.VerifyOptions{
+		Roots:     pool,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageAny},
+	}
+	if _, err := cert.Verify(opts); err != nil {
+		return fmt.Errorf("mesh: cert chain invalid: %w", err)
+	}
+	return nil
+}
+
+// verifyCertBoundIdentity is the full chain + identity check the
+// gossip verifiers call when origin_cert_pem is non-empty. Combines
+// verifyCertChain (chain validity) with verifyCertIdentityLocal
+// (SAN ↔ node_id, cert SPKI ↔ pubkey). Returns the first error it
+// encounters.
+func verifyCertBoundIdentity(certPEM []byte, pool *x509.CertPool, claimedPubkey ed25519.PublicKey, claimedNodeID string) error {
+	if err := verifyCertChain(certPEM, pool); err != nil {
+		return err
+	}
+	return verifyCertIdentityLocal(certPEM, claimedPubkey, claimedNodeID)
 }
 
 // ed25519EqualPub is a byte-wise equality check that tolerates nil

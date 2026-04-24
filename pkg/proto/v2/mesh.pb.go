@@ -794,12 +794,20 @@ func (x *MeshKeepalive) GetLifetimeMsgsOut() uint64 {
 // other side can quickly learn the wider mesh. Signed by the
 // sender (origin_node_id) so the receiver can reject a forged
 // announce from a relay that compromised an upstream link.
+//
+// origin_cert_pem is the sender's project-CA-signed leaf cert
+// (when the sender runs in cert-bound mode). Receivers with a
+// TrustedCAs pool configured chain this against the pool and
+// read the SAN to verify origin_node_id; receivers without a
+// pool (and legacy senders without the field) fall back to the
+// DeriveNodeID(pubkey) == origin_node_id check.
 type MeshPeerAnnounce struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nodes         []*NodeInfo            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	OriginNodeId  string                 `protobuf:"bytes,2,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
-	Pubkey        []byte                 `protobuf:"bytes,3,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // must match origin_node_id
-	Sig           []byte                 `protobuf:"bytes,4,opt,name=sig,proto3" json:"sig,omitempty"`       // Ed25519_sign(priv, canonical(announce without sig))
+	Pubkey        []byte                 `protobuf:"bytes,3,opt,name=pubkey,proto3" json:"pubkey,omitempty"`                                      // must match origin_node_id (legacy) or cert SPKI
+	Sig           []byte                 `protobuf:"bytes,4,opt,name=sig,proto3" json:"sig,omitempty"`                                            // Ed25519_sign(priv, canonical(announce without sig))
+	OriginCertPem []byte                 `protobuf:"bytes,5,opt,name=origin_cert_pem,json=originCertPem,proto3" json:"origin_cert_pem,omitempty"` // project-CA-signed leaf; empty = legacy self-cert
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -862,20 +870,29 @@ func (x *MeshPeerAnnounce) GetSig() []byte {
 	return nil
 }
 
+func (x *MeshPeerAnnounce) GetOriginCertPem() []byte {
+	if x != nil {
+		return x.OriginCertPem
+	}
+	return nil
+}
+
 // MeshPeerDelta: incremental update broadcast to every directly-
 // connected neighbour when the sender's known-peer set changes.
 // seq is monotonic per origin_node_id so receivers deduplicate
 // across flooding paths. Signed by origin so floods can't be
-// forged by intermediate hops.
+// forged by intermediate hops. See MeshPeerAnnounce for the
+// cert-mode vs. legacy semantics of origin_cert_pem.
 type MeshPeerDelta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OriginNodeId  string                 `protobuf:"bytes,1,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
 	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
 	Added         []*NodeInfo            `protobuf:"bytes,3,rep,name=added,proto3" json:"added,omitempty"`
 	RemovedIds    []string               `protobuf:"bytes,4,rep,name=removed_ids,json=removedIds,proto3" json:"removed_ids,omitempty"`
-	Ttl           uint32                 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`      // flood TTL, distinct from envelope.ttl
-	Pubkey        []byte                 `protobuf:"bytes,6,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // must match origin_node_id
-	Sig           []byte                 `protobuf:"bytes,7,opt,name=sig,proto3" json:"sig,omitempty"`       // Ed25519_sign(priv, canonical(delta without sig + ttl))
+	Ttl           uint32                 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`                                           // flood TTL, distinct from envelope.ttl
+	Pubkey        []byte                 `protobuf:"bytes,6,opt,name=pubkey,proto3" json:"pubkey,omitempty"`                                      // must match origin_node_id (legacy) or cert SPKI
+	Sig           []byte                 `protobuf:"bytes,7,opt,name=sig,proto3" json:"sig,omitempty"`                                            // Ed25519_sign(priv, canonical(delta without sig + ttl))
+	OriginCertPem []byte                 `protobuf:"bytes,8,opt,name=origin_cert_pem,json=originCertPem,proto3" json:"origin_cert_pem,omitempty"` // project-CA-signed leaf; empty = legacy self-cert
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -959,6 +976,13 @@ func (x *MeshPeerDelta) GetSig() []byte {
 	return nil
 }
 
+func (x *MeshPeerDelta) GetOriginCertPem() []byte {
+	if x != nil {
+		return x.OriginCertPem
+	}
+	return nil
+}
+
 // MeshLSA: link-state advertisement. Each node periodically (and on
 // adjacency change) signs and floods a description of its directly
 // connected neighbours. Only the node identified by origin_node_id
@@ -970,9 +994,10 @@ type MeshLSA struct {
 	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`                              // monotonic per origin
 	ExpiresAt     int64                  `protobuf:"varint,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // unix seconds
 	Links         []*MeshLSA_Link        `protobuf:"bytes,4,rep,name=links,proto3" json:"links,omitempty"`
-	Pubkey        []byte                 `protobuf:"bytes,5,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // for convenience; must match origin_node_id
+	Pubkey        []byte                 `protobuf:"bytes,5,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // must match origin_node_id (legacy) or cert SPKI
 	Sig           []byte                 `protobuf:"bytes,6,opt,name=sig,proto3" json:"sig,omitempty"`       // Ed25519_sign(priv, canonical(lsa without sig))
 	FloodTtl      uint32                 `protobuf:"varint,7,opt,name=flood_ttl,json=floodTtl,proto3" json:"flood_ttl,omitempty"`
+	OriginCertPem []byte                 `protobuf:"bytes,8,opt,name=origin_cert_pem,json=originCertPem,proto3" json:"origin_cert_pem,omitempty"` // project-CA-signed leaf; empty = legacy self-cert
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1054,6 +1079,13 @@ func (x *MeshLSA) GetFloodTtl() uint32 {
 		return x.FloodTtl
 	}
 	return 0
+}
+
+func (x *MeshLSA) GetOriginCertPem() []byte {
+	if x != nil {
+		return x.OriginCertPem
+	}
+	return nil
 }
 
 // MeshUnreachable: sent back along the reverse path when a
@@ -1484,12 +1516,13 @@ const file_mesh_proto_rawDesc = "" +
 	"\x11lifetime_bytes_in\x18\x02 \x01(\x04R\x0flifetimeBytesIn\x12,\n" +
 	"\x12lifetime_bytes_out\x18\x03 \x01(\x04R\x10lifetimeBytesOut\x12(\n" +
 	"\x10lifetime_msgs_in\x18\x04 \x01(\x04R\x0elifetimeMsgsIn\x12*\n" +
-	"\x11lifetime_msgs_out\x18\x05 \x01(\x04R\x0flifetimeMsgsOut\"\x8f\x01\n" +
+	"\x11lifetime_msgs_out\x18\x05 \x01(\x04R\x0flifetimeMsgsOut\"\xb7\x01\n" +
 	"\x10MeshPeerAnnounce\x12+\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x15.platypus.v2.NodeInfoR\x05nodes\x12$\n" +
 	"\x0eorigin_node_id\x18\x02 \x01(\tR\foriginNodeId\x12\x16\n" +
 	"\x06pubkey\x18\x03 \x01(\fR\x06pubkey\x12\x10\n" +
-	"\x03sig\x18\x04 \x01(\fR\x03sig\"\xd1\x01\n" +
+	"\x03sig\x18\x04 \x01(\fR\x03sig\x12&\n" +
+	"\x0forigin_cert_pem\x18\x05 \x01(\fR\roriginCertPem\"\xf9\x01\n" +
 	"\rMeshPeerDelta\x12$\n" +
 	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12+\n" +
@@ -1498,7 +1531,8 @@ const file_mesh_proto_rawDesc = "" +
 	"removedIds\x12\x10\n" +
 	"\x03ttl\x18\x05 \x01(\rR\x03ttl\x12\x16\n" +
 	"\x06pubkey\x18\x06 \x01(\fR\x06pubkey\x12\x10\n" +
-	"\x03sig\x18\a \x01(\fR\x03sig\"\x8d\x02\n" +
+	"\x03sig\x18\a \x01(\fR\x03sig\x12&\n" +
+	"\x0forigin_cert_pem\x18\b \x01(\fR\roriginCertPem\"\xb5\x02\n" +
 	"\aMeshLSA\x12$\n" +
 	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x1d\n" +
@@ -1507,7 +1541,8 @@ const file_mesh_proto_rawDesc = "" +
 	"\x05links\x18\x04 \x03(\v2\x19.platypus.v2.MeshLSA.LinkR\x05links\x12\x16\n" +
 	"\x06pubkey\x18\x05 \x01(\fR\x06pubkey\x12\x10\n" +
 	"\x03sig\x18\x06 \x01(\fR\x03sig\x12\x1b\n" +
-	"\tflood_ttl\x18\a \x01(\rR\bfloodTtl\x1a3\n" +
+	"\tflood_ttl\x18\a \x01(\rR\bfloodTtl\x12&\n" +
+	"\x0forigin_cert_pem\x18\b \x01(\fR\roriginCertPem\x1a3\n" +
 	"\x04Link\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x12\n" +
 	"\x04cost\x18\x02 \x01(\rR\x04cost\"J\n" +

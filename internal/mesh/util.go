@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"crypto/ed25519"
+	"crypto/x509"
 	"fmt"
 	"os"
 
@@ -39,14 +40,20 @@ func signPeerAnnounce(priv ed25519.PrivateKey, ann *v2pb.MeshPeerAnnounce) {
 	ann.Sig = signBytes(priv, canon)
 }
 
-// verifyPeerAnnounce checks the sig against the claimed pubkey +
-// confirms pubkey hashes to origin_node_id. Returns nil on success.
-func verifyPeerAnnounce(ann *v2pb.MeshPeerAnnounce) error {
+// verifyPeerAnnounce checks the Ed25519 sig against the claimed
+// pubkey AND verifies the origin identity. When OriginCertPem is
+// populated AND trustedCAs is non-nil, the cert is chain-verified
+// against the pool and the SAN binding is enforced. Otherwise the
+// verifier falls back to the legacy DeriveNodeID(pubkey) == origin
+// self-cert check. A populated cert without a trusted pool is
+// ignored (legacy path), not rejected — mesh-only tests work
+// without a PKI configured.
+func verifyPeerAnnounce(ann *v2pb.MeshPeerAnnounce, trustedCAs *x509.CertPool) error {
 	if len(ann.Pubkey) != ed25519.PublicKeySize {
 		return fmt.Errorf("peer_announce: bad pubkey length %d", len(ann.Pubkey))
 	}
-	if DeriveNodeID(ann.Pubkey) != ann.OriginNodeId {
-		return fmt.Errorf("peer_announce: pubkey/origin mismatch")
+	if err := verifyGossipOrigin("peer_announce", ann.OriginCertPem, ann.Pubkey, ann.OriginNodeId, trustedCAs); err != nil {
+		return err
 	}
 	sig := ann.Sig
 	cp := proto.Clone(ann).(*v2pb.MeshPeerAnnounce)
@@ -77,12 +84,13 @@ func signPeerDelta(priv ed25519.PrivateKey, delta *v2pb.MeshPeerDelta) {
 }
 
 // verifyPeerDelta is the ingest-side counterpart of signPeerDelta.
-func verifyPeerDelta(delta *v2pb.MeshPeerDelta) error {
+// See verifyPeerAnnounce for the cert-bound / legacy dispatch.
+func verifyPeerDelta(delta *v2pb.MeshPeerDelta, trustedCAs *x509.CertPool) error {
 	if len(delta.Pubkey) != ed25519.PublicKeySize {
 		return fmt.Errorf("peer_delta: bad pubkey length %d", len(delta.Pubkey))
 	}
-	if DeriveNodeID(delta.Pubkey) != delta.OriginNodeId {
-		return fmt.Errorf("peer_delta: pubkey/origin mismatch")
+	if err := verifyGossipOrigin("peer_delta", delta.OriginCertPem, delta.Pubkey, delta.OriginNodeId, trustedCAs); err != nil {
+		return err
 	}
 	sig := delta.Sig
 	cp := proto.Clone(delta).(*v2pb.MeshPeerDelta)
@@ -94,6 +102,23 @@ func verifyPeerDelta(delta *v2pb.MeshPeerDelta) error {
 	}
 	if !ed25519.Verify(delta.Pubkey, canon, sig) {
 		return fmt.Errorf("peer_delta: bad signature")
+	}
+	return nil
+}
+
+// verifyGossipOrigin picks the right identity check for a signed
+// gossip payload: cert-bound when certPEM is populated AND a
+// trusted CA pool is configured, legacy self-cert otherwise. The
+// prefix is used purely for error-message readability.
+func verifyGossipOrigin(prefix string, certPEM []byte, pubkey ed25519.PublicKey, nodeID string, trustedCAs *x509.CertPool) error {
+	if len(certPEM) > 0 && trustedCAs != nil {
+		if err := verifyCertBoundIdentity(certPEM, trustedCAs, pubkey, nodeID); err != nil {
+			return fmt.Errorf("%s: %w", prefix, err)
+		}
+		return nil
+	}
+	if DeriveNodeID(pubkey) != nodeID {
+		return fmt.Errorf("%s: pubkey/origin mismatch", prefix)
 	}
 	return nil
 }
