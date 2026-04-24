@@ -44,6 +44,7 @@ func TestParse_RejectsMalformed(t *testing.T) {
 		"plt_onlyid",
 		"plt_.onlysecret",
 		"ghp_token",             // wrong prefix
+		"sess_abc.def",          // session tokens no longer parsed (post-v2)
 		"plt_abcdef.NOT-BASE32", // dashes are not valid base32 chars
 	}
 	for _, c := range cases {
@@ -55,7 +56,7 @@ func TestParse_RejectsMalformed(t *testing.T) {
 
 // --- MintPAT + RedeemPAT happy path -----------------------------------------
 
-func TestRedeemPAT_HappyPath_IssuesSession(t *testing.T) {
+func TestRedeemPAT_HappyPath(t *testing.T) {
 	svc := newSvc(t)
 	admin, proj := bootstrap(t, svc.DB())
 	ctx := context.Background()
@@ -76,11 +77,14 @@ func TestRedeemPAT_HappyPath_IssuesSession(t *testing.T) {
 	if res.Outcome != "success" {
 		t.Fatalf("Outcome = %q; want success", res.Outcome)
 	}
-	if res.AgentID == "" || res.SessionPlaintext == "" {
-		t.Fatalf("missing agent_id or session_token: %+v", res)
+	if res.AgentID == "" {
+		t.Fatalf("missing agent_id: %+v", res)
 	}
-	if !strings.HasPrefix(res.SessionPlaintext, enrollment.SessionPrefix) {
-		t.Fatalf("SessionPlaintext missing sess_ prefix: %q", res.SessionPlaintext)
+	if !strings.HasPrefix(res.AgentID, "agent-") {
+		t.Fatalf("AgentID missing agent- prefix: %q", res.AgentID)
+	}
+	if res.ProjectID != proj.ID {
+		t.Fatalf("ProjectID = %q; want %q", res.ProjectID, proj.ID)
 	}
 
 	// PAT is now consumed; a second redemption must fail.
@@ -119,65 +123,6 @@ func TestRedeemPAT_HappyPath_IssuesSession(t *testing.T) {
 	}
 	if !outcomes[storage.OutcomeSuccess] || !outcomes[storage.OutcomeDenied] {
 		t.Fatalf("outcomes = %+v; want success + denied", outcomes)
-	}
-}
-
-// --- RedeemSession + rotation -----------------------------------------------
-
-func TestRedeemSession_RotatesAndInvalidatesOld(t *testing.T) {
-	svc := newSvc(t)
-	admin, proj := bootstrap(t, svc.DB())
-	ctx := context.Background()
-
-	// Enroll once to get an initial session.
-	issue, err := svc.Svc.MintPAT(ctx, enrollment.MintPATInput{
-		ProjectID: proj.ID, IssuedByUser: admin.ID, MaxUses: 1,
-	})
-	if err != nil {
-		t.Fatalf("MintPAT: %v", err)
-	}
-	first, err := svc.Svc.RedeemPAT(ctx, issue.PlaintextToken, enrollment.RedeemContext{MachineID: "m1"})
-	if err != nil || first.Outcome != "success" {
-		t.Fatalf("enroll: %+v err=%v", first, err)
-	}
-
-	// Reconnect with the session token → rotation returns a new token.
-	second, err := svc.Svc.RedeemSession(ctx, first.SessionPlaintext, enrollment.RedeemContext{MachineID: "m1"})
-	if err != nil {
-		t.Fatalf("RedeemSession: %v", err)
-	}
-	if second.Outcome != "success" {
-		t.Fatalf("Outcome = %q; want success", second.Outcome)
-	}
-	if second.AgentID != first.AgentID {
-		t.Fatalf("AgentID changed across rotation: %q -> %q", first.AgentID, second.AgentID)
-	}
-	if second.SessionID == first.SessionID {
-		t.Fatal("SessionID did not change on rotation")
-	}
-	if second.SessionPlaintext == first.SessionPlaintext {
-		t.Fatal("session plaintext did not change on rotation")
-	}
-
-	// Old token must be rejected now (session_inactive — it's rotated).
-	replay, err := svc.Svc.RedeemSession(ctx, first.SessionPlaintext, enrollment.RedeemContext{})
-	if err != nil {
-		t.Fatalf("replay err: %v", err)
-	}
-	if replay.Outcome != "session_inactive" {
-		t.Fatalf("replay Outcome = %q; want session_inactive", replay.Outcome)
-	}
-}
-
-func TestRedeemSession_RejectsUnknown(t *testing.T) {
-	svc := newSvc(t)
-	res, err := svc.Svc.RedeemSession(context.Background(), "sess_aaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb",
-		enrollment.RedeemContext{})
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if res.Outcome != "unknown_session" {
-		t.Fatalf("Outcome = %q", res.Outcome)
 	}
 }
 

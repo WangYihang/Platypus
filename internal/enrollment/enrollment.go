@@ -1,13 +1,13 @@
-// Package enrollment handles the PAT / session-token credential lifecycle:
-// minting new PATs, redeeming them into agent sessions, and rotating
-// existing sessions. It is the single source of truth for how the
-// opaque `plt_*` / `sess_*` token strings are parsed, hashed, and
-// verified.
+// Package enrollment handles the PAT credential lifecycle: minting new
+// PATs and redeeming them. Post-enrollment identity is carried by a
+// project-CA-signed client certificate (see internal/pki and
+// handler_enroll_v2.go), not by rotating session tokens — the
+// server-side session-token store has been removed.
 //
 // The package deliberately sits above internal/storage but below
 // internal/api and internal/core so it can be called from either the
-// admin REST layer (minting) or the agent-facing TCP handshake
-// (redeeming) without creating a cycle.
+// admin REST layer (minting) or the v2 enrollment handler (redeeming)
+// without creating a cycle.
 package enrollment
 
 import (
@@ -31,13 +31,10 @@ const (
 	// Visible in logs / git / Slack so secret scanners can match it the
 	// same way they do GitHub's `ghp_`.
 	PATPrefix = "plt_"
-	// SessionPrefix tags long-lived rotating credentials issued to an
-	// agent after successful enrollment.
-	SessionPrefix = "sess_"
 
 	// Token shape: "<prefix><id>.<secret>". The id half is the primary
-	// key in pat_tokens / agent_sessions (indexed); the secret half is
-	// what we hash and compare against the stored SHA-256 digest.
+	// key in pat_tokens (indexed); the secret half is what we hash and
+	// compare against the stored SHA-256 digest.
 	idLen     = 20
 	secretLen = 20
 
@@ -45,15 +42,6 @@ const (
 	// unset. Short enough that an accidentally-leaked token burns out
 	// quickly; long enough to survive manual copy-paste flows.
 	DefaultPATTTL = 1 * time.Hour
-
-	// DefaultSessionTTL is the lifetime of a freshly-issued session
-	// token. Rotations reset this.
-	DefaultSessionTTL = 30 * 24 * time.Hour
-
-	// RenewGrace is how long before expiry the server recommends the
-	// agent rotate its session. Leaves headroom for transient network
-	// partitions so rotation doesn't race against hard expiry.
-	RenewGrace = 6 * time.Hour
 )
 
 // enc is unpadded lowercase base32 — URL-safe, case-insensitive, and
@@ -61,14 +49,14 @@ const (
 // like I/l/0/O once decoded to lowercase.
 var enc = base32.StdEncoding.WithPadding(base32.NoPadding)
 
-// CredentialKind classifies which half of the lifecycle a caller is
-// presenting. The server dispatches on this after parseCredential.
+// CredentialKind classifies which credential shape a caller is
+// presenting. Retained as a tag on ParsedCredential for symmetry with
+// other credential parsers in the codebase, but only PATs are live.
 type CredentialKind int
 
 const (
 	KindUnknown CredentialKind = iota
 	KindPAT
-	KindSession
 )
 
 // ParsedCredential is what Parse returns: a kind-tagged (id, secret)
@@ -85,21 +73,13 @@ type ParsedCredential struct {
 // the expected `<prefix><id>.<secret>` shape.
 var ErrMalformed = errors.New("enrollment: malformed credential")
 
-// Parse splits a presented credential. It does NOT validate the
-// credential against storage — that's RedeemPAT / RedeemSession.
+// Parse splits a presented PAT credential. It does NOT validate the
+// credential against storage — that's RedeemPAT's job.
 func Parse(raw string) (*ParsedCredential, error) {
-	var kind CredentialKind
-	var rest string
-	switch {
-	case strings.HasPrefix(raw, PATPrefix):
-		kind = KindPAT
-		rest = strings.TrimPrefix(raw, PATPrefix)
-	case strings.HasPrefix(raw, SessionPrefix):
-		kind = KindSession
-		rest = strings.TrimPrefix(raw, SessionPrefix)
-	default:
+	if !strings.HasPrefix(raw, PATPrefix) {
 		return nil, ErrMalformed
 	}
+	rest := strings.TrimPrefix(raw, PATPrefix)
 	parts := strings.SplitN(rest, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, ErrMalformed
@@ -108,17 +88,11 @@ func Parse(raw string) (*ParsedCredential, error) {
 	if err != nil {
 		return nil, ErrMalformed
 	}
-	// We carry the full id (including prefix) back out so callers can
-	// round-trip it to the storage layer verbatim.
-	id := prefixFor(kind) + parts[0]
-	return &ParsedCredential{Kind: kind, ID: id, Secret: secret}, nil
-}
-
-func prefixFor(k CredentialKind) string {
-	if k == KindSession {
-		return SessionPrefix
-	}
-	return PATPrefix
+	return &ParsedCredential{
+		Kind:   KindPAT,
+		ID:     PATPrefix + parts[0],
+		Secret: secret,
+	}, nil
 }
 
 // generate builds a fresh (id, secret, full) triple for a given prefix.
@@ -253,22 +227,18 @@ func (s *Service) RevokePAT(ctx context.Context, tokenID, actorUser, reason stri
 	return nil
 }
 
-// RedeemResult is returned to the agent-facing handshake after a
-// successful enrollment exchange. The SessionPlaintext is the ONLY
-// moment the new session token exists in memory — the caller returns
-// it in AgentEnrollResponse and drops the reference immediately.
+// RedeemResult is returned to the v2 enrollment handler after a
+// successful PAT redemption. AgentID / ProjectID are the bindings the
+// caller stamps into the final client certificate; CertPEM / CAPem
+// are populated by the legacy IssueForAgent path when the caller
+// supplied an Ed25519 pubkey. Today's v2 handler leaves pubkey empty
+// and issues the cert itself from a CSR — CertPEM will be "" on that
+// path, which is fine.
 type RedeemResult struct {
-	AgentID          string
-	ProjectID        string
-	SessionID        string
-	SessionPlaintext string
-	SessionExpiresAt time.Time
-	Outcome          string // "success" always on nil error; diagnostic string otherwise
+	AgentID   string
+	ProjectID string
+	Outcome   string // "success" always on nil error; diagnostic string otherwise
 
-	// CertPEM / CAPem are populated when the server has PKI configured
-	// AND the agent included a valid Ed25519 pubkey in its request.
-	// Both empty means "no cert this round" — the agent stays on
-	// PSK + session_token only, same as before Phase 4.
 	CertPEM string
 	CAPem   string
 }
@@ -287,10 +257,12 @@ type RedeemContext struct {
 	AgentPubKey []byte
 }
 
-// RedeemPAT verifies a PAT string, atomically consumes one use, creates
-// an agent_id + session for it, and records audit events. The result's
-// Outcome is always populated even on the nil-error path so callers can
-// log a consistent classification.
+// RedeemPAT verifies a PAT string, atomically consumes one use, mints
+// a fresh agent_id, and records audit events. Post-v2, agent identity
+// is carried by the client certificate the caller issues from the
+// returned (AgentID, ProjectID) — no server-side session token is
+// created. The result's Outcome is always populated even on the
+// nil-error path so callers can log a consistent classification.
 func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext) (*RedeemResult, error) {
 	parsed, parseErr := Parse(raw)
 	if parseErr != nil || parsed.Kind != KindPAT {
@@ -309,148 +281,43 @@ func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext)
 		return &RedeemResult{Outcome: outcome}, nil
 	}
 
-	// PAT accepted — mint a brand-new agent_id and initial session.
+	// PAT accepted — mint a brand-new agent_id. The caller (v2
+	// enrollment handler) signs the CSR and returns the cert; we don't
+	// need any server-side state bound to agent_id here.
 	agentID := "agent-" + uuid.NewString()
-	sess, plaintext, err := s.issueSession(ctx, agentID, tok.ProjectID, "enroll", rctx.MachineID)
-	if err != nil {
-		s.logRedemption(ctx, parsed.ID, rctx, agentID, "error", err.Error())
-		return &RedeemResult{Outcome: "error"}, err
-	}
 	s.logRedemption(ctx, parsed.ID, rctx, agentID, "success", "")
 
 	certPEM, caPEM := s.maybeIssueCert(ctx, tok.ProjectID, agentID, rctx.AgentPubKey, "enroll")
 
 	return &RedeemResult{
-		AgentID:          agentID,
-		ProjectID:        tok.ProjectID,
-		SessionID:        sess.SessionID,
-		SessionPlaintext: plaintext,
-		SessionExpiresAt: sess.ExpiresAt,
-		Outcome:          "success",
-		CertPEM:          certPEM,
-		CAPem:            caPEM,
+		AgentID:   agentID,
+		ProjectID: tok.ProjectID,
+		Outcome:   "success",
+		CertPEM:   certPEM,
+		CAPem:     caPEM,
 	}, nil
 }
 
-// RedeemSession verifies a session token and rotates it, producing a
-// fresh session token for the agent to persist. This is the reconnect
-// path — it does NOT touch PATs or create a new agent_id.
-func (s *Service) RedeemSession(ctx context.Context, raw string, rctx RedeemContext) (*RedeemResult, error) {
-	parsed, parseErr := Parse(raw)
-	if parseErr != nil || parsed.Kind != KindSession {
-		return &RedeemResult{Outcome: "malformed"}, ErrMalformed
-	}
-
-	current, err := s.db.AgentSessions().GetBySessionID(ctx, parsed.ID)
-	if errors.Is(err, storage.ErrNotFound) {
-		return &RedeemResult{Outcome: "unknown_session"}, nil
-	}
-	if err != nil {
-		return &RedeemResult{Outcome: "error"}, err
-	}
-	if !current.IsActive(time.Now()) {
-		return &RedeemResult{Outcome: "session_inactive"}, nil
-	}
-	// Constant-time compare to protect against timing side channels, even
-	// though we've already indexed the session lookup by id.
-	wantHash := sha256.Sum256(parsed.Secret)
-	if !bytesEqualCT(wantHash[:], current.SessionTokenHash) {
-		return &RedeemResult{Outcome: "invalid_secret"}, nil
-	}
-
-	// Rotate.
-	next, plaintext, err := s.rotateSession(ctx, current, rctx.MachineID)
-	if err != nil {
-		return &RedeemResult{Outcome: "error"}, err
-	}
-	// In-band rotation: re-issue cert only if the agent provided a
-	// pubkey in its renew request. Today's SessionRenewRequest
-	// doesn't carry one (the agent's cert is expected to outlive its
-	// session_token because cert TTL is explicit on issuance), so this
-	// branch is dormant until a future proto revision.
-	certPEM, caPEM := s.maybeIssueCert(ctx, current.ProjectID, current.AgentID, rctx.AgentPubKey, "rotation")
-	return &RedeemResult{
-		AgentID:          current.AgentID,
-		ProjectID:        current.ProjectID,
-		SessionID:        next.SessionID,
-		SessionPlaintext: plaintext,
-		SessionExpiresAt: next.ExpiresAt,
-		Outcome:          "success",
-		CertPEM:          certPEM,
-		CAPem:            caPEM,
-	}, nil
-}
-
-// maybeIssueCert delegates to the attached PKI issuer when possible.
-// Three short-circuits:
-//   - No PKI configured   → nothing to do, agent stays on PSK / session.
-//   - No pubkey provided  → the agent built against an older binary
-//     that doesn't set the field; skip silently.
-//   - Issuance errors     → we log and continue. A failed cert issue
-//     MUST NOT fail enrollment; the PAT /
-//     session auth is independent and operators
-//     shouldn't lose agents because of a CA hiccup.
+// maybeIssueCert delegates to the attached PKI issuer when both PKI
+// is configured AND the caller supplied a pubkey. It's the legacy
+// "issue cert from raw pubkey" code path; the v2 enrollment handler
+// doesn't use it — it calls IssueAgentLeafFromCSR directly so the
+// cert binds to a key the server has actually verified against a
+// CSR. Kept here because MintPAT callers that predate the CSR path
+// still rely on it returning empty-string on the common "no PKI /
+// no pubkey" combination.
 func (s *Service) maybeIssueCert(ctx context.Context, projectID, agentID string, pubkey []byte, reason string) (string, string) {
 	if s.pki == nil || len(pubkey) == 0 {
 		return "", ""
 	}
 	certPEM, caPEM, err := s.pki.IssueForAgent(ctx, projectID, agentID, pubkey, reason)
 	if err != nil {
-		// The maybeIssueCert contract: log-and-return-empty. Callers
-		// (RedeemPAT / RedeemSession) still emit the "success"
-		// enrollment event; the audit trail in admin_audit_log can
-		// capture the CA failure via the PKI handler later.
+		// The maybeIssueCert contract: log-and-return-empty. The
+		// RedeemPAT caller still emits the "success" enrollment event;
+		// the CA failure surfaces in the PKI handler's own audit log.
 		return "", ""
 	}
 	return certPEM, caPEM
-}
-
-// issueSession creates a brand-new active session for an agent. Used on
-// first enrollment.
-func (s *Service) issueSession(ctx context.Context, agentID, projectID, reason, machineID string) (*storage.AgentSession, string, error) {
-	id, _, hash, full, err := generate(SessionPrefix)
-	if err != nil {
-		return nil, "", err
-	}
-	now := time.Now().UTC()
-	sess := &storage.AgentSession{
-		SessionID:        id,
-		AgentID:          agentID,
-		ProjectID:        projectID,
-		SessionTokenHash: hash,
-		IssuedAt:         now,
-		IssuedReason:     reason,
-		ExpiresAt:        now.Add(DefaultSessionTTL),
-		MachineID:        machineID,
-	}
-	if err := s.db.AgentSessions().InsertActive(ctx, sess); err != nil {
-		return nil, "", err
-	}
-	return sess, full, nil
-}
-
-// rotateSession creates a new generation and marks the current one as
-// rotated. Runs inside a single transaction via storage.AgentSessions.RotateTo.
-func (s *Service) rotateSession(ctx context.Context, current *storage.AgentSession, machineID string) (*storage.AgentSession, string, error) {
-	id, _, hash, full, err := generate(SessionPrefix)
-	if err != nil {
-		return nil, "", err
-	}
-	now := time.Now().UTC()
-	next := &storage.AgentSession{
-		SessionID:        id,
-		AgentID:          current.AgentID,
-		ProjectID:        current.ProjectID,
-		SessionTokenHash: hash,
-		IssuedAt:         now,
-		IssuedReason:     "rotation",
-		ExpiresAt:        now.Add(DefaultSessionTTL),
-		MachineID:        machineID,
-	}
-	if err := s.db.AgentSessions().RotateTo(ctx, current.SessionID, next, now); err != nil {
-		return nil, "", err
-	}
-	return next, full, nil
 }
 
 // logRedemption writes a PAT / session redemption attempt into the
@@ -517,6 +384,7 @@ func (s *Service) logRedemption(ctx context.Context, tokenID string, rctx Redeem
 }
 
 // bytesEqualCT is subtle.ConstantTimeCompare wrapped so tests can stub.
+// Used by install.go when verifying install-token secrets.
 func bytesEqualCT(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
