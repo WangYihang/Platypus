@@ -116,17 +116,35 @@ func TestHandshakePSKMismatchRejected(t *testing.T) {
 }
 
 func TestHandshakeForgedNodeIDRejected(t *testing.T) {
-	// Build an Identity whose NodeID field is a lie. The server must
-	// reject it during validateHelloCommon.
+	// Build an Identity whose NodeID field lies but whose Ed25519 +
+	// X25519 keys are otherwise well-formed — makes sure the server
+	// rejects on the HandshakePayload node_id/pubkey mismatch check
+	// rather than bailing at the Noise layer.
 	base := mustIdentity(t)
 	forged := &Identity{
-		NodeID:     "this-is-not-the-real-node-id-xx",
-		PublicKey:  base.PublicKey,
-		PrivateKey: base.PrivateKey,
+		NodeID:        "this-is-not-the-real-node-id-xx",
+		PublicKey:     base.PublicKey,
+		PrivateKey:    base.PrivateKey,
+		X25519Private: base.X25519Private,
+		X25519Public:  base.X25519Public,
 	}
 	psk := randomPSK(t)
 	_, _, _, sErr := runHandshake(t, forged, mustIdentity(t), psk, psk)
 	if sErr == nil {
 		t.Fatal("expected server to reject forged NodeID")
+	}
+}
+
+// TestHandshakeSelfIDRejected: an initiator claiming the same NodeID
+// as the responder must be rejected — otherwise a compromised node
+// could impersonate its peer on a loopback attack.
+func TestHandshakeSelfIDRejected(t *testing.T) {
+	psk := randomPSK(t)
+	shared := mustIdentity(t)
+	// Both sides have the SAME Identity. Server must notice the
+	// peer claims its own NodeID in the payload and bail.
+	_, _, _, sErr := runHandshake(t, shared, shared, psk, psk)
+	if sErr == nil {
+		t.Fatal("expected server to reject peer claiming its own NodeID")
 	}
 }

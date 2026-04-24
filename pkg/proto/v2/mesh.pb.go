@@ -83,6 +83,7 @@ type MeshEnvelope struct {
 	//
 	//	*MeshEnvelope_Hello
 	//	*MeshEnvelope_HelloAck
+	//	*MeshEnvelope_HelloFinish
 	//	*MeshEnvelope_Keepalive
 	//	*MeshEnvelope_PeerAnnounce
 	//	*MeshEnvelope_PeerDelta
@@ -195,6 +196,15 @@ func (x *MeshEnvelope) GetHelloAck() *MeshHelloAck {
 	return nil
 }
 
+func (x *MeshEnvelope) GetHelloFinish() *MeshHelloFinish {
+	if x != nil {
+		if x, ok := x.Payload.(*MeshEnvelope_HelloFinish); ok {
+			return x.HelloFinish
+		}
+	}
+	return nil
+}
+
 func (x *MeshEnvelope) GetKeepalive() *MeshKeepalive {
 	if x != nil {
 		if x, ok := x.Payload.(*MeshEnvelope_Keepalive); ok {
@@ -290,12 +300,19 @@ type isMeshEnvelope_Payload interface {
 }
 
 type MeshEnvelope_Hello struct {
-	// Link handshake + keepalive
+	// Link handshake + keepalive (handshake is Noise_XXpsk3;
+	// Hello / HelloAck / HelloFinish are the three Noise messages
+	// plus each carries an application payload after the session
+	// key is established).
 	Hello *MeshHello `protobuf:"bytes,10,opt,name=hello,proto3,oneof"`
 }
 
 type MeshEnvelope_HelloAck struct {
 	HelloAck *MeshHelloAck `protobuf:"bytes,11,opt,name=hello_ack,json=helloAck,proto3,oneof"`
+}
+
+type MeshEnvelope_HelloFinish struct {
+	HelloFinish *MeshHelloFinish `protobuf:"bytes,13,opt,name=hello_finish,json=helloFinish,proto3,oneof"`
 }
 
 type MeshEnvelope_Keepalive struct {
@@ -349,6 +366,8 @@ type MeshEnvelope_Opaque struct {
 func (*MeshEnvelope_Hello) isMeshEnvelope_Payload() {}
 
 func (*MeshEnvelope_HelloAck) isMeshEnvelope_Payload() {}
+
+func (*MeshEnvelope_HelloFinish) isMeshEnvelope_Payload() {}
 
 func (*MeshEnvelope_Keepalive) isMeshEnvelope_Payload() {}
 
@@ -457,23 +476,89 @@ func (x *NodeInfo) GetBootstrapService() bool {
 	return false
 }
 
-// MeshHello is the first application-level frame on a new mesh link
-// (dialer sends it, listener replies with MeshHelloAck).
-type MeshHello struct {
+// HandshakePayload is the application data wrapped inside the
+// Noise handshake from HelloAck onward. It is encrypted + MAC'd
+// by the Noise session.
+type HandshakePayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Pubkey        []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`               // 32-byte Ed25519 public key
-	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`                 // 32 random bytes
-	PskMac        []byte                 `protobuf:"bytes,4,opt,name=psk_mac,json=pskMac,proto3" json:"psk_mac,omitempty"` // HMAC-SHA256(PSK, "platypus-mesh-hello"||pubkey||nonce)
-	Protocol      uint32                 `protobuf:"varint,5,opt,name=protocol,proto3" json:"protocol,omitempty"`          // mesh protocol version (current = 1)
-	Addresses     []string               `protobuf:"bytes,6,rep,name=addresses,proto3" json:"addresses,omitempty"`         // advertised listen addresses
+	Ed25519Pubkey []byte                 `protobuf:"bytes,2,opt,name=ed25519_pubkey,json=ed25519Pubkey,proto3" json:"ed25519_pubkey,omitempty"` // must hash to node_id via DeriveNodeID
+	Protocol      uint32                 `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"`                               // mesh protocol version (current = 1)
+	Addresses     []string               `protobuf:"bytes,4,rep,name=addresses,proto3" json:"addresses,omitempty"`                              // advertised listen addresses
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HandshakePayload) Reset() {
+	*x = HandshakePayload{}
+	mi := &file_mesh_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HandshakePayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandshakePayload) ProtoMessage() {}
+
+func (x *HandshakePayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mesh_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandshakePayload.ProtoReflect.Descriptor instead.
+func (*HandshakePayload) Descriptor() ([]byte, []int) {
+	return file_mesh_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *HandshakePayload) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *HandshakePayload) GetEd25519Pubkey() []byte {
+	if x != nil {
+		return x.Ed25519Pubkey
+	}
+	return nil
+}
+
+func (x *HandshakePayload) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *HandshakePayload) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+// MeshHello = Noise message 1 (initiator → responder). Just the
+// initiator's ephemeral; no payload.
+type MeshHello struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoiseMsg      []byte                 `protobuf:"bytes,1,opt,name=noise_msg,json=noiseMsg,proto3" json:"noise_msg,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MeshHello) Reset() {
 	*x = MeshHello{}
-	mi := &file_mesh_proto_msgTypes[2]
+	mi := &file_mesh_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +570,7 @@ func (x *MeshHello) String() string {
 func (*MeshHello) ProtoMessage() {}
 
 func (x *MeshHello) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[2]
+	mi := &file_mesh_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,70 +583,29 @@ func (x *MeshHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshHello.ProtoReflect.Descriptor instead.
 func (*MeshHello) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{2}
+	return file_mesh_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *MeshHello) GetNodeId() string {
+func (x *MeshHello) GetNoiseMsg() []byte {
 	if x != nil {
-		return x.NodeId
-	}
-	return ""
-}
-
-func (x *MeshHello) GetPubkey() []byte {
-	if x != nil {
-		return x.Pubkey
+		return x.NoiseMsg
 	}
 	return nil
 }
 
-func (x *MeshHello) GetNonce() []byte {
-	if x != nil {
-		return x.Nonce
-	}
-	return nil
-}
-
-func (x *MeshHello) GetPskMac() []byte {
-	if x != nil {
-		return x.PskMac
-	}
-	return nil
-}
-
-func (x *MeshHello) GetProtocol() uint32 {
-	if x != nil {
-		return x.Protocol
-	}
-	return 0
-}
-
-func (x *MeshHello) GetAddresses() []string {
-	if x != nil {
-		return x.Addresses
-	}
-	return nil
-}
-
-// MeshHelloAck is the reply. sig proves the responder holds the
-// private key matching pubkey by signing the concatenated nonces +
-// peer node_id (prevents replay and identity swap).
+// MeshHelloAck = Noise message 2 (responder → initiator). Carries
+// the responder's ephemeral + static + a HandshakePayload
+// advertising the responder's NodeID/Ed25519 pubkey/addresses.
 type MeshHelloAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Pubkey        []byte                 `protobuf:"bytes,2,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
-	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	PskMac        []byte                 `protobuf:"bytes,4,opt,name=psk_mac,json=pskMac,proto3" json:"psk_mac,omitempty"` // HMAC-SHA256(PSK, "platypus-mesh-hello-ack"||pubkey||nonce)
-	Sig           []byte                 `protobuf:"bytes,5,opt,name=sig,proto3" json:"sig,omitempty"`                     // Ed25519_sign(priv, peer_nonce||own_nonce||peer_node_id)
-	Protocol      uint32                 `protobuf:"varint,6,opt,name=protocol,proto3" json:"protocol,omitempty"`
-	Addresses     []string               `protobuf:"bytes,7,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	NoiseMsg      []byte                 `protobuf:"bytes,1,opt,name=noise_msg,json=noiseMsg,proto3" json:"noise_msg,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MeshHelloAck) Reset() {
 	*x = MeshHelloAck{}
-	mi := &file_mesh_proto_msgTypes[3]
+	mi := &file_mesh_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -573,7 +617,7 @@ func (x *MeshHelloAck) String() string {
 func (*MeshHelloAck) ProtoMessage() {}
 
 func (x *MeshHelloAck) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[3]
+	mi := &file_mesh_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -586,54 +630,60 @@ func (x *MeshHelloAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshHelloAck.ProtoReflect.Descriptor instead.
 func (*MeshHelloAck) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{3}
+	return file_mesh_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *MeshHelloAck) GetNodeId() string {
+func (x *MeshHelloAck) GetNoiseMsg() []byte {
 	if x != nil {
-		return x.NodeId
-	}
-	return ""
-}
-
-func (x *MeshHelloAck) GetPubkey() []byte {
-	if x != nil {
-		return x.Pubkey
+		return x.NoiseMsg
 	}
 	return nil
 }
 
-func (x *MeshHelloAck) GetNonce() []byte {
-	if x != nil {
-		return x.Nonce
-	}
-	return nil
+// MeshHelloFinish = Noise message 3 (initiator → responder).
+// Carries the initiator's static + its HandshakePayload + finalises
+// the PSK mix. After this, both sides hold paired CipherStates;
+// mesh traffic continues in plaintext on the underlying TLS link.
+type MeshHelloFinish struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoiseMsg      []byte                 `protobuf:"bytes,1,opt,name=noise_msg,json=noiseMsg,proto3" json:"noise_msg,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MeshHelloAck) GetPskMac() []byte {
-	if x != nil {
-		return x.PskMac
-	}
-	return nil
+func (x *MeshHelloFinish) Reset() {
+	*x = MeshHelloFinish{}
+	mi := &file_mesh_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-func (x *MeshHelloAck) GetSig() []byte {
-	if x != nil {
-		return x.Sig
-	}
-	return nil
+func (x *MeshHelloFinish) String() string {
+	return protoimpl.X.MessageStringOf(x)
 }
 
-func (x *MeshHelloAck) GetProtocol() uint32 {
+func (*MeshHelloFinish) ProtoMessage() {}
+
+func (x *MeshHelloFinish) ProtoReflect() protoreflect.Message {
+	mi := &file_mesh_proto_msgTypes[5]
 	if x != nil {
-		return x.Protocol
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return 0
+	return mi.MessageOf(x)
 }
 
-func (x *MeshHelloAck) GetAddresses() []string {
+// Deprecated: Use MeshHelloFinish.ProtoReflect.Descriptor instead.
+func (*MeshHelloFinish) Descriptor() ([]byte, []int) {
+	return file_mesh_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *MeshHelloFinish) GetNoiseMsg() []byte {
 	if x != nil {
-		return x.Addresses
+		return x.NoiseMsg
 	}
 	return nil
 }
@@ -655,7 +705,7 @@ type MeshKeepalive struct {
 
 func (x *MeshKeepalive) Reset() {
 	*x = MeshKeepalive{}
-	mi := &file_mesh_proto_msgTypes[4]
+	mi := &file_mesh_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +717,7 @@ func (x *MeshKeepalive) String() string {
 func (*MeshKeepalive) ProtoMessage() {}
 
 func (x *MeshKeepalive) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[4]
+	mi := &file_mesh_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +730,7 @@ func (x *MeshKeepalive) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshKeepalive.ProtoReflect.Descriptor instead.
 func (*MeshKeepalive) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{4}
+	return file_mesh_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MeshKeepalive) GetSentAt() int64 {
@@ -735,7 +785,7 @@ type MeshPeerAnnounce struct {
 
 func (x *MeshPeerAnnounce) Reset() {
 	*x = MeshPeerAnnounce{}
-	mi := &file_mesh_proto_msgTypes[5]
+	mi := &file_mesh_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +797,7 @@ func (x *MeshPeerAnnounce) String() string {
 func (*MeshPeerAnnounce) ProtoMessage() {}
 
 func (x *MeshPeerAnnounce) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[5]
+	mi := &file_mesh_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +810,7 @@ func (x *MeshPeerAnnounce) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshPeerAnnounce.ProtoReflect.Descriptor instead.
 func (*MeshPeerAnnounce) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{5}
+	return file_mesh_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MeshPeerAnnounce) GetNodes() []*NodeInfo {
@@ -811,7 +861,7 @@ type MeshPeerDelta struct {
 
 func (x *MeshPeerDelta) Reset() {
 	*x = MeshPeerDelta{}
-	mi := &file_mesh_proto_msgTypes[6]
+	mi := &file_mesh_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +873,7 @@ func (x *MeshPeerDelta) String() string {
 func (*MeshPeerDelta) ProtoMessage() {}
 
 func (x *MeshPeerDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[6]
+	mi := &file_mesh_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +886,7 @@ func (x *MeshPeerDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshPeerDelta.ProtoReflect.Descriptor instead.
 func (*MeshPeerDelta) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{6}
+	return file_mesh_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MeshPeerDelta) GetOriginNodeId() string {
@@ -908,7 +958,7 @@ type MeshLSA struct {
 
 func (x *MeshLSA) Reset() {
 	*x = MeshLSA{}
-	mi := &file_mesh_proto_msgTypes[7]
+	mi := &file_mesh_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -920,7 +970,7 @@ func (x *MeshLSA) String() string {
 func (*MeshLSA) ProtoMessage() {}
 
 func (x *MeshLSA) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[7]
+	mi := &file_mesh_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -933,7 +983,7 @@ func (x *MeshLSA) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshLSA.ProtoReflect.Descriptor instead.
 func (*MeshLSA) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{7}
+	return file_mesh_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MeshLSA) GetOriginNodeId() string {
@@ -997,7 +1047,7 @@ type MeshUnreachable struct {
 
 func (x *MeshUnreachable) Reset() {
 	*x = MeshUnreachable{}
-	mi := &file_mesh_proto_msgTypes[8]
+	mi := &file_mesh_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1059,7 @@ func (x *MeshUnreachable) String() string {
 func (*MeshUnreachable) ProtoMessage() {}
 
 func (x *MeshUnreachable) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[8]
+	mi := &file_mesh_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1072,7 @@ func (x *MeshUnreachable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshUnreachable.ProtoReflect.Descriptor instead.
 func (*MeshUnreachable) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{8}
+	return file_mesh_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MeshUnreachable) GetTargetNode() string {
@@ -1051,7 +1101,7 @@ type MeshStreamOpen struct {
 
 func (x *MeshStreamOpen) Reset() {
 	*x = MeshStreamOpen{}
-	mi := &file_mesh_proto_msgTypes[9]
+	mi := &file_mesh_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1063,7 +1113,7 @@ func (x *MeshStreamOpen) String() string {
 func (*MeshStreamOpen) ProtoMessage() {}
 
 func (x *MeshStreamOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[9]
+	mi := &file_mesh_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1076,7 +1126,7 @@ func (x *MeshStreamOpen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshStreamOpen.ProtoReflect.Descriptor instead.
 func (*MeshStreamOpen) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{9}
+	return file_mesh_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MeshStreamOpen) GetInitiatorNodeId() string {
@@ -1119,7 +1169,7 @@ type MeshStreamOpenAck struct {
 
 func (x *MeshStreamOpenAck) Reset() {
 	*x = MeshStreamOpenAck{}
-	mi := &file_mesh_proto_msgTypes[10]
+	mi := &file_mesh_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1131,7 +1181,7 @@ func (x *MeshStreamOpenAck) String() string {
 func (*MeshStreamOpenAck) ProtoMessage() {}
 
 func (x *MeshStreamOpenAck) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[10]
+	mi := &file_mesh_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1144,7 +1194,7 @@ func (x *MeshStreamOpenAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshStreamOpenAck.ProtoReflect.Descriptor instead.
 func (*MeshStreamOpenAck) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{10}
+	return file_mesh_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MeshStreamOpenAck) GetInitiatorNodeId() string {
@@ -1187,7 +1237,7 @@ type MeshStreamData struct {
 
 func (x *MeshStreamData) Reset() {
 	*x = MeshStreamData{}
-	mi := &file_mesh_proto_msgTypes[11]
+	mi := &file_mesh_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1199,7 +1249,7 @@ func (x *MeshStreamData) String() string {
 func (*MeshStreamData) ProtoMessage() {}
 
 func (x *MeshStreamData) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[11]
+	mi := &file_mesh_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1212,7 +1262,7 @@ func (x *MeshStreamData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshStreamData.ProtoReflect.Descriptor instead.
 func (*MeshStreamData) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{11}
+	return file_mesh_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MeshStreamData) GetInitiatorNodeId() string {
@@ -1254,7 +1304,7 @@ type MeshStreamClose struct {
 
 func (x *MeshStreamClose) Reset() {
 	*x = MeshStreamClose{}
-	mi := &file_mesh_proto_msgTypes[12]
+	mi := &file_mesh_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1266,7 +1316,7 @@ func (x *MeshStreamClose) String() string {
 func (*MeshStreamClose) ProtoMessage() {}
 
 func (x *MeshStreamClose) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[12]
+	mi := &file_mesh_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1279,7 +1329,7 @@ func (x *MeshStreamClose) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshStreamClose.ProtoReflect.Descriptor instead.
 func (*MeshStreamClose) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{12}
+	return file_mesh_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *MeshStreamClose) GetInitiatorNodeId() string {
@@ -1313,7 +1363,7 @@ type MeshLSA_Link struct {
 
 func (x *MeshLSA_Link) Reset() {
 	*x = MeshLSA_Link{}
-	mi := &file_mesh_proto_msgTypes[13]
+	mi := &file_mesh_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1325,7 +1375,7 @@ func (x *MeshLSA_Link) String() string {
 func (*MeshLSA_Link) ProtoMessage() {}
 
 func (x *MeshLSA_Link) ProtoReflect() protoreflect.Message {
-	mi := &file_mesh_proto_msgTypes[13]
+	mi := &file_mesh_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1338,7 +1388,7 @@ func (x *MeshLSA_Link) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeshLSA_Link.ProtoReflect.Descriptor instead.
 func (*MeshLSA_Link) Descriptor() ([]byte, []int) {
-	return file_mesh_proto_rawDescGZIP(), []int{7, 0}
+	return file_mesh_proto_rawDescGZIP(), []int{9, 0}
 }
 
 func (x *MeshLSA_Link) GetNodeId() string {
@@ -1360,7 +1410,7 @@ var File_mesh_proto protoreflect.FileDescriptor
 const file_mesh_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"mesh.proto\x12\vplatypus.v2\"\x80\a\n" +
+	"mesh.proto\x12\vplatypus.v2\"\xc3\a\n" +
 	"\fMeshEnvelope\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -1373,7 +1423,8 @@ const file_mesh_proto_rawDesc = "" +
 	"\x03ttl\x18\x06 \x01(\rR\x03ttl\x12.\n" +
 	"\x05hello\x18\n" +
 	" \x01(\v2\x16.platypus.v2.MeshHelloH\x00R\x05hello\x128\n" +
-	"\thello_ack\x18\v \x01(\v2\x19.platypus.v2.MeshHelloAckH\x00R\bhelloAck\x12:\n" +
+	"\thello_ack\x18\v \x01(\v2\x19.platypus.v2.MeshHelloAckH\x00R\bhelloAck\x12A\n" +
+	"\fhello_finish\x18\r \x01(\v2\x1c.platypus.v2.MeshHelloFinishH\x00R\vhelloFinish\x12:\n" +
 	"\tkeepalive\x18\f \x01(\v2\x1a.platypus.v2.MeshKeepaliveH\x00R\tkeepalive\x12D\n" +
 	"\rpeer_announce\x18\x14 \x01(\v2\x1d.platypus.v2.MeshPeerAnnounceH\x00R\fpeerAnnounce\x12;\n" +
 	"\n" +
@@ -1394,22 +1445,18 @@ const file_mesh_proto_rawDesc = "" +
 	"\taddresses\x18\x03 \x03(\tR\taddresses\x12\x1b\n" +
 	"\tlast_seen\x18\x04 \x01(\x03R\blastSeen\x12\x12\n" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12+\n" +
-	"\x11bootstrap_service\x18\x06 \x01(\bR\x10bootstrapService\"\xa5\x01\n" +
-	"\tMeshHello\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
-	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x14\n" +
-	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x17\n" +
-	"\apsk_mac\x18\x04 \x01(\fR\x06pskMac\x12\x1a\n" +
-	"\bprotocol\x18\x05 \x01(\rR\bprotocol\x12\x1c\n" +
-	"\taddresses\x18\x06 \x03(\tR\taddresses\"\xba\x01\n" +
-	"\fMeshHelloAck\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
-	"\x06pubkey\x18\x02 \x01(\fR\x06pubkey\x12\x14\n" +
-	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x17\n" +
-	"\apsk_mac\x18\x04 \x01(\fR\x06pskMac\x12\x10\n" +
-	"\x03sig\x18\x05 \x01(\fR\x03sig\x12\x1a\n" +
-	"\bprotocol\x18\x06 \x01(\rR\bprotocol\x12\x1c\n" +
-	"\taddresses\x18\a \x03(\tR\taddresses\"\xd8\x01\n" +
+	"\x11bootstrap_service\x18\x06 \x01(\bR\x10bootstrapService\"\x8c\x01\n" +
+	"\x10HandshakePayload\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12%\n" +
+	"\x0eed25519_pubkey\x18\x02 \x01(\fR\red25519Pubkey\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\rR\bprotocol\x12\x1c\n" +
+	"\taddresses\x18\x04 \x03(\tR\taddresses\"(\n" +
+	"\tMeshHello\x12\x1b\n" +
+	"\tnoise_msg\x18\x01 \x01(\fR\bnoiseMsg\"+\n" +
+	"\fMeshHelloAck\x12\x1b\n" +
+	"\tnoise_msg\x18\x01 \x01(\fR\bnoiseMsg\".\n" +
+	"\x0fMeshHelloFinish\x12\x1b\n" +
+	"\tnoise_msg\x18\x01 \x01(\fR\bnoiseMsg\"\xd8\x01\n" +
 	"\rMeshKeepalive\x12\x17\n" +
 	"\asent_at\x18\x01 \x01(\x03R\x06sentAt\x12*\n" +
 	"\x11lifetime_bytes_in\x18\x02 \x01(\x04R\x0flifetimeBytesIn\x12,\n" +
@@ -1482,45 +1529,48 @@ func file_mesh_proto_rawDescGZIP() []byte {
 }
 
 var file_mesh_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_mesh_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_mesh_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_mesh_proto_goTypes = []any{
 	(MeshStreamKind)(0),       // 0: platypus.v2.MeshStreamKind
 	(*MeshEnvelope)(nil),      // 1: platypus.v2.MeshEnvelope
 	(*NodeInfo)(nil),          // 2: platypus.v2.NodeInfo
-	(*MeshHello)(nil),         // 3: platypus.v2.MeshHello
-	(*MeshHelloAck)(nil),      // 4: platypus.v2.MeshHelloAck
-	(*MeshKeepalive)(nil),     // 5: platypus.v2.MeshKeepalive
-	(*MeshPeerAnnounce)(nil),  // 6: platypus.v2.MeshPeerAnnounce
-	(*MeshPeerDelta)(nil),     // 7: platypus.v2.MeshPeerDelta
-	(*MeshLSA)(nil),           // 8: platypus.v2.MeshLSA
-	(*MeshUnreachable)(nil),   // 9: platypus.v2.MeshUnreachable
-	(*MeshStreamOpen)(nil),    // 10: platypus.v2.MeshStreamOpen
-	(*MeshStreamOpenAck)(nil), // 11: platypus.v2.MeshStreamOpenAck
-	(*MeshStreamData)(nil),    // 12: platypus.v2.MeshStreamData
-	(*MeshStreamClose)(nil),   // 13: platypus.v2.MeshStreamClose
-	(*MeshLSA_Link)(nil),      // 14: platypus.v2.MeshLSA.Link
+	(*HandshakePayload)(nil),  // 3: platypus.v2.HandshakePayload
+	(*MeshHello)(nil),         // 4: platypus.v2.MeshHello
+	(*MeshHelloAck)(nil),      // 5: platypus.v2.MeshHelloAck
+	(*MeshHelloFinish)(nil),   // 6: platypus.v2.MeshHelloFinish
+	(*MeshKeepalive)(nil),     // 7: platypus.v2.MeshKeepalive
+	(*MeshPeerAnnounce)(nil),  // 8: platypus.v2.MeshPeerAnnounce
+	(*MeshPeerDelta)(nil),     // 9: platypus.v2.MeshPeerDelta
+	(*MeshLSA)(nil),           // 10: platypus.v2.MeshLSA
+	(*MeshUnreachable)(nil),   // 11: platypus.v2.MeshUnreachable
+	(*MeshStreamOpen)(nil),    // 12: platypus.v2.MeshStreamOpen
+	(*MeshStreamOpenAck)(nil), // 13: platypus.v2.MeshStreamOpenAck
+	(*MeshStreamData)(nil),    // 14: platypus.v2.MeshStreamData
+	(*MeshStreamClose)(nil),   // 15: platypus.v2.MeshStreamClose
+	(*MeshLSA_Link)(nil),      // 16: platypus.v2.MeshLSA.Link
 }
 var file_mesh_proto_depIdxs = []int32{
-	3,  // 0: platypus.v2.MeshEnvelope.hello:type_name -> platypus.v2.MeshHello
-	4,  // 1: platypus.v2.MeshEnvelope.hello_ack:type_name -> platypus.v2.MeshHelloAck
-	5,  // 2: platypus.v2.MeshEnvelope.keepalive:type_name -> platypus.v2.MeshKeepalive
-	6,  // 3: platypus.v2.MeshEnvelope.peer_announce:type_name -> platypus.v2.MeshPeerAnnounce
-	7,  // 4: platypus.v2.MeshEnvelope.peer_delta:type_name -> platypus.v2.MeshPeerDelta
-	8,  // 5: platypus.v2.MeshEnvelope.lsa:type_name -> platypus.v2.MeshLSA
-	9,  // 6: platypus.v2.MeshEnvelope.unreachable:type_name -> platypus.v2.MeshUnreachable
-	10, // 7: platypus.v2.MeshEnvelope.stream_open:type_name -> platypus.v2.MeshStreamOpen
-	11, // 8: platypus.v2.MeshEnvelope.stream_open_ack:type_name -> platypus.v2.MeshStreamOpenAck
-	12, // 9: platypus.v2.MeshEnvelope.stream_data:type_name -> platypus.v2.MeshStreamData
-	13, // 10: platypus.v2.MeshEnvelope.stream_close:type_name -> platypus.v2.MeshStreamClose
-	2,  // 11: platypus.v2.MeshPeerAnnounce.nodes:type_name -> platypus.v2.NodeInfo
-	2,  // 12: platypus.v2.MeshPeerDelta.added:type_name -> platypus.v2.NodeInfo
-	14, // 13: platypus.v2.MeshLSA.links:type_name -> platypus.v2.MeshLSA.Link
-	0,  // 14: platypus.v2.MeshStreamOpen.kind:type_name -> platypus.v2.MeshStreamKind
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 0: platypus.v2.MeshEnvelope.hello:type_name -> platypus.v2.MeshHello
+	5,  // 1: platypus.v2.MeshEnvelope.hello_ack:type_name -> platypus.v2.MeshHelloAck
+	6,  // 2: platypus.v2.MeshEnvelope.hello_finish:type_name -> platypus.v2.MeshHelloFinish
+	7,  // 3: platypus.v2.MeshEnvelope.keepalive:type_name -> platypus.v2.MeshKeepalive
+	8,  // 4: platypus.v2.MeshEnvelope.peer_announce:type_name -> platypus.v2.MeshPeerAnnounce
+	9,  // 5: platypus.v2.MeshEnvelope.peer_delta:type_name -> platypus.v2.MeshPeerDelta
+	10, // 6: platypus.v2.MeshEnvelope.lsa:type_name -> platypus.v2.MeshLSA
+	11, // 7: platypus.v2.MeshEnvelope.unreachable:type_name -> platypus.v2.MeshUnreachable
+	12, // 8: platypus.v2.MeshEnvelope.stream_open:type_name -> platypus.v2.MeshStreamOpen
+	13, // 9: platypus.v2.MeshEnvelope.stream_open_ack:type_name -> platypus.v2.MeshStreamOpenAck
+	14, // 10: platypus.v2.MeshEnvelope.stream_data:type_name -> platypus.v2.MeshStreamData
+	15, // 11: platypus.v2.MeshEnvelope.stream_close:type_name -> platypus.v2.MeshStreamClose
+	2,  // 12: platypus.v2.MeshPeerAnnounce.nodes:type_name -> platypus.v2.NodeInfo
+	2,  // 13: platypus.v2.MeshPeerDelta.added:type_name -> platypus.v2.NodeInfo
+	16, // 14: platypus.v2.MeshLSA.links:type_name -> platypus.v2.MeshLSA.Link
+	0,  // 15: platypus.v2.MeshStreamOpen.kind:type_name -> platypus.v2.MeshStreamKind
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_mesh_proto_init() }
@@ -1531,6 +1581,7 @@ func file_mesh_proto_init() {
 	file_mesh_proto_msgTypes[0].OneofWrappers = []any{
 		(*MeshEnvelope_Hello)(nil),
 		(*MeshEnvelope_HelloAck)(nil),
+		(*MeshEnvelope_HelloFinish)(nil),
 		(*MeshEnvelope_Keepalive)(nil),
 		(*MeshEnvelope_PeerAnnounce)(nil),
 		(*MeshEnvelope_PeerDelta)(nil),
@@ -1548,7 +1599,7 @@ func file_mesh_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mesh_proto_rawDesc), len(file_mesh_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

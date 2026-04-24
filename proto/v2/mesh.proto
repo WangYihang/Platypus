@@ -35,10 +35,14 @@ message MeshEnvelope {
   uint32 ttl         = 6;
 
   oneof payload {
-    // Link handshake + keepalive
-    MeshHello     hello     = 10;
-    MeshHelloAck  hello_ack = 11;
-    MeshKeepalive keepalive = 12;
+    // Link handshake + keepalive (handshake is Noise_XXpsk3;
+    // Hello / HelloAck / HelloFinish are the three Noise messages
+    // plus each carries an application payload after the session
+    // key is established).
+    MeshHello        hello        = 10;
+    MeshHelloAck     hello_ack    = 11;
+    MeshHelloFinish  hello_finish = 13;
+    MeshKeepalive    keepalive    = 12;
 
     // Peer-table gossip
     MeshPeerAnnounce peer_announce = 20;
@@ -75,28 +79,44 @@ message NodeInfo {
   bool   bootstrap_service = 6; // true if node accepts bootstrap streams
 }
 
-// MeshHello is the first application-level frame on a new mesh link
-// (dialer sends it, listener replies with MeshHelloAck).
-message MeshHello {
-  string node_id  = 1;
-  bytes  pubkey   = 2; // 32-byte Ed25519 public key
-  bytes  nonce    = 3; // 32 random bytes
-  bytes  psk_mac  = 4; // HMAC-SHA256(PSK, "platypus-mesh-hello"||pubkey||nonce)
-  uint32 protocol = 5; // mesh protocol version (current = 1)
-  repeated string addresses = 6; // advertised listen addresses
+// Mesh handshake is Noise_XXpsk3 over Curve25519/ChaChaPoly/BLAKE2b:
+// three messages (Hello → HelloAck → HelloFinish). The responder's
+// second message and the initiator's third message each carry an
+// encrypted HandshakePayload that binds the Noise X25519 identity
+// to an Ed25519 NodeID used for LSA/gossip signing. A network-wide
+// PSK is mixed in at position 3 so mesh membership is gated by a
+// shared secret on top of Noise's mutual auth — equivalent to the
+// old PSK-MAC design but with standard crypto primitives.
+
+// HandshakePayload is the application data wrapped inside the
+// Noise handshake from HelloAck onward. It is encrypted + MAC'd
+// by the Noise session.
+message HandshakePayload {
+  string node_id          = 1;
+  bytes  ed25519_pubkey   = 2; // must hash to node_id via DeriveNodeID
+  uint32 protocol         = 3; // mesh protocol version (current = 1)
+  repeated string addresses = 4; // advertised listen addresses
 }
 
-// MeshHelloAck is the reply. sig proves the responder holds the
-// private key matching pubkey by signing the concatenated nonces +
-// peer node_id (prevents replay and identity swap).
+// MeshHello = Noise message 1 (initiator → responder). Just the
+// initiator's ephemeral; no payload.
+message MeshHello {
+  bytes noise_msg = 1;
+}
+
+// MeshHelloAck = Noise message 2 (responder → initiator). Carries
+// the responder's ephemeral + static + a HandshakePayload
+// advertising the responder's NodeID/Ed25519 pubkey/addresses.
 message MeshHelloAck {
-  string node_id  = 1;
-  bytes  pubkey   = 2;
-  bytes  nonce    = 3;
-  bytes  psk_mac  = 4; // HMAC-SHA256(PSK, "platypus-mesh-hello-ack"||pubkey||nonce)
-  bytes  sig      = 5; // Ed25519_sign(priv, peer_nonce||own_nonce||peer_node_id)
-  uint32 protocol = 6;
-  repeated string addresses = 7;
+  bytes noise_msg = 1;
+}
+
+// MeshHelloFinish = Noise message 3 (initiator → responder).
+// Carries the initiator's static + its HandshakePayload + finalises
+// the PSK mix. After this, both sides hold paired CipherStates;
+// mesh traffic continues in plaintext on the underlying TLS link.
+message MeshHelloFinish {
+  bytes noise_msg = 1;
 }
 
 // MeshKeepalive is a periodic heartbeat. Either side may send one;

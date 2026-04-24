@@ -8,6 +8,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/coder/websocket v1.8.14
 	github.com/creack/pty v1.1.24
+	github.com/flynn/noise v1.1.0
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/validator/v10 v10.30.2

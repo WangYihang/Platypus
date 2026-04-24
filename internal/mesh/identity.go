@@ -17,9 +17,13 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/hkdf"
 )
 
 // NodeIDLen is the encoded length of a NodeID in characters. base32 over
@@ -33,13 +37,69 @@ const NodeIDLen = 32
 // NodeIDs are URL-safe and case-insensitive.
 var nodeIDEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
-// Identity bundles an Ed25519 keypair with its derived NodeID. It is
-// safe to share the exported PublicKey / NodeID; PrivateKey must never
-// leave the process it was generated in.
+// Identity bundles an Ed25519 keypair (for NodeID derivation +
+// LSA/gossip signing) with a derived X25519 keypair (for the Noise
+// mesh handshake). The X25519 keys are deterministic from the
+// Ed25519 seed via HKDF-SHA256, so an Identity restored from disk
+// reproduces the same X25519 static key every time. PrivateKey +
+// X25519Private must never leave the process they were generated in.
 type Identity struct {
 	NodeID     string
 	PublicKey  ed25519.PublicKey
 	PrivateKey ed25519.PrivateKey
+
+	// X25519 static keypair for Noise. 32 bytes each. Derived from
+	// PrivateKey.Seed() via HKDF so we don't need a separate disk
+	// artifact — restoring the Ed25519 seed reconstructs them.
+	X25519Private [32]byte
+	X25519Public  [32]byte
+}
+
+// x25519HKDFLabel domain-separates the X25519 derivation so the same
+// Ed25519 seed cannot be accidentally reused to derive a key that
+// chains into another protocol (e.g. file encryption). Kept stable
+// across versions; if it ever needs to change, bump the suffix.
+const x25519HKDFLabel = "platypus-mesh-noise-x25519-v1"
+
+// deriveX25519Keypair derives a Curve25519 static keypair from an
+// Ed25519 seed. The derivation is deterministic so the same seed
+// reproduces the same X25519 keypair — which means persisting just
+// the Ed25519 seed is enough to restore the full Identity.
+//
+// We can't safely convert Ed25519's signing key to a Curve25519
+// Diffie-Hellman key in general (the conversion is defined but has
+// subtle pitfalls around cross-protocol attacks), so HKDF-ing a
+// fresh X25519 scalar from the seed with a domain-separation label
+// avoids the hazard entirely.
+func deriveX25519Keypair(seed []byte) ([32]byte, [32]byte, error) {
+	var priv, pub [32]byte
+	h := hkdf.New(sha256.New, seed, nil, []byte(x25519HKDFLabel))
+	if _, err := io.ReadFull(h, priv[:]); err != nil {
+		return priv, pub, fmt.Errorf("hkdf read: %w", err)
+	}
+	// Clamp per RFC 7748.
+	priv[0] &= 248
+	priv[31] &= 127
+	priv[31] |= 64
+	pubBytes, err := curve25519.X25519(priv[:], curve25519.Basepoint)
+	if err != nil {
+		return priv, pub, fmt.Errorf("curve25519 base mult: %w", err)
+	}
+	copy(pub[:], pubBytes)
+	return priv, pub, nil
+}
+
+// fillX25519 computes and sets id's X25519 keypair from the Ed25519
+// seed. Called by every constructor path (NewIdentity +
+// LoadOrCreateIdentity) so Identity is always complete.
+func (id *Identity) fillX25519() error {
+	priv, pub, err := deriveX25519Keypair(id.PrivateKey.Seed())
+	if err != nil {
+		return fmt.Errorf("mesh: derive x25519: %w", err)
+	}
+	id.X25519Private = priv
+	id.X25519Public = pub
+	return nil
 }
 
 // DeriveNodeID returns the canonical NodeID for an Ed25519 public key.
@@ -54,17 +114,22 @@ func DeriveNodeID(pub ed25519.PublicKey) string {
 	return strings.ToLower(nodeIDEncoding.EncodeToString(sum[:]))[:NodeIDLen]
 }
 
-// NewIdentity generates a fresh Ed25519 keypair.
+// NewIdentity generates a fresh Ed25519 keypair and derives the
+// matching X25519 static for Noise.
 func NewIdentity() (*Identity, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("mesh: generate identity key: %w", err)
 	}
-	return &Identity{
+	id := &Identity{
 		NodeID:     DeriveNodeID(pub),
 		PublicKey:  pub,
 		PrivateKey: priv,
-	}, nil
+	}
+	if err := id.fillX25519(); err != nil {
+		return nil, err
+	}
+	return id, nil
 }
 
 // LoadOrCreateIdentity reads an identity from dir, or generates and
@@ -92,11 +157,15 @@ func LoadOrCreateIdentity(dir string) (*Identity, error) {
 		}
 		priv := ed25519.NewKeyFromSeed(seed)
 		pub := priv.Public().(ed25519.PublicKey)
-		return &Identity{
+		id := &Identity{
 			NodeID:     DeriveNodeID(pub),
 			PublicKey:  pub,
 			PrivateKey: priv,
-		}, nil
+		}
+		if err := id.fillX25519(); err != nil {
+			return nil, err
+		}
+		return id, nil
 	}
 	if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("mesh: read identity key: %w", err)

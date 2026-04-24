@@ -1,30 +1,24 @@
 package mesh
 
 import (
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 	"context"
-	"crypto/ed25519"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"time"
 
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
 const (
 	meshProtocolVersion = 1
-	pskDomainHello      = "platypus-mesh-hello"
-	pskDomainHelloAck   = "platypus-mesh-hello-ack"
 	handshakeTimeout    = 5 * time.Second
 )
 
-// ErrHandshake wraps any handshake failure so the caller can log a short
-// reason without leaking whether it was the PSK, the signature, or a
-// malformed frame that failed — attackers should see "handshake failed"
-// and no more.
+// ErrHandshake wraps any handshake failure so the caller can log a
+// short reason without leaking whether it was the PSK, the signature,
+// or a malformed frame that failed — attackers should see "handshake
+// failed" and no more. Kept as a named type so call sites can still
+// branch on it (e.g. Dialer backoff policy).
 type ErrHandshake struct {
 	Stage  string
 	Detail string
@@ -38,68 +32,14 @@ func handshakeError(stage, detail string) *ErrHandshake {
 	return &ErrHandshake{Stage: stage, Detail: detail}
 }
 
-// HandshakeResult is returned to both sides of a completed mesh
-// handshake. It carries the peer's verified identity plus the addresses
-// the peer advertises (used for gossip).
-type HandshakeResult struct {
-	PeerNodeID    string
-	PeerPublicKey ed25519.PublicKey
-	PeerAddresses []string
-}
-
-// pskMAC computes HMAC-SHA256(psk, domain || pubkey || nonce).
-func pskMAC(psk []byte, domain string, pubkey, nonce []byte) []byte {
-	mac := hmac.New(sha256.New, psk)
-	mac.Write([]byte(domain))
-	mac.Write(pubkey)
-	mac.Write(nonce)
-	return mac.Sum(nil)
-}
-
-// sigMessage is the canonical bytestring the responder signs: peer's
-// hello nonce, then own ack nonce, then peer's claimed node_id. Including
-// the peer node_id prevents an attacker who captures a valid Ack from
-// reusing it against a different initiator.
-func sigMessage(peerNonce, ownNonce []byte, peerNodeID string) []byte {
-	buf := make([]byte, 0, len(peerNonce)+len(ownNonce)+len(peerNodeID))
-	buf = append(buf, peerNonce...)
-	buf = append(buf, ownNonce...)
-	buf = append(buf, []byte(peerNodeID)...)
-	return buf
-}
-
-// validateHelloCommon checks invariants shared between Hello and HelloAck
-// on the receiving side. It does NOT check the signature (HelloAck only).
-func validateHelloCommon(
-	psk []byte,
-	domain string,
-	nodeID string,
-	pubkey, nonce, mac []byte,
-	protocolVer uint32,
-) error {
-	if protocolVer != meshProtocolVersion {
-		return handshakeError("protocol", fmt.Sprintf("unsupported protocol %d", protocolVer))
-	}
-	if len(pubkey) != ed25519.PublicKeySize {
-		return handshakeError("pubkey", "wrong length")
-	}
-	if len(nonce) != 32 {
-		return handshakeError("nonce", "wrong length")
-	}
-	if DeriveNodeID(pubkey) != nodeID {
-		return handshakeError("node_id", "does not match pubkey")
-	}
-	expected := pskMAC(psk, domain, pubkey, nonce)
-	if subtle.ConstantTimeCompare(expected, mac) != 1 {
-		return handshakeError("psk_mac", "mismatch")
-	}
-	return nil
-}
+// nowNanos is a testing seam for the timestamp field in MeshEnvelope
+// during the handshake frames. Plain time.Now() in production.
+var nowNanos = func() int64 { return time.Now().UnixNano() }
 
 // PerformClientHandshake runs the mesh handshake from the side that
-// opened the transport (the "dialer" / "client" half). It sends
-// MeshHello, expects MeshHelloAck, verifies the MAC + signature, and
-// returns the peer's identity.
+// opened the transport (the "dialer" / "client" half). Three Noise
+// XXpsk3 messages are exchanged; on success the peer's Ed25519
+// identity is returned. PSK must be non-empty (≥16 bytes).
 func PerformClientHandshake(
 	ctx context.Context,
 	codec *envCodec,
@@ -107,56 +47,17 @@ func PerformClientHandshake(
 	psk []byte,
 	advertisedAddrs []string,
 ) (*HandshakeResult, error) {
+	if len(psk) < 16 {
+		return nil, handshakeError("psk", "missing or too short")
+	}
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
-
-	helloNonce := make([]byte, 32)
-	if _, err := rand.Read(helloNonce); err != nil {
-		return nil, handshakeError("nonce_gen", err.Error())
-	}
-
-	hello := &v2pb.MeshHello{
-		NodeId:    id.NodeID,
-		Pubkey:    id.PublicKey,
-		Nonce:     helloNonce,
-		PskMac:    pskMAC(psk, pskDomainHello, id.PublicKey, helloNonce),
-		Protocol:  meshProtocolVersion,
-		Addresses: advertisedAddrs,
-	}
-	if err := sendWithCtx(ctx, codec, &v2pb.MeshEnvelope{
-		Timestamp: time.Now().UnixNano(),
-		Version:   meshProtocolVersion,
-		Payload:   &v2pb.MeshEnvelope_Hello{Hello: hello},
-	}); err != nil {
-		return nil, handshakeError("send_hello", err.Error())
-	}
-
-	env, err := recvWithCtx(ctx, codec)
-	if err != nil {
-		return nil, handshakeError("recv_ack", err.Error())
-	}
-	ack, ok := env.Payload.(*v2pb.MeshEnvelope_HelloAck)
-	if !ok {
-		return nil, handshakeError("recv_ack", "unexpected payload")
-	}
-	a := ack.HelloAck
-	if err := validateHelloCommon(psk, pskDomainHelloAck, a.NodeId, a.Pubkey, a.Nonce, a.PskMac, a.Protocol); err != nil {
-		return nil, err
-	}
-	if !ed25519.Verify(a.Pubkey, sigMessage(helloNonce, a.Nonce, id.NodeID), a.Sig) {
-		return nil, handshakeError("signature", "invalid")
-	}
-	return &HandshakeResult{
-		PeerNodeID:    a.NodeId,
-		PeerPublicKey: a.Pubkey,
-		PeerAddresses: a.Addresses,
-	}, nil
+	res, err := runNoiseInitiator(ctx, codec, id, psk, buildPayload(id, advertisedAddrs))
+	return wrapNoiseErr(res, err)
 }
 
 // PerformServerHandshake runs the mesh handshake from the side that
-// accepted the transport (the "listener" / "server" half). It waits for
-// MeshHello, verifies it, signs a challenge, and replies with
-// MeshHelloAck.
+// accepted the transport.
 func PerformServerHandshake(
 	ctx context.Context,
 	codec *envCodec,
@@ -164,57 +65,77 @@ func PerformServerHandshake(
 	psk []byte,
 	advertisedAddrs []string,
 ) (*HandshakeResult, error) {
+	if len(psk) < 16 {
+		return nil, handshakeError("psk", "missing or too short")
+	}
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
-
-	env, err := recvWithCtx(ctx, codec)
-	if err != nil {
-		return nil, handshakeError("recv_hello", err.Error())
-	}
-	hello, ok := env.Payload.(*v2pb.MeshEnvelope_Hello)
-	if !ok {
-		return nil, handshakeError("recv_hello", "unexpected payload")
-	}
-	h := hello.Hello
-	if err := validateHelloCommon(psk, pskDomainHello, h.NodeId, h.Pubkey, h.Nonce, h.PskMac, h.Protocol); err != nil {
-		return nil, err
-	}
-	if h.NodeId == id.NodeID {
-		return nil, handshakeError("node_id", "peer claims own NodeID")
-	}
-
-	ackNonce := make([]byte, 32)
-	if _, err := rand.Read(ackNonce); err != nil {
-		return nil, handshakeError("nonce_gen", err.Error())
-	}
-	sig := ed25519.Sign(id.PrivateKey, sigMessage(h.Nonce, ackNonce, h.NodeId))
-	ack := &v2pb.MeshHelloAck{
-		NodeId:    id.NodeID,
-		Pubkey:    id.PublicKey,
-		Nonce:     ackNonce,
-		PskMac:    pskMAC(psk, pskDomainHelloAck, id.PublicKey, ackNonce),
-		Sig:       sig,
-		Protocol:  meshProtocolVersion,
-		Addresses: advertisedAddrs,
-	}
-	if err := sendWithCtx(ctx, codec, &v2pb.MeshEnvelope{
-		Timestamp: time.Now().UnixNano(),
-		Version:   meshProtocolVersion,
-		Payload:   &v2pb.MeshEnvelope_HelloAck{HelloAck: ack},
-	}); err != nil {
-		return nil, handshakeError("send_ack", err.Error())
-	}
-	return &HandshakeResult{
-		PeerNodeID:    h.NodeId,
-		PeerPublicKey: h.Pubkey,
-		PeerAddresses: h.Addresses,
-	}, nil
+	res, err := runNoiseResponder(ctx, codec, id, psk, buildPayload(id, advertisedAddrs))
+	return wrapNoiseErr(res, err)
 }
 
-// sendWithCtx / recvWithCtx run a codec operation on a goroutine so the
-// handshake honours context cancellation. The ProtoCodec itself blocks
-// on its underlying ReadWriter, which doesn't accept a deadline, so we
-// wrap it.
+// buildPayload fills the HandshakePayload we advertise on our side
+// of the Noise handshake. Kept local so the three callers stay in
+// sync on field population.
+func buildPayload(id *Identity, addresses []string) *v2pb.HandshakePayload {
+	return &v2pb.HandshakePayload{
+		NodeId:        id.NodeID,
+		Ed25519Pubkey: append([]byte(nil), id.PublicKey...),
+		Protocol:      meshProtocolVersion,
+		Addresses:     append([]string(nil), addresses...),
+	}
+}
+
+// wrapNoiseErr normalises runNoise{Initiator,Responder} errors into
+// the ErrHandshake type the rest of the package (and its callers)
+// expect. Classification is best-effort based on the error message;
+// the Dialer only cares that *ErrHandshake is returned so it can
+// apply a longer back-off for identity problems.
+func wrapNoiseErr(res *HandshakeResult, err error) (*HandshakeResult, error) {
+	if err == nil {
+		return res, nil
+	}
+	var he *ErrHandshake
+	if errors.As(err, &he) {
+		return nil, he
+	}
+	stage := "noise"
+	if isIDErr(err) {
+		stage = "identity"
+	}
+	return nil, handshakeError(stage, err.Error())
+}
+
+func isIDErr(err error) bool {
+	msg := err.Error()
+	for _, probe := range []string{
+		"node_id", "ed25519 pubkey", "peer claims", "unsupported protocol",
+	} {
+		if contains(msg, probe) {
+			return true
+		}
+	}
+	return false
+}
+
+// contains is a narrow strings.Contains shim so we don't import
+// strings just for this helper (this file already pulls time + fmt).
+func contains(s, sub string) bool {
+	if len(sub) == 0 {
+		return true
+	}
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+// sendWithCtx / recvWithCtx run a codec operation on a goroutine so
+// the handshake honours context cancellation. envCodec itself blocks
+// on its underlying ReadWriter, which doesn't accept a deadline, so
+// we wrap it here.
 func sendWithCtx(ctx context.Context, codec *envCodec, env *v2pb.MeshEnvelope) error {
 	done := make(chan error, 1)
 	go func() { done <- codec.Send(env) }()
