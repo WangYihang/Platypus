@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -25,10 +26,27 @@ var (
 // SQLite DB (./platypus.db) to keep operator files together.
 const logPath = "./platypus.log"
 
+// resolveLevel honours PLATYPUS_LOG_LEVEL for operators who need to
+// peek at dispatcher / handshake debug lines (ingress_unknown_alpn,
+// ingress_handshake_failed) without rebuilding. Unrecognised values
+// fall back to INFO.
+func resolveLevel() slog.Level {
+	switch strings.ToLower(os.Getenv("PLATYPUS_LOG_LEVEL")) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func init() {
 	// Default handler covers any log calls that happen before Init() —
 	// currently none, but keeps things safe if an import-time hook logs.
-	L = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	L = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: resolveLevel()}))
 }
 
 // Init opens ./platypus.log and switches the package logger to a JSON
@@ -39,14 +57,15 @@ func Init() {
 	initOnce.Do(func() {
 		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		var w io.Writer = os.Stderr
+		level := resolveLevel()
 		if err != nil {
-			L = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
+			L = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))
 			L.Warn("log_file_open_failed", "path", logPath, "error", err.Error())
 			return
 		}
 		logFile = f
 		w = io.MultiWriter(os.Stderr, f)
-		L = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		L = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))
 	})
 }
 

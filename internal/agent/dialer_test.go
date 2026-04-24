@@ -14,7 +14,9 @@ import (
 
 // BuildDialerTLSConfig wires an Identity into a *tls.Config the
 // agent uses for tls.Dial to the server: own leaf cert as
-// Certificates, project CA as RootCAs, ALPN "ptps-agent".
+// Certificates, project CA as RootCAs, ALPN "http/1.1" (the
+// HTTP-layer ALPN that lands on the server's unified ingress HTTP
+// listener where /api/v1/agent/link lives).
 
 // mintTestIdentity mints a self-signed CA and a leaf cert signed
 // by it, returning everything packaged as an Identity.
@@ -77,8 +79,8 @@ func TestBuildDialerTLSConfig_HappyPath(t *testing.T) {
 	if cfg.RootCAs == nil {
 		t.Fatal("RootCAs nil; should contain project CA")
 	}
-	if len(cfg.NextProtos) == 0 || cfg.NextProtos[0] != "ptps-agent" {
-		t.Fatalf("NextProtos = %v; want [ptps-agent ...]", cfg.NextProtos)
+	if len(cfg.NextProtos) == 0 || cfg.NextProtos[0] != "http/1.1" {
+		t.Fatalf("NextProtos = %v; want [http/1.1 ...]", cfg.NextProtos)
 	}
 	if cfg.MinVersion < tls.VersionTLS12 {
 		t.Fatalf("MinVersion = %x; want >= TLS 1.2", cfg.MinVersion)

@@ -145,10 +145,28 @@ func main() {
 		}
 	}
 
-	tlsCfg, err := ingress.BuildTLSConfig(ingress.CertSource{
+	// If no cert was configured, self-issue a leaf from the project CA
+	// and use it for ingress TLS. This replaces the stand-alone
+	// self-signed dev fallback — the old cert chained to nothing the
+	// agent-side trust store knew, so agents with PLATYPUS_PROJECT_CA
+	// pinned refused the handshake with a confusing "unknown
+	// authority" error. Issuing the ingress leaf from the same CA
+	// agents pin makes `docker compose up` work without mkcert.
+	certSource := ingress.CertSource{
 		CertFile: cfg.Ingress.Cert,
 		KeyFile:  cfg.Ingress.Key,
-	}, ingress.DefaultProtocols)
+	}
+	if cfg.Ingress.Cert == "" && cfg.Ingress.Key == "" {
+		if issued, err := issueIngressLeafFromProjectCA(ctx, pkiSvc, cfg); err != nil {
+			log.L.Warn("ingress_tls_autoissue_failed",
+				"error", err.Error(),
+				"hint", "falling back to stand-alone self-signed cert; agents that pin PLATYPUS_PROJECT_CA will fail the handshake",
+			)
+		} else {
+			certSource.InMemoryCert = issued
+		}
+	}
+	tlsCfg, err := ingress.BuildTLSConfig(certSource, ingress.DefaultProtocols)
 	if err != nil {
 		log.Error("ingress: build tls config: %v", err)
 		os.Exit(1)
@@ -422,6 +440,51 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 // node. Any step failure is logged and returns nil — mesh is
 // optional; we never abort server startup over it.
 //
+// issueIngressLeafFromProjectCA self-issues a server TLS leaf from
+// the same project CA agents pin via PLATYPUS_PROJECT_CA. Returns
+// nil, err if the project CA isn't available yet (e.g. KEK
+// misconfigured) — the caller logs the error and falls back to the
+// stand-alone self-signed leaf. Hosts for the SAN come from
+// cfg.Ingress.PublicAddrOrAddr() (split off the port).
+func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config) (*tls.Certificate, error) {
+	projectID := cfg.Mesh.ProjectID
+	if projectID == "" {
+		projectID = storage.DefaultProjectID
+	}
+	// EnsureCA first so the private bits exist before the IssueServerCert
+	// path tries to unseal them. createdBy is the seeded system user.
+	if _, err := pkiSvc.EnsureCA(ctx, projectID, storage.SystemUserID); err != nil {
+		return nil, fmt.Errorf("ensure project CA: %w", err)
+	}
+	addr := cfg.Ingress.PublicAddrOrAddr()
+	if addr == "" {
+		return nil, errors.New("ingress.public_addr / ingress.addr both empty")
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr // no port — treat the whole string as the hostname
+	}
+	hosts := []string{host}
+	// Always add localhost + loopback so the `curl -fsSL http://localhost:<port>/install/...`
+	// bootstrap path, and plain `curl https://127.0.0.1:<port>/...`, both
+	// verify against the same leaf without the operator having to line up
+	// hostnames with public_addr.
+	for _, extra := range []string{"localhost", "127.0.0.1", "::1"} {
+		if extra != host {
+			hosts = append(hosts, extra)
+		}
+	}
+	res, err := pkiSvc.IssueServerCert(ctx, projectID, hosts, storage.SystemUserID)
+	if err != nil {
+		return nil, err
+	}
+	leaf, err := tls.X509KeyPair([]byte(res.CertPEM), []byte(res.KeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("parse self-issued leaf: %w", err)
+	}
+	return &leaf, nil
+}
+
 // Project scoping: cfg.Mesh.ProjectID picks which project's CA to
 // chain the server's leaf to. Agents in the same project will
 // trust the resulting identity via the same CA.

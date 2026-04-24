@@ -188,7 +188,16 @@ func (d *Dispatcher) handshakeAndDispatch(raw net.Conn) {
 			return
 		}
 		d.cfg.OnMesh(tlsConn)
-	case ALPNHTTP2, ALPNHTTP1:
+	case ALPNHTTP2, ALPNHTTP1, "":
+		// Empty NegotiatedProtocol means the client didn't send ALPN
+		// at all — Go's http.Transport suppresses it for HTTP/1-only
+		// connections (e.g. WebSocket upgrades for coder/websocket),
+		// and generic TLS tooling (openssl s_client without -alpn,
+		// older curl versions) doesn't send it either. Treat it the
+		// same as explicit http/1.1 and route into the HTTP listener
+		// — previously these connections got silently closed, which
+		// surfaced as unhelpful "EOF" errors on the client side and
+		// took days to trace.
 		if err := d.vln.push(tlsConn); err != nil {
 			log.L.Debug("ingress_http_push_failed",
 				"remote", raw.RemoteAddr().String(),
@@ -196,10 +205,6 @@ func (d *Dispatcher) handshakeAndDispatch(raw net.Conn) {
 			)
 		}
 	default:
-		// Covers both empty ALPN (pre-refactor agent, spec-violating
-		// TLS client) and unknown protocols. No silent fallback —
-		// the refactor removed the compat window so every peer must
-		// advertise a supported ALPN.
 		log.L.Debug("ingress_unknown_alpn",
 			"remote", raw.RemoteAddr().String(),
 			"negotiated", proto,

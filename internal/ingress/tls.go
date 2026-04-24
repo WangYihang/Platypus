@@ -11,14 +11,22 @@ import (
 )
 
 // CertSource describes where to get the server's TLS certificate.
-// Either LoadFromFiles to point at an operator-provided cert/key pair,
-// or SelfSigned to generate an ephemeral one at startup.
+// Priority is InMemoryCert > (CertFile+KeyFile) > self-signed
+// fallback; each mode logs a distinct ingress_tls_cert_* INFO/WARN
+// so operators can see which path the server took.
 type CertSource struct {
 	// CertFile / KeyFile point at PEM-encoded cert + key. Both must be
 	// set together; if either is empty the source falls back to
 	// self-signed and logs a loud warning.
 	CertFile string
 	KeyFile  string
+
+	// InMemoryCert, if non-nil, is used directly without reading from
+	// disk. This is the path cmd/platypus-server takes when no cert
+	// file is configured: it self-issues a leaf from the project CA
+	// so agents pinning the same CA pass the handshake. Takes
+	// precedence over CertFile / KeyFile.
+	InMemoryCert *tls.Certificate
 }
 
 // BuildTLSConfig returns a *tls.Config wired up for ALPN dispatch. On
@@ -44,6 +52,12 @@ func BuildTLSConfig(src CertSource, protocols []string) (*tls.Config, error) {
 }
 
 func loadOrGenerate(src CertSource) (tls.Certificate, error) {
+	if src.InMemoryCert != nil {
+		log.L.Info("ingress_tls_cert_in_memory",
+			"source", "project-ca-signed leaf minted at startup",
+		)
+		return *src.InMemoryCert, nil
+	}
 	if src.CertFile != "" && src.KeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(src.CertFile, src.KeyFile)
 		if err != nil {

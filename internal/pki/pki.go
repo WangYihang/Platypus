@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -319,6 +320,154 @@ func (s *Service) IssueAgentCert(ctx context.Context, in IssueInput) (*IssueResu
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
 	}, nil
+}
+
+// ServerCertResult bundles everything the ingress layer needs to
+// stand up TLS: the server's leaf cert, its matching private key,
+// and the project CA the chain anchors on.
+type ServerCertResult struct {
+	CertPEM string
+	KeyPEM  string
+	CAPem   string
+}
+
+// IssueServerCert mints a short-lived TLS server leaf signed by the
+// project CA, with DNSNames / IPAddresses populated from `hosts` so
+// the cert passes hostname verification. Returns the cert + its
+// freshly-generated private key — agents pinning the same project CA
+// will accept the cert without any further trust-store wiring.
+//
+// This is the counterpart to IssueAgentCert for the "who watches the
+// watcher" problem: without it the ingress falls back to a stand-alone
+// self-signed leaf which nothing in the agent trust graph chains to,
+// and agents with PLATYPUS_PROJECT_CA set refuse the handshake.
+func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts []string, issuedByUser string) (*ServerCertResult, error) {
+	if len(hosts) == 0 {
+		return nil, errors.New("pki: IssueServerCert: hosts must be non-empty")
+	}
+	ca, err := s.db.ProjectCA().Get(ctx, projectID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, errors.New("pki: IssueServerCert: project CA not initialised; call EnsureCA first")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if ca.RevokedAt != nil {
+		return nil, errors.New("pki: IssueServerCert: project CA is revoked")
+	}
+
+	kek, err := readKEK()
+	if err != nil {
+		return nil, err
+	}
+	caPriv, err := unsealCAPriv(kek, ca.PrivKeyNonce, ca.PrivKeyCT)
+	if err != nil {
+		return nil, err
+	}
+
+	leafPub, leafPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("pki: IssueServerCert keygen: %w", err)
+	}
+
+	tx, err := s.db.ProjectCA().BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_ = tx.Rollback()
+		}
+	}()
+
+	serial, err := s.db.ProjectCA().AllocateSerial(ctx, tx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	notBefore := time.Now().Add(-5 * time.Minute).UTC()
+	notAfter := notBefore.Add(DefaultAgentCertTTL + 5*time.Minute)
+	certPEM, err := signServerLeaf(caPriv, ca.CertPEM, hosts, leafPub, serial, notBefore, notAfter)
+	if err != nil {
+		return nil, err
+	}
+	pubPEM, err := encodePublicKey(leafPub)
+	if err != nil {
+		return nil, err
+	}
+
+	row := &storage.IssuedCert{
+		Serial:       serial,
+		ProjectID:    projectID,
+		AgentID:      "server",
+		CertPEM:      certPEM,
+		PubKeyPEM:    pubPEM,
+		IssuedAt:     time.Now().UTC(),
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
+		IssuedReason: "admin",
+		IssuedByUser: issuedByUser,
+	}
+	if err := s.db.IssuedCerts().InsertTx(ctx, tx, row); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	rollback = false
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(leafPriv)
+	if err != nil {
+		return nil, fmt.Errorf("pki: IssueServerCert marshal key: %w", err)
+	}
+	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+
+	return &ServerCertResult{
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
+		CAPem:   ca.CertPEM,
+	}, nil
+}
+
+// signServerLeaf is the sibling of signLeaf that stamps DNS / IP SANs
+// instead of platypus:// URI SANs. hosts can be a mix of hostnames and
+// numeric IPs; net.ParseIP decides the bucket.
+func signServerLeaf(caPriv ed25519.PrivateKey, caPEM string, hosts []string, pub ed25519.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
+	caCert, err := parseCAFromPEM(caPEM)
+	if err != nil {
+		return "", err
+	}
+
+	var dns []string
+	var ips []net.IP
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			ips = append(ips, ip)
+		} else {
+			dns = append(dns, h)
+		}
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(serial),
+		Subject: pkix.Name{
+			CommonName:   "platypus-ingress",
+			Organization: []string{"Platypus"},
+		},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:              dns,
+		IPAddresses:           ips,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, caCert, pub, caPriv)
+	if err != nil {
+		return "", fmt.Errorf("pki: sign server leaf: %w", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
 }
 
 // --- Low-level helpers ---------------------------------------------------

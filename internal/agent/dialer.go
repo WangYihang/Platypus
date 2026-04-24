@@ -9,14 +9,18 @@ import (
 	"fmt"
 )
 
-// ALPNAgentV2 is the ALPN protocol identifier the agent advertises
-// to the server's ingress dispatcher so agent-link traffic lands on
-// the v2 handler (distinct from the legacy "ptps-agent" Envelope
-// flow, which Phase III will retire). For now we reuse the same
-// string — the v1 Envelope pipeline is still the dispatcher's agent
-// handler, and once Phase II.6 lands the server-side handler
-// switches to WS/yamux.
-const ALPNAgentV2 = "ptps-agent"
+// ALPNAgentV2 is the ALPN protocol advertised on the agent-link TLS
+// connection. We negotiate http/1.1 so the connection lands on the
+// unified ingress's HTTP listener, where gin serves /api/v1/agent/link
+// and upgrades to WebSocket. Pinning "ptps-agent" (the legacy v1
+// Envelope identifier) routes the connection into the dispatcher's
+// OnAgent handler instead, which v2 deployments leave unset — the
+// server silently closes the TLS session and the agent sees EOF.
+//
+// WebSocket over h2 needs extended CONNECT support that
+// coder/websocket doesn't implement, so advertising "h2" is not an
+// option here. http/1.1 matches what the websocket handshake speaks.
+const ALPNAgentV2 = "http/1.1"
 
 // BuildDialerTLSConfig produces a *tls.Config ready for tls.Dial
 // from an on-disk agent Identity. The caller uses this as the
