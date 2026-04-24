@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures/test";
 
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
@@ -16,23 +16,20 @@ test.describe("project shell", () => {
 
         // Brand (aria-labelled span in components/Brand.tsx).
         await expect(page.getByLabel("Platypus")).toBeVisible();
-        // All six nav links.
         await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
 
         // Current nav surface (desktop/frontend/src/layout/ProjectSidebar.tsx).
-        // Topology is feature-flagged; Enrollment is admin-only (we're
-        // logged in as admin so it renders).
+        // Hosts + Sessions + Topology collapsed into the Fleet view;
+        // Dispatch was removed; Settings is new. Enrollment is admin-
+        // only (we're logged in as admin so it renders).
         for (const label of [
             "Overview",
-            "Hosts",
-            "Sessions",
+            "Fleet",
             "Activities",
             "Enrollment",
-            "Dispatch",
             "Members",
+            "Settings",
         ]) {
-            // Antd icons inject their name into the accessible label
-            // ("appstore Overview"), so match the trailing label.
             await expect(
                 page.getByRole("link", { name: new RegExp(`${label}$`) }),
             ).toBeVisible();

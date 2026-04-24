@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test } from "../fixtures/test";
 
 // Same blocker as 15/17: two zero-config agents on the same test
 // machine collide on hosts.(project_id, fingerprint). Unskip once

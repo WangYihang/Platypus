@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures/test";
 
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 import { baseURL } from "../fixtures/env";

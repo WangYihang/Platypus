@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test } from "../fixtures/test";
 
 // Two agents on the same test machine trip the
 // hosts.(project_id, fingerprint) UNIQUE constraint — both processes

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures/test";
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
 test.describe("host files", () => {
@@ -10,8 +10,12 @@ test.describe("host files", () => {
     test("Files tab loads root directory entries from the agent", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Hosts$/ }).click();
-        await page.locator("table tbody tr").first().click();
+        await page.getByRole("link", { name: /Fleet$/ }).click();
+        await page
+            .getByTestId("fleet-panel-table")
+            .locator("table tbody tr")
+            .first()
+            .click();
         await page.getByRole("tab", { name: "Files" }).click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
 

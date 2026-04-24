@@ -169,7 +169,10 @@ export default function MeshGraph(props: MeshGraphProps) {
             container: containerRef.current,
             elements,
             style: topologyStylesheet(),
-            wheelSensitivity: 0.25,
+            // wheelSensitivity is deliberately left at Cytoscape's
+            // default — overriding it makes the library log a "custom
+            // wheel sensitivity" warning on every mount, and our zoom
+            // already feels fine out of the box.
             minZoom: 0.25,
             maxZoom: 2.5,
         });

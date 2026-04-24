@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test } from "../fixtures/test";
 
 // Needs two agents on the same test machine — blocked by the
 // hosts.(project_id, fingerprint) UNIQUE constraint. Both processes

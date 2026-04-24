@@ -72,6 +72,29 @@ export default defineConfig(({ mode }) => {
                         }
                         if (id.includes("/@xterm/")) return "vendor-xterm";
                         if (id.includes("/react-router")) return "vendor-router";
+                        // Cytoscape ships ~900 KB raw; split into its own
+                        // chunk so only the Topology/Graph view on Fleet
+                        // pays for it.
+                        if (
+                            id.includes("/cytoscape/") ||
+                            id.includes("/cytoscape-fcose/") ||
+                            id.includes("/layout-base/") ||
+                            id.includes("/cose-base/")
+                        ) {
+                            return "vendor-graph";
+                        }
+                        // CodeMirror (editor + language modes) is ~300 KB
+                        // raw; only FileEditor uses it.
+                        if (
+                            id.includes("/@codemirror/") ||
+                            id.includes("/@uiw/react-codemirror/") ||
+                            id.includes("/@lezer/") ||
+                            id.includes("/style-mod/") ||
+                            id.includes("/w3c-keyname/") ||
+                            id.includes("/crelt/")
+                        ) {
+                            return "vendor-editor";
+                        }
                         if (
                             id.includes("/react/") ||
                             id.includes("/react-dom/") ||
@@ -83,10 +106,15 @@ export default defineConfig(({ mode }) => {
                     },
                 },
             },
-            // Default 500 KB chunk-size warning. With antd gone the
-            // largest shared chunk is vendor-charts at ~370 KB raw; any
-            // new regression pushing a chunk past that probably deserves
-            // a second look.
+            // vendor-misc stays under the default 500 KB warning after
+            // the cytoscape / codemirror splits above; vendor-graph and
+            // vendor-editor are each inherently ~560 KB (single
+            // monolithic libs that can't be split further without
+            // over-engineering) and are route-lazy-loaded — only the
+            // Fleet Graph view / FileEditor pay for them. Bump the
+            // warning just past that natural ceiling so only a NEW
+            // regression past 600 KB trips it.
+            chunkSizeWarningLimit: 600,
         },
         // Build-time globals consumed by the status bar. Set GIT_COMMIT in
         // CI (or via the Makefile) to get a real short hash; falls back to

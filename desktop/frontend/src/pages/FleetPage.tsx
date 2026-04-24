@@ -73,6 +73,8 @@ export default function FleetPage() {
             <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={switcher} />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                 <div
+                    data-testid="fleet-panel-table"
+                    aria-hidden={view !== "table"}
                     style={{
                         position: "absolute",
                         inset: 0,
@@ -82,6 +84,8 @@ export default function FleetPage() {
                     <HostsPanel />
                 </div>
                 <div
+                    data-testid="fleet-panel-timeline"
+                    aria-hidden={view !== "timeline"}
                     style={{
                         position: "absolute",
                         inset: 0,
@@ -91,6 +95,8 @@ export default function FleetPage() {
                     <SessionsPanel />
                 </div>
                 <div
+                    data-testid="fleet-panel-graph"
+                    aria-hidden={view !== "graph"}
                     style={{
                         position: "absolute",
                         inset: 0,

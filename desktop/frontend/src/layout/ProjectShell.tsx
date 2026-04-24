@@ -66,37 +66,30 @@ export default function ProjectShell({ requireProject = false }: Props) {
 
     if (!user) return null;
 
-    if (projects === null) {
-        return (
-            <ShellChrome
-                user={user}
-                serverURL={serverURL}
-                projects={[]}
-                currentSlug={params.projectSlug}
-                refresh={refresh}
-            >
-                <Centered>
-                    <Loader2 className="size-5 animate-spin text-text-muted" />
-                </Centered>
-            </ShellChrome>
-        );
-    }
-
-    const project = params.projectSlug
-        ? projects.find((p) => p.slug === params.projectSlug) ?? null
-        : null;
+    const projectList = projects ?? [];
+    const project =
+        projects && params.projectSlug
+            ? projects.find((p) => p.slug === params.projectSlug) ?? null
+            : null;
+    const loading = projects === null;
 
     return (
-        <ProjectShellContext.Provider value={{ projects, project, refresh }}>
+        <ProjectShellContext.Provider
+            value={{ projects: projectList, project, refresh }}
+        >
             <GlobalTerminalProvider>
                 <ShellChrome
                     user={user}
                     serverURL={serverURL}
-                    projects={projects}
+                    projects={projectList}
                     currentSlug={params.projectSlug}
                     refresh={refresh}
                 >
-                    {requireProject && !project ? (
+                    {loading ? (
+                        <Centered>
+                            <Loader2 className="size-5 animate-spin text-text-muted" />
+                        </Centered>
+                    ) : requireProject && !project ? (
                         <EmptyState
                             title="Project not found"
                             description={`No project with slug "${params.projectSlug}". It may have been deleted, or you may have lost access.`}
