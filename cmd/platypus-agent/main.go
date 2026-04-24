@@ -134,8 +134,9 @@ func main() {
 			RPC: agent.AgentRPCHandlers{
 				Exec: agent.HandleExec,
 			},
-			Process:  agent.HandleProcessStream,
-			FileRead: agent.HandleFileReadStream,
+			Process:   agent.HandleProcessStream,
+			FileRead:  agent.HandleFileReadStream,
+			FileWrite: agent.HandleFileWriteStream,
 		})
 	}
 

@@ -64,6 +64,11 @@ message FileWriteRequest {
 }
 
 message FileWriteResponse {
+  // Populated when the agent could not even open the destination
+  // (missing parent dir with mkdirs=false, permission denied).
+  // Stream closes immediately after this frame with no chunks
+  // exchanged.
+  string error = 1;
 }
 
 // FileWriteResult is the final summary message sent by the agent

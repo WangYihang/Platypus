@@ -299,7 +299,12 @@ func (x *FileWriteRequest) GetMkdirs() bool {
 }
 
 type FileWriteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Populated when the agent could not even open the destination
+	// (missing parent dir with mkdirs=false, permission denied).
+	// Stream closes immediately after this frame with no chunks
+	// exchanged.
+	Error         string `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +337,13 @@ func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use FileWriteResponse.ProtoReflect.Descriptor instead.
 func (*FileWriteResponse) Descriptor() ([]byte, []int) {
 	return file_file_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FileWriteResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
 }
 
 // FileWriteResult is the final summary message sent by the agent
@@ -411,8 +423,9 @@ const file_file_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
 	"\x06append\x18\x02 \x01(\bR\x06append\x12\x12\n" +
 	"\x04mode\x18\x03 \x01(\rR\x04mode\x12\x16\n" +
-	"\x06mkdirs\x18\x04 \x01(\bR\x06mkdirs\"\x13\n" +
-	"\x11FileWriteResponse\"L\n" +
+	"\x06mkdirs\x18\x04 \x01(\bR\x06mkdirs\")\n" +
+	"\x11FileWriteResponse\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\"L\n" +
 	"\x0fFileWriteResult\x12#\n" +
 	"\rbytes_written\x18\x01 \x01(\x03R\fbytesWritten\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05errorB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"

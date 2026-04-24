@@ -22,9 +22,10 @@ import (
 // get rejected. Tunnel / file / event / socks5 slots will land
 // alongside their respective handlers.
 type AgentHandlerDeps struct {
-	RPC      AgentRPCHandlers
-	Process  ProcessHandler
-	FileRead FileReadHandler
+	RPC       AgentRPCHandlers
+	Process   ProcessHandler
+	FileRead  FileReadHandler
+	FileWrite FileWriteHandler
 }
 
 // ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
@@ -35,6 +36,10 @@ type ProcessHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2
 // FileReadHandler processes one STREAM_TYPE_FILE_READ stream.
 // Production impl: HandleFileReadStream.
 type FileReadHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileReadRequest) error
+
+// FileWriteHandler processes one STREAM_TYPE_FILE_WRITE stream.
+// Production impl: HandleFileWriteStream.
+type FileWriteHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileWriteRequest) error
 
 // ServeLink is the agent-side accept loop. For each incoming yamux
 // stream it reads the StreamHeader (already done by sess.Accept),
@@ -109,6 +114,19 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 		}
 		if err := deps.FileRead(ctx, stream, &req); err != nil {
 			log.Warn("agent: file-read stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_FILE_WRITE:
+		if deps.FileWrite == nil {
+			rejectStream(stream, "unsupported_type", "file-write handler not registered")
+			return
+		}
+		var req v2pb.FileWriteRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse FileWriteRequest: "+err.Error())
+			return
+		}
+		if err := deps.FileWrite(ctx, stream, &req); err != nil {
+			log.Warn("agent: file-write stream for %s: %v", hdr.CorrelationId, err)
 		}
 	default:
 		rejectStream(stream, "unsupported_type", fmt.Sprintf("no handler for %s", hdr.Type))

@@ -49,6 +49,16 @@ func WriteFrame(w io.Writer, m proto.Message) error {
 	if _, err := w.Write(header); err != nil {
 		return fmt.Errorf("v2pb: WriteFrame header: %w", err)
 	}
+	// Skip the body Write entirely on zero-byte payloads. On some
+	// io.Writer implementations (notably net.Pipe) a zero-length
+	// Write still blocks until a matching Read arrives, which
+	// deadlocks paired-session tests when a message marshals to no
+	// bytes (e.g. an empty FileWriteResponse). Readers use
+	// io.ReadFull with a zero-length buffer, which is a no-op, so
+	// dropping the Write has no effect on the wire semantics.
+	if len(payload) == 0 {
+		return nil
+	}
 	if _, err := w.Write(payload); err != nil {
 		return fmt.Errorf("v2pb: WriteFrame payload: %w", err)
 	}
