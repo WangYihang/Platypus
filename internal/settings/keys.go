@@ -28,6 +28,7 @@ import "time"
 const (
 	KeyAuthAccessTokenTTL       = "auth.access_token_ttl"
 	KeyAuthRefreshTokenTTL      = "auth.refresh_token_ttl"
+	KeyAuthPATDefaultTTL        = "auth.pat_default_ttl"
 	KeyDistributorChannel       = "distributor.channel"
 	KeyDistributorPresignedTTL  = "distributor.presigned_ttl"
 	KeyMeshDiscoveryLAN         = "mesh.discovery_lan"
@@ -40,6 +41,7 @@ const (
 const (
 	DefaultAccessTokenTTL       = 15 * time.Minute
 	DefaultRefreshTokenTTL      = 14 * 24 * time.Hour
+	DefaultPATDefaultTTL        = time.Hour
 	DefaultDistributorChannel   = "stable"
 	DefaultPresignedTTL         = 5 * time.Minute
 	DefaultMeshDiscoveryLAN     = true

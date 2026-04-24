@@ -214,8 +214,8 @@ func TestRegistry_DescribeAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DescribeAll: %v", err)
 	}
-	if len(descs) != 6 {
-		t.Fatalf("len = %d, want 6", len(descs))
+	if len(descs) != 7 {
+		t.Fatalf("len = %d, want 7", len(descs))
 	}
 
 	byKey := map[string]settings.SettingDescriptor{}

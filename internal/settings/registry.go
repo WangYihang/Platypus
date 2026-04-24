@@ -69,6 +69,15 @@ func (r *Registry) RefreshTokenTTL() time.Duration {
 	})
 }
 
+// PATDefaultTTL is the TTL embedded in a newly minted PAT when the
+// admin didn't supply one explicitly at install-artifact mint time.
+// Enrollment consults this via the SettingsProvider interface.
+func (r *Registry) PATDefaultTTL() time.Duration {
+	return r.getDuration(KeyAuthPATDefaultTTL, func() time.Duration {
+		return DefaultPATDefaultTTL
+	})
+}
+
 // DistributorChannel is the default release channel shipped in the
 // install script.
 func (r *Registry) DistributorChannel() string {

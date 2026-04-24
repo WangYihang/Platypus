@@ -54,6 +54,13 @@ var allDescriptors = []descriptorMeta{
 		Description: "Lifetime of an issued refresh JWT, in seconds.",
 	},
 	{
+		Key:         KeyAuthPATDefaultTTL,
+		Type:        typeDurationSeconds,
+		Section:     "auth",
+		Label:       "PAT default TTL",
+		Description: "Default lifetime of a minted PAT when the admin doesn't specify one, in seconds.",
+	},
+	{
 		Key:         KeyDistributorChannel,
 		Type:        typeString,
 		Section:     "distributor",
@@ -130,6 +137,8 @@ func (r *Registry) describeDefault(m descriptorMeta) any {
 		return int64(DefaultAccessTokenTTL.Seconds())
 	case KeyAuthRefreshTokenTTL:
 		return int64(DefaultRefreshTokenTTL.Seconds())
+	case KeyAuthPATDefaultTTL:
+		return int64(DefaultPATDefaultTTL.Seconds())
 	case KeyDistributorChannel:
 		return DefaultDistributorChannel
 	case KeyDistributorPresignedTTL:
@@ -221,6 +230,8 @@ func (r *Registry) describeEffective(m descriptorMeta) any {
 		return int64(r.AccessTokenTTL().Seconds())
 	case KeyAuthRefreshTokenTTL:
 		return int64(r.RefreshTokenTTL().Seconds())
+	case KeyAuthPATDefaultTTL:
+		return int64(r.PATDefaultTTL().Seconds())
 	case KeyDistributorChannel:
 		return r.DistributorChannel()
 	case KeyDistributorPresignedTTL:

@@ -324,7 +324,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	agentLinkSvc := core.NewAgentLinkService()
 	sessionsH := api.NewSessionsV2Handler(db, agentLinkSvc)
 
-	enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
+	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 
 	// /install/<token> and /v1/manifest/* now live on the same gin

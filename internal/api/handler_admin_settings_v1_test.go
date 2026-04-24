@@ -33,7 +33,7 @@ func adminSettingsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssue
 	return r, db, issuer, reg
 }
 
-func TestAdminSettings_ListReturns6Descriptors(t *testing.T) {
+func TestAdminSettings_ListReturnsAllDescriptors(t *testing.T) {
 	r, db, issuer, _ := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
@@ -48,8 +48,8 @@ func TestAdminSettings_ListReturns6Descriptors(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(body.Settings) != 6 {
-		t.Fatalf("len=%d want=6 body=%s", len(body.Settings), w.Body.String())
+	if len(body.Settings) != 7 {
+		t.Fatalf("len=%d want=7 body=%s", len(body.Settings), w.Body.String())
 	}
 }
 

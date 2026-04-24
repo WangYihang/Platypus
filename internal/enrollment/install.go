@@ -72,6 +72,13 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 	}
 	patTTL := in.PATTTL
 	if patTTL <= 0 {
+		if s.settings != nil {
+			if d := s.settings.PATDefaultTTL(); d > 0 {
+				patTTL = d
+			}
+		}
+	}
+	if patTTL <= 0 {
 		patTTL = DefaultPATTTL
 	}
 

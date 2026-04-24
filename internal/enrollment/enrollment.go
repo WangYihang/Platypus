@@ -130,6 +130,18 @@ type Service struct {
 	// freshly-signed agent identity cert. When nil, enrollment still
 	// works using PSK + session_token only (Phase 1–3 behaviour).
 	pki PKIIssuer
+	// settings is optional — when set, MintInstallArtifact consults
+	// it for the default PAT TTL so admins can tune the default from
+	// the Web UI without a server restart. When nil, falls back to
+	// the DefaultPATTTL constant.
+	settings SettingsProvider
+}
+
+// SettingsProvider exposes the subset of settings.Registry the
+// enrollment package consults at mint time. Kept as an interface so
+// enrollment has no compile-time dependency on internal/settings.
+type SettingsProvider interface {
+	PATDefaultTTL() time.Duration
 }
 
 // PKIIssuer is the subset of internal/pki.Service that enrollment
@@ -152,6 +164,13 @@ func New(db *storage.DB) *Service { return &Service{db: db} }
 // the issuer — useful for tests.
 func (s *Service) WithPKI(p PKIIssuer) *Service {
 	s.pki = p
+	return s
+}
+
+// WithSettings attaches a settings provider used for default-TTL
+// lookups on mint. Idempotent.
+func (s *Service) WithSettings(sp SettingsProvider) *Service {
+	s.settings = sp
 	return s
 }
 
