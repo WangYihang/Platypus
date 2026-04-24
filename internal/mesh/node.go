@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/WangYihang/Platypus/internal/protocol"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
@@ -202,6 +203,42 @@ func (n *Node) ListenerAddr() string {
 		return ""
 	}
 	return n.listener.Addr()
+}
+
+// AcceptRaw runs the inbound mesh handshake on an already-TLS'd
+// net.Conn and registers the resulting link. This is the entry point
+// the unified-ingress dispatcher (internal/ingress) uses once it has
+// determined a connection negotiated "ptps-mesh". mesh.Listener's
+// accept loop also delegates here once PR-E retires the standalone
+// listener, but during the transition they coexist.
+//
+// Blocks until the link is fully torn down (or the handshake is
+// rejected). Caller must launch it in its own goroutine.
+func (n *Node) AcceptRaw(ctx context.Context, conn net.Conn) {
+	// Bounded deadline on the app-level handshake; link.run clears
+	// it once keepalive is driving the liveness check.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+
+	codec := protocol.NewProtoCodec(conn)
+	result, err := PerformServerHandshake(ctx, codec, n.identity, n.psk, n.advertisedAddrs())
+	if err != nil {
+		n.logger.Debug("mesh inbound handshake failed",
+			slog.String("remote", conn.RemoteAddr().String()),
+			slog.String("error", err.Error()))
+		closeConn(conn)
+		return
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		n.logger.Debug("clear deadline", slog.String("error", err.Error()))
+	}
+
+	link := newLink(conn, codec, result.PeerNodeID, result.PeerPublicKey, result.PeerAddresses, n)
+	if !n.adoptLink(link) {
+		link.logger.Info("duplicate mesh link, closing inbound")
+		closeConn(conn)
+		return
+	}
+	link.run()
 }
 
 // ------------------------------------------------------------------

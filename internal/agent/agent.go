@@ -110,7 +110,17 @@ func ConnectWithOptions(endpoint, token string, state *State, opts *ConnectOptio
 		return err
 	}
 
-	config := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
+	// NextProtos announces the ptps-agent ALPN so the server-side
+	// ingress dispatcher routes this connection to the agent handler
+	// instead of the HTTP or mesh path. Cert chain verification is
+	// still skipped — peer identity is proven at the application
+	// layer via enrollment token / session token exchange. Pre-
+	// unification servers without a dispatcher ignore the field.
+	config := tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"ptps-agent"},
+	}
 	if hash.MD5(endpoint) != "4d1bf9fd5962f16f6b4b53a387a6d852" { // pragma: allowlist secret
 		log.Debug("Connecting to: %s", endpoint)
 		conn, err := tls.Dial("tcp", endpoint, &config)

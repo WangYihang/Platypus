@@ -107,7 +107,11 @@ func (l *Listener) Addr() string {
 // selfSignedTLSConfig builds a TLS config using the project's existing
 // ephemeral self-signed cert helper. Mutual identity is proven at the
 // application layer via the mesh handshake, so `InsecureSkipVerify` on
-// the cert-chain level is acceptable here.
+// the cert-chain level is acceptable here. NextProtos advertises the
+// ptps-mesh ALPN so the unified-ingress dispatcher on the server side
+// routes these connections to mesh.Node.AcceptRaw; pre-unification
+// mesh listeners that don't run through a dispatcher simply ignore
+// the announced protocol.
 func selfSignedTLSConfig() (*tls.Config, error) {
 	certBuilder := &strings.Builder{}
 	keyBuilder := &strings.Builder{}
@@ -120,5 +124,6 @@ func selfSignedTLSConfig() (*tls.Config, error) {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 		MinVersion:         tls.VersionTLS12,
+		NextProtos:         []string{"ptps-mesh"},
 	}, nil
 }
