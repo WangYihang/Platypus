@@ -71,19 +71,28 @@ func Open(path string) (*DB, error) {
 //     every commit). The durability window is "power loss within the
 //     last few seconds", which is acceptable for our workload.
 //
+// plus a _txlock=immediate driver option. Default BEGIN is "deferred":
+// the transaction starts as a reader and upgrades to a writer on the
+// first write. Two concurrent deferred transactions that both try to
+// upgrade race against the write lock and one gets SQLITE_BUSY_SNAPSHOT
+// (517) — even with busy_timeout. _txlock=immediate makes every BEGIN
+// acquire the write lock up front; contenders wait on the busy_timeout
+// properly and serialise cleanly.
+//
 // ":memory:" DBs get a process-unique shared-cache name so multiple
 // connections in the pool actually point at the same in-memory DB —
 // default ":memory:" gives every new connection its own empty DB, which
 // breaks once MaxOpenConns isn't pinned to 1. Tests opening independent
 // in-memory instances still get isolation via the per-Open counter.
 func buildDSN(path string) string {
-	const pragmas = "_pragma=journal_mode(WAL)" +
+	const params = "_txlock=immediate" +
+		"&_pragma=journal_mode(WAL)" +
 		"&_pragma=foreign_keys(ON)" +
 		"&_pragma=busy_timeout(5000)" +
 		"&_pragma=synchronous(NORMAL)"
 	if path == ":memory:" {
 		n := memDBCounter.Add(1)
-		return fmt.Sprintf("file:platypus-mem-%d?mode=memory&cache=shared&%s", n, pragmas)
+		return fmt.Sprintf("file:platypus-mem-%d?mode=memory&cache=shared&%s", n, params)
 	}
 	// file:... accepts a bare path; strings.HasPrefix guard keeps callers
 	// that already built their own URI from being double-prefixed.
@@ -92,9 +101,9 @@ func buildDSN(path string) string {
 		if strings.Contains(path, "?") {
 			sep = "&"
 		}
-		return path + sep + pragmas
+		return path + sep + params
 	}
-	return "file:" + path + "?" + pragmas
+	return "file:" + path + "?" + params
 }
 
 // closeWith closes db, joining any close error with the original so we don't
