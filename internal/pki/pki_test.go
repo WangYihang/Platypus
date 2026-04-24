@@ -133,8 +133,26 @@ func TestIssueAgentCert_ValidChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse leaf: %v", err)
 	}
-	if leaf.Subject.CommonName != "Platypus agent agent-1" {
+	if leaf.Subject.CommonName != "agent-1" {
 		t.Fatalf("leaf CN = %q", leaf.Subject.CommonName)
+	}
+	// NodeID-binding SAN URIs: mesh & AgentLink key off these.
+	wantURIs := map[string]bool{
+		"platypus://agent/agent-1": false,
+		"platypus://project/":      false, // project id is random; prefix check only
+	}
+	for _, u := range leaf.URIs {
+		s := u.String()
+		if s == "platypus://agent/agent-1" {
+			wantURIs[s] = true
+		} else if len(s) > len("platypus://project/") && s[:len("platypus://project/")] == "platypus://project/" {
+			wantURIs["platypus://project/"] = true
+		}
+	}
+	for want, ok := range wantURIs {
+		if !ok {
+			t.Fatalf("leaf missing expected URI SAN prefix %q; got %v", want, leaf.URIs)
+		}
 	}
 	caBlock, _ := pem.Decode([]byte(res.CAPem))
 	caCert, _ := x509.ParseCertificate(caBlock.Bytes)
@@ -147,6 +165,69 @@ func TestIssueAgentCert_ValidChain(t *testing.T) {
 		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}); err != nil {
 		t.Fatalf("leaf failed to verify against CA: %v", err)
+	}
+}
+
+// IssueAgentLeafFromCSR accepts a PEM PKCS#10 CSR, extracts its
+// Ed25519 public key, and issues a leaf cert bound to the server-
+// supplied AgentID and ProjectID (CSR subject is ignored).
+func TestIssueAgentLeafFromCSR_Roundtrip(t *testing.T) {
+	svc, _, admin, proj := setup(t)
+	ctx := context.Background()
+	if _, err := svc.EnsureCA(ctx, proj.ID, admin.ID); err != nil {
+		t.Fatalf("EnsureCA: %v", err)
+	}
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	tmpl := &x509.CertificateRequest{}
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, tmpl, priv)
+	if err != nil {
+		t.Fatalf("CreateCertificateRequest: %v", err)
+	}
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+
+	res, err := svc.IssueAgentLeafFromCSR(ctx, pki.CSRInput{
+		ProjectID:    proj.ID,
+		AgentID:      "agent-csr",
+		CSRPEM:       csrPEM,
+		Reason:       "enroll",
+		IssuedByUser: admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("IssueAgentLeafFromCSR: %v", err)
+	}
+	leafBlock, _ := pem.Decode([]byte(res.CertPEM))
+	leaf, err := x509.ParseCertificate(leafBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse leaf: %v", err)
+	}
+	if !leaf.PublicKey.(ed25519.PublicKey).Equal(pub) {
+		t.Fatalf("leaf pubkey does not match CSR pubkey")
+	}
+	if leaf.Subject.CommonName != "agent-csr" {
+		t.Fatalf("leaf CN = %q; want agent-csr", leaf.Subject.CommonName)
+	}
+}
+
+// A CSR carrying a non-Ed25519 key is rejected at parse time; we only
+// mint Ed25519 certs today.
+func TestIssueAgentLeafFromCSR_RejectsNonEd25519(t *testing.T) {
+	svc, _, admin, proj := setup(t)
+	ctx := context.Background()
+	if _, err := svc.EnsureCA(ctx, proj.ID, admin.ID); err != nil {
+		t.Fatalf("EnsureCA: %v", err)
+	}
+	// Use a malformed PEM to trip parseCSRAndExtractPubkey's decode check.
+	_, err := svc.IssueAgentLeafFromCSR(ctx, pki.CSRInput{
+		ProjectID: proj.ID, AgentID: "a",
+		CSRPEM: []byte("not a csr"),
+		Reason: "enroll", IssuedByUser: admin.ID,
+	})
+	if err == nil {
+		t.Fatalf("want error for malformed CSR; got nil")
 	}
 }
 

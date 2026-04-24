@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"os"
 	"time"
 
@@ -255,7 +256,11 @@ func (s *Service) IssueAgentCert(ctx context.Context, in IssueInput) (*IssueResu
 
 	notBefore := time.Now().Add(-5 * time.Minute).UTC() // clock-skew grace
 	notAfter := notBefore.Add(ttl + 5*time.Minute)
-	certPEM, err := signLeaf(caPriv, ca.CertPEM, in.AgentID, in.AgentPubKey, serial, notBefore, notAfter)
+	uris, err := agentURISANs(in.AgentID, in.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	certPEM, err := signLeaf(caPriv, ca.CertPEM, in.AgentID, in.AgentPubKey, uris, serial, notBefore, notAfter)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +392,7 @@ func makeSelfSignedRoot(projectID string, priv ed25519.PrivateKey, pub ed25519.P
 // signLeaf issues a leaf cert for an agent. The subject CN embeds the
 // agent_id for easy identification in a packet capture / openssl view;
 // the actual trust binding is the pubkey the cert commits to.
-func signLeaf(caPriv ed25519.PrivateKey, caPEM, agentID string, pub ed25519.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
+func signLeaf(caPriv ed25519.PrivateKey, caPEM, agentID string, pub ed25519.PublicKey, uris []*url.URL, serial int64, notBefore, notAfter time.Time) (string, error) {
 	caCert, err := parseCAFromPEM(caPEM)
 	if err != nil {
 		return "", err
@@ -395,7 +400,7 @@ func signLeaf(caPriv ed25519.PrivateKey, caPEM, agentID string, pub ed25519.Publ
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(serial),
 		Subject: pkix.Name{
-			CommonName:   "Platypus agent " + agentID,
+			CommonName:   agentID,
 			Organization: []string{"Platypus"},
 		},
 		NotBefore: notBefore,
@@ -405,6 +410,7 @@ func signLeaf(caPriv ed25519.PrivateKey, caPEM, agentID string, pub ed25519.Publ
 			x509.ExtKeyUsageClientAuth,
 			x509.ExtKeyUsageServerAuth,
 		},
+		URIs:                  uris,
 		BasicConstraintsValid: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, caCert, pub, caPriv)
