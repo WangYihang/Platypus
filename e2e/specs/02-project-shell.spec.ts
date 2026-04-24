@@ -19,11 +19,15 @@ test.describe("project shell", () => {
         // All six nav links.
         await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
 
+        // Current nav surface (desktop/frontend/src/layout/ProjectSidebar.tsx).
+        // Topology is feature-flagged; Enrollment is admin-only (we're
+        // logged in as admin so it renders).
         for (const label of [
             "Overview",
             "Hosts",
-            "Listeners",
             "Sessions",
+            "Activities",
+            "Enrollment",
             "Dispatch",
             "Members",
         ]) {
