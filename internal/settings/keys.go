@@ -34,6 +34,7 @@ const (
 	KeyMeshDiscoveryLAN         = "mesh.discovery_lan"
 	KeyMeshDiscoveryIntervalSec = "mesh.discovery_interval_seconds"
 	KeyAuditRetentionDays       = "audit.retention_days"
+	KeyMeshPeers                = "mesh.peers"
 )
 
 // Hardcoded defaults — the last line of the resolution chain. Must
@@ -61,4 +62,5 @@ const (
 	typeBool            = "bool"
 	typeString          = "string"
 	typeInt             = "int"
+	typeStringList      = "string_list"
 )

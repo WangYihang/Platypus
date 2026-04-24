@@ -131,6 +131,22 @@ func (r *Registry) AuditRetentionDays() int {
 	})
 }
 
+// MeshPeers is the list of bootstrap peer addresses ("host:port").
+// The mesh Node reconciles against this on every tick so admins can
+// add / remove peers live from the Web UI without a restart.
+// YAML cfg.Mesh.Peers is the initial default; empty list is a valid
+// override that removes all bootstrap targets.
+func (r *Registry) MeshPeers() []string {
+	return r.getStringList(KeyMeshPeers, func() []string {
+		if r.cfg != nil && len(r.cfg.Mesh.Peers) > 0 {
+			out := make([]string, len(r.cfg.Mesh.Peers))
+			copy(out, r.cfg.Mesh.Peers)
+			return out
+		}
+		return nil
+	})
+}
+
 // ------------------- resolution helpers -------------------
 
 func (r *Registry) getDuration(key string, fallback func() time.Duration) time.Duration {
@@ -169,6 +185,35 @@ func (r *Registry) getBool(key string, fallback func() bool) bool {
 	b := fallback()
 	r.cache.Store(key, &cacheEntry{value: b})
 	return b
+}
+
+// getStringList handles JSON string-array settings. The DB value is
+// a JSON array e.g. ["host1:9443","host2:9443"]. Returning nil vs an
+// empty slice is significant: the fallback returning a non-nil empty
+// slice means "admin explicitly overrode to empty", vs nil meaning
+// "no value; use caller's backstop default".
+func (r *Registry) getStringList(key string, fallback func() []string) []string {
+	if v, ok := r.cacheLoad(key); ok {
+		if l, ok := v.([]string); ok {
+			return l
+		}
+	}
+	if raw, ok := r.dbRaw(key); ok {
+		var l []string
+		if err := json.Unmarshal([]byte(raw), &l); err == nil {
+			// Preserve empty-list-as-override: a non-nil empty slice
+			// tells consumers "I meant no peers" rather than
+			// "consult YAML".
+			if l == nil {
+				l = []string{}
+			}
+			r.cache.Store(key, &cacheEntry{value: l})
+			return l
+		}
+	}
+	l := fallback()
+	r.cache.Store(key, &cacheEntry{value: l})
+	return l
 }
 
 // getInt handles plain-integer settings (audit.retention_days is the
@@ -329,6 +374,16 @@ func validate(key, rawJSON string) error {
 		var s string
 		if err := json.Unmarshal([]byte(rawJSON), &s); err != nil {
 			return fmt.Errorf("%w: expected string: %v", ErrBadValue, err)
+		}
+	case typeStringList:
+		var l []string
+		if err := json.Unmarshal([]byte(rawJSON), &l); err != nil {
+			return fmt.Errorf("%w: expected string array: %v", ErrBadValue, err)
+		}
+		for i, s := range l {
+			if s == "" {
+				return fmt.Errorf("%w: list entry %d is empty", ErrBadValue, i)
+			}
 		}
 	default:
 		return fmt.Errorf("%w: unknown descriptor type %q", ErrBadValue, d.Type)

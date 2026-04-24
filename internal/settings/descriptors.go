@@ -95,6 +95,13 @@ var allDescriptors = []descriptorMeta{
 		Label:       "Retention (days)",
 		Description: "Delete audit entries older than this many days. 0 = keep forever.",
 	},
+	{
+		Key:         KeyMeshPeers,
+		Type:        typeStringList,
+		Section:     "mesh",
+		Label:       "Bootstrap peers",
+		Description: "host:port addresses the mesh node dials at boot and on every reconcile tick. Live-editable; the Node picks up adds/removes on the next tick.",
+	},
 }
 
 func descriptor(key string) (descriptorMeta, bool) {
@@ -156,6 +163,8 @@ func (r *Registry) describeDefault(m descriptorMeta) any {
 		return int64(DefaultMeshDiscoveryIntSecs)
 	case KeyAuditRetentionDays:
 		return int64(DefaultAuditRetentionDays)
+	case KeyMeshPeers:
+		return []string{}
 	}
 	return nil
 }
@@ -229,6 +238,14 @@ func (r *Registry) describeDB(ctx context.Context, m descriptorMeta) any {
 		if json.Unmarshal([]byte(row.Value), &s) == nil {
 			return s
 		}
+	case typeStringList:
+		var l []string
+		if json.Unmarshal([]byte(row.Value), &l) == nil {
+			if l == nil {
+				l = []string{}
+			}
+			return l
+		}
 	}
 	return nil
 }
@@ -251,6 +268,8 @@ func (r *Registry) describeEffective(m descriptorMeta) any {
 		return int64(r.MeshDiscoveryInterval().Seconds())
 	case KeyAuditRetentionDays:
 		return int64(r.AuditRetentionDays())
+	case KeyMeshPeers:
+		return r.MeshPeers()
 	}
 	return nil
 }

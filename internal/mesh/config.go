@@ -14,6 +14,7 @@ import (
 type SettingsProvider interface {
 	MeshDiscoveryLAN() bool
 	MeshDiscoveryInterval() time.Duration
+	MeshPeers() []string
 }
 
 // Config collects the runtime knobs for a mesh Node. Identity,
@@ -107,4 +108,14 @@ func (c *Config) discoveryInterval() time.Duration {
 		return time.Duration(c.DiscoveryInterval) * time.Second
 	}
 	return 30 * time.Second
+}
+
+// currentPeers returns the live bootstrap peer list, preferring the
+// Settings provider. When nil, falls back to the static Peers field
+// so tests / mesh-only callers with no registry keep working.
+func (c *Config) currentPeers() []string {
+	if c.Settings != nil {
+		return c.Settings.MeshPeers()
+	}
+	return c.Peers
 }

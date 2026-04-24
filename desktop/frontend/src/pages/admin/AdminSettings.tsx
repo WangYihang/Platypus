@@ -20,12 +20,13 @@ import { Switch } from "@/components/ui/switch";
 
 // Section order on the page. Anything outside this list appears at the
 // end under "Other".
-const SECTION_ORDER = ["auth", "distributor", "mesh"] as const;
+const SECTION_ORDER = ["auth", "distributor", "mesh", "audit"] as const;
 
 const SECTION_TITLES: Record<string, string> = {
     auth: "Authentication",
     distributor: "Agent distributor",
     mesh: "Mesh overlay",
+    audit: "Audit log",
 };
 
 const SOURCE_TONE: Record<SettingDescriptor["source"], "danger" | "info" | "neutral"> = {
@@ -37,8 +38,14 @@ const SOURCE_TONE: Record<SettingDescriptor["source"], "danger" | "info" | "neut
 // formValueFor produces the string form-value for an input, given the
 // effective typed value. We use strings throughout the form state; the
 // submit path parses them back to the right type before sending.
+// string_list values are rendered newline-separated so a <textarea>
+// stays simple ("one peer per line").
 function formValueFor(d: SettingDescriptor): string {
     if (d.effective === undefined || d.effective === null) return "";
+    if (d.type === "string_list") {
+        if (Array.isArray(d.effective)) return (d.effective as string[]).join("\n");
+        return "";
+    }
     return String(d.effective);
 }
 
@@ -67,6 +74,13 @@ function parseFormValue(
         }
         case "string":
             return { ok: true, value: raw };
+        case "string_list": {
+            const items = raw
+                .split("\n")
+                .map((s) => s.trim())
+                .filter((s) => s !== "");
+            return { ok: true, value: items };
+        }
         default:
             return { ok: false, error: `unknown type ${d.type}` };
     }
@@ -342,6 +356,29 @@ function renderInput(
                 disabled={disabled}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
+            />
+        );
+    }
+    if (d.type === "string_list") {
+        return (
+            <textarea
+                disabled={disabled}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                rows={Math.max(2, (value.match(/\n/g)?.length ?? 0) + 1)}
+                placeholder={"one per line\nhost:9443"}
+                style={{
+                    width: "100%",
+                    minHeight: 60,
+                    padding: "6px 8px",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: 12,
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: 4,
+                    background: palette.surface,
+                    color: palette.textPrimary,
+                    resize: "vertical",
+                }}
             />
         );
     }

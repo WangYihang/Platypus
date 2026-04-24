@@ -201,7 +201,12 @@ export async function deleteUser(id: string): Promise<void> {
 // GET/PUT/DELETE on /api/v1/admin/settings/:key. Values cross the
 // wire as typed JSON — number for durations/ints, bool, string.
 
-export type SettingType = "duration_seconds" | "bool" | "string" | "int";
+export type SettingType =
+    | "duration_seconds"
+    | "bool"
+    | "string"
+    | "int"
+    | "string_list";
 
 // SettingDescriptor mirrors internal/settings.SettingDescriptor. The
 // effective value is what the server is currently using; db/yaml hold

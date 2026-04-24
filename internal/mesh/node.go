@@ -149,7 +149,9 @@ func (n *Node) Start(ctx context.Context) error {
 		// Seed dials for configured bootstrap peers. We don't know their
 		// NodeIDs yet; use the address as a placeholder key. After a
 		// successful handshake the real NodeID takes over.
-		for _, peer := range n.cfg.Peers {
+		// currentPeers consults the Settings provider first, so a UI
+		// edit made before Start() is visible here.
+		for _, peer := range n.cfg.currentPeers() {
 			if peer == "" {
 				continue
 			}
@@ -706,6 +708,16 @@ func (n *Node) reconcileLoop(ctx context.Context) {
 		case <-tick.C:
 			if n.dialer == nil {
 				continue
+			}
+			// Bootstrap peers: re-read from the Settings provider on
+			// every tick so admin add/remove takes effect without a
+			// restart. EnsurePeer is idempotent; the dialer already
+			// de-dups against live tasks.
+			for _, peer := range n.cfg.currentPeers() {
+				if peer == "" {
+					continue
+				}
+				n.dialer.EnsurePeer(ctx, "bootstrap:"+peer, []string{peer})
 			}
 			for _, rec := range n.registry.Snapshot() {
 				if rec.NodeID == n.identity.NodeID {
