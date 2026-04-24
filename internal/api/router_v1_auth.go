@@ -14,6 +14,10 @@ import (
 // legacy ones.
 func RegisterV1AuthRoutes(engine *gin.Engine, auth *AuthHandler, users *UsersHandler, rbac *RBAC) {
 	authGroup := engine.Group("/api/v1/auth")
+	// /info is public so the desktop onboarding wizard can probe a
+	// freshly-typed server URL without asking the user to guess
+	// which form (Log in vs First-time setup) applies to that host.
+	authGroup.GET("/info", auth.PublicInfo)
 	authGroup.POST("/bootstrap", auth.Bootstrap)
 	authGroup.POST("/login", auth.Login)
 	authGroup.POST("/refresh", auth.Refresh)

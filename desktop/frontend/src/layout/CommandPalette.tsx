@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     Clock,
@@ -7,7 +7,9 @@ import {
     FolderKanban,
     LayoutGrid,
     Monitor,
+    Plus,
     Search,
+    Server,
     Settings2,
     TerminalSquare,
     Users,
@@ -25,19 +27,34 @@ import {
 import { palette, radius, space } from "./theme";
 import { useShell } from "./ProjectShell";
 import { Host, listHosts } from "../lib/api";
+import {
+    ServerProfile,
+    getActiveServerId,
+    listServers,
+    onServersChange,
+} from "../lib/servers";
+import { switchServer } from "../lib/auth";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
+
+interface Props {
+    onAddServer?: () => void;
+    onManageServers?: () => void;
+}
 
 // CommandPalette is the keyboard-first nav surface (Cmd/Ctrl+K). It
 // lives at the shell level next to TerminalDrawer so it's always
 // reachable. Content is scoped to the current project: page nav,
-// project switch, host navigation, and opening a shell on any host.
-export default function CommandPalette() {
+// project switch, host navigation, opening a shell on any host,
+// switching between saved servers.
+export default function CommandPalette({ onAddServer, onManageServers }: Props) {
     const navigate = useNavigate();
     const { project, projects } = useShell();
     const { openShell } = useGlobalTerminal();
     const [open, setOpen] = useState(false);
     const [hosts, setHosts] = useState<Host[]>([]);
     const [loadingHosts, setLoadingHosts] = useState(false);
+    const servers = useServerList();
+    const activeServerId = useActiveServerId();
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -302,6 +319,45 @@ export default function CommandPalette() {
                         </CommandGroup>
                     </>
                 )}
+
+                <CommandSeparator
+                    style={{
+                        height: 1,
+                        background: palette.border,
+                        margin: `${space[2]}px 0`,
+                    }}
+                />
+                <CommandGroup heading="Servers">
+                    {servers
+                        .filter((s) => s.id !== activeServerId)
+                        .map((s) => (
+                            <PaletteItem
+                                key={`srv-${s.id}`}
+                                value={`server ${s.name} ${s.url}`}
+                                icon={<Server className="size-4" />}
+                                label={`Switch to ${s.name}`}
+                                hint={s.url}
+                                keywords={[s.name, s.url]}
+                                onSelect={() => run(() => void switchServer(s.id))}
+                            />
+                        ))}
+                    {onAddServer && (
+                        <PaletteItem
+                            icon={<Plus className="size-4" />}
+                            label="Add server…"
+                            keywords={["new", "add", "server"]}
+                            onSelect={() => run(() => onAddServer())}
+                        />
+                    )}
+                    {onManageServers && (
+                        <PaletteItem
+                            icon={<Settings2 className="size-4" />}
+                            label="Manage servers…"
+                            keywords={["manage", "servers", "rename", "remove"]}
+                            onSelect={() => run(() => onManageServers())}
+                        />
+                    )}
+                </CommandGroup>
             </CommandList>
 
             <div
@@ -367,6 +423,30 @@ function PaletteItem({
                 <span style={{ color: palette.textMuted, fontSize: 12 }}>{hint}</span>
             )}
         </CommandItem>
+    );
+}
+
+// servers.ts fires onServersChange on both mutations and active
+// pointer changes, so one version counter covers both reads.
+let serverVersion = 0;
+onServersChange(() => {
+    serverVersion++;
+});
+
+function useServerList(): ServerProfile[] {
+    const v = useSyncExternalStore(
+        (fn) => onServersChange(fn),
+        () => serverVersion,
+        () => serverVersion,
+    );
+    return useMemo(() => listServers(), [v]);
+}
+
+function useActiveServerId(): string | null {
+    return useSyncExternalStore(
+        (fn) => onServersChange(fn),
+        () => getActiveServerId(),
+        () => getActiveServerId(),
     );
 }
 

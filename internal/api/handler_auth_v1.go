@@ -41,6 +41,18 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+// publicInfoResponse is the shape of GET /api/v1/auth/info. Unlike
+// /api/v1/info (which is auth-gated), this endpoint is reachable
+// without a bearer token so the onboarding wizard can probe a URL
+// the user just typed and tell them whether to log in or bootstrap.
+// Keep the payload tiny — no live counters, no build sha that an
+// attacker could correlate against CVEs; just "is this a Platypus
+// server, and is it ready for first-time setup?".
+type publicInfoResponse struct {
+	Product           string `json:"product"`
+	AdminBootstrapped bool   `json:"admin_bootstrapped"`
+}
+
 type userBody struct {
 	ID       string    `json:"id"`
 	Username string    `json:"username"`
@@ -51,6 +63,25 @@ type tokenPair struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	User         *userBody `json:"user,omitempty"`
+}
+
+// PublicInfo answers GET /api/v1/auth/info without requiring a bearer
+// token. Returns just enough metadata for the desktop onboarding
+// wizard to decide whether to show the Log-in or First-time-setup
+// form. No build sha, no session counts, no endpoint enumeration —
+// callers that are already authenticated can hit /api/v1/info for
+// that.
+func (h *AuthHandler) PublicInfo(c *gin.Context) {
+	ctx := c.Request.Context()
+	n, err := h.db.Users().Count(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "count users"})
+		return
+	}
+	c.JSON(http.StatusOK, publicInfoResponse{
+		Product:           "platypus",
+		AdminBootstrapped: n > 0,
+	})
 }
 
 // Bootstrap is the one-shot "set up the first admin" flow. It succeeds only

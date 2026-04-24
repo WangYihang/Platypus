@@ -45,6 +45,15 @@ export const palette = {
     successDot: "#3ECF8E",
     danger: "#ee0000",
     warning: "#f5a623",
+
+    // Server-rail tile backgrounds. One stable bucket per URL via
+    // avatarBg() in lib/servers.ts; the letter sits on top. Ten
+    // colours keeps collision density low even at the 16-profile cap
+    // without turning the rail into a rainbow.
+    avatarBgs: [
+        "#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f97316",
+        "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#6366f1",
+    ] as const,
 } as const;
 
 // Spacing / radius / font tokens. Components consume these instead of

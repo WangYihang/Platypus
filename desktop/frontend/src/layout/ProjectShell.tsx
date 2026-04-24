@@ -6,12 +6,16 @@ import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
 import { Project, listProjects } from "../lib/api";
 import { getSessionUser, getSession } from "../lib/auth";
+import { listServers, setActiveServerId } from "../lib/servers";
 import {
     GlobalTerminalProvider,
     useGlobalTerminal,
 } from "../terminal/GlobalTerminalContext";
 import TerminalDrawer from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
+import AddServerDialog from "./AddServerDialog";
+import ManageServersDialog from "./ManageServersDialog";
+import ServerRail from "./ServerRail";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
 
@@ -119,7 +123,10 @@ function ShellChrome({
     refresh: () => Promise<void>;
     children: ReactNode;
 }) {
+    const [addOpen, setAddOpen] = useState(false);
+    const [manageOpen, setManageOpen] = useState(false);
     useGlobalTerminalHotkey();
+    useServerSwitchHotkeys();
     return (
         <div
             style={{
@@ -139,6 +146,10 @@ function ShellChrome({
                     overflow: "hidden",
                 }}
             >
+                <ServerRail
+                    onAddServer={() => setAddOpen(true)}
+                    onManageServers={() => setManageOpen(true)}
+                />
                 <ProjectSidebar
                     user={user}
                     serverURL={serverURL}
@@ -150,7 +161,16 @@ function ShellChrome({
             </div>
             <TerminalDrawer />
             <StatusBar />
-            <CommandPalette />
+            <CommandPalette
+                onAddServer={() => setAddOpen(true)}
+                onManageServers={() => setManageOpen(true)}
+            />
+            <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
+            <ManageServersDialog
+                open={manageOpen}
+                onOpenChange={setManageOpen}
+                onAddServer={() => setAddOpen(true)}
+            />
         </div>
     );
 }
@@ -169,6 +189,29 @@ function useGlobalTerminalHotkey() {
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, [toggleDrawer]);
+}
+
+// Ctrl+1..9 (Cmd+1..9 on Mac desktop builds) jumps to the Nth server
+// in the rail. On web Chrome reserves Cmd+1..9 for tab switching —
+// Alt+1..9 is the web-mode fallback. Both bindings coexist; the
+// keydown handler only fires when the combo is free.
+function useServerSwitchHotkeys() {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key < "1" || e.key > "9") return;
+            const isMac = /Mac/i.test(navigator.platform);
+            const primary = (isMac && e.metaKey) || (!isMac && e.ctrlKey);
+            const secondary = e.altKey && !e.ctrlKey && !e.metaKey;
+            if (!primary && !secondary) return;
+            const idx = Number(e.key) - 1;
+            const servers = listServers();
+            if (idx < 0 || idx >= servers.length) return;
+            e.preventDefault();
+            setActiveServerId(servers[idx].id);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
 }
 
 function Centered({ children }: { children: ReactNode }) {

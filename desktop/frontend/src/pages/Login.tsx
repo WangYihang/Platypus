@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useNavigate } from "react-router-dom";
 
 import Card from "../components/Card";
 import { bootstrap, login } from "../lib/auth";
+import { getServer, listServers } from "../lib/servers";
 import { font, palette, space } from "../layout/theme";
 
 import { Button } from "@/components/ui/button";
@@ -39,20 +41,29 @@ type BootstrapFormValues = z.infer<typeof bootstrapSchema>;
 interface Props {
     onLoggedIn: () => void;
     initialURL?: string;
+    // Pinned to a specific saved ServerProfile when the rail sent
+    // the user here to re-auth (e.g. clicking a signed-out tile).
+    // Hides the URL field, the First-time setup tab, and the
+    // bootstrap flow.
+    pinnedServerId?: string;
 }
 
 // Login is the auth gate for both web and desktop modes. Two flows in
 // one card via a tab control: standard username+password login, and
 // the one-shot bootstrap flow that creates the first admin from the
 // API secret printed on server startup.
-export default function Login({ onLoggedIn, initialURL }: Props) {
+export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props) {
     const [busy, setBusy] = useState(false);
+    const navigate = useNavigate();
 
+    const pinnedProfile = pinnedServerId ? getServer(pinnedServerId) : null;
     const defaultURL =
+        pinnedProfile?.url ||
         initialURL ||
         (typeof window !== "undefined"
             ? window.location.origin.replace(/:\d+$/, ":7331")
             : "");
+    const hasSavedServers = listServers().length > 0;
 
     const loginForm = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -66,7 +77,7 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
     async function doLogin(v: LoginFormValues) {
         setBusy(true);
         try {
-            await login(v.url, v.username, v.password);
+            await login(pinnedProfile ?? v.url, v.username, v.password);
             onLoggedIn();
         } catch (err) {
             toast.error(`login: ${String(err)}`);
@@ -102,6 +113,26 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
         >
             <div style={{ width: 440, maxWidth: "100%" }}>
                 <div style={{ marginBottom: space[6], textAlign: "left" }}>
+                    {hasSavedServers && (
+                        <button
+                            onClick={() => navigate("/projects")}
+                            style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                background: "none",
+                                border: "none",
+                                color: palette.textMuted,
+                                fontSize: 12,
+                                cursor: "pointer",
+                                padding: 0,
+                                marginBottom: space[2],
+                            }}
+                        >
+                            <ArrowLeft className="size-3" />
+                            Back to servers
+                        </button>
+                    )}
                     <h1
                         style={{
                             margin: 0,
@@ -113,7 +144,7 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                             letterSpacing: -0.2,
                         }}
                     >
-                        Platypus
+                        {pinnedProfile ? pinnedProfile.name : "Platypus"}
                     </h1>
                     <p
                         style={{
@@ -123,17 +154,20 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                             lineHeight: 1.5,
                         }}
                     >
-                        Log in to your server, or bootstrap the first admin from the
-                        startup secret.
+                        {pinnedProfile
+                            ? `Sign back in to ${pinnedProfile.url}.`
+                            : "Log in to your server, or bootstrap the first admin from the startup secret."}
                     </p>
                 </div>
 
                 <Card padding={6}>
                     <Tabs defaultValue="login" className="w-full">
-                        <TabsList className="mb-4 grid w-full grid-cols-2">
-                            <TabsTrigger value="login">Log in</TabsTrigger>
-                            <TabsTrigger value="bootstrap">First-time setup</TabsTrigger>
-                        </TabsList>
+                        {!pinnedProfile && (
+                            <TabsList className="mb-4 grid w-full grid-cols-2">
+                                <TabsTrigger value="login">Log in</TabsTrigger>
+                                <TabsTrigger value="bootstrap">First-time setup</TabsTrigger>
+                            </TabsList>
+                        )}
 
                         <TabsContent value="login">
                             <Form {...loginForm}>
@@ -141,22 +175,36 @@ export default function Login({ onLoggedIn, initialURL }: Props) {
                                     onSubmit={loginForm.handleSubmit(doLogin)}
                                     className="space-y-4"
                                 >
-                                    <FormField
-                                        control={loginForm.control}
-                                        name="url"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Server URL</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        placeholder="http://127.0.0.1:7331"
-                                                        {...field}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
+                                    {!pinnedProfile && (
+                                        <FormField
+                                            control={loginForm.control}
+                                            name="url"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Server URL</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            placeholder="http://127.0.0.1:7331"
+                                                            {...field}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    )}
+                                    {pinnedProfile && (
+                                        <div
+                                            style={{
+                                                fontFamily: font.mono,
+                                                fontSize: 12,
+                                                color: palette.textMuted,
+                                                marginBottom: space[2],
+                                            }}
+                                        >
+                                            {pinnedProfile.url}
+                                        </div>
+                                    )}
                                     <FormField
                                         control={loginForm.control}
                                         name="username"

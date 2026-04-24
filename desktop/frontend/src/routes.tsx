@@ -11,6 +11,7 @@ import ProjectShell from "./layout/ProjectShell";
 // loaded — Suspense below paints a full-viewport spinner while the
 // page chunk streams in, which on LAN / same-origin is a 50-200ms blip.
 const LoginRoute = lazy(() => import("./routes/LoginRoute"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const FleetPage = lazy(() => import("./pages/FleetPage"));
@@ -122,6 +123,11 @@ export const router = createBrowserRouter([
     {
         path: "/login",
         element: withSuspense(<LoginRoute />),
+        errorElement: <RootErrorBoundary />,
+    },
+    {
+        path: "/onboarding",
+        element: withSuspense(<Onboarding />),
         errorElement: <RootErrorBoundary />,
     },
     {

@@ -9,12 +9,30 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { onActiveChange } from "../lib/auth";
+import { getActiveServerId } from "../lib/servers";
+
 const MAX_SHELLS = 8;
-const HEIGHT_KEY = "platypus.terminalDrawer.height";
-const OPEN_KEY = "platypus.terminalDrawer.open";
 const DEFAULT_HEIGHT = 320;
 const MIN_HEIGHT = 140;
 const MAX_HEIGHT_RATIO = 0.85;
+
+// Drawer layout state (height / open) is persisted per active server
+// so switching between workspaces doesn't leak one user's preferred
+// drawer size into another. When no active server is set we skip
+// persistence entirely — the drawer is only meaningful inside an
+// authenticated project shell anyway. Legacy unscoped keys are read
+// once and copied under the active server's namespace the first
+// time this module runs with a session.
+const LEGACY_HEIGHT_KEY = "platypus.terminalDrawer.height";
+const LEGACY_OPEN_KEY = "platypus.terminalDrawer.open";
+
+function heightKey(serverId: string): string {
+    return `platypus.${serverId}.terminalDrawer.height`;
+}
+function openKey(serverId: string): string {
+    return `platypus.${serverId}.terminalDrawer.open`;
+}
 
 export interface ShellEntry {
     id: string;
@@ -53,9 +71,12 @@ function nextShellId(): string {
     return `shell-${Date.now()}-${shellCounter}`;
 }
 
-function readPersistedHeight(): number {
+function readPersistedHeight(serverId: string | null): number {
     try {
-        const raw = localStorage.getItem(HEIGHT_KEY);
+        const raw = serverId
+            ? localStorage.getItem(heightKey(serverId)) ??
+              localStorage.getItem(LEGACY_HEIGHT_KEY)
+            : localStorage.getItem(LEGACY_HEIGHT_KEY);
         if (!raw) return DEFAULT_HEIGHT;
         const n = parseInt(raw, 10);
         if (Number.isNaN(n)) return DEFAULT_HEIGHT;
@@ -65,9 +86,13 @@ function readPersistedHeight(): number {
     }
 }
 
-function readPersistedOpen(): boolean {
+function readPersistedOpen(serverId: string | null): boolean {
     try {
-        return localStorage.getItem(OPEN_KEY) === "1";
+        const raw = serverId
+            ? localStorage.getItem(openKey(serverId)) ??
+              localStorage.getItem(LEGACY_OPEN_KEY)
+            : localStorage.getItem(LEGACY_OPEN_KEY);
+        return raw === "1";
     } catch {
         return false;
     }
@@ -83,20 +108,41 @@ function clampHeight(h: number): number {
 export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
     const [shells, setShells] = useState<ShellEntry[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [drawerOpen, setDrawerOpen] = useState<boolean>(readPersistedOpen);
-    const [drawerHeight, setDrawerHeightState] = useState<number>(readPersistedHeight);
+    const [activeServerId, setActiveServerIdState] = useState<string | null>(() =>
+        getActiveServerId(),
+    );
+    const [drawerOpen, setDrawerOpen] = useState<boolean>(() =>
+        readPersistedOpen(activeServerId),
+    );
+    const [drawerHeight, setDrawerHeightState] = useState<number>(() =>
+        readPersistedHeight(activeServerId),
+    );
+
+    // Rehydrate when the user switches servers so each workspace
+    // remembers its own drawer size.
+    useEffect(() => {
+        const unsub = onActiveChange(() => {
+            const next = getActiveServerId();
+            setActiveServerIdState(next);
+            setDrawerHeightState(readPersistedHeight(next));
+            setDrawerOpen(readPersistedOpen(next));
+        });
+        return unsub;
+    }, []);
 
     useEffect(() => {
+        if (!activeServerId) return;
         try {
-            localStorage.setItem(HEIGHT_KEY, String(drawerHeight));
+            localStorage.setItem(heightKey(activeServerId), String(drawerHeight));
         } catch {
             // ignore quota / disabled storage
         }
-    }, [drawerHeight]);
+    }, [drawerHeight, activeServerId]);
 
     useEffect(() => {
+        if (!activeServerId) return;
         try {
-            localStorage.setItem(OPEN_KEY, drawerOpen ? "1" : "0");
+            localStorage.setItem(openKey(activeServerId), drawerOpen ? "1" : "0");
         } catch {
             // ignore
         }

@@ -3,7 +3,8 @@ import { Router, Zap } from "lucide-react";
 
 import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import { palette, radius, space } from "../layout/theme";
-import { getSession, onSessionChange } from "../lib/auth";
+import { getSession, onActiveChange, onSessionChange } from "../lib/auth";
+import { getActiveServer, onServersChange } from "../lib/servers";
 import { ServerInfo, getServerInfo } from "../lib/api";
 import Mono from "./Mono";
 import StatusDot from "./StatusDot";
@@ -20,14 +21,24 @@ const POLL_MS = 10_000;
 // to `error` so the UI stays legible rather than flashing empty.
 export default function StatusBar() {
     const [session, setSession] = useState(() => getSession());
+    const [activeName, setActiveName] = useState(() => getActiveServer()?.name ?? null);
     const [info, setInfo] = useState<ServerInfo | null>(null);
     const [online, setOnline] = useState<"online" | "offline" | "error">("offline");
     const timerRef = useRef<number | null>(null);
 
-    // Keep local session state in sync with login/logout so the bar
-    // clears counts when the user signs out.
+    // Keep local session / active-profile state in sync with login,
+    // logout, server switch, rename — so the bar always names the
+    // workspace the user is currently looking at.
     useEffect(() => {
-        return onSessionChange(() => setSession(getSession()));
+        const unsubs = [
+            onSessionChange(() => setSession(getSession())),
+            onActiveChange(() => {
+                setSession(getSession());
+                setActiveName(getActiveServer()?.name ?? null);
+            }),
+            onServersChange(() => setActiveName(getActiveServer()?.name ?? null)),
+        ];
+        return () => unsubs.forEach((u) => u());
     }, []);
 
     useEffect(() => {
@@ -130,9 +141,25 @@ export default function StatusBar() {
                               : "not connected"
                     }
                 />
-                <Mono size={11} color={palette.textSecondary}>
+                {activeName && (
+                    <>
+                        <span style={{ color: palette.textSecondary, fontWeight: 500 }}>
+                            {activeName}
+                        </span>
+                        <span style={{ color: palette.border }}>·</span>
+                    </>
+                )}
+                <Mono size={11} color={palette.textMuted}>
                     {serverHost}
                 </Mono>
+                {session?.user && (
+                    <>
+                        <span style={{ color: palette.border }}>·</span>
+                        <Mono size={11} color={palette.textMuted}>
+                            {session.user.username}
+                        </Mono>
+                    </>
+                )}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
