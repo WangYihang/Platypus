@@ -19,7 +19,7 @@ const (
 )
 
 func (n *Node) runDiscovery(ctx context.Context) {
-	if !n.cfg.DiscoveryLAN {
+	if !n.cfg.discoveryLAN() {
 		return
 	}
 
@@ -74,17 +74,24 @@ func (n *Node) advertise(ctx context.Context, addr string) {
 }
 
 func (n *Node) browse(ctx context.Context) {
-	interval := time.Duration(n.cfg.DiscoveryInterval) * time.Second
-	if interval < 10*time.Second {
-		interval = 30 * time.Second
-	}
-
-	n.logger.Info("mdns browsing started", slog.Duration("interval", interval))
+	n.logger.Info("mdns browsing started", slog.Duration("initial_interval", n.currentBrowseInterval()))
 
 	// Initial scan
 	n.doBrowse(ctx)
 
 	for {
+		// Re-read interval + enable flag each cycle so admin toggles
+		// take effect without a restart.
+		if !n.cfg.discoveryLAN() {
+			// Poll at the current cadence until discovery is re-enabled.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(n.currentBrowseInterval()):
+				continue
+			}
+		}
+		interval := n.currentBrowseInterval()
 		// Add up to 20% jitter to the interval
 		jitter := time.Duration(float64(interval) * 0.2 * (2.0*rand.Float64() - 1.0))
 		select {
@@ -94,6 +101,16 @@ func (n *Node) browse(ctx context.Context) {
 			n.doBrowse(ctx)
 		}
 	}
+}
+
+// currentBrowseInterval clamps the configured discovery interval to a
+// 10s floor to avoid flooding the LAN on a misconfiguration.
+func (n *Node) currentBrowseInterval() time.Duration {
+	d := n.cfg.discoveryInterval()
+	if d < 10*time.Second {
+		return 30 * time.Second
+	}
+	return d
 }
 
 func (n *Node) doBrowse(ctx context.Context) {

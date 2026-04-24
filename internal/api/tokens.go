@@ -15,12 +15,20 @@ import (
 // HS256 scheme. Access tokens are short-lived and carry identity; refresh
 // tokens are longer-lived and carry only the jti + user id so that
 // refresh_tokens row in storage can be looked up for revocation.
+//
+// TTLs have two sources: the constructor-baked fallback (used by tests and
+// pre-registry callers) and, optionally, per-issue provider funcs set via
+// SetTTLProviders. When providers are installed (wired to the settings
+// registry in production) admin edits to the TTL take effect on the very
+// next Issue call — no restart, no re-signing of existing tokens.
 type TokenIssuer struct {
-	accessKey  []byte
-	refreshKey []byte
-	accessTTL  time.Duration
-	refreshTTL time.Duration
-	now        func() time.Time // swappable for tests later
+	accessKey    []byte
+	refreshKey   []byte
+	accessTTL    time.Duration
+	refreshTTL   time.Duration
+	accessTTLFn  func() time.Duration // optional: consulted per IssueAccess
+	refreshTTLFn func() time.Duration // optional: consulted per IssueRefresh
+	now          func() time.Time     // swappable for tests later
 }
 
 // AccessClaims is the application-level claim set embedded in an access JWT.
@@ -71,6 +79,32 @@ func NewTokenIssuer(accessKey, refreshKey string, accessTTL, refreshTTL time.Dur
 	}, nil
 }
 
+// SetTTLProviders installs functions consulted on every IssueAccess /
+// IssueRefresh. Typically wired to settings.Registry.AccessTokenTTL /
+// RefreshTokenTTL so admin edits take effect immediately.
+func (i *TokenIssuer) SetTTLProviders(access, refresh func() time.Duration) {
+	i.accessTTLFn = access
+	i.refreshTTLFn = refresh
+}
+
+func (i *TokenIssuer) currentAccessTTL() time.Duration {
+	if i.accessTTLFn != nil {
+		if d := i.accessTTLFn(); d > 0 {
+			return d
+		}
+	}
+	return i.accessTTL
+}
+
+func (i *TokenIssuer) currentRefreshTTL() time.Duration {
+	if i.refreshTTLFn != nil {
+		if d := i.refreshTTLFn(); d > 0 {
+			return d
+		}
+	}
+	return i.refreshTTL
+}
+
 func (i *TokenIssuer) IssueAccess(c AccessClaims) (string, error) {
 	now := i.now().UTC()
 	claims := typedClaims{
@@ -78,7 +112,7 @@ func (i *TokenIssuer) IssueAccess(c AccessClaims) (string, error) {
 			Subject:   c.UserID,
 			Audience:  jwt.ClaimStrings{audAccess},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(i.accessTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(i.currentAccessTTL())),
 			ID:        uuid.NewString(),
 		},
 		Username: c.Username,
@@ -95,7 +129,7 @@ func (i *TokenIssuer) IssueRefresh(c RefreshClaims) (string, error) {
 			Subject:   c.UserID,
 			Audience:  jwt.ClaimStrings{audRefresh},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(i.refreshTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(i.currentRefreshTTL())),
 			ID:        c.TokenID,
 		},
 		TokenID: c.TokenID,

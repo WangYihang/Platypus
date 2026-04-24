@@ -41,6 +41,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/pki"
+	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
@@ -106,6 +107,14 @@ func main() {
 	// receives the same instance.
 	pkiSvc := pki.New(db)
 
+	// settingsReg is the live policy-config layer. Built up front so
+	// the mesh Node (below) and the REST engine can both attach to
+	// the same instance — admin edits to mesh.discovery_lan /
+	// discovery_interval_seconds, token TTLs, and distributor
+	// channel / presigned_ttl take effect on the next hot-path read
+	// without a restart.
+	settingsReg := settings.New(db, cfg)
+
 	// Mesh node (optional). The server self-issues a cert-bound
 	// leaf under cfg.Mesh.ProjectID's CA — same chain agents in
 	// that project use — and joins the overlay. On any wiring
@@ -113,7 +122,7 @@ func main() {
 	// never aborts over mesh.
 	var meshNode *mesh.Node
 	if cfg.Mesh.PSKFile != "" {
-		if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr); node != nil {
+		if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr, settingsReg); node != nil {
 			core.Ctx.Mesh = node
 			meshNode = node
 		}
@@ -159,7 +168,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rest := buildRESTEngine(ctx, cfg, db, pkiSvc)
+	rest := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg)
 
 	go func() {
 		if err := dispatcher.Serve(ctx, listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -264,7 +273,7 @@ func mustRandomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service) http.Handler {
+func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) http.Handler {
 	rest := api.CreateRESTfulAPIServer()
 
 	accessKey := cfg.RESTful.JWTAccessKey
@@ -277,13 +286,14 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 		refreshKey = mustRandomHex(32)
 		log.Info("No JWTRefreshKey configured — generated a random one. Set RESTful.JWTRefreshKey to keep refresh tokens valid across restarts.")
 	}
-	accessTTL := time.Duration(cfg.RESTful.AccessTTLOrDefault()) * time.Second
-	refreshTTL := time.Duration(cfg.RESTful.RefreshTTLOrDefault()) * time.Second
+	accessTTL := settingsReg.AccessTokenTTL()
+	refreshTTL := settingsReg.RefreshTokenTTL()
 	tokens, err := api.NewTokenIssuer(accessKey, refreshKey, accessTTL, refreshTTL)
 	if err != nil {
 		log.Error("token issuer: %v", err)
 		os.Exit(1)
 	}
+	tokens.SetTTLProviders(settingsReg.AccessTokenTTL, settingsReg.RefreshTokenTTL)
 
 	auth := api.NewAuth()
 	auth.SetJWTFallback(tokens)
@@ -340,14 +350,9 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 			log.Error("distributor: init artifact store: %v", err)
 			os.Exit(1)
 		}
-		ttl, err := time.ParseDuration(cfg.Distributor.PresignedTTL)
-		if err != nil || ttl <= 0 {
-			ttl = 5 * time.Minute
-		}
 		core.RegisterDistributorRoutes(rest, core.DistributorArgs{
-			Channel:      cfg.Distributor.ChannelOrDefault(),
-			PresignedTTL: ttl,
-			Store:        store,
+			Settings: settingsReg,
+			Store:    store,
 		})
 	} else {
 		log.Info("Distributor disabled: configure distributor.store.endpoint to enable installer downloads.")
@@ -369,6 +374,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
+	api.RegisterV1AdminSettingsRoutes(rest, api.NewAdminSettingsHandler(settingsReg), rbac)
 	api.RegisterSwaggerRoutes(rest)
 
 	// TopologyStream + observer were v1 — they relied on the
@@ -397,7 +403,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 // Project scoping: cfg.Mesh.ProjectID picks which project's CA to
 // chain the server's leaf to. Agents in the same project will
 // trust the resulting identity via the same CA.
-func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config, publicAddr string) *mesh.Node {
+func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config, publicAddr string, settingsReg *settings.Registry) *mesh.Node {
 	projectID := cfg.Mesh.ProjectID
 	if projectID == "" {
 		log.Error("mesh: cfg.Mesh.ProjectID is required for the server to self-issue a leaf cert; skipping")
@@ -457,6 +463,7 @@ func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Co
 		ProjectID:         projectID,
 		BootstrapEnabled:  bootstrapTarget != "",
 		BootstrapTarget:   bootstrapTarget,
+		Settings:          settingsReg,
 	}, nil)
 	if err != nil {
 		log.Error("mesh: NewNode: %v", err)

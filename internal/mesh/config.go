@@ -1,6 +1,20 @@
 package mesh
 
-import "crypto/x509"
+import (
+	"crypto/x509"
+	"time"
+)
+
+// SettingsProvider exposes the subset of settings.Registry the mesh
+// node consults on hot paths. Kept as an interface so the mesh
+// package has no compile-time dependency on internal/settings or
+// internal/storage. nil is legal — accessors fall back to the static
+// Config values (DiscoveryLAN, DiscoveryInterval) so tests without a
+// registry keep working.
+type SettingsProvider interface {
+	MeshDiscoveryLAN() bool
+	MeshDiscoveryInterval() time.Duration
+}
 
 // Config collects the runtime knobs for a mesh Node. Identity,
 // TrustedCAs, and either PSK or PSKFile are required; the rest
@@ -62,4 +76,35 @@ type Config struct {
 	// back to the legacy DeriveNodeID(pubkey) self-cert check —
 	// useful for pure-mesh tests that don't have a PKI.
 	TrustedCAs *x509.CertPool
+
+	// Settings is the live source of truth for runtime-tunable mesh
+	// knobs (DiscoveryLAN, DiscoveryInterval). When non-nil the
+	// discovery loop consults it on every cycle so admin edits take
+	// effect immediately. When nil the static DiscoveryLAN /
+	// DiscoveryInterval fields above are used — tests without a
+	// registry keep working.
+	Settings SettingsProvider
+}
+
+// discoveryLAN returns the live LAN-discovery flag, preferring the
+// Settings provider when one is attached.
+func (c *Config) discoveryLAN() bool {
+	if c.Settings != nil {
+		return c.Settings.MeshDiscoveryLAN()
+	}
+	return c.DiscoveryLAN
+}
+
+// discoveryInterval returns the live mDNS browse interval as a
+// duration, preferring the Settings provider.
+func (c *Config) discoveryInterval() time.Duration {
+	if c.Settings != nil {
+		if d := c.Settings.MeshDiscoveryInterval(); d > 0 {
+			return d
+		}
+	}
+	if c.DiscoveryInterval > 0 {
+		return time.Duration(c.DiscoveryInterval) * time.Second
+	}
+	return 30 * time.Second
 }

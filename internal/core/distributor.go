@@ -43,13 +43,21 @@ type ManifestArtifact struct {
 	SHA256 string `json:"sha256"` // hex-encoded
 }
 
+// DistributorSettings is the live policy surface the distributor
+// consults on every request. The production implementation is
+// settings.Registry; tests pass a stub. Kept as an interface so the
+// core package has no compile-time dependency on internal/settings.
+type DistributorSettings interface {
+	DistributorChannel() string
+	DistributorPresignedTTL() time.Duration
+}
+
 // Distributor is the HTTP facade in front of the release artifact store.
 // It never serves binary bytes itself — it returns the signed manifest
 // and 302-redirects to short-lived presigned URLs for artifact downloads.
 type Distributor struct {
-	Channel      string         `json:"channel"`
-	PresignedTTL time.Duration  `json:"-"`
-	Store        artifact.Store `json:"-"`
+	Settings DistributorSettings `json:"-"`
+	Store    artifact.Store      `json:"-"`
 }
 
 // RegisterDistributorRoutes mounts the distributor + installer routes
@@ -65,9 +73,8 @@ func RegisterDistributorRoutes(engine *gin.Engine, cfg DistributorArgs) *Distrib
 	gin.DefaultWriter = io.Discard
 
 	d := &Distributor{
-		Channel:      cfg.Channel,
-		PresignedTTL: cfg.PresignedTTL,
-		Store:        cfg.Store,
+		Settings: cfg.Settings,
+		Store:    cfg.Store,
 	}
 	if Ctx != nil {
 		Ctx.Distributor = d
@@ -94,9 +101,33 @@ func RegisterDistributorRoutes(engine *gin.Engine, cfg DistributorArgs) *Distrib
 // DistributorArgs bundles the inputs to RegisterDistributorRoutes so
 // we can grow the surface without churning call sites.
 type DistributorArgs struct {
-	Channel      string
-	PresignedTTL time.Duration
-	Store        artifact.Store
+	Settings DistributorSettings
+	Store    artifact.Store
+}
+
+// currentChannel resolves the live release channel. The distributor
+// consults the settings registry on every request so admin edits take
+// effect immediately. When Settings is nil (e.g. unit tests without a
+// registry) it falls back to the hardcoded default so tests stay
+// trivial.
+func (d *Distributor) currentChannel() string {
+	if d.Settings != nil {
+		if v := d.Settings.DistributorChannel(); v != "" {
+			return v
+		}
+	}
+	return "stable"
+}
+
+// currentPresignedTTL mirrors currentChannel for the presigned URL
+// lifetime.
+func (d *Distributor) currentPresignedTTL() time.Duration {
+	if d.Settings != nil {
+		if d := d.Settings.DistributorPresignedTTL(); d > 0 {
+			return d
+		}
+	}
+	return 5 * time.Minute
 }
 
 // handleManifest returns the raw manifest JSON for the requested
@@ -154,7 +185,8 @@ func (d *Distributor) handleArtifact(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	m, err := d.loadManifest(ctx, d.Channel)
+	channel := d.currentChannel()
+	m, err := d.loadManifest(ctx, channel)
 	if err != nil {
 		log.Error("distributor: load manifest: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "manifest unavailable"})
@@ -165,7 +197,7 @@ func (d *Distributor) handleArtifact(c *gin.Context) {
 			"error":           "version not served by current channel",
 			"requested":       version,
 			"channel_version": m.Version,
-			"channel":         d.Channel,
+			"channel":         channel,
 		})
 		return
 	}
@@ -174,7 +206,7 @@ func (d *Distributor) handleArtifact(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no artifact for %s/%s", osName, archName)})
 		return
 	}
-	url, _, err := d.Store.PresignGet(ctx, art.Key, d.PresignedTTL)
+	url, _, err := d.Store.PresignGet(ctx, art.Key, d.currentPresignedTTL())
 	if err != nil {
 		log.Error("distributor: presign %s: %s", art.Key, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "presign failed"})

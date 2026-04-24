@@ -40,26 +40,12 @@ type RESTfulConfig struct {
 	DBFile            string `yaml:"db_file"             mapstructure:"db_file"`             // empty defaults to ./platypus.db
 }
 
-// AccessTTLOrDefault returns the configured access token lifetime in
-// seconds, or a sensible default (15 minutes) when unset.
-func (c RESTfulConfig) AccessTTLOrDefault() int {
-	if c.AccessExpireTime > 0 {
-		return c.AccessExpireTime
-	}
-	return 15 * 60
-}
-
-// RefreshTTLOrDefault returns the configured refresh token lifetime in
-// seconds, or a sensible default (14 days) when unset.
-func (c RESTfulConfig) RefreshTTLOrDefault() int {
-	if c.RefreshExpireTime > 0 {
-		return c.RefreshExpireTime
-	}
-	return 14 * 24 * 60 * 60
-}
-
 // DBFileOrDefault returns the configured SQLite path, or "./platypus.db"
 // when unset. Unix paths only for now.
+//
+// TTL defaults moved to internal/settings so the runtime override layer
+// and the YAML defaults share a single source of truth; legacy
+// AccessTTLOrDefault / RefreshTTLOrDefault helpers were dropped.
 func (c RESTfulConfig) DBFileOrDefault() string {
 	if c.DBFile != "" {
 		return c.DBFile
@@ -88,15 +74,6 @@ type ArtifactStoreConfig struct {
 	AccessKeyID     string `yaml:"access_key_id"     mapstructure:"access_key_id"`
 	SecretAccessKey string `yaml:"secret_access_key" mapstructure:"secret_access_key"`
 	UseSSL          bool   `yaml:"use_ssl"           mapstructure:"use_ssl"`
-}
-
-// ChannelOrDefault returns the configured release channel, defaulting
-// to "stable" when unset.
-func (c DistributorConfig) ChannelOrDefault() string {
-	if c.Channel != "" {
-		return c.Channel
-	}
-	return "stable"
 }
 
 // MeshConfig opts the server into the agent overlay. Identity is
