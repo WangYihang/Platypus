@@ -91,6 +91,22 @@ func main() {
 	// should do.
 	pki.KEKPath = filepath.Join(filepath.Dir(dbFile), "ca.kek")
 
+	// Seed the "system" pseudo-user and the "default" project before
+	// anything touches FKs that point at them. Mesh's server-self-issue
+	// flow (tryStartServerMesh → pki.EnsureCA) writes project_ca rows
+	// whose project_id + created_by_user FKs require both of these
+	// rows to exist. Idempotent on every boot; the admin bootstrap
+	// path in handler_auth_v1 still runs its own GetBySlug guard.
+	systemUserID, err := storage.EnsureSystemUser(ctx, db)
+	if err != nil {
+		log.Error("seed system user: %v", err)
+		os.Exit(1)
+	}
+	if _, err := storage.EnsureDefaultProject(ctx, db, systemUserID); err != nil {
+		log.Error("seed default project: %v", err)
+		os.Exit(1)
+	}
+
 	ingressAddr := cfg.Ingress.Addr
 	if ingressAddr == "" {
 		ingressAddr = defaultIngressAddr
@@ -410,8 +426,9 @@ func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Co
 		return nil
 	}
 	// Ensure (or create) the project CA, then self-issue a leaf
-	// with SAN "platypus://agent/server".
-	if _, err := pkiSvc.EnsureCA(ctx, projectID, "server"); err != nil {
+	// with SAN "platypus://agent/server". createdBy points at the
+	// seeded system user so the project_ca.created_by_user FK resolves.
+	if _, err := pkiSvc.EnsureCA(ctx, projectID, storage.SystemUserID); err != nil {
 		log.Error("mesh: ensure project CA for %q: %v", projectID, err)
 		return nil
 	}
