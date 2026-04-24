@@ -68,9 +68,14 @@ export default function HostView({ projectID, hostID }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     // pickedSessionID drives which session Terminal / Files operate
-    // on. Lifted here so both tabs stay in sync and the "my session
-    // just disappeared, fall back to the next live one" effect runs
-    // once rather than in each tab.
+    // on. Despite the name, the value is the host's agent_id, not the
+    // sessions-row UUID — every per-host RPC route on the server
+    // (/api/v1/agents/:id/fs, /terminal/:id/ws, /rpc/:id, …) keys off
+    // the agent_id from the cert SAN, which is what core.AgentLinkService
+    // is registered under. Using the sessions-row id here would 404
+    // because that's a fresh UUID per insert with no relationship to
+    // the cert. The "session" framing stays in the variable name so
+    // existing tab props keep working without churn.
     const [pickedSessionID, setPickedSessionID] = useState<string | null>(null);
 
     const project = useCurrentProject();
@@ -149,14 +154,16 @@ export default function HostView({ projectID, hostID }: Props) {
 
     useEffect(() => {
         const live = sessions.filter((s) => !s.disconnected_at);
-        if (live.length === 0) {
-            if (pickedSessionID !== null) setPickedSessionID(null);
-            return;
+        // No live session → blank the pick so tabs render empty state.
+        // Any live session → pin pickedSessionID to host.agent_id (see
+        // comment on the useState above). agent_id is single-valued
+        // per host, so we don't need to disambiguate between concurrent
+        // sessions on the same agent.
+        const next = live.length > 0 && host?.agent_id ? host.agent_id : null;
+        if (pickedSessionID !== next) {
+            setPickedSessionID(next);
         }
-        if (!pickedSessionID || !live.some((s) => s.id === pickedSessionID)) {
-            setPickedSessionID(live[0].id);
-        }
-    }, [sessions, pickedSessionID]);
+    }, [sessions, host?.agent_id, pickedSessionID]);
 
     if (loading && !host) {
         return (
