@@ -9,6 +9,8 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"strings"
+	"sync/atomic"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -26,42 +28,73 @@ type DB struct {
 	*sql.DB
 }
 
+// memDBCounter gives each ":memory:" Open() call a process-unique name so
+// multiple sql.DB connections share one in-memory DB (required once
+// MaxOpenConns isn't pinned to 1) while different DB instances stay
+// isolated.
+var memDBCounter atomic.Uint64
+
 // Open opens a SQLite database at path (":memory:" is fine for tests),
-// enables foreign-key enforcement, and applies every embedded migration. If
-// anything fails mid-setup the partially-opened connection is closed and an
-// error is returned — callers never see half-migrated state.
+// runs every pending migration, and returns a handle. Pragmas are encoded
+// in the DSN via modernc.org/sqlite's _pragma query param so they're
+// applied to every connection the pool opens — WAL requires concurrent
+// readers, and foreign-keys/busy-timeout are per-connection in SQLite, so
+// the single-conn pinning the previous version used is no longer needed.
+// If anything fails mid-setup the partially-opened connection is closed
+// and an error is returned — callers never see half-migrated state.
 func Open(path string) (*DB, error) {
-	raw, err := sql.Open("sqlite", path)
+	raw, err := sql.Open("sqlite", buildDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
 	if err := raw.Ping(); err != nil {
 		return nil, closeWith(raw, fmt.Errorf("ping sqlite %q: %w", path, err))
 	}
-	// Pragmas are per-connection in SQLite — Go's sql.DB may create
-	// several underlying connections under concurrent load, and each
-	// spawn resets to defaults. Pinning MaxOpenConns to 1 guarantees
-	// every query hits the single connection we configure below, which
-	// is the standard idiom for SQLite (concurrent writers serialise on
-	// the write lock anyway; one connection is strictly simpler).
-	raw.SetMaxOpenConns(1)
-	// SQLite defaults foreign_keys to OFF; the ON DELETE CASCADE edges in the
-	// schema are only meaningful with it on.
-	if _, err := raw.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, closeWith(raw, fmt.Errorf("enable foreign_keys: %w", err))
-	}
-	// Block instead of failing fast when two callers both want a
-	// RESERVED write lock at the same time. With MaxOpenConns=1 the
-	// pool serialises for us, but the timeout is still belt-and-braces
-	// for tests that sometimes hit the driver-level lock before the
-	// pool's queue.
-	if _, err := raw.Exec("PRAGMA busy_timeout = 5000"); err != nil {
-		return nil, closeWith(raw, fmt.Errorf("set busy_timeout: %w", err))
-	}
 	if err := runMigrations(raw); err != nil {
 		return nil, closeWith(raw, err)
 	}
 	return &DB{DB: raw}, nil
+}
+
+// buildDSN turns a caller-facing path ("/var/lib/platypus.db" or
+// ":memory:") into a modernc.org/sqlite URI with the PRAGMAs the server
+// relies on baked in:
+//
+//   - journal_mode=WAL:   concurrent readers, single writer. Persistent
+//     across restarts (written to the DB header); setting it every
+//     connection is a no-op after the first.
+//   - foreign_keys=ON:    ON DELETE CASCADE edges in the schema require
+//     this; SQLite defaults it to off, per-connection.
+//   - busy_timeout=5000:  block up to 5s on a RESERVED write lock before
+//     returning SQLITE_BUSY.
+//   - synchronous=NORMAL: safe with WAL (fsync on checkpoint, not on
+//     every commit). The durability window is "power loss within the
+//     last few seconds", which is acceptable for our workload.
+//
+// ":memory:" DBs get a process-unique shared-cache name so multiple
+// connections in the pool actually point at the same in-memory DB —
+// default ":memory:" gives every new connection its own empty DB, which
+// breaks once MaxOpenConns isn't pinned to 1. Tests opening independent
+// in-memory instances still get isolation via the per-Open counter.
+func buildDSN(path string) string {
+	const pragmas = "_pragma=journal_mode(WAL)" +
+		"&_pragma=foreign_keys(ON)" +
+		"&_pragma=busy_timeout(5000)" +
+		"&_pragma=synchronous(NORMAL)"
+	if path == ":memory:" {
+		n := memDBCounter.Add(1)
+		return fmt.Sprintf("file:platypus-mem-%d?mode=memory&cache=shared&%s", n, pragmas)
+	}
+	// file:... accepts a bare path; strings.HasPrefix guard keeps callers
+	// that already built their own URI from being double-prefixed.
+	if strings.HasPrefix(path, "file:") {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		return path + sep + pragmas
+	}
+	return "file:" + path + "?" + pragmas
 }
 
 // closeWith closes db, joining any close error with the original so we don't
