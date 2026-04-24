@@ -382,6 +382,7 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
+	api.RegisterV2TerminalRoute(rest, agentLinkSvc)
 	api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
