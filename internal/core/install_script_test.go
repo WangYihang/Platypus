@@ -2,6 +2,8 @@ package core_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/enrollment"
+	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -126,6 +129,55 @@ func TestInstallScript_NoEnrollmentService(t *testing.T) {
 	engine.ServeHTTP(rec, req)
 	if rec.Code != 503 {
 		t.Fatalf("status = %d; want 503", rec.Code)
+	}
+}
+
+// Install script embeds PLATYPUS_PROJECT_CA when the project has an
+// initialised CA, and omits it otherwise. Agents built for the v2
+// enroll flow read this env var to pre-trust the server cert.
+func TestInstallScript_InjectsProjectCA(t *testing.T) {
+	db := mustOpenDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", admin)
+
+	// Seed a CA row so ConsumeInstallDownload can look it up.
+	kek := make([]byte, 32)
+	_, _ = rand.Read(kek)
+	t.Setenv(pki.KEKEnvVar, hex.EncodeToString(kek))
+	if _, err := pki.New(db).EnsureCA(ctx, proj.ID, admin.ID); err != nil {
+		t.Fatalf("EnsureCA: %v", err)
+	}
+
+	svc := enrollment.New(db)
+	core.SetEnrollment(svc)
+	installCtx(t, db)
+	defer uninstallCtx()
+
+	art, err := svc.MintInstallArtifact(ctx, enrollment.MintInstallArtifactInput{
+		ProjectID: proj.ID, IssuedByUser: admin.ID,
+		ServerEndpoint: "127.0.0.1:13337",
+	})
+	if err != nil {
+		t.Fatalf("MintInstallArtifact: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	core.RegisterDistributorRoutes(engine, core.DistributorArgs{})
+
+	req := httptest.NewRequest("GET", "/install/"+art.PlaintextDownloadToken, nil)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d; body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "PLATYPUS_PROJECT_CA=") {
+		t.Fatalf("install script missing PLATYPUS_PROJECT_CA line:\n%s", body)
+	}
+	if !strings.Contains(body, "export PLATYPUS_PROJECT_CA") {
+		t.Fatalf("install script missing export statement:\n%s", body)
 	}
 }
 

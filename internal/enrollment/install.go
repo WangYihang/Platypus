@@ -110,6 +110,13 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 // ConsumeResult is what ConsumeInstallDownload returns to the distributor.
 // PATPlaintext is the freshly-minted PAT that should be embedded into
 // the rendered shell script. Outcome is always set for audit logging.
+//
+// ProjectID + ProjectCAPEM are populated on success when the project
+// has an initialised CA. The distributor embeds the CA PEM in the
+// install script so the agent can verify the server's TLS chain on
+// subsequent connections without relying on TOFU or InsecureSkipVerify.
+// Both empty means PKI isn't configured; the agent falls back to
+// skip-verify (legacy behaviour).
 type ConsumeResult struct {
 	Outcome        string // "success" / "unknown_id" / "invalid_secret" / "expired" / "revoked" / "already_consumed" / "malformed"
 	DownloadID     string
@@ -119,6 +126,8 @@ type ConsumeResult struct {
 	PATTokenID     string
 	PATPlaintext   string
 	PATExpiresAt   time.Time
+	ProjectID      string
+	ProjectCAPEM   string
 }
 
 // ConsumeContext carries request metadata used for audit rows.
@@ -203,6 +212,13 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		return &ConsumeResult{Outcome: outcome}, nil
 	}
 
+	// Best-effort CA lookup. Missing is fine — agents built before
+	// the v2 enroll flow ignore PLATYPUS_PROJECT_CA anyway.
+	var caPEM string
+	if ca, caErr := s.db.ProjectCA().Get(ctx, tok.ProjectID); caErr == nil {
+		caPEM = ca.CertPEM
+	}
+
 	return &ConsumeResult{
 		Outcome:        "success",
 		DownloadID:     id,
@@ -212,6 +228,8 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		PATTokenID:     patRes.TokenID,
 		PATPlaintext:   patRes.PlaintextToken,
 		PATExpiresAt:   patRes.ExpiresAt,
+		ProjectID:      tok.ProjectID,
+		ProjectCAPEM:   caPEM,
 	}, nil
 }
 
