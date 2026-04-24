@@ -7,7 +7,6 @@ import {
     Loader2,
     Monitor,
     Network,
-    Router,
     ShieldCheck,
     Users,
     Zap,
@@ -92,7 +91,6 @@ export default function ProjectSidebar({
     const items: NavItem[] = [
         { to: "overview", label: "Overview", icon: <LayoutGrid className="size-4" />, requiresProject: true },
         { to: "hosts", label: "Hosts", icon: <Monitor className="size-4" />, requiresProject: true },
-        { to: "listeners", label: "Listeners", icon: <Router className="size-4" />, requiresProject: true },
         { to: "sessions", label: "Sessions", icon: <ShieldCheck className="size-4" />, requiresProject: true },
         ...(featureFlags.topology
             ? [{ to: "topology", label: "Topology", icon: <Network className="size-4" />, requiresProject: true }]
@@ -190,7 +188,7 @@ export default function ProjectSidebar({
                             lineHeight: 1.5,
                         }}
                     >
-                        Pick a project to see its hosts, listeners, and sessions.
+                        Pick a project to see its hosts and sessions.
                     </div>
                 )}
             </nav>
@@ -208,7 +206,7 @@ export default function ProjectSidebar({
                     <DialogHeader>
                         <DialogTitle>New project</DialogTitle>
                         <DialogDescription>
-                            Projects scope every resource (hosts, listeners, sessions, tokens).
+                            Projects scope every resource (hosts, sessions, tokens).
                         </DialogDescription>
                     </DialogHeader>
                     <Form {...createForm}>

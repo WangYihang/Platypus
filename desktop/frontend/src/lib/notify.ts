@@ -131,8 +131,6 @@ export const NotifyEvent = {
     HostSeen: "host.seen",
     SessionOpened: "session.opened",
     SessionClosed: "session.closed",
-    ListenerCreated: "listener.created",
-    ListenerDeleted: "listener.deleted",
     TopologyLinkUp: "topology.link_up",
     TopologyLinkDown: "topology.link_down",
     TopologyLinkStats: "topology.link_stats",
@@ -152,13 +150,6 @@ export interface SessionEventPayload {
     project_id: string;
     host_id: string;
     session_id: string;
-}
-
-export interface ListenerEventPayload {
-    project_id: string;
-    listener_id: string;
-    host?: string;
-    port?: number;
 }
 
 // --- Topology event payloads ----------------------------------------

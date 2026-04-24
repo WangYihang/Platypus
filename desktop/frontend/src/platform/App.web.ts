@@ -56,29 +56,6 @@ export async function DispatchCommand(
     return resp.results || [];
 }
 
-// ---------- Listeners ---------------------------------------------------
-
-export async function ListListeners(): Promise<api.Listener[]> {
-    const resp = await apiJSON<{ listeners: any[] }>("/api/v1/listeners");
-    return (resp.listeners || []).map((s: any) => {
-        const l = { ...s } as api.Listener & { NumSessions: number };
-        l.NumSessions = s.agent_clients ? Object.keys(s.agent_clients).length : 0;
-        return l;
-    });
-}
-
-export async function CreateListener(host: string, port: number): Promise<void> {
-    await apiFetch("/api/v1/listeners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, port }),
-    });
-}
-
-export async function DeleteListener(hash: string): Promise<void> {
-    await apiFetch("/api/v1/listeners/" + encodeURIComponent(hash), { method: "DELETE" });
-}
-
 // ---------- Files -------------------------------------------------------
 // Pages still call PickFileToUpload → upload path → UploadFile(path). In a
 // browser there are no real paths, so we stash the user-picked File in a

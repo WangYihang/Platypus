@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, RotateCw, Router, Users, Zap } from "lucide-react";
+import { Loader2, RotateCw, Users, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,13 @@ import LineChartCard, { LinePoint } from "../components/charts/LineChartCard";
 import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
 import PageHeader from "../components/PageHeader";
-import StatusPill from "../components/StatusPill";
 import { palette, space } from "../layout/theme";
 import {
     Host,
-    Listener,
     Project,
     SessionRow,
+    getServerInfo,
     listHosts,
-    listListeners,
     listProjectSessions,
 } from "../lib/api";
 import { fromNow, isOnline } from "../lib/time";
@@ -30,13 +28,14 @@ interface Props {
 }
 
 // ProjectOverview is the dashboard at /projects/:slug/overview. Four
-// KPI tiles, a 24h sessions line chart, top-hosts bar, listener health
-// mini-list, recent activity feed, and a quick-actions row at the
-// bottom. The "+ New listener" button lives in PageHeader so it's
-// always one click away from the project landing.
+// KPI tiles (hosts / online / ingress / live sessions), a 24h sessions
+// line chart, top-hosts bar, recent activity feed, and a quick-actions
+// row at the bottom. The unified ingress means there's only one
+// public endpoint agents dial, so the old per-listener mini-list has
+// been retired.
 export default function ProjectOverview({ project, onOpenMembers }: Props) {
     const navigate = useNavigate();
-    const [listeners, setListeners] = useState<Listener[] | null>(null);
+    const [publicAddr, setPublicAddr] = useState<string>("");
     const [hosts, setHosts] = useState<Host[] | null>(null);
     const [sessions24h, setSessions24h] = useState<SessionRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -46,12 +45,12 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
         setLoading(true);
         try {
             const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const [l, h, s] = await Promise.all([
-                listListeners(project.id),
+            const [info, h, s] = await Promise.all([
+                getServerInfo(),
                 listHosts(project.id),
                 listProjectSessions(project.id, { since, limit: 1000 }),
             ]);
-            setListeners(l);
+            setPublicAddr(info.public_addr || "");
             setHosts(h);
             setSessions24h(s);
             setError(null);
@@ -151,13 +150,6 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                                 Members
                             </Button>
                         )}
-                        <Button
-                            size="sm"
-                            onClick={() => navigate(`/projects/${project.slug}/listeners`)}
-                        >
-                            <Plus className="size-3.5" />
-                            New listener
-                        </Button>
                     </>
                 }
             />
@@ -196,7 +188,11 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                                 : undefined
                         }
                     />
-                    <MetricCard label="Listeners" value={listeners?.length ?? "—"} />
+                    <MetricCard
+                        label="Ingress"
+                        value={publicAddr || "—"}
+                        hint="Single TLS port agents dial"
+                    />
                     <MetricCard
                         label="Live sessions"
                         value={liveSessionsCount}
@@ -228,71 +224,23 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                         marginBottom: space[6],
                     }}
                 >
-                    <Card
-                        header={
-                            <span
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                }}
-                            >
-                                <span>Listeners</span>
-                                <Button
-                                    variant="link"
-                                    size="sm"
-                                    className="h-auto p-0 text-text-secondary"
-                                    onClick={() =>
-                                        navigate(`/projects/${project.slug}/listeners`)
-                                    }
-                                >
-                                    Manage all →
-                                </Button>
-                            </span>
-                        }
-                        padding={0}
-                    >
-                        {listeners === null || listeners.length === 0 ? (
-                            <div
-                                style={{
-                                    padding: space[5],
-                                    color: palette.textSecondary,
-                                    fontSize: 13,
-                                }}
-                            >
-                                {listeners === null
-                                    ? "Loading…"
-                                    : "No listeners yet — create one to start accepting agent connections."}
+                    <Card header="Ingress" padding={0}>
+                        <div
+                            style={{
+                                padding: space[5],
+                                color: palette.textSecondary,
+                                fontSize: 13,
+                                lineHeight: 1.6,
+                            }}
+                        >
+                            Agents dial a single TLS port (ALPN-multiplexed) and
+                            enrol with a project-scoped PAT. The ingress address
+                            below is what the install script and mesh bootstrap
+                            hand out:
+                            <div style={{ marginTop: space[3] }}>
+                                <Mono>{publicAddr || "— not reported —"}</Mono>
                             </div>
-                        ) : (
-                            <div style={{ display: "flex", flexDirection: "column" }}>
-                                {listeners.slice(0, 5).map((l, i) => (
-                                    <div
-                                        key={l.id}
-                                        onClick={() =>
-                                            navigate(
-                                                `/projects/${project.slug}/listeners/${l.id}`,
-                                            )
-                                        }
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            padding: `${space[3]}px ${space[5]}px`,
-                                            borderTop:
-                                                i === 0
-                                                    ? "none"
-                                                    : `1px solid ${palette.border}`,
-                                            cursor: "pointer",
-                                            fontSize: 13,
-                                        }}
-                                    >
-                                        <Mono>{`${l.host}:${l.port}`}</Mono>
-                                        <StatusPill tone="success">listening</StatusPill>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        </div>
                     </Card>
 
                     <Card header="Recent activity">
@@ -311,12 +259,6 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                             gap: space[3],
                         }}
                     >
-                        <QuickAction
-                            icon={<Router className="size-4" />}
-                            title="Create a listener"
-                            description="Bind a host:port to start accepting agent connections."
-                            onClick={() => navigate(`/projects/${project.slug}/listeners`)}
-                        />
                         <QuickAction
                             icon={<Zap className="size-4" />}
                             title="Run dispatch"

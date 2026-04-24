@@ -1,6 +1,6 @@
 // Typed wrappers over the /api/v1 surface introduced by the redesign
-// (Projects, Hosts, Listeners, Sessions, Dispatch). Thin on purpose —
-// each function is one authJSON call. Response shapes mirror the Go
+// (Projects, Hosts, Sessions, Dispatch). Thin on purpose — each
+// function is one authJSON call. Response shapes mirror the Go
 // handler_*_v2.go structs so a rename on either side will surface at
 // compile time.
 
@@ -29,20 +29,10 @@ export interface Host {
     last_seen_at: string;
 }
 
-export interface Listener {
-    id: string;
-    project_id: string;
-    host: string;
-    port: number;
-    public_ip?: string;
-    shell_path?: string;
-    created_at: string;
-}
-
 export interface SessionRow {
     id: string;
     project_id: string;
-    listener_id: string;
+    ingress_addr: string;
     host_id: string;
     alias?: string;
     user?: string;
@@ -146,25 +136,6 @@ export async function listProjectSessions(
     return j.sessions;
 }
 
-// --- Listeners -------------------------------------------------------
-
-export async function listListeners(pid: string): Promise<Listener[]> {
-    const j = await authJSON<{ listeners: Listener[] }>(`/api/v1/projects/${pid}/listeners`);
-    return j.listeners;
-}
-
-export async function createListener(pid: string, host: string, port: number): Promise<Listener> {
-    return authJSON<Listener>(`/api/v1/projects/${pid}/listeners`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, port }),
-    });
-}
-
-export async function deleteListener(pid: string, lid: string): Promise<void> {
-    await authFetch(`/api/v1/projects/${pid}/listeners/${lid}`, { method: "DELETE" });
-}
-
 // --- Dispatch --------------------------------------------------------
 
 export async function dispatchCommand(
@@ -233,7 +204,7 @@ export interface ServerInfo {
     commit: string;
     date: string;
     started_at: string;
-    listener_count: number;
+    public_addr: string;
     session_count: number;
 }
 

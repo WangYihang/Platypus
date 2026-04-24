@@ -14,8 +14,8 @@ type listSessionsV1Response struct {
 	Sessions []json.RawMessage `json:"sessions"`
 }
 
-// ListSessions returns every agent session attached to any listener.
-// Backed by GET /api/v1/sessions.
+// ListSessions returns every agent session currently attached to the
+// unified ingress. Backed by GET /api/v1/sessions.
 func (a *App) ListSessions() ([]api.Session, error) {
 	c, err := a.client()
 	if err != nil {

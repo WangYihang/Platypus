@@ -15,8 +15,6 @@ const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const HostsPage = lazy(() => import("./pages/HostsPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
-const ListenersPage = lazy(() => import("./pages/ListenersPage"));
-const ListenerDetailPage = lazy(() => import("./pages/ListenerDetailPage"));
 const SessionsPage = lazy(() => import("./pages/SessionsPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
@@ -151,11 +149,6 @@ export const router = createBrowserRouter([
                         element: <Navigate to="terminal" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
-                    { path: "listeners", element: withSuspense(<ListenersPage />) },
-                    {
-                        path: "listeners/:listenerId",
-                        element: withSuspense(<ListenerDetailPage />),
-                    },
                     { path: "sessions", element: withSuspense(<SessionsPage />) },
                     { path: "topology", element: withSuspense(<TopologyPage />) },
                     { path: "activities", element: withSuspense(<ActivitiesPage />) },

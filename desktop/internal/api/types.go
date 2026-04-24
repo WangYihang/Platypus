@@ -20,21 +20,6 @@ type Session struct {
 	GroupDispatch     bool              `json:"group_dispatch"`
 }
 
-// Listener is the desktop's view of a TCPServer entry.
-type Listener struct {
-	Hash           string    `json:"hash"`
-	Host           string    `json:"host"`
-	Port           uint16    `json:"port"`
-	HashFormat     string    `json:"-"`
-	GroupDispatch  bool      `json:"group_dispatch"`
-	DisableHistory bool      `json:"disable_history"`
-	PublicIP       string    `json:"public_ip"`
-	ShellPath      string    `json:"shell_path"`
-	Timestamp      time.Time `json:"timestamp"`
-	Interfaces     []string  `json:"interfaces"`
-	NumSessions    int       `json:"-"` // computed by ListListeners from AgentClients
-}
-
 // TunnelInfo mirrors what the server's GET /api/v1/sessions/:id/tunnels
 // returns: each entry has a type (pull|push|socks5) and an address.
 type TunnelInfo struct {

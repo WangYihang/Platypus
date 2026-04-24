@@ -18,6 +18,7 @@ import {
     IssueInstallResponse,
     IssuePATResponse,
     PATTokenListItem,
+    getServerInfo,
     issueInstallArtifact,
     issuePAT,
     listInstallArtifacts,
@@ -350,6 +351,22 @@ function IssueInstallDialog({
         defaultValues: { server_endpoint: "", target_os: "", target_arch: "" },
     });
 
+    // Pre-fill server_endpoint with the server's public_addr whenever
+    // the dialog opens. Admins can still override; the common case
+    // (LAN dev, single prod server) is that they accept the default.
+    useEffect(() => {
+        if (!open) return;
+        getServerInfo()
+            .then((info) => {
+                if (info.public_addr) {
+                    form.setValue("server_endpoint", info.public_addr);
+                }
+            })
+            .catch(() => {
+                /* best-effort — the field stays blank if /info fails */
+            });
+    }, [open, form]);
+
     async function submit(v: InstallFormValues) {
         try {
             const r = await issueInstallArtifact(projectID, v);
@@ -381,8 +398,8 @@ function IssueInstallDialog({
                                         <Input placeholder="203.0.113.5:13337" {...field} />
                                     </FormControl>
                                     <FormDescription>
-                                        host:port that the agent will connect back to (usually one
-                                        of your TCP listeners)
+                                        host:port agents dial; defaults to this server's unified
+                                        ingress address
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>

@@ -13,10 +13,8 @@ import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
     Host,
-    Listener,
     SessionRow,
     listHosts,
-    listListeners,
     listProjectSessions,
 } from "../lib/api";
 import { fromNow } from "../lib/time";
@@ -37,7 +35,7 @@ type FilterMode = "live" | "all";
 
 // SessionsPage is the cross-host project sessions list at
 // /projects/:slug/sessions. Live + historical view with a toggle
-// filter and free-text search over id/user/remote/host/listener. Row
+// filter and free-text search over id/user/remote/host/ingress. Row
 // click jumps to the host's terminal tab. Data is server-paginated
 // (one unbounded fetch — sessions typically number in the dozens),
 // so we filter client-side rather than round-tripping each keystroke.
@@ -46,7 +44,6 @@ export default function SessionsPage() {
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<SessionRow[] | null>(null);
     const [hostsByID, setHostsByID] = useState<Record<string, Host>>({});
-    const [listenersByID, setListenersByID] = useState<Record<string, Listener>>({});
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<FilterMode>("live");
@@ -56,18 +53,14 @@ export default function SessionsPage() {
         setLoading(true);
         try {
             const opts = filter === "live" ? { live: true } : {};
-            const [s, h, l] = await Promise.all([
+            const [s, h] = await Promise.all([
                 listProjectSessions(project.id, opts),
                 listHosts(project.id),
-                listListeners(project.id),
             ]);
             setSessions(s);
             const hMap: Record<string, Host> = {};
             for (const x of h) hMap[x.id] = x;
             setHostsByID(hMap);
-            const lMap: Record<string, Listener> = {};
-            for (const x of l) lMap[x.id] = x;
-            setListenersByID(lMap);
             setError(null);
         } catch (e) {
             setError(String(e));
@@ -87,21 +80,20 @@ export default function SessionsPage() {
         if (!q) return sessions;
         return sessions.filter((s) => {
             const host = hostsByID[s.host_id];
-            const lis = listenersByID[s.listener_id];
             const hay = [
                 s.id,
                 s.user,
                 s.remote_addr,
                 host?.hostname,
                 host?.primary_alias,
-                lis ? `${lis.host}:${lis.port}` : undefined,
+                s.ingress_addr,
             ]
                 .filter(Boolean)
                 .join(" ")
                 .toLowerCase();
             return hay.includes(q);
         });
-    }, [sessions, query, hostsByID, listenersByID]);
+    }, [sessions, query, hostsByID]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -194,7 +186,7 @@ export default function SessionsPage() {
                                 <TableRow>
                                     <TableHead className="w-[180px]">Session</TableHead>
                                     <TableHead>Host</TableHead>
-                                    <TableHead>Listener</TableHead>
+                                    <TableHead>Ingress</TableHead>
                                     <TableHead className="w-[120px]">User</TableHead>
                                     <TableHead className="w-[140px]">Connected</TableHead>
                                     <TableHead className="w-[180px]">Status</TableHead>
@@ -203,7 +195,6 @@ export default function SessionsPage() {
                             <TableBody>
                                 {filtered.map((s) => {
                                     const host = hostsByID[s.host_id];
-                                    const lis = listenersByID[s.listener_id];
                                     const primary =
                                         host?.primary_alias ||
                                         host?.hostname ||
@@ -232,10 +223,10 @@ export default function SessionsPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                                {lis ? (
-                                                    <Mono>{`${lis.host}:${lis.port}`}</Mono>
+                                                {s.ingress_addr ? (
+                                                    <Mono>{s.ingress_addr}</Mono>
                                                 ) : (
-                                                    <Mono>{`${s.listener_id.slice(0, 8)}…`}</Mono>
+                                                    "—"
                                                 )}
                                             </TableCell>
                                             <TableCell>

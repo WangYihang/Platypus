@@ -138,9 +138,9 @@ export default function StatusBar() {
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <Router className="size-3" />
-                    <span>Listeners</span>
+                    <span>Ingress</span>
                     <Mono size={11} color={palette.textPrimary}>
-                        {info?.listener_count ?? "—"}
+                        {info?.public_addr || "—"}
                     </Mono>
                 </span>
                 <span style={{ color: palette.border }}>·</span>

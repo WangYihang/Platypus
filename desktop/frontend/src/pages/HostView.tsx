@@ -13,11 +13,9 @@ import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
     Host,
-    Listener,
     SessionRow,
     getHost,
     listHostSessions,
-    listListeners,
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
@@ -52,7 +50,6 @@ type TabKey = (typeof TABS)[number];
 export default function HostView({ projectID, hostID }: Props) {
     const [host, setHost] = useState<Host | null>(null);
     const [sessions, setSessions] = useState<SessionRow[]>([]);
-    const [listenersMap, setListenersMap] = useState<Record<string, Listener>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     // pickedSessionID drives which session Terminal / Files / Tunnels
@@ -73,16 +70,12 @@ export default function HostView({ projectID, hostID }: Props) {
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const [h, s, ls] = await Promise.all([
+            const [h, s] = await Promise.all([
                 getHost(projectID, hostID),
                 listHostSessions(projectID, hostID),
-                listListeners(projectID),
             ]);
             setHost(h);
             setSessions(s);
-            const map: Record<string, Listener> = {};
-            for (const l of ls) map[l.id] = l;
-            setListenersMap(map);
             setError(null);
         } catch (e) {
             setError(String(e));
@@ -243,7 +236,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     )}
                 </div>
                 <div style={{ display: activeTab === "sessions" ? "block" : "none" }}>
-                    <SessionsPanel sessions={sessions} listenersMap={listenersMap} />
+                    <SessionsPanel sessions={sessions} />
                 </div>
                 <div style={{ display: activeTab === "info" ? "block" : "none" }}>
                     <InfoPanel host={host} />
@@ -292,13 +285,7 @@ function InfoPanel({ host }: { host: Host }) {
     );
 }
 
-function SessionsPanel({
-    sessions,
-    listenersMap,
-}: {
-    sessions: SessionRow[];
-    listenersMap: Record<string, Listener>;
-}) {
+function SessionsPanel({ sessions }: { sessions: SessionRow[] }) {
     if (sessions.length === 0) {
         return (
             <Card padding={0}>
@@ -315,7 +302,7 @@ function SessionsPanel({
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[180px]">Session</TableHead>
-                        <TableHead>Listener</TableHead>
+                        <TableHead>Ingress</TableHead>
                         <TableHead>User</TableHead>
                         <TableHead>Remote</TableHead>
                         <TableHead className="w-[140px]">Connected</TableHead>
@@ -324,18 +311,13 @@ function SessionsPanel({
                 </TableHeader>
                 <TableBody>
                     {sessions.map((r) => {
-                        const l = listenersMap[r.listener_id];
                         return (
                             <TableRow key={r.id}>
                                 <TableCell>
                                     <Mono>{`${r.id.slice(0, 16)}…`}</Mono>
                                 </TableCell>
                                 <TableCell>
-                                    {l ? (
-                                        <Mono>{`${l.host}:${l.port}`}</Mono>
-                                    ) : (
-                                        <Mono>{`${r.listener_id.slice(0, 8)}…`}</Mono>
-                                    )}
+                                    {r.ingress_addr ? <Mono>{r.ingress_addr}</Mono> : "—"}
                                 </TableCell>
                                 <TableCell>
                                     {r.user ? (
