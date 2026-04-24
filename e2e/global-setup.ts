@@ -223,6 +223,101 @@ export default async function globalSetup() {
     // Calling /auth/login back-to-back can race the refresh-token
     // persist (500 "persist refresh") under the same DB.
     process.env.PLATYPUS_E2E_ADMIN_TOKEN = auth.access_token;
+
+    // Spawn one baseline agent for the "default" project. Specs that
+    // need "an agent is online" assert on host rows directly rather
+    // than spawning their own per-test agent; multiple agents on the
+    // same machine would collide on the hosts.(project_id, fingerprint)
+    // UNIQUE constraint (every agent binary picks up the same
+    // os.Hostname() / machine-id, so fingerprints match). Single
+    // shared fixture sidesteps that without needing a machine-id CLI
+    // flag on the agent.
+    const defaultProject = seeded.find((p) => p.slug === "default");
+    if (!defaultProject) {
+        throw new Error("globalSetup: default project missing after seeding");
+    }
+    await startBaselineAgent(tmpdir, defaultProject.id, auth.access_token);
+}
+
+async function startBaselineAgent(
+    tmpdir: string,
+    projectID: string,
+    adminToken: string,
+): Promise<void> {
+    const patResp = (await (
+        await fetch(`${backendURL}/api/v1/projects/${projectID}/pat-tokens`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({
+                description: "e2e-baseline",
+                ttl_seconds: 3600,
+                max_uses: 100,
+            }),
+        })
+    ).json()) as { token: string };
+    const caResp = (await (
+        await fetch(`${backendURL}/api/v1/projects/${projectID}/ca`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        })
+    ).json()) as { cert_pem: string };
+    const caBase64 = Buffer.from(caResp.cert_pem, "utf8").toString("base64");
+
+    const agentHome = path.join(tmpdir, "baseline-agent");
+    mkdirSync(agentHome, { recursive: true });
+
+    const agent = spawn(
+        AGENT_BINARY,
+        [
+            "--host",
+            BACKEND_HOST,
+            "--port",
+            String(BACKEND_PORT),
+            "--token",
+            patResp.token,
+            "--identity-dir",
+            agentHome,
+        ],
+        {
+            cwd: tmpdir,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env, PLATYPUS_PROJECT_CA: caBase64 },
+        },
+    );
+    process.env.PLATYPUS_E2E_AGENT_PID = String(agent.pid);
+
+    const reaper = () => {
+        try {
+            if (agent.pid) process.kill(agent.pid, "SIGKILL");
+        } catch {
+            /* already gone */
+        }
+    };
+    process.once("exit", reaper);
+    process.once("SIGINT", reaper);
+    process.once("SIGTERM", reaper);
+
+    if (process.env.E2E_VERBOSE_AGENT) {
+        agent.stdout?.on("data", (c: Buffer) => process.stdout.write(`[baseline-agent] ${c}`));
+        agent.stderr?.on("data", (c: Buffer) => process.stderr.write(`[baseline-agent!] ${c}`));
+    }
+
+    // Block globalSetup until the host row shows up, so the first
+    // spec already has its populated hosts view.
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+        const r = await fetch(`${backendURL}/api/v1/projects/${projectID}/hosts`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        if (r.ok) {
+            const { hosts } = (await r.json()) as { hosts?: unknown[] };
+            if (hosts && hosts.length > 0) return;
+        }
+        await new Promise((res) => setTimeout(res, 250));
+    }
+    throw new Error("globalSetup: baseline agent did not register a host in 15s");
 }
 
 // Re-export the backend handle for teardown via the env-passed PID.

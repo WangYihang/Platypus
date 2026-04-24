@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
 test.describe("host files", () => {

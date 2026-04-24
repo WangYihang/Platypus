@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
 test.describe("host view", () => {
@@ -22,8 +21,9 @@ test.describe("host view", () => {
             page.getByText(/active · /).first(),
         ).toBeVisible({ timeout: 10_000 });
 
-        // The five-tab strip (Terminal/Files/Tunnels/Sessions/Info).
-        for (const label of ["Terminal", "Files", "Tunnels", "Info"]) {
+        // Current tab strip (Terminal/Files/Sessions/Info) — Tunnels
+        // was removed with the v2 stack refactor.
+        for (const label of ["Terminal", "Files", "Sessions", "Info"]) {
             await expect(page.getByRole("tab", { name: label })).toBeVisible();
         }
 
