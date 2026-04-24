@@ -7,6 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -296,6 +299,69 @@ func TestBuildCRL_IncludesRevokedLive(t *testing.T) {
 	}
 	if crl.RevokedCertificateEntries[0].SerialNumber.Int64() != issued.Serial {
 		t.Fatalf("CRL serial mismatch")
+	}
+}
+
+// With the KEK file fallback enabled, an unset env var no longer
+// aborts CA init: the KEK is generated on demand, persisted, and
+// reused across subsequent calls. This is the zero-config dev path
+// exercised by `docker compose up`.
+func TestEnsureCA_KEKFileFallback(t *testing.T) {
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	t.Setenv(pki.KEKEnvVar, "")
+	kekPath := filepath.Join(t.TempDir(), "nested", "ca.kek")
+	prev := pki.KEKPath
+	pki.KEKPath = kekPath
+	t.Cleanup(func() { pki.KEKPath = prev })
+
+	ctx := context.Background()
+	admin := &user.User{ID: "u", Username: "u", PasswordHash: "h", Role: user.RoleAdmin, CreatedAt: time.Now().UTC()}
+	if err := db.Users().Create(ctx, admin); err != nil {
+		t.Fatalf("Users.Create: %v", err)
+	}
+	proj := &storage.Project{ID: "p", Name: "p", Slug: "p", CreatedAt: time.Now().UTC(), CreatedBy: admin.ID}
+	if err := db.Projects().Create(ctx, proj); err != nil {
+		t.Fatalf("Projects.Create: %v", err)
+	}
+
+	svc := pki.New(db)
+	ca1, err := svc.EnsureCA(ctx, proj.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("EnsureCA (first): %v", err)
+	}
+
+	raw, err := os.ReadFile(kekPath)
+	if err != nil {
+		t.Fatalf("KEK file not written: %v", err)
+	}
+	kek, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatalf("KEK file contents not hex: %v", err)
+	}
+	if len(kek) != 32 {
+		t.Fatalf("KEK length = %d; want 32", len(kek))
+	}
+	info, err := os.Stat(kekPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("KEK file perms = %o; want 0600", perm)
+	}
+
+	// Second call must reuse the on-disk KEK (same row returned, no
+	// error from a mismatched decrypt).
+	ca2, err := svc.EnsureCA(ctx, proj.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("EnsureCA (second): %v", err)
+	}
+	if ca1.CertPEM != ca2.CertPEM {
+		t.Fatalf("CA cert changed between calls; file reuse broken")
 	}
 }
 

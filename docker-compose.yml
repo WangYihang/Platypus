@@ -8,8 +8,10 @@ services:
     volumes:
       - platypus_data:/app/data
       - ./config.docker.yml:/app/config.yml
-    environment:
-      - PLATYPUS_CA_KEK=e2e-kek-do-not-use-in-prod-replace-me-now!!
+    # PLATYPUS_CA_KEK is intentionally unset: the server auto-generates
+    # and persists the KEK at /app/data/ca.kek on first boot, so fresh
+    # `docker compose up` Just Works. For production, inject a real KEK
+    # here (e.g. via a secret) to keep the key off the data volume.
     restart: always
     depends_on:
       init-data:

@@ -25,11 +25,16 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
@@ -63,6 +68,25 @@ var ErrKEKMissing = errors.New("pki: PLATYPUS_CA_KEK not set")
 // bytes of hex. Operators get a crisp error at startup rather than a
 // mysterious 500 later.
 var ErrKEKMalformed = errors.New("pki: PLATYPUS_CA_KEK must be 64 hex chars (32 bytes)")
+
+// KEKPath, when non-empty, enables a dev-friendly fallback: if the
+// PLATYPUS_CA_KEK env var is unset, readKEK reads the hex-encoded KEK
+// from this file, and if the file is missing it generates a random
+// KEK and writes it there (0600). The server main sets this to
+// "<data-dir>/ca.kek" so `docker compose up` works with zero config.
+// Tests and code paths that want the strict "env var required" old
+// behavior leave it empty.
+//
+// Trade-off when the fallback is active: the KEK sits next to the
+// SQLite file it's supposed to protect, so the CA private key is
+// effectively plaintext to anyone who can read the data volume. For
+// production, set PLATYPUS_CA_KEK explicitly (env takes precedence).
+var KEKPath string
+
+// autoKEKWarnOnce gates the one-shot WARN log emitted when readKEK
+// auto-generates a KEK. Without it the warning would fire on every
+// IssueAgentCert / RotateCA call.
+var autoKEKWarnOnce sync.Once
 
 // Service wraps the storage + KEK plumbing. Stateless — safe to share
 // across goroutines.
@@ -299,14 +323,54 @@ func (s *Service) IssueAgentCert(ctx context.Context, in IssueInput) (*IssueResu
 
 // --- Low-level helpers ---------------------------------------------------
 
-// readKEK pulls the operator-supplied key-encryption-key from the env.
-// Separate from pkg-level init() so tests can vary it per case via
-// t.Setenv.
+// readKEK resolves the key-encryption-key in priority order:
+//  1. PLATYPUS_CA_KEK env var (the production path).
+//  2. KEKPath file, if that package-level var is set (dev fallback).
+//  3. Generate a random KEK and persist it at KEKPath, emitting a
+//     one-shot WARN. Only reachable when KEKPath is set.
+//
+// If neither the env var nor KEKPath is set the function returns
+// ErrKEKMissing, preserving the prior strict behavior for tests and
+// any deployment that opts out of the file fallback.
 func readKEK() ([]byte, error) {
-	raw := os.Getenv(KEKEnvVar)
-	if raw == "" {
+	if raw := os.Getenv(KEKEnvVar); raw != "" {
+		return decodeKEK(raw)
+	}
+	if KEKPath == "" {
 		return nil, ErrKEKMissing
 	}
+
+	data, err := os.ReadFile(KEKPath)
+	if err == nil {
+		return decodeKEK(strings.TrimSpace(string(data)))
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("pki: read kek file %q: %w", KEKPath, err)
+	}
+
+	kek := make([]byte, aesKeyLen)
+	if _, err := rand.Read(kek); err != nil {
+		return nil, fmt.Errorf("pki: generate kek: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(KEKPath), 0o700); err != nil {
+		return nil, fmt.Errorf("pki: create kek dir: %w", err)
+	}
+	encoded := hex.EncodeToString(kek) + "\n"
+	if err := os.WriteFile(KEKPath, []byte(encoded), 0o600); err != nil {
+		return nil, fmt.Errorf("pki: write kek file %q: %w", KEKPath, err)
+	}
+	autoKEKWarnOnce.Do(func() {
+		log.L.Warn("auto_generated_ca_kek",
+			"path", KEKPath,
+			"hint", "set PLATYPUS_CA_KEK in production to keep the key outside the data volume",
+		)
+	})
+	return kek, nil
+}
+
+// decodeKEK validates a hex-encoded KEK string and returns the raw
+// 32-byte key, or ErrKEKMalformed on any decoding / length mismatch.
+func decodeKEK(raw string) ([]byte, error) {
 	kek, err := hex.DecodeString(raw)
 	if err != nil || len(kek) != aesKeyLen {
 		return nil, ErrKEKMalformed

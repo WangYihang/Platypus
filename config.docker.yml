@@ -22,6 +22,10 @@ restful:
   # startup (tokens won't survive a server restart). Set for prod.
   # access_expire_time / refresh_expire_time in seconds; 0 = defaults
   # (15 min / 14 days).
+  # The CA key-encryption-key lives in the same directory as db_file,
+  # at ./ca.kek. It's auto-generated on first boot when the
+  # PLATYPUS_CA_KEK env var is unset. For production, set the env var
+  # to keep the KEK off the data volume.
 
 distributor:
   channel: "stable"
