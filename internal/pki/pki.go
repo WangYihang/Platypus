@@ -16,7 +16,9 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
@@ -365,10 +367,18 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 		return nil, err
 	}
 
-	leafPub, leafPriv, err := ed25519.GenerateKey(rand.Reader)
+	// ECDSA P-256 rather than Ed25519: Chromium refuses TLS server
+	// certs signed with Ed25519 (ERR_SSL_VERSION_OR_CIPHER_MISMATCH
+	// with no further detail) even though the spec permits it, so
+	// mixing an Ed25519 ingress leaf with a browser-driven Web UI
+	// breaks the very path we're trying to support. ECDSA P-256 is
+	// universally supported and the CA's own Ed25519 sig over the
+	// leaf is still fine.
+	leafPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("pki: IssueServerCert keygen: %w", err)
 	}
+	leafPub := leafPriv.Public().(*ecdsa.PublicKey)
 
 	tx, err := s.db.ProjectCA().BeginTx(ctx)
 	if err != nil {
@@ -432,8 +442,11 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 
 // signServerLeaf is the sibling of signLeaf that stamps DNS / IP SANs
 // instead of platypus:// URI SANs. hosts can be a mix of hostnames and
-// numeric IPs; net.ParseIP decides the bucket.
-func signServerLeaf(caPriv ed25519.PrivateKey, caPEM string, hosts []string, pub ed25519.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
+// numeric IPs; net.ParseIP decides the bucket. The leaf's key is
+// ECDSA (see IssueServerCert's rationale); the CA signer stays
+// Ed25519 so this crosses key algorithms, which x509.CreateCertificate
+// accepts as long as both are valid crypto.Signer / crypto.PublicKey.
+func signServerLeaf(caPriv ed25519.PrivateKey, caPEM string, hosts []string, pub *ecdsa.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
 	caCert, err := parseCAFromPEM(caPEM)
 	if err != nil {
 		return "", err
@@ -641,9 +654,10 @@ func parseCAFromPEM(caPEM string) (*x509.Certificate, error) {
 	return x509.ParseCertificate(block.Bytes)
 }
 
-// encodePublicKey renders an Ed25519 public key as a PKCS#8 PEM block.
-// Used for the issued_certs.pubkey_pem column (admin UI diffs / export).
-func encodePublicKey(pub ed25519.PublicKey) (string, error) {
+// encodePublicKey renders any supported public key (Ed25519 for
+// agent identities, ECDSA for the ingress server leaf) as a PKCS#8
+// PEM block. Used for the issued_certs.pubkey_pem column.
+func encodePublicKey(pub any) (string, error) {
 	der, err := x509.MarshalPKIXPublicKey(pub)
 	if err != nil {
 		return "", err

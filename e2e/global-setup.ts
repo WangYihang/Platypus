@@ -80,6 +80,7 @@ export default async function globalSetup() {
 
     const dbPath = path.join(tmpdir, "platypus.db");
     const configPath = path.join(tmpdir, "config.yml");
+
     // Matches internal/utils/config/config.go (snake_case yaml tags).
     // Listeners / distributor / mesh listen_addr all moved onto the
     // unified ingress; distributor.store endpoint left empty so the
@@ -87,6 +88,12 @@ export default async function globalSetup() {
     // mesh.project_id is "default" to align with the system-seeded
     // project row (storage.DefaultProjectID) — using any other value
     // would fail project_ca's FK on startup.
+    //
+    // Leaving ingress.cert/key unset triggers the server's new
+    // auto-issue path (cmd/platypus-server/main.go :: issueIngressLeaf
+    // FromProjectCA), which stamps a TLS leaf signed by the project
+    // CA. Agents that pin PLATYPUS_PROJECT_CA (fetched via
+    // /api/v1/projects/:pid/ca after bootstrap) verify that chain.
     const config = {
         ingress: {
             addr: `${BACKEND_HOST}:${BACKEND_PORT}`,

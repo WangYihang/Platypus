@@ -13,13 +13,8 @@ test.describe("mesh automatic discovery", () => {
 
         // 1. Start two agents with ZERO mesh configuration.
         // They should bootstrap from the server and then discover each other via mDNS.
-        const agentA = await startZeroConfigAgent(def.id, token, {
-            token: "agent-zero-a",
-        });
-
-        const agentB = await startZeroConfigAgent(def.id, token, {
-            token: "agent-zero-b",
-        });
+        const agentA = await startZeroConfigAgent(def.id, token);
+        const agentB = await startZeroConfigAgent(def.id, token);
 
         try {
             await loginAsAdmin(page);

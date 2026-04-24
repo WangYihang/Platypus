@@ -65,6 +65,57 @@ export async function createProject(
     );
 }
 
+export interface PATResponse {
+    token_id: string;
+    token: string; // plaintext "plt_<id>.<secret>" — only ever returned here
+    expires_at: string;
+    issued_at: string;
+    max_uses: number;
+    description?: string;
+}
+
+// issuePAT mints a fresh PAT for the given project. The plaintext
+// token lives only in this response; callers should stash it.
+export async function issuePAT(
+    backendURL: string,
+    adminToken: string,
+    projectID: string,
+    opts: { description?: string; ttl_seconds?: number; max_uses?: number } = {},
+): Promise<PATResponse> {
+    return postJSON<PATResponse>(
+        `${backendURL}/api/v1/projects/${projectID}/pat-tokens`,
+        {
+            description: opts.description ?? "e2e",
+            ttl_seconds: opts.ttl_seconds ?? 3600,
+            max_uses: opts.max_uses ?? 0,
+        },
+        adminToken,
+    );
+}
+
+export interface ProjectCAResp {
+    project_id: string;
+    cert_pem: string;
+    created_at: string;
+    created_by_user: string;
+    serial_counter: number;
+}
+
+// getProjectCA fetches the PEM-encoded CA cert for the project. The
+// agent loads this (base64-wrapped) from PLATYPUS_PROJECT_CA on
+// startup to pin the server chain.
+export async function getProjectCA(
+    backendURL: string,
+    adminToken: string,
+    projectID: string,
+): Promise<ProjectCAResp> {
+    const r = await fetch(`${backendURL}/api/v1/projects/${projectID}/ca`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (!r.ok) throw new Error(`get project CA → ${r.status}: ${await r.text()}`);
+    return (await r.json()) as ProjectCAResp;
+}
+
 export async function listProjects(
     backendURL: string,
     token: string,
@@ -104,9 +155,11 @@ export async function listProjectSessions(
     return j.sessions || [];
 }
 
-// waitForSessions polls the per-project sessions endpoint until at least
-// `min` live sessions are present. Used by globalSetup to confirm the
-// baseline agent has registered before any spec runs.
+// waitForSessions polls the per-project sessions endpoint. In the
+// v2 server only host rows are persisted on agent connect — logical
+// sessions aren't created automatically — so new specs should prefer
+// waitForHosts. Kept for any legacy caller that asserts directly on
+// sessions.
 export async function waitForSessions(
     backendURL: string,
     token: string,
@@ -127,6 +180,54 @@ export async function waitForSessions(
     }
     throw new Error(
         `expected ≥${min} live session(s) in project ${projectID} within ${timeoutMs}ms (saw ${last.length})`,
+    );
+}
+
+export interface HostResp {
+    id: string;
+    project_id: string;
+    hostname?: string;
+    online: boolean;
+}
+
+export async function listProjectHosts(
+    backendURL: string,
+    token: string,
+    projectID: string,
+): Promise<HostResp[]> {
+    const r = await fetch(`${backendURL}/api/v1/projects/${projectID}/hosts`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`list project hosts → ${r.status}: ${await r.text()}`);
+    const j = (await r.json()) as { hosts?: HostResp[] };
+    return j.hosts || [];
+}
+
+// waitForHosts polls the per-project hosts endpoint until at least
+// `min` rows appear. The v2 enroll flow upserts a host row on every
+// agent enrollment (and on subsequent link connects), so this is the
+// reliable "an agent is online" signal for specs that need to wait
+// for their fixture agent to show up in the API.
+export async function waitForHosts(
+    backendURL: string,
+    token: string,
+    projectID: string,
+    min: number,
+    timeoutMs = 15_000,
+): Promise<HostResp[]> {
+    const deadline = Date.now() + timeoutMs;
+    let last: HostResp[] = [];
+    while (Date.now() < deadline) {
+        try {
+            last = await listProjectHosts(backendURL, token, projectID);
+            if (last.length >= min) return last;
+        } catch {
+            /* swallow until deadline */
+        }
+        await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(
+        `expected ≥${min} host(s) in project ${projectID} within ${timeoutMs}ms (saw ${last.length})`,
     );
 }
 

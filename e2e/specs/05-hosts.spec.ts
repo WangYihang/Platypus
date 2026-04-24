@@ -1,9 +1,9 @@
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "../fixtures/agent";
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
 test.describe("hosts", () => {
-    test("populated list shows the baseline agent's host", async ({ page }) => {
+    test("populated list shows the live agent's host", async ({ page, liveAgent }) => {
+        void liveAgent; // spawn order only
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
         await page.getByRole("link", { name: /Hosts$/ }).click();

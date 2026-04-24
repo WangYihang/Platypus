@@ -14,14 +14,12 @@ test.describe("mesh topology", () => {
         // 1. Start Agent A (Mesh Listener)
         const agentA = await startMeshAgent(def.id, token, {
             meshListen: "127.0.0.1:17771",
-            token: "agent-a",
         });
 
         // 2. Start Agent B (Mesh Dialer, peers to A)
         const agentB = await startMeshAgent(def.id, token, {
             meshListen: "127.0.0.1:17772",
             peers: ["127.0.0.1:17771"],
-            token: "agent-b",
         });
 
         try {
