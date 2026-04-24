@@ -19,6 +19,13 @@ import (
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
+// activityQueueCap bounds the in-flight queue between Record callers
+// and the writer goroutine. A full queue means Record blocks
+// (backpressure) — preferable to unbounded goroutine spawn under a
+// sudden burst, or to silent data loss. 4096 slots is ≈128 KiB of
+// pointers, a trivial amount of memory for the guarantee it buys.
+const activityQueueCap = 4096
+
 // Input is the caller-facing payload. Every field is optional; Record
 // fills in defaults (at, actor_type, outcome) when the caller leaves
 // them empty. Fields left zero serialise as NULL / empty in storage.
@@ -44,46 +51,80 @@ type Input struct {
 	At time.Time
 }
 
-// Recorder wraps the storage layer and emits rows asynchronously. Every
-// call to Record is fire-and-forget: the goroutine it spawns is bounded
-// by a 2-second context and all errors are logged rather than returned.
-// This keeps the audit layer from ever blocking the request path.
+// Recorder wraps the storage layer and emits rows asynchronously
+// through a single writer goroutine fed by a bounded queue. Every
+// Record call enqueues one row; the writer drains serially and
+// handles DB errors via the log package. Callers never see a DB
+// error from the audit path.
 type Recorder struct {
-	db *storage.DB
+	db        *storage.DB
+	queue     chan *storage.Activity
+	closing   chan struct{} // closed by Close() — signals senders + writer
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
-// New constructs a recorder bound to the given DB.
+// New constructs a recorder bound to the given DB and starts its
+// background writer goroutine. Call Close() to drain the queue and
+// stop the writer (typically not needed in a long-running server;
+// tests use it to observe the post-drain state).
 func New(db *storage.DB) *Recorder {
-	return &Recorder{db: db}
+	return newWithCap(db, activityQueueCap)
 }
 
-// Record emits one activity row asynchronously.
+// newWithCap is the in-package constructor that lets tests pick a
+// smaller queue so they can exercise the full-queue path without
+// allocating 4096 slots.
+func newWithCap(db *storage.DB, cap int) *Recorder {
+	r := &Recorder{
+		db:      db,
+		queue:   make(chan *storage.Activity, cap),
+		closing: make(chan struct{}),
+	}
+	if db != nil {
+		r.wg.Add(1)
+		go r.writer()
+	}
+	return r
+}
+
+// Record enqueues one activity row. If the queue is full the call
+// blocks until the writer drains a slot OR Close() is called (the
+// event is then dropped rather than panicking on a closed send).
+// Post-Close calls are silent no-ops.
 func (r *Recorder) Record(in Input) {
 	if r == nil || r.db == nil {
 		return
 	}
 	ev := buildActivity(in)
-	go r.persist(ev)
+	select {
+	case r.queue <- ev:
+	case <-r.closing:
+		// recorder is shutting down; drop
+	}
 }
 
-// RecordWithContext is the context-aware variant; handy for tests that
-// want a bounded write, or for agent-side code that has its own
-// lifecycle context.
+// RecordWithContext is the context-aware variant. Same backpressure
+// semantics as Record, but the caller's context can abort a blocked
+// enqueue — useful for request-scoped callers who don't want their
+// handler to stall on a full audit queue.
 func (r *Recorder) RecordWithContext(ctx context.Context, in Input) {
 	if r == nil || r.db == nil {
 		return
 	}
 	ev := buildActivity(in)
-	go func() {
-		writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-		r.writeOnce(writeCtx, ev)
-	}()
+	select {
+	case r.queue <- ev:
+	case <-ctx.Done():
+		log.Warn("activity: drop (ctx canceled): %s", ev.Action)
+	case <-r.closing:
+		// recorder is shutting down; drop
+	}
 }
 
 // Time runs fn, measures duration, and records a row based on fn's
 // return value. The caller's error is returned unchanged; audit-write
-// errors are swallowed.
+// errors are swallowed (via the recorder's log-on-fail policy).
 func (r *Recorder) Time(in Input, fn func() error) error {
 	start := time.Now().UTC()
 	err := fn()
@@ -106,6 +147,46 @@ func (r *Recorder) Time(in Input, fn func() error) error {
 	return err
 }
 
+// Close signals the writer to drain the remaining queued events and
+// exit. Blocks until the writer has finished processing everything it
+// had in hand when Close was called. Safe to call multiple times;
+// only the first call has an effect.
+func (r *Recorder) Close() {
+	if r == nil {
+		return
+	}
+	r.closeOnce.Do(func() {
+		close(r.closing)
+	})
+	r.wg.Wait()
+}
+
+// writer is the single consumer of the queue. It drains each event
+// through writeOnce and exits after Close() signals AND the queue is
+// empty — guaranteeing that every Record that completed before Close
+// lands in storage.
+func (r *Recorder) writer() {
+	defer r.wg.Done()
+	for {
+		select {
+		case ev := <-r.queue:
+			r.persist(ev)
+		case <-r.closing:
+			// Drain whatever senders got in before Close landed.
+			for {
+				select {
+				case ev := <-r.queue:
+					r.persist(ev)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// persist writes a single event with a bounded-duration context so a
+// wedged DB connection doesn't stall the whole writer.
 func (r *Recorder) persist(ev *storage.Activity) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
