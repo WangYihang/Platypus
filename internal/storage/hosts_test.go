@@ -168,3 +168,42 @@ func TestHostRepo_Upsert_SameMachineDifferentProjects(t *testing.T) {
 		t.Fatal("same machine_id in different projects was merged into one row")
 	}
 }
+
+// TouchLastSeen bumps last_seen_at on a per-tick heartbeat from the
+// agent-link handler so the Web UI's "online" presence dot stays
+// accurate over a long-lived idle link. No-op (ErrNotFound) when the
+// agent_id has no host yet — Upsert may still be in flight.
+func TestHostRepo_TouchLastSeen(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "prod", "Production", admin)
+
+	t0 := time.Now().Add(-time.Hour).UTC()
+	h, err := db.Hosts().Upsert(ctx, &storage.HostIdentity{
+		ProjectID: proj.ID, AgentID: "agent-1", Fingerprint: "fp-1",
+		Hostname: "alpha", OS: "linux", SeenAt: t0,
+	})
+	if err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if !h.LastSeenAt.Equal(t0) {
+		t.Fatalf("setup: LastSeenAt = %v; want %v", h.LastSeenAt, t0)
+	}
+
+	t1 := t0.Add(45 * time.Second)
+	if err := db.Hosts().TouchLastSeen(ctx, "agent-1", t1); err != nil {
+		t.Fatalf("TouchLastSeen: %v", err)
+	}
+	got, err := db.Hosts().GetByAgentID(ctx, "agent-1")
+	if err != nil {
+		t.Fatalf("GetByAgentID: %v", err)
+	}
+	if !got.LastSeenAt.Equal(t1) {
+		t.Fatalf("after touch: LastSeenAt = %v; want %v", got.LastSeenAt, t1)
+	}
+
+	if err := db.Hosts().TouchLastSeen(ctx, "agent-missing", t1); err == nil {
+		t.Fatalf("TouchLastSeen on missing agent_id should return error")
+	}
+}

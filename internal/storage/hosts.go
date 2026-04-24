@@ -425,6 +425,30 @@ func (r *HostRepo) GetByAgentID(ctx context.Context, agentID string) (*Host, err
 	return h, nil
 }
 
+// TouchLastSeen bumps last_seen_at for the host identified by
+// agent_id. Cheap one-row UPDATE; the agent-link handler runs this on
+// a heartbeat tick so the Web UI's online window (60s lookback over
+// last_seen_at) reflects long-lived links accurately. Returns
+// ErrNotFound when no row claims the agent_id yet — callers should
+// treat that as transient (the enroll-time Upsert may still be in
+// flight) and let the next tick try again.
+func (r *HostRepo) TouchLastSeen(ctx context.Context, agentID string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE hosts SET last_seen_at = ? WHERE agent_id = ?`,
+		at.UTC(), agentID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // scanHostRow scans a single row from *sql.Rows or *sql.Row via rowScanner.
 func scanHostRow(s rowScanner) (*Host, error) {
 	var (

@@ -124,6 +124,15 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 	// agent is already serving RPCs to end users.
 	if h.db != nil {
 		go h.refreshHostFromSysInfo(agentID, projectID)
+		// Long-lived heartbeat: bump hosts.last_seen_at on a tick so
+		// the Web UI's "online" presence dot (60s lookback against
+		// last_seen_at; see desktop/.../lib/time.ts:isOnline) stays
+		// green for the entire lifetime of a quiet link, not just
+		// the first 60s after connect. Stops automatically when the
+		// gin request context cancels (which happens on link drop).
+		heartbeatCtx, stopHeartbeat := context.WithCancel(c.Request.Context())
+		defer stopHeartbeat()
+		go h.heartbeatHostLastSeen(heartbeatCtx, agentID)
 	}
 
 	for {
@@ -143,6 +152,37 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		go h.dispatchStream(agentID, hdr, stream)
 	}
 }
+
+// heartbeatHostLastSeen ticks every hostHeartbeatInterval and bumps
+// hosts.last_seen_at for the linked agent. Returns when ctx cancels
+// (i.e. the link drops). Cheap one-row UPDATE per tick — keeping the
+// interval comfortably under the frontend's 60s online window means
+// the presence dot stays green even when no RPC traffic flows.
+func (h *AgentLinkHandler) heartbeatHostLastSeen(ctx context.Context, agentID string) {
+	t := time.NewTicker(hostHeartbeatInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			if err := h.db.Hosts().TouchLastSeen(ctx, agentID, now); err != nil {
+				if errors.Is(err, storage.ErrNotFound) {
+					// Enroll-time Upsert may still be in flight on
+					// the very first tick after a fresh enrollment;
+					// just try again next tick.
+					continue
+				}
+				log.Debug("agent link: heartbeat last_seen for %s: %v", agentID, err)
+			}
+		}
+	}
+}
+
+// hostHeartbeatInterval is comfortably below the Web UI's 60s
+// online-presence window so a single missed tick (network blip, slow
+// SQL write) doesn't flip the dot to grey.
+const hostHeartbeatInterval = 20 * time.Second
 
 // dispatchStream is the stub dispatcher until Phase II.C wires up
 // per-stream-type handlers. We write a StreamReject back to the
