@@ -126,6 +126,21 @@ func HandleSysInfo(ctx context.Context, _ *v2pb.SysInfoRequest) *v2pb.SysInfoRes
 	return CollectSysInfo(ctx)
 }
 
+// HandleProcessList returns a sorted, capped process snapshot. The
+// server proxies this for the dedicated Processes tab in the Web UI.
+// Unlike SysInfo, this response can be large on busy hosts so we
+// bound it via processListCap (500). top_n=0 means "as many as the
+// cap allows"; sort_by defaults to "cpu" when empty or unrecognized.
+func HandleProcessList(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse {
+	top := uint32(0)
+	sortBy := ""
+	if req != nil {
+		top = req.TopN
+		sortBy = req.SortBy
+	}
+	return CollectProcessList(ctx, top, sortBy)
+}
+
 // fileEntryFromInfo packages an os.FileInfo into the proto shape.
 // Populates SymlinkTarget only when the entry itself is a symlink
 // (the caller passed the full path so we can readlink it).

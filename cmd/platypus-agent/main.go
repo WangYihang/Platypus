@@ -117,14 +117,15 @@ func main() {
 		logger.Info("v2 link established; serving streams")
 		return agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
 			RPC: agent.AgentRPCHandlers{
-				Exec:    agent.HandleExec,
-				ListDir: agent.HandleListDir,
-				Stat:    agent.HandleStat,
-				Delete:  agent.HandleDelete,
-				Rename:  agent.HandleRename,
-				Mkdir:   agent.HandleMkdir,
-				Chmod:   agent.HandleChmod,
-				SysInfo: agent.HandleSysInfo,
+				Exec:        agent.HandleExec,
+				ListDir:     agent.HandleListDir,
+				Stat:        agent.HandleStat,
+				Delete:      agent.HandleDelete,
+				Rename:      agent.HandleRename,
+				Mkdir:       agent.HandleMkdir,
+				Chmod:       agent.HandleChmod,
+				SysInfo:     agent.HandleSysInfo,
+				ProcessList: agent.HandleProcessList,
 			},
 			Process:    agent.HandleProcessStream,
 			FileRead:   agent.HandleFileReadStream,

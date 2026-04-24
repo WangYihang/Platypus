@@ -38,6 +38,7 @@ type RpcRequest struct {
 	//	*RpcRequest_Mkdir
 	//	*RpcRequest_Chmod
 	//	*RpcRequest_SysInfo
+	//	*RpcRequest_ProcessList
 	Payload       isRpcRequest_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -152,6 +153,15 @@ func (x *RpcRequest) GetSysInfo() *SysInfoRequest {
 	return nil
 }
 
+func (x *RpcRequest) GetProcessList() *ProcessListRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*RpcRequest_ProcessList); ok {
+			return x.ProcessList
+		}
+	}
+	return nil
+}
+
 type isRpcRequest_Payload interface {
 	isRpcRequest_Payload()
 }
@@ -188,6 +198,10 @@ type RpcRequest_SysInfo struct {
 	SysInfo *SysInfoRequest `protobuf:"bytes,30,opt,name=sys_info,json=sysInfo,proto3,oneof"`
 }
 
+type RpcRequest_ProcessList struct {
+	ProcessList *ProcessListRequest `protobuf:"bytes,31,opt,name=process_list,json=processList,proto3,oneof"`
+}
+
 func (*RpcRequest_Exec) isRpcRequest_Payload() {}
 
 func (*RpcRequest_ListDir) isRpcRequest_Payload() {}
@@ -203,6 +217,8 @@ func (*RpcRequest_Mkdir) isRpcRequest_Payload() {}
 func (*RpcRequest_Chmod) isRpcRequest_Payload() {}
 
 func (*RpcRequest_SysInfo) isRpcRequest_Payload() {}
+
+func (*RpcRequest_ProcessList) isRpcRequest_Payload() {}
 
 type RpcResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -220,6 +236,7 @@ type RpcResponse struct {
 	//	*RpcResponse_Mkdir
 	//	*RpcResponse_Chmod
 	//	*RpcResponse_SysInfo
+	//	*RpcResponse_ProcessList
 	Payload       isRpcResponse_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -341,6 +358,15 @@ func (x *RpcResponse) GetSysInfo() *SysInfoResponse {
 	return nil
 }
 
+func (x *RpcResponse) GetProcessList() *ProcessListResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*RpcResponse_ProcessList); ok {
+			return x.ProcessList
+		}
+	}
+	return nil
+}
+
 type isRpcResponse_Payload interface {
 	isRpcResponse_Payload()
 }
@@ -377,6 +403,10 @@ type RpcResponse_SysInfo struct {
 	SysInfo *SysInfoResponse `protobuf:"bytes,30,opt,name=sys_info,json=sysInfo,proto3,oneof"`
 }
 
+type RpcResponse_ProcessList struct {
+	ProcessList *ProcessListResponse `protobuf:"bytes,31,opt,name=process_list,json=processList,proto3,oneof"`
+}
+
 func (*RpcResponse_Exec) isRpcResponse_Payload() {}
 
 func (*RpcResponse_ListDir) isRpcResponse_Payload() {}
@@ -392,6 +422,8 @@ func (*RpcResponse_Mkdir) isRpcResponse_Payload() {}
 func (*RpcResponse_Chmod) isRpcResponse_Payload() {}
 
 func (*RpcResponse_SysInfo) isRpcResponse_Payload() {}
+
+func (*RpcResponse_ProcessList) isRpcResponse_Payload() {}
 
 // --- One-shot exec ---
 type ExecRequest struct {
@@ -1539,6 +1571,25 @@ type SysInfoResponse struct {
 	Users []*UserSession `protobuf:"bytes,110,rep,name=users,proto3" json:"users,omitempty"`
 	// When the snapshot was captured, agent-side wall clock.
 	SampledAtUnix int64 `protobuf:"varint,120,opt,name=sampled_at_unix,json=sampledAtUnix,proto3" json:"sampled_at_unix,omitempty"`
+	// Coarse classification of what the agent runs on. One of:
+	// "container" | "vm" | "bare_metal" | "laptop" | "desktop" | "unknown".
+	// Derived agent-side from container markers (cgroup, /.dockerenv),
+	// gopsutil's VirtualizationSystem, and the SMBIOS chassis type.
+	MachineType string `protobuf:"bytes,130,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"`
+	// Raw SMBIOS chassis type as a string (DMTF spec 3.3.4.1), e.g. "10"
+	// (Notebook), "23" (Rack Mount). Empty when unavailable.
+	ChassisType   string `protobuf:"bytes,131,opt,name=chassis_type,json=chassisType,proto3" json:"chassis_type,omitempty"`
+	ProductVendor string `protobuf:"bytes,132,opt,name=product_vendor,json=productVendor,proto3" json:"product_vendor,omitempty"` // e.g. "Dell Inc.", "Apple Inc."
+	ProductName   string `protobuf:"bytes,133,opt,name=product_name,json=productName,proto3" json:"product_name,omitempty"`       // e.g. "PowerEdge R740", "MacBookPro18,1"
+	BiosVendor    string `protobuf:"bytes,134,opt,name=bios_vendor,json=biosVendor,proto3" json:"bios_vendor,omitempty"`
+	BiosVersion   string `protobuf:"bytes,135,opt,name=bios_version,json=biosVersion,proto3" json:"bios_version,omitempty"`
+	// Container runtime when machine_type=="container": "docker" |
+	// "kubepods" | "containerd" | "lxc" | "podman" | "wsl" | "".
+	ContainerRuntime string `protobuf:"bytes,136,opt,name=container_runtime,json=containerRuntime,proto3" json:"container_runtime,omitempty"`
+	// Graphics adapters. Static fields populated via /sys or WMI on all
+	// platforms; runtime stats (utilization, VRAM used) come from
+	// nvidia-smi when it's on PATH.
+	Gpus          []*GPUInfo `protobuf:"bytes,140,rep,name=gpus,proto3" json:"gpus,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1860,11 +1911,433 @@ func (x *SysInfoResponse) GetSampledAtUnix() int64 {
 	return 0
 }
 
+func (x *SysInfoResponse) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetChassisType() string {
+	if x != nil {
+		return x.ChassisType
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetProductVendor() string {
+	if x != nil {
+		return x.ProductVendor
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetProductName() string {
+	if x != nil {
+		return x.ProductName
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetBiosVendor() string {
+	if x != nil {
+		return x.BiosVendor
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetBiosVersion() string {
+	if x != nil {
+		return x.BiosVersion
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetContainerRuntime() string {
+	if x != nil {
+		return x.ContainerRuntime
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetGpus() []*GPUInfo {
+	if x != nil {
+		return x.Gpus
+	}
+	return nil
+}
+
+// GPUInfo is a single graphics adapter. All fields are optional;
+// zero/empty means "not reported" (which the UI renders as "—").
+// Runtime stats (VramUsedBytes, UtilizationPct) require a vendor tool
+// — today only nvidia-smi is consulted. Static fields (vendor/model/
+// driver/VramTotal) come from the kernel (Linux /sys/class/drm) or
+// WMI (Windows).
+type GPUInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Vendor         string                 `protobuf:"bytes,1,opt,name=vendor,proto3" json:"vendor,omitempty"` // "NVIDIA" | "AMD" | "Intel" | "Apple" | ...
+	Model          string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`   // brand / product name
+	Driver         string                 `protobuf:"bytes,3,opt,name=driver,proto3" json:"driver,omitempty"` // driver module name, e.g. "nvidia", "amdgpu"
+	DriverVersion  string                 `protobuf:"bytes,4,opt,name=driver_version,json=driverVersion,proto3" json:"driver_version,omitempty"`
+	VramTotalBytes uint64                 `protobuf:"varint,5,opt,name=vram_total_bytes,json=vramTotalBytes,proto3" json:"vram_total_bytes,omitempty"` // 0 = unknown
+	VramUsedBytes  uint64                 `protobuf:"varint,6,opt,name=vram_used_bytes,json=vramUsedBytes,proto3" json:"vram_used_bytes,omitempty"`    // 0 = unknown
+	UtilizationPct float64                `protobuf:"fixed64,7,opt,name=utilization_pct,json=utilizationPct,proto3" json:"utilization_pct,omitempty"`  // 0 = unknown
+	BusId          string                 `protobuf:"bytes,8,opt,name=bus_id,json=busId,proto3" json:"bus_id,omitempty"`                               // PCI bus id where applicable
+	Uuid           string                 `protobuf:"bytes,9,opt,name=uuid,proto3" json:"uuid,omitempty"`                                              // vendor-provided uuid if any
+	Index          uint32                 `protobuf:"varint,10,opt,name=index,proto3" json:"index,omitempty"`                                          // vendor-local ordinal (nvidia-smi index)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GPUInfo) Reset() {
+	*x = GPUInfo{}
+	mi := &file_rpc_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GPUInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GPUInfo) ProtoMessage() {}
+
+func (x *GPUInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GPUInfo.ProtoReflect.Descriptor instead.
+func (*GPUInfo) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GPUInfo) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetDriver() string {
+	if x != nil {
+		return x.Driver
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetDriverVersion() string {
+	if x != nil {
+		return x.DriverVersion
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetVramTotalBytes() uint64 {
+	if x != nil {
+		return x.VramTotalBytes
+	}
+	return 0
+}
+
+func (x *GPUInfo) GetVramUsedBytes() uint64 {
+	if x != nil {
+		return x.VramUsedBytes
+	}
+	return 0
+}
+
+func (x *GPUInfo) GetUtilizationPct() float64 {
+	if x != nil {
+		return x.UtilizationPct
+	}
+	return 0
+}
+
+func (x *GPUInfo) GetBusId() string {
+	if x != nil {
+		return x.BusId
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetUuid() string {
+	if x != nil {
+		return x.Uuid
+	}
+	return ""
+}
+
+func (x *GPUInfo) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+// ProcessInfo is a single OS process snapshot. Returned by the
+// ProcessList RPC (populating the dedicated Processes tab in the UI).
+// cmdline is truncated to 512 bytes agent-side to bound payload size.
+type ProcessInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           uint32                 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	Ppid          uint32                 `protobuf:"varint,2,opt,name=ppid,proto3" json:"ppid,omitempty"`
+	User          string                 `protobuf:"bytes,3,opt,name=user,proto3" json:"user,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Cmdline       string                 `protobuf:"bytes,5,opt,name=cmdline,proto3" json:"cmdline,omitempty"`
+	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // gopsutil Status() string, e.g. "S", "R"
+	CpuPercent    float64                `protobuf:"fixed64,7,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
+	MemPercent    float64                `protobuf:"fixed64,8,opt,name=mem_percent,json=memPercent,proto3" json:"mem_percent,omitempty"`
+	RssBytes      uint64                 `protobuf:"varint,9,opt,name=rss_bytes,json=rssBytes,proto3" json:"rss_bytes,omitempty"`
+	NumThreads    uint32                 `protobuf:"varint,10,opt,name=num_threads,json=numThreads,proto3" json:"num_threads,omitempty"`
+	CreatedAtUnix int64                  `protobuf:"varint,11,opt,name=created_at_unix,json=createdAtUnix,proto3" json:"created_at_unix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessInfo) Reset() {
+	*x = ProcessInfo{}
+	mi := &file_rpc_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessInfo) ProtoMessage() {}
+
+func (x *ProcessInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessInfo.ProtoReflect.Descriptor instead.
+func (*ProcessInfo) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ProcessInfo) GetPid() uint32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetPpid() uint32 {
+	if x != nil {
+		return x.Ppid
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *ProcessInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ProcessInfo) GetCmdline() string {
+	if x != nil {
+		return x.Cmdline
+	}
+	return ""
+}
+
+func (x *ProcessInfo) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ProcessInfo) GetCpuPercent() float64 {
+	if x != nil {
+		return x.CpuPercent
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetMemPercent() float64 {
+	if x != nil {
+		return x.MemPercent
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetRssBytes() uint64 {
+	if x != nil {
+		return x.RssBytes
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetNumThreads() uint32 {
+	if x != nil {
+		return x.NumThreads
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetCreatedAtUnix() int64 {
+	if x != nil {
+		return x.CreatedAtUnix
+	}
+	return 0
+}
+
+// ProcessListRequest selects how many processes to return and how to
+// sort them. The agent does the sort so top_n is meaningful. top_n=0
+// means "all", capped at 500 server-side to keep the payload bounded.
+type ProcessListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TopN          uint32                 `protobuf:"varint,1,opt,name=top_n,json=topN,proto3" json:"top_n,omitempty"`
+	SortBy        string                 `protobuf:"bytes,2,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"` // "cpu" (default) | "mem" | "rss" | "pid"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessListRequest) Reset() {
+	*x = ProcessListRequest{}
+	mi := &file_rpc_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessListRequest) ProtoMessage() {}
+
+func (x *ProcessListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessListRequest.ProtoReflect.Descriptor instead.
+func (*ProcessListRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ProcessListRequest) GetTopN() uint32 {
+	if x != nil {
+		return x.TopN
+	}
+	return 0
+}
+
+func (x *ProcessListRequest) GetSortBy() string {
+	if x != nil {
+		return x.SortBy
+	}
+	return ""
+}
+
+type ProcessListResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Processes []*ProcessInfo         `protobuf:"bytes,1,rep,name=processes,proto3" json:"processes,omitempty"`
+	// Total process count before top_n slicing; useful for the UI to
+	// show "30 of 412 processes".
+	TotalCount    uint32 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessListResponse) Reset() {
+	*x = ProcessListResponse{}
+	mi := &file_rpc_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessListResponse) ProtoMessage() {}
+
+func (x *ProcessListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessListResponse.ProtoReflect.Descriptor instead.
+func (*ProcessListResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ProcessListResponse) GetProcesses() []*ProcessInfo {
+	if x != nil {
+		return x.Processes
+	}
+	return nil
+}
+
+func (x *ProcessListResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *ProcessListResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_rpc_proto protoreflect.FileDescriptor
 
 const file_rpc_proto_rawDesc = "" +
 	"\n" +
-	"\trpc.proto\x12\vplatypus.v2\"\xbd\x03\n" +
+	"\trpc.proto\x12\vplatypus.v2\"\x83\x04\n" +
 	"\n" +
 	"RpcRequest\x12.\n" +
 	"\x04exec\x18\n" +
@@ -1875,8 +2348,9 @@ const file_rpc_proto_rawDesc = "" +
 	"\x06rename\x18\x17 \x01(\v2\x1a.platypus.v2.RenameRequestH\x00R\x06rename\x121\n" +
 	"\x05mkdir\x18\x18 \x01(\v2\x19.platypus.v2.MkdirRequestH\x00R\x05mkdir\x121\n" +
 	"\x05chmod\x18\x19 \x01(\v2\x19.platypus.v2.ChmodRequestH\x00R\x05chmod\x128\n" +
-	"\bsys_info\x18\x1e \x01(\v2\x1b.platypus.v2.SysInfoRequestH\x00R\asysInfoB\t\n" +
-	"\apayload\"\xdc\x03\n" +
+	"\bsys_info\x18\x1e \x01(\v2\x1b.platypus.v2.SysInfoRequestH\x00R\asysInfo\x12D\n" +
+	"\fprocess_list\x18\x1f \x01(\v2\x1f.platypus.v2.ProcessListRequestH\x00R\vprocessListB\t\n" +
+	"\apayload\"\xa3\x04\n" +
 	"\vRpcResponse\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12/\n" +
 	"\x04exec\x18\n" +
@@ -1887,7 +2361,8 @@ const file_rpc_proto_rawDesc = "" +
 	"\x06rename\x18\x17 \x01(\v2\x1b.platypus.v2.RenameResponseH\x00R\x06rename\x122\n" +
 	"\x05mkdir\x18\x18 \x01(\v2\x1a.platypus.v2.MkdirResponseH\x00R\x05mkdir\x122\n" +
 	"\x05chmod\x18\x19 \x01(\v2\x1a.platypus.v2.ChmodResponseH\x00R\x05chmod\x129\n" +
-	"\bsys_info\x18\x1e \x01(\v2\x1c.platypus.v2.SysInfoResponseH\x00R\asysInfoB\t\n" +
+	"\bsys_info\x18\x1e \x01(\v2\x1c.platypus.v2.SysInfoResponseH\x00R\asysInfo\x12E\n" +
+	"\fprocess_list\x18\x1f \x01(\v2 .platypus.v2.ProcessListResponseH\x00R\vprocessListB\t\n" +
 	"\apayload\"\xd9\x01\n" +
 	"\vExecRequest\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
@@ -1966,7 +2441,7 @@ const file_rpc_proto_rawDesc = "" +
 	"\bterminal\x18\x02 \x01(\tR\bterminal\x12\x12\n" +
 	"\x04host\x18\x03 \x01(\tR\x04host\x12\x1d\n" +
 	"\n" +
-	"started_at\x18\x04 \x01(\x03R\tstartedAt\"\xe2\v\n" +
+	"started_at\x18\x04 \x01(\x03R\tstartedAt\"\x95\x0e\n" +
 	"\x0fSysInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x1a\n" +
@@ -2017,10 +2492,55 @@ const file_rpc_proto_rawDesc = "" +
 	"interfaces\x120\n" +
 	"\x05disks\x18d \x03(\v2\x1a.platypus.v2.DiskPartitionR\x05disks\x12.\n" +
 	"\x05users\x18n \x03(\v2\x18.platypus.v2.UserSessionR\x05users\x12&\n" +
-	"\x0fsampled_at_unix\x18x \x01(\x03R\rsampledAtUnix\x1aD\n" +
+	"\x0fsampled_at_unix\x18x \x01(\x03R\rsampledAtUnix\x12\"\n" +
+	"\fmachine_type\x18\x82\x01 \x01(\tR\vmachineType\x12\"\n" +
+	"\fchassis_type\x18\x83\x01 \x01(\tR\vchassisType\x12&\n" +
+	"\x0eproduct_vendor\x18\x84\x01 \x01(\tR\rproductVendor\x12\"\n" +
+	"\fproduct_name\x18\x85\x01 \x01(\tR\vproductName\x12 \n" +
+	"\vbios_vendor\x18\x86\x01 \x01(\tR\n" +
+	"biosVendor\x12\"\n" +
+	"\fbios_version\x18\x87\x01 \x01(\tR\vbiosVersion\x12,\n" +
+	"\x11container_runtime\x18\x88\x01 \x01(\tR\x10containerRuntime\x12)\n" +
+	"\x04gpus\x18\x8c\x01 \x03(\v2\x14.platypus.v2.GPUInfoR\x04gpus\x1aD\n" +
 	"\x16NetworkInterfacesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x02\n" +
+	"\aGPUInfo\x12\x16\n" +
+	"\x06vendor\x18\x01 \x01(\tR\x06vendor\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
+	"\x06driver\x18\x03 \x01(\tR\x06driver\x12%\n" +
+	"\x0edriver_version\x18\x04 \x01(\tR\rdriverVersion\x12(\n" +
+	"\x10vram_total_bytes\x18\x05 \x01(\x04R\x0evramTotalBytes\x12&\n" +
+	"\x0fvram_used_bytes\x18\x06 \x01(\x04R\rvramUsedBytes\x12'\n" +
+	"\x0futilization_pct\x18\a \x01(\x01R\x0eutilizationPct\x12\x15\n" +
+	"\x06bus_id\x18\b \x01(\tR\x05busId\x12\x12\n" +
+	"\x04uuid\x18\t \x01(\tR\x04uuid\x12\x14\n" +
+	"\x05index\x18\n" +
+	" \x01(\rR\x05index\"\xb5\x02\n" +
+	"\vProcessInfo\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\rR\x03pid\x12\x12\n" +
+	"\x04ppid\x18\x02 \x01(\rR\x04ppid\x12\x12\n" +
+	"\x04user\x18\x03 \x01(\tR\x04user\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12\x18\n" +
+	"\acmdline\x18\x05 \x01(\tR\acmdline\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12\x1f\n" +
+	"\vcpu_percent\x18\a \x01(\x01R\n" +
+	"cpuPercent\x12\x1f\n" +
+	"\vmem_percent\x18\b \x01(\x01R\n" +
+	"memPercent\x12\x1b\n" +
+	"\trss_bytes\x18\t \x01(\x04R\brssBytes\x12\x1f\n" +
+	"\vnum_threads\x18\n" +
+	" \x01(\rR\n" +
+	"numThreads\x12&\n" +
+	"\x0fcreated_at_unix\x18\v \x01(\x03R\rcreatedAtUnix\"B\n" +
+	"\x12ProcessListRequest\x12\x13\n" +
+	"\x05top_n\x18\x01 \x01(\rR\x04topN\x12\x17\n" +
+	"\asort_by\x18\x02 \x01(\tR\x06sortBy\"\x84\x01\n" +
+	"\x13ProcessListResponse\x126\n" +
+	"\tprocesses\x18\x01 \x03(\v2\x18.platypus.v2.ProcessInfoR\tprocesses\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\rR\n" +
+	"totalCount\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05errorB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_rpc_proto_rawDescOnce sync.Once
@@ -2034,32 +2554,36 @@ func file_rpc_proto_rawDescGZIP() []byte {
 	return file_rpc_proto_rawDescData
 }
 
-var file_rpc_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_rpc_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_rpc_proto_goTypes = []any{
-	(*RpcRequest)(nil),       // 0: platypus.v2.RpcRequest
-	(*RpcResponse)(nil),      // 1: platypus.v2.RpcResponse
-	(*ExecRequest)(nil),      // 2: platypus.v2.ExecRequest
-	(*ExecResponse)(nil),     // 3: platypus.v2.ExecResponse
-	(*FileEntry)(nil),        // 4: platypus.v2.FileEntry
-	(*ListDirRequest)(nil),   // 5: platypus.v2.ListDirRequest
-	(*ListDirResponse)(nil),  // 6: platypus.v2.ListDirResponse
-	(*StatRequest)(nil),      // 7: platypus.v2.StatRequest
-	(*StatResponse)(nil),     // 8: platypus.v2.StatResponse
-	(*DeleteRequest)(nil),    // 9: platypus.v2.DeleteRequest
-	(*DeleteResponse)(nil),   // 10: platypus.v2.DeleteResponse
-	(*RenameRequest)(nil),    // 11: platypus.v2.RenameRequest
-	(*RenameResponse)(nil),   // 12: platypus.v2.RenameResponse
-	(*MkdirRequest)(nil),     // 13: platypus.v2.MkdirRequest
-	(*MkdirResponse)(nil),    // 14: platypus.v2.MkdirResponse
-	(*ChmodRequest)(nil),     // 15: platypus.v2.ChmodRequest
-	(*ChmodResponse)(nil),    // 16: platypus.v2.ChmodResponse
-	(*SysInfoRequest)(nil),   // 17: platypus.v2.SysInfoRequest
-	(*NetworkInterface)(nil), // 18: platypus.v2.NetworkInterface
-	(*DiskPartition)(nil),    // 19: platypus.v2.DiskPartition
-	(*UserSession)(nil),      // 20: platypus.v2.UserSession
-	(*SysInfoResponse)(nil),  // 21: platypus.v2.SysInfoResponse
-	nil,                      // 22: platypus.v2.ExecRequest.EnvEntry
-	nil,                      // 23: platypus.v2.SysInfoResponse.NetworkInterfacesEntry
+	(*RpcRequest)(nil),          // 0: platypus.v2.RpcRequest
+	(*RpcResponse)(nil),         // 1: platypus.v2.RpcResponse
+	(*ExecRequest)(nil),         // 2: platypus.v2.ExecRequest
+	(*ExecResponse)(nil),        // 3: platypus.v2.ExecResponse
+	(*FileEntry)(nil),           // 4: platypus.v2.FileEntry
+	(*ListDirRequest)(nil),      // 5: platypus.v2.ListDirRequest
+	(*ListDirResponse)(nil),     // 6: platypus.v2.ListDirResponse
+	(*StatRequest)(nil),         // 7: platypus.v2.StatRequest
+	(*StatResponse)(nil),        // 8: platypus.v2.StatResponse
+	(*DeleteRequest)(nil),       // 9: platypus.v2.DeleteRequest
+	(*DeleteResponse)(nil),      // 10: platypus.v2.DeleteResponse
+	(*RenameRequest)(nil),       // 11: platypus.v2.RenameRequest
+	(*RenameResponse)(nil),      // 12: platypus.v2.RenameResponse
+	(*MkdirRequest)(nil),        // 13: platypus.v2.MkdirRequest
+	(*MkdirResponse)(nil),       // 14: platypus.v2.MkdirResponse
+	(*ChmodRequest)(nil),        // 15: platypus.v2.ChmodRequest
+	(*ChmodResponse)(nil),       // 16: platypus.v2.ChmodResponse
+	(*SysInfoRequest)(nil),      // 17: platypus.v2.SysInfoRequest
+	(*NetworkInterface)(nil),    // 18: platypus.v2.NetworkInterface
+	(*DiskPartition)(nil),       // 19: platypus.v2.DiskPartition
+	(*UserSession)(nil),         // 20: platypus.v2.UserSession
+	(*SysInfoResponse)(nil),     // 21: platypus.v2.SysInfoResponse
+	(*GPUInfo)(nil),             // 22: platypus.v2.GPUInfo
+	(*ProcessInfo)(nil),         // 23: platypus.v2.ProcessInfo
+	(*ProcessListRequest)(nil),  // 24: platypus.v2.ProcessListRequest
+	(*ProcessListResponse)(nil), // 25: platypus.v2.ProcessListResponse
+	nil,                         // 26: platypus.v2.ExecRequest.EnvEntry
+	nil,                         // 27: platypus.v2.SysInfoResponse.NetworkInterfacesEntry
 }
 var file_rpc_proto_depIdxs = []int32{
 	2,  // 0: platypus.v2.RpcRequest.exec:type_name -> platypus.v2.ExecRequest
@@ -2070,26 +2594,30 @@ var file_rpc_proto_depIdxs = []int32{
 	13, // 5: platypus.v2.RpcRequest.mkdir:type_name -> platypus.v2.MkdirRequest
 	15, // 6: platypus.v2.RpcRequest.chmod:type_name -> platypus.v2.ChmodRequest
 	17, // 7: platypus.v2.RpcRequest.sys_info:type_name -> platypus.v2.SysInfoRequest
-	3,  // 8: platypus.v2.RpcResponse.exec:type_name -> platypus.v2.ExecResponse
-	6,  // 9: platypus.v2.RpcResponse.list_dir:type_name -> platypus.v2.ListDirResponse
-	8,  // 10: platypus.v2.RpcResponse.stat:type_name -> platypus.v2.StatResponse
-	10, // 11: platypus.v2.RpcResponse.delete:type_name -> platypus.v2.DeleteResponse
-	12, // 12: platypus.v2.RpcResponse.rename:type_name -> platypus.v2.RenameResponse
-	14, // 13: platypus.v2.RpcResponse.mkdir:type_name -> platypus.v2.MkdirResponse
-	16, // 14: platypus.v2.RpcResponse.chmod:type_name -> platypus.v2.ChmodResponse
-	21, // 15: platypus.v2.RpcResponse.sys_info:type_name -> platypus.v2.SysInfoResponse
-	22, // 16: platypus.v2.ExecRequest.env:type_name -> platypus.v2.ExecRequest.EnvEntry
-	4,  // 17: platypus.v2.ListDirResponse.entries:type_name -> platypus.v2.FileEntry
-	4,  // 18: platypus.v2.StatResponse.entry:type_name -> platypus.v2.FileEntry
-	23, // 19: platypus.v2.SysInfoResponse.network_interfaces:type_name -> platypus.v2.SysInfoResponse.NetworkInterfacesEntry
-	18, // 20: platypus.v2.SysInfoResponse.interfaces:type_name -> platypus.v2.NetworkInterface
-	19, // 21: platypus.v2.SysInfoResponse.disks:type_name -> platypus.v2.DiskPartition
-	20, // 22: platypus.v2.SysInfoResponse.users:type_name -> platypus.v2.UserSession
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	24, // 8: platypus.v2.RpcRequest.process_list:type_name -> platypus.v2.ProcessListRequest
+	3,  // 9: platypus.v2.RpcResponse.exec:type_name -> platypus.v2.ExecResponse
+	6,  // 10: platypus.v2.RpcResponse.list_dir:type_name -> platypus.v2.ListDirResponse
+	8,  // 11: platypus.v2.RpcResponse.stat:type_name -> platypus.v2.StatResponse
+	10, // 12: platypus.v2.RpcResponse.delete:type_name -> platypus.v2.DeleteResponse
+	12, // 13: platypus.v2.RpcResponse.rename:type_name -> platypus.v2.RenameResponse
+	14, // 14: platypus.v2.RpcResponse.mkdir:type_name -> platypus.v2.MkdirResponse
+	16, // 15: platypus.v2.RpcResponse.chmod:type_name -> platypus.v2.ChmodResponse
+	21, // 16: platypus.v2.RpcResponse.sys_info:type_name -> platypus.v2.SysInfoResponse
+	25, // 17: platypus.v2.RpcResponse.process_list:type_name -> platypus.v2.ProcessListResponse
+	26, // 18: platypus.v2.ExecRequest.env:type_name -> platypus.v2.ExecRequest.EnvEntry
+	4,  // 19: platypus.v2.ListDirResponse.entries:type_name -> platypus.v2.FileEntry
+	4,  // 20: platypus.v2.StatResponse.entry:type_name -> platypus.v2.FileEntry
+	27, // 21: platypus.v2.SysInfoResponse.network_interfaces:type_name -> platypus.v2.SysInfoResponse.NetworkInterfacesEntry
+	18, // 22: platypus.v2.SysInfoResponse.interfaces:type_name -> platypus.v2.NetworkInterface
+	19, // 23: platypus.v2.SysInfoResponse.disks:type_name -> platypus.v2.DiskPartition
+	20, // 24: platypus.v2.SysInfoResponse.users:type_name -> platypus.v2.UserSession
+	22, // 25: platypus.v2.SysInfoResponse.gpus:type_name -> platypus.v2.GPUInfo
+	23, // 26: platypus.v2.ProcessListResponse.processes:type_name -> platypus.v2.ProcessInfo
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_rpc_proto_init() }
@@ -2106,6 +2634,7 @@ func file_rpc_proto_init() {
 		(*RpcRequest_Mkdir)(nil),
 		(*RpcRequest_Chmod)(nil),
 		(*RpcRequest_SysInfo)(nil),
+		(*RpcRequest_ProcessList)(nil),
 	}
 	file_rpc_proto_msgTypes[1].OneofWrappers = []any{
 		(*RpcResponse_Exec)(nil),
@@ -2116,6 +2645,7 @@ func file_rpc_proto_init() {
 		(*RpcResponse_Mkdir)(nil),
 		(*RpcResponse_Chmod)(nil),
 		(*RpcResponse_SysInfo)(nil),
+		(*RpcResponse_ProcessList)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2123,7 +2653,7 @@ func file_rpc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_proto_rawDesc), len(file_rpc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

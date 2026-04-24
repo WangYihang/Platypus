@@ -55,8 +55,18 @@ type EnrollRequest struct {
 	PrimaryIp       string `protobuf:"bytes,31,opt,name=primary_ip,json=primaryIp,proto3" json:"primary_ip,omitempty"`
 	PrimaryMac      string `protobuf:"bytes,32,opt,name=primary_mac,json=primaryMac,proto3" json:"primary_mac,omitempty"`
 	BootTimeUnix    uint64 `protobuf:"varint,33,opt,name=boot_time_unix,json=bootTimeUnix,proto3" json:"boot_time_unix,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Hardware / chassis classification (optional; captured once at
+	// enroll so the host list already shows a machine-type icon
+	// before the first agent reconnect triggers the full SysInfo
+	// refresh).
+	MachineType   string `protobuf:"bytes,40,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"`
+	ChassisType   string `protobuf:"bytes,41,opt,name=chassis_type,json=chassisType,proto3" json:"chassis_type,omitempty"`
+	ProductVendor string `protobuf:"bytes,42,opt,name=product_vendor,json=productVendor,proto3" json:"product_vendor,omitempty"`
+	ProductName   string `protobuf:"bytes,43,opt,name=product_name,json=productName,proto3" json:"product_name,omitempty"`
+	BiosVendor    string `protobuf:"bytes,44,opt,name=bios_vendor,json=biosVendor,proto3" json:"bios_vendor,omitempty"`
+	BiosVersion   string `protobuf:"bytes,45,opt,name=bios_version,json=biosVersion,proto3" json:"bios_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnrollRequest) Reset() {
@@ -222,6 +232,48 @@ func (x *EnrollRequest) GetBootTimeUnix() uint64 {
 	return 0
 }
 
+func (x *EnrollRequest) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *EnrollRequest) GetChassisType() string {
+	if x != nil {
+		return x.ChassisType
+	}
+	return ""
+}
+
+func (x *EnrollRequest) GetProductVendor() string {
+	if x != nil {
+		return x.ProductVendor
+	}
+	return ""
+}
+
+func (x *EnrollRequest) GetProductName() string {
+	if x != nil {
+		return x.ProductName
+	}
+	return ""
+}
+
+func (x *EnrollRequest) GetBiosVendor() string {
+	if x != nil {
+		return x.BiosVendor
+	}
+	return ""
+}
+
+func (x *EnrollRequest) GetBiosVersion() string {
+	if x != nil {
+		return x.BiosVersion
+	}
+	return ""
+}
+
 type EnrollResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// PEM-encoded agent leaf certificate, signed by the project CA.
@@ -311,7 +363,7 @@ var File_enroll_proto protoreflect.FileDescriptor
 
 const file_enroll_proto_rawDesc = "" +
 	"\n" +
-	"\fenroll.proto\x12\vplatypus.v2\"\xcd\x04\n" +
+	"\fenroll.proto\x12\vplatypus.v2\"\xa1\x06\n" +
 	"\rEnrollRequest\x12\x10\n" +
 	"\x03pat\x18\x01 \x01(\tR\x03pat\x12\x17\n" +
 	"\acsr_pem\x18\x02 \x01(\fR\x06csrPem\x12\x1a\n" +
@@ -334,7 +386,14 @@ const file_enroll_proto_rawDesc = "" +
 	"primary_ip\x18\x1f \x01(\tR\tprimaryIp\x12\x1f\n" +
 	"\vprimary_mac\x18  \x01(\tR\n" +
 	"primaryMac\x12$\n" +
-	"\x0eboot_time_unix\x18! \x01(\x04R\fbootTimeUnix\"\xa8\x01\n" +
+	"\x0eboot_time_unix\x18! \x01(\x04R\fbootTimeUnix\x12!\n" +
+	"\fmachine_type\x18( \x01(\tR\vmachineType\x12!\n" +
+	"\fchassis_type\x18) \x01(\tR\vchassisType\x12%\n" +
+	"\x0eproduct_vendor\x18* \x01(\tR\rproductVendor\x12!\n" +
+	"\fproduct_name\x18+ \x01(\tR\vproductName\x12\x1f\n" +
+	"\vbios_vendor\x18, \x01(\tR\n" +
+	"biosVendor\x12!\n" +
+	"\fbios_version\x18- \x01(\tR\vbiosVersion\"\xa8\x01\n" +
 	"\x0eEnrollResponse\x12\x19\n" +
 	"\bcert_pem\x18\x01 \x01(\fR\acertPem\x12\x15\n" +
 	"\x06ca_pem\x18\x02 \x01(\fR\x05caPem\x12\x19\n" +

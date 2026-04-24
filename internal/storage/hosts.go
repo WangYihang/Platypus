@@ -44,6 +44,20 @@ type Host struct {
 	PrimaryMAC      string
 	BootTimeUnix    int64
 	AgentVersion    string
+
+	// --- Hardware / chassis classification (migration 000012). All
+	// optional; MachineType is the high-level category surfaced in
+	// the hosts list ("container" / "vm" / "bare_metal" / "laptop" /
+	// "desktop" / "unknown"). GPUSummary is a short
+	// "NVIDIA RTX 4090; Intel UHD 770" blurb built server-side from
+	// the first few entries of the live GPU list.
+	MachineType   string
+	ChassisType   string
+	ProductVendor string
+	ProductName   string
+	BIOSVendor    string
+	BIOSVersion   string
+	GPUSummary    string
 }
 
 // HostIdentity carries the agent-reported identity we upsert into the
@@ -73,6 +87,14 @@ type HostIdentity struct {
 	PrimaryMAC      string
 	BootTimeUnix    int64
 	AgentVersion    string
+
+	MachineType   string
+	ChassisType   string
+	ProductVendor string
+	ProductName   string
+	BIOSVendor    string
+	BIOSVersion   string
+	GPUSummary    string
 }
 
 func (db *DB) Hosts() *HostRepo { return &HostRepo{db: db.DB} }
@@ -89,7 +111,9 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        agent_id, arch, platform, platform_family, platform_version,
        kernel_version, cpu_model, num_cpu, mem_total_bytes,
        current_user, timezone, primary_ip, primary_mac,
-       boot_time_unix, agent_version`
+       boot_time_unix, agent_version,
+       machine_type, chassis_type, product_vendor, product_name,
+       bios_vendor, bios_version, gpu_summary`
 
 // Upsert merges the given identity into the hosts table. Matching order:
 //
@@ -172,7 +196,10 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			       platform_version = ?, kernel_version = ?, cpu_model = ?,
 			       num_cpu = ?, mem_total_bytes = ?, current_user = ?,
 			       timezone = ?, primary_ip = ?, primary_mac = ?,
-			       boot_time_unix = ?, agent_version = ?
+			       boot_time_unix = ?, agent_version = ?,
+			       machine_type = ?, chassis_type = ?, product_vendor = ?,
+			       product_name = ?, bios_vendor = ?, bios_version = ?,
+			       gpu_summary = ?
 			 WHERE id = ?`,
 			nullIfEmpty(merged.MachineID), merged.Fingerprint, merged.FingerprintFallback,
 			merged.Hostname, merged.OS, merged.LastSeenAt,
@@ -183,6 +210,10 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			nullIfEmpty(merged.CurrentUser), nullIfEmpty(merged.Timezone),
 			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
 			nullIfInt64(merged.BootTimeUnix), nullIfEmpty(merged.AgentVersion),
+			nullIfEmpty(merged.MachineType), nullIfEmpty(merged.ChassisType),
+			nullIfEmpty(merged.ProductVendor), nullIfEmpty(merged.ProductName),
+			nullIfEmpty(merged.BIOSVendor), nullIfEmpty(merged.BIOSVersion),
+			nullIfEmpty(merged.GPUSummary),
 			existing.ID,
 		); err != nil {
 			return nil, err
@@ -220,6 +251,13 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		PrimaryMAC:          ident.PrimaryMAC,
 		BootTimeUnix:        ident.BootTimeUnix,
 		AgentVersion:        ident.AgentVersion,
+		MachineType:         ident.MachineType,
+		ChassisType:         ident.ChassisType,
+		ProductVendor:       ident.ProductVendor,
+		ProductName:         ident.ProductName,
+		BIOSVendor:          ident.BIOSVendor,
+		BIOSVersion:         ident.BIOSVersion,
+		GPUSummary:          ident.GPUSummary,
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO hosts
@@ -228,9 +266,12 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		   agent_id, arch, platform, platform_family, platform_version,
 		   kernel_version, cpu_model, num_cpu, mem_total_bytes,
 		   current_user, timezone, primary_ip, primary_mac,
-		   boot_time_unix, agent_version)
+		   boot_time_unix, agent_version,
+		   machine_type, chassis_type, product_vendor, product_name,
+		   bios_vendor, bios_version, gpu_summary)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		        ?, ?, ?, ?, ?, ?, ?)`,
 		h.ID, h.ProjectID, nullIfEmpty(h.MachineID), h.Fingerprint,
 		h.FingerprintFallback, h.Hostname, h.PrimaryAlias, h.OS,
 		h.FirstSeenAt, h.LastSeenAt,
@@ -241,6 +282,10 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfEmpty(h.CurrentUser), nullIfEmpty(h.Timezone),
 		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
 		nullIfInt64(h.BootTimeUnix), nullIfEmpty(h.AgentVersion),
+		nullIfEmpty(h.MachineType), nullIfEmpty(h.ChassisType),
+		nullIfEmpty(h.ProductVendor), nullIfEmpty(h.ProductName),
+		nullIfEmpty(h.BIOSVendor), nullIfEmpty(h.BIOSVersion),
+		nullIfEmpty(h.GPUSummary),
 	); err != nil {
 		return nil, err
 	}
@@ -300,6 +345,27 @@ func mergeHost(existing *Host, ident *HostIdentity) *Host {
 	}
 	if ident.AgentVersion != "" {
 		h.AgentVersion = ident.AgentVersion
+	}
+	if ident.MachineType != "" {
+		h.MachineType = ident.MachineType
+	}
+	if ident.ChassisType != "" {
+		h.ChassisType = ident.ChassisType
+	}
+	if ident.ProductVendor != "" {
+		h.ProductVendor = ident.ProductVendor
+	}
+	if ident.ProductName != "" {
+		h.ProductName = ident.ProductName
+	}
+	if ident.BIOSVendor != "" {
+		h.BIOSVendor = ident.BIOSVendor
+	}
+	if ident.BIOSVersion != "" {
+		h.BIOSVersion = ident.BIOSVersion
+	}
+	if ident.GPUSummary != "" {
+		h.GPUSummary = ident.GPUSummary
 	}
 	return &h
 }
@@ -380,6 +446,13 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		primaryMAC      sql.NullString
 		bootTimeUnix    sql.NullInt64
 		agentVersion    sql.NullString
+		machineType     sql.NullString
+		chassisType     sql.NullString
+		productVendor   sql.NullString
+		productName     sql.NullString
+		biosVendor      sql.NullString
+		biosVersion     sql.NullString
+		gpuSummary      sql.NullString
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
@@ -388,6 +461,8 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&kernelVersion, &cpuModel, &numCPU, &memTotalBytes,
 		&currentUser, &timezone, &primaryIP, &primaryMAC,
 		&bootTimeUnix, &agentVersion,
+		&machineType, &chassisType, &productVendor, &productName,
+		&biosVendor, &biosVersion, &gpuSummary,
 	)
 	if err != nil {
 		return nil, err
@@ -442,6 +517,27 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	}
 	if agentVersion.Valid {
 		h.AgentVersion = agentVersion.String
+	}
+	if machineType.Valid {
+		h.MachineType = machineType.String
+	}
+	if chassisType.Valid {
+		h.ChassisType = chassisType.String
+	}
+	if productVendor.Valid {
+		h.ProductVendor = productVendor.String
+	}
+	if productName.Valid {
+		h.ProductName = productName.String
+	}
+	if biosVendor.Valid {
+		h.BIOSVendor = biosVendor.String
+	}
+	if biosVersion.Valid {
+		h.BIOSVersion = biosVersion.String
+	}
+	if gpuSummary.Valid {
+		h.GPUSummary = gpuSummary.String
 	}
 	return &h, nil
 }

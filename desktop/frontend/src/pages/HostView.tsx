@@ -1,6 +1,15 @@
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RotateCw } from "lucide-react";
+import {
+    Boxes,
+    HelpCircle,
+    Laptop,
+    Layers,
+    Loader2,
+    Monitor,
+    RotateCw,
+    Server,
+} from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Card from "../components/Card";
@@ -23,6 +32,7 @@ import {
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
 import FilesTab from "./host/FilesTab";
+import ProcessesTab from "./host/ProcessesTab";
 import TerminalTab from "./host/TerminalTab";
 
 import { Button } from "@/components/ui/button";
@@ -41,7 +51,7 @@ interface Props {
     hostID: string;
 }
 
-const TABS = ["terminal", "files", "sessions", "info"] as const;
+const TABS = ["terminal", "files", "sessions", "info", "processes"] as const;
 type TabKey = (typeof TABS)[number];
 
 // HostView is the main-panel view when a Host is selected. Four tabs
@@ -187,6 +197,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
                 <TabsTrigger value="info">Info</TabsTrigger>
+                <TabsTrigger value="processes">Processes</TabsTrigger>
             </TabsList>
         </Tabs>
     );
@@ -263,6 +274,13 @@ export default function HostView({ projectID, hostID }: Props) {
                         onRefreshSysInfo={refreshSysInfo}
                     />
                 </div>
+                <div style={{ display: activeTab === "processes" ? "block" : "none" }}>
+                    <ProcessesTab
+                        projectID={projectID}
+                        hostID={hostID}
+                        active={activeTab === "processes"}
+                    />
+                </div>
             </div>
         </div>
     );
@@ -329,6 +347,10 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                 <DataList
                     items={[
                         { label: "hostname", value: host.hostname || sysInfo?.hostname || "—" },
+                        {
+                            label: "machine type",
+                            value: <MachineTypePill type={sysInfo?.machine_type || host.machine_type} />,
+                        },
                         { label: "primary alias", value: host.primary_alias || "—" },
                         {
                             label: "agent id",
@@ -523,6 +545,8 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                 )}
             </Card>
 
+            <HardwareCard host={host} sysInfo={sysInfo} />
+
             {sysInfo?.disks && sysInfo.disks.length > 0 && (
                 <Card header="Storage" padding={5}>
                     <Table>
@@ -712,6 +736,151 @@ function SessionsPanel({ sessions }: { sessions: SessionRow[] }) {
                     })}
                 </TableBody>
             </Table>
+        </Card>
+    );
+}
+
+// machineTypeMeta maps the coarse classification string to a label
+// and a lucide icon. Keeping the mapping tight here (rather than in
+// a shared util) so that adding a new category only touches one
+// place per use site.
+const machineTypeMeta: Record<
+    string,
+    { label: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+    container: { label: "container", Icon: Boxes },
+    vm: { label: "virtual machine", Icon: Layers },
+    bare_metal: { label: "bare metal", Icon: Server },
+    laptop: { label: "laptop", Icon: Laptop },
+    desktop: { label: "desktop", Icon: Monitor },
+    unknown: { label: "unknown", Icon: HelpCircle },
+};
+
+function MachineTypePill({ type }: { type?: string }) {
+    const meta = type ? machineTypeMeta[type] : undefined;
+    if (!meta) return <>—</>;
+    const { label, Icon } = meta;
+    return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
+            <Icon className="size-3.5" />
+            <span>{label}</span>
+        </span>
+    );
+}
+
+// HardwareCard surfaces the chassis / product / BIOS identity plus
+// the GPU list. Everything is optional — if the agent had no way to
+// read DMI and ghw returned nothing we still render the card with
+// "—" placeholders so operators can tell the probe ran but found
+// nothing rather than "was this even collected?".
+function HardwareCard({ host, sysInfo }: { host: Host; sysInfo: HostSysInfo | null }) {
+    const productVendor = sysInfo?.product_vendor || host.product_vendor;
+    const productName = sysInfo?.product_name || host.product_name;
+    const biosVendor = sysInfo?.bios_vendor || host.bios_vendor;
+    const biosVersion = sysInfo?.bios_version || host.bios_version;
+    const chassis = sysInfo?.chassis_type || host.chassis_type;
+    const containerRuntime = sysInfo?.container_runtime;
+
+    const gpus = sysInfo?.gpus || [];
+
+    return (
+        <Card header="Hardware" padding={5}>
+            <DataList
+                items={[
+                    {
+                        label: "machine type",
+                        value: (
+                            <MachineTypePill type={sysInfo?.machine_type || host.machine_type} />
+                        ),
+                    },
+                    ...(containerRuntime
+                        ? [
+                              {
+                                  label: "container runtime",
+                                  value: <Mono>{containerRuntime}</Mono>,
+                              },
+                          ]
+                        : []),
+                    {
+                        label: "chassis",
+                        value: chassis ? <Mono>{chassis}</Mono> : "—",
+                    },
+                    {
+                        label: "product",
+                        value: (
+                            <span>
+                                {productVendor || "—"}
+                                {productName ? ` · ${productName}` : ""}
+                            </span>
+                        ),
+                    },
+                    {
+                        label: "BIOS",
+                        value: (
+                            <span>
+                                {biosVendor || "—"}
+                                {biosVersion ? ` · ${biosVersion}` : ""}
+                            </span>
+                        ),
+                    },
+                ]}
+            />
+            {gpus.length > 0 && (
+                <div style={{ marginTop: space[4] }}>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[100px]">vendor</TableHead>
+                                <TableHead>model</TableHead>
+                                <TableHead className="w-[120px]">driver</TableHead>
+                                <TableHead className="w-[120px]">VRAM</TableHead>
+                                <TableHead className="w-[90px]">util</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {gpus.map((g, i) => (
+                                <TableRow key={g.uuid || g.bus_id || `gpu-${i}`}>
+                                    <TableCell>{g.vendor || "—"}</TableCell>
+                                    <TableCell>{g.model || "—"}</TableCell>
+                                    <TableCell>
+                                        {g.driver ? (
+                                            <Mono size={11}>
+                                                {g.driver}
+                                                {g.driver_version ? ` ${g.driver_version}` : ""}
+                                            </Mono>
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {g.vram_total_bytes
+                                            ? `${formatBytes(g.vram_used_bytes)} / ${formatBytes(
+                                                  g.vram_total_bytes,
+                                              )}`
+                                            : "—"}
+                                    </TableCell>
+                                    <TableCell>
+                                        {g.utilization_pct !== undefined && g.utilization_pct > 0
+                                            ? `${g.utilization_pct.toFixed(0)} %`
+                                            : "—"}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+            {gpus.length === 0 && host.gpu_summary && (
+                <div
+                    style={{
+                        marginTop: space[3],
+                        fontSize: 12,
+                        color: palette.textSecondary,
+                    }}
+                >
+                    {host.gpu_summary}
+                </div>
+            )}
         </Card>
     );
 }

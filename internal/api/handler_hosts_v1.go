@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -65,6 +66,14 @@ type hostResponse struct {
 	PrimaryMAC      string `json:"primary_mac,omitempty"`
 	BootTimeUnix    int64  `json:"boot_time_unix,omitempty"`
 	AgentVersion    string `json:"agent_version,omitempty"`
+
+	MachineType   string `json:"machine_type,omitempty"`
+	ChassisType   string `json:"chassis_type,omitempty"`
+	ProductVendor string `json:"product_vendor,omitempty"`
+	ProductName   string `json:"product_name,omitempty"`
+	BIOSVendor    string `json:"bios_vendor,omitempty"`
+	BIOSVersion   string `json:"bios_version,omitempty"`
+	GPUSummary    string `json:"gpu_summary,omitempty"`
 }
 
 func toHostResponse(h *storage.Host) hostResponse {
@@ -94,6 +103,13 @@ func toHostResponse(h *storage.Host) hostResponse {
 		PrimaryMAC:          h.PrimaryMAC,
 		BootTimeUnix:        h.BootTimeUnix,
 		AgentVersion:        h.AgentVersion,
+		MachineType:         h.MachineType,
+		ChassisType:         h.ChassisType,
+		ProductVendor:       h.ProductVendor,
+		ProductName:         h.ProductName,
+		BIOSVendor:          h.BIOSVendor,
+		BIOSVersion:         h.BIOSVersion,
+		GPUSummary:          h.GPUSummary,
 	}
 }
 
@@ -175,6 +191,67 @@ func (h *HostsHandler) GetSysInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.GetSysInfo())
 }
 
+// GetProcesses handles GET /projects/:pid/hosts/:hid/processes and
+// proxies a live ProcessList RPC through to the connected agent. The
+// response body is the raw v2pb.ProcessListResponse so the Web UI
+// sees exactly the shape the agent produced — see GetSysInfo for the
+// same design rationale. Query parameters:
+//
+//	top   — 0 or absent = as many as the 500-row cap allows
+//	sort  — "cpu" (default) | "mem" | "rss" | "pid"
+//
+// Viewer role is sufficient: process enumeration is read-only and
+// already lets operators see what's running via the Terminal tab.
+func (h *HostsHandler) GetProcesses(c *gin.Context) {
+	if h.svc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "live process list not configured"})
+		return
+	}
+	pid := c.Param("pid")
+	host, err := h.db.Hosts().GetByID(c.Request.Context(), c.Param("hid"))
+	if errors.Is(err, storage.ErrNotFound) || (err == nil && host.ProjectID != pid) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup host"})
+		return
+	}
+	if host.AgentID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host has no registered agent"})
+		return
+	}
+
+	var topN uint32
+	if s := c.Query("top"); s != "" {
+		if n, err := strconv.ParseUint(s, 10, 32); err == nil {
+			topN = uint32(n)
+		}
+	}
+	sortBy := c.DefaultQuery("sort", "cpu")
+
+	resp, err := core.CallAgentRPC(c.Request.Context(), h.svc, host.AgentID, &v2pb.RpcRequest{
+		Payload: &v2pb.RpcRequest_ProcessList{ProcessList: &v2pb.ProcessListRequest{
+			TopN:   topN,
+			SortBy: sortBy,
+		}},
+	})
+	if err != nil {
+		var notConnected *core.ErrAgentNotConnected
+		if errors.As(err, &notConnected) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "agent not connected"})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	if resp.Error != "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": resp.Error})
+		return
+	}
+	c.JSON(http.StatusOK, resp.GetProcessList())
+}
+
 // RegisterV1HostsRoutes mounts the per-project host routes under
 // /api/v1/projects/:pid/hosts. Every route is RequireAuth +
 // RequireProjectRole(viewer).
@@ -185,5 +262,6 @@ func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
 		grp.GET("", h.List)
 		grp.GET("/:hid", h.Get)
 		grp.GET("/:hid/sysinfo", h.GetSysInfo)
+		grp.GET("/:hid/processes", h.GetProcesses)
 	}
 }
