@@ -61,8 +61,8 @@ func (s *AgentService) Handle(conn net.Conn) {
 		IngressAddr:    s.cfg.IngressAddr,
 		ProjectID:      s.cfg.ProjectID,
 		DisableHistory: s.cfg.DisableHistory,
-	}, nil)
-	handleAgentConnection(client, nil)
+	})
+	handleAgentConnection(client)
 }
 
 // IngressAddr is exposed for callers (install-script templating,

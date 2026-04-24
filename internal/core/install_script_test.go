@@ -42,7 +42,8 @@ func TestInstallScript_HappyAndReplay(t *testing.T) {
 	// Stand up just the distributor engine. We don't need the TLS
 	// listener path — the install endpoint is pure HTTP.
 	gin.SetMode(gin.TestMode)
-	engine := core.CreateDistributorServer(core.DistributorArgs{Host: "127.0.0.1"})
+	engine := gin.New()
+	core.RegisterDistributorRoutes(engine, core.DistributorArgs{})
 
 	// First curl: 200 OK, body is a shell script containing the PAT.
 	req := httptest.NewRequest("GET", "/install/"+artifact.PlaintextDownloadToken, nil)
@@ -94,7 +95,8 @@ func TestInstallScript_Unknown(t *testing.T) {
 	defer uninstallCtx()
 
 	gin.SetMode(gin.TestMode)
-	engine := core.CreateDistributorServer(core.DistributorArgs{Host: "127.0.0.1"})
+	engine := gin.New()
+	core.RegisterDistributorRoutes(engine, core.DistributorArgs{})
 
 	req := httptest.NewRequest("GET", "/install/dl_aaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb", nil)
 	rec := httptest.NewRecorder()
@@ -117,7 +119,8 @@ func TestInstallScript_NoEnrollmentService(t *testing.T) {
 	installCtx(t, db)
 	defer uninstallCtx()
 
-	engine := core.CreateDistributorServer(core.DistributorArgs{Host: "127.0.0.1"})
+	engine := gin.New()
+	core.RegisterDistributorRoutes(engine, core.DistributorArgs{})
 	req := httptest.NewRequest("GET", "/install/dl_whatever.secret", nil)
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)

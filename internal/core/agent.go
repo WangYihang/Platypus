@@ -83,21 +83,16 @@ type AgentClient struct {
 	ShellPath string `json:"-"`
 	// IngressAddr is the host:port the agent dialled to reach this
 	// server. Persisted on the session row for audit.
-	IngressAddr string `json:"ingress_addr"`
-	// server is retained for the duration of the unified-ingress
-	// transition so the existing DeleteAgentClient fan-out and
-	// websocket broadcast helpers keep working. PR-E removes it once
-	// AgentService owns the whole lifecycle.
-	server            *TCPServer           `json:"-"`
+	IngressAddr       string               `json:"ingress_addr"`
 	codec             *protocol.ProtoCodec `json:"-"`
 	atomLock          *sync.Mutex          `json:"-"`
 	processes         map[string]*Process  `json:"-"`
 	currentProcessKey string               `json:"-"`
 }
 
-// AgentClientConfig bundles the per-connection defaults the service
-// (or legacy TCPServer) injects when constructing a client. Zero-value
-// is a legal choice for tests.
+// AgentClientConfig bundles the per-connection defaults AgentService
+// injects when constructing a client. Zero-value is a legal choice for
+// tests.
 type AgentClientConfig struct {
 	HashFormat     string
 	ShellPath      string
@@ -106,7 +101,7 @@ type AgentClientConfig struct {
 	DisableHistory bool
 }
 
-func CreateAgentClient(conn net.Conn, cfg AgentClientConfig, server *TCPServer) *AgentClient {
+func CreateAgentClient(conn net.Conn, cfg AgentClientConfig) *AgentClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
 	if cfg.ShellPath == "" {
@@ -131,7 +126,6 @@ func CreateAgentClient(conn net.Conn, cfg AgentClientConfig, server *TCPServer) 
 		ShellPath:         cfg.ShellPath,
 		IngressAddr:       cfg.IngressAddr,
 		ProjectID:         cfg.ProjectID,
-		server:            server,
 		codec:             protocol.NewProtoCodec(conn),
 		atomLock:          new(sync.Mutex),
 		processes:         map[string]*Process{},

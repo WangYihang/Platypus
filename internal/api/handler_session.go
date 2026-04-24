@@ -141,17 +141,15 @@ func DispatchCommand(c *gin.Context) {
 	}
 
 	var results []result
-	for _, s := range core.GetServers() {
-		for _, client := range s.GetAllAgentClients() {
-			if client.GroupDispatch {
-				ch := make(chan string, 1)
-				go func() { ch <- client.System(req.Command) }()
-				select {
-				case output := <-ch:
-					results = append(results, result{SessionHash: client.Hash, Output: output})
-				case <-time.After(time.Duration(req.Timeout) * time.Second):
-					results = append(results, result{SessionHash: client.Hash, Error: "timeout"})
-				}
+	for _, client := range core.AllAgents() {
+		if client.GroupDispatch {
+			ch := make(chan string, 1)
+			go func() { ch <- client.System(req.Command) }()
+			select {
+			case output := <-ch:
+				results = append(results, result{SessionHash: client.Hash, Output: output})
+			case <-time.After(time.Duration(req.Timeout) * time.Second):
+				results = append(results, result{SessionHash: client.Hash, Error: "timeout"})
 			}
 		}
 	}

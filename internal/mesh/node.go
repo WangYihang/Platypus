@@ -30,8 +30,7 @@ type Node struct {
 	cfg      Config
 	logger   *slog.Logger
 
-	listener *Listener
-	dialer   *Dialer
+	dialer *Dialer
 	registry *Registry
 	lsdb     *LSDB
 	routes   *RouteTable
@@ -133,26 +132,14 @@ func (n *Node) SetPayloadHandler(h PayloadHandler) {
 	n.payloadHandler.Store(&h)
 }
 
-// Start boots the listener, dialer, and periodic tasks. Returns once
-// the listener is ready (if one is configured). Blocks until ctx is
+// Start boots the dialer and periodic tasks. The unified-ingress
+// dispatcher drives inbound links through AcceptRaw, so there is no
+// independent listener to spin up here. Blocks until ctx is
 // cancelled in the background goroutines.
 func (n *Node) Start(ctx context.Context) error {
 	var startErr error
 	n.startOnce.Do(func() {
 		n.dialer = newDialer(n)
-		if n.cfg.ListenAddr != "" {
-			ln, err := newListener(n, n.cfg.ListenAddr)
-			if err != nil {
-				startErr = err
-				return
-			}
-			n.listener = ln
-			go func() {
-				if err := ln.Serve(ctx); err != nil {
-					n.logger.Error("mesh listener exited", slog.String("error", err.Error()))
-				}
-			}()
-		}
 		// Seed dials for configured bootstrap peers. We don't know their
 		// NodeIDs yet; use the address as a placeholder key. After a
 		// successful handshake the real NodeID takes over.
@@ -196,13 +183,13 @@ func (n *Node) SendTo(dst string, env *agentpb.Envelope) error {
 	return link.Send(env)
 }
 
-// ListenerAddr returns the address the mesh listener is bound to, or
-// "" if no listener is configured. Useful when ListenAddr is ":0".
+// ListenerAddr returns the ingress address the mesh node advertises.
+// Pulled from cfg.AdvertiseAddrs when set, otherwise empty.
 func (n *Node) ListenerAddr() string {
-	if n.listener == nil {
-		return ""
+	if len(n.cfg.AdvertiseAddrs) > 0 {
+		return n.cfg.AdvertiseAddrs[0]
 	}
-	return n.listener.Addr()
+	return ""
 }
 
 // AcceptRaw runs the inbound mesh handshake on an already-TLS'd
@@ -693,17 +680,12 @@ func (n *Node) reconcileLoop(ctx context.Context) {
 }
 
 // advertisedAddrs returns the addresses this node is willing to publish
-// for other nodes to dial. If none are configured, it falls back to the
-// listener's bound address.
+// for other nodes to dial. The unified-ingress dispatcher owns the
+// listening socket, so we rely entirely on AdvertiseAddrs /
+// ListenAddr from config.
 func (n *Node) advertisedAddrs() []string {
 	if len(n.cfg.AdvertiseAddrs) > 0 {
 		return n.cfg.AdvertiseAddrs
-	}
-	if n.listener != nil {
-		addr := n.listener.Addr()
-		if addr != "" {
-			return []string{addr}
-		}
 	}
 	if n.cfg.ListenAddr != "" {
 		return []string{n.cfg.ListenAddr}

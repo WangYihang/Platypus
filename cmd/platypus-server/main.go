@@ -2,7 +2,7 @@
 //
 // @title           Platypus API
 // @version         1.0
-// @description     REST API for managing agent listeners, sessions, file transfer, and tunnels.
+// @description     REST API for managing agent sessions, file transfer, and tunnels.
 // @description     Every endpoint except /api/v1/auth/token requires a Bearer token obtained via that endpoint.
 // @BasePath        /
 // @securityDefinitions.apikey BearerAuth
@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -31,6 +32,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/core/artifact"
 	"github.com/WangYihang/Platypus/internal/enrollment"
+	"github.com/WangYihang/Platypus/internal/ingress"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/pki"
@@ -45,6 +47,8 @@ import (
 )
 
 const shutdownTimeout = 30 * time.Second
+
+const defaultIngressAddr = ":9443"
 
 func main() {
 	log.Init()
@@ -62,18 +66,50 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	servers := startHTTPServers(cfg)
+	// Open the persistent store before anything else that needs it
+	// (enrollment, PKI, install tokens). Distributor / REST / agent
+	// all share the same handle.
+	if !cfg.RESTful.Enable {
+		log.Error("RESTful is now the only supported control-plane mode; set restful.enable=true in the config.")
+		os.Exit(1)
+	}
+	dbFile := cfg.RESTful.DBFileOrDefault()
+	db, err := storage.Open(dbFile)
+	if err != nil {
+		log.Error("open database %q: %v", dbFile, err)
+		os.Exit(1)
+	}
+	core.Ctx.Storage = db
+	log.Success("Storage: %s", dbFile)
 
+	ingressAddr := cfg.Ingress.Addr
+	if ingressAddr == "" {
+		ingressAddr = defaultIngressAddr
+	}
+	publicAddr := cfg.Ingress.PublicAddr
+	if publicAddr == "" {
+		publicAddr = ingressAddr
+	}
+	api.PublicAddr = publicAddr
+
+	// Mesh node (optional). When enabled it publishes PublicAddr so
+	// peers can dial through the ingress dispatcher; inbound mesh
+	// connections arrive via dispatcher → Node.AcceptRaw.
+	var meshNode *mesh.Node
 	if cfg.Mesh.PSKFile != "" {
-		bootstrapTarget := deriveBootstrapTarget(cfg)
+		bootstrapTarget := cfg.Mesh.BootstrapTarget
 		if bootstrapTarget == "" {
-			log.Info("Mesh bootstrap disabled: no bootstrap_target configured and listener inference was not possible.")
+			bootstrapTarget = publicAddr
+		}
+		advertise := cfg.Mesh.AdvertiseAddrs
+		if len(advertise) == 0 && publicAddr != "" {
+			advertise = []string{publicAddr}
 		}
 		node, err := mesh.NewNode(mesh.Config{
 			IdentityDir:       cfg.Mesh.IdentityDir,
 			PSKFile:           cfg.Mesh.PSKFile,
-			ListenAddr:        cfg.Mesh.ListenAddr,
-			AdvertiseAddrs:    cfg.Mesh.AdvertiseAddrs,
+			ListenAddr:        "", // listener is the unified ingress
+			AdvertiseAddrs:    advertise,
 			Peers:             cfg.Mesh.Peers,
 			Role:              "server",
 			DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
@@ -91,16 +127,74 @@ func main() {
 			os.Exit(1)
 		}
 		core.Ctx.Mesh = node
-		log.Success("Mesh enabled: node_id=%s listen=%s", node.NodeID(), node.ListenerAddr())
+		meshNode = node
+		log.Success("Mesh enabled: node_id=%s advertise=%v", node.NodeID(), advertise)
 	}
 
-	for _, s := range cfg.Listeners {
-		listener := core.CreateTCPServer(s.Host, s.Port, s.HashFormat, s.DisableHistory, s.PublicIP, s.ShellPath)
-		if listener != nil {
-			time.Sleep(0x100 * time.Millisecond)
-			go (*listener).Run()
-		}
+	tlsCfg, err := ingress.BuildTLSConfig(ingress.CertSource{
+		CertFile: cfg.Ingress.Cert,
+		KeyFile:  cfg.Ingress.Key,
+	}, ingress.DefaultProtocols)
+	if err != nil {
+		log.Error("ingress: build tls config: %v", err)
+		os.Exit(1)
 	}
+
+	agentSvc := core.NewAgentService(core.AgentServiceConfig{
+		HashFormat:     cfg.Ingress.HashFormat,
+		ShellPath:      cfg.Ingress.ShellPath,
+		IngressAddr:    publicAddr,
+		ProjectID:      cfg.Mesh.ProjectID,
+		DisableHistory: cfg.Ingress.DisableHistory,
+	})
+	core.SetAgentService(agentSvc)
+
+	dispatcher, err := ingress.New(ingress.Config{
+		TLSConfig: tlsCfg,
+		OnAgent:   agentSvc.Handle,
+		OnMesh: func(conn net.Conn) {
+			if meshNode == nil {
+				_ = conn.Close()
+				return
+			}
+			meshNode.AcceptRaw(ctx, conn)
+		},
+	})
+	if err != nil {
+		log.Error("ingress: configure dispatcher: %v", err)
+		os.Exit(1)
+	}
+
+	listener, err := net.Listen("tcp", ingressAddr)
+	if err != nil {
+		log.Error("ingress: listen %s: %v", ingressAddr, err)
+		os.Exit(1)
+	}
+
+	rest := buildRESTEngine(cfg, db)
+
+	go func() {
+		if err := dispatcher.Serve(ctx, listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("ingress: %v", err)
+		}
+	}()
+
+	httpLn := dispatcher.HTTPListener(listener.Addr())
+	httpSrv := &http.Server{
+		Handler:           rest,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		if err := httpSrv.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("rest: %v", err)
+		}
+	}()
+
+	log.L.Info("ingress_ready",
+		"addr", ingressAddr,
+		"public_addr", publicAddr,
+		"tls_cert", cfg.Ingress.Cert,
+	)
 
 	log.L.Info("server_running")
 
@@ -112,8 +206,7 @@ func main() {
 		Meta: map[string]any{
 			"version":      update.Version,
 			"config":       configFile,
-			"listeners":    len(cfg.Listeners),
-			"restful":      cfg.RESTful.Enable,
+			"ingress":      ingressAddr,
 			"mesh_enabled": cfg.Mesh.PSKFile != "",
 		},
 	})
@@ -134,12 +227,7 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-
-	for _, srv := range servers {
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Error("server shutdown: %v", err)
-		}
-	}
+	_ = httpSrv.Shutdown(shutdownCtx)
 	log.Success("Server stopped cleanly")
 }
 
@@ -177,20 +265,6 @@ func formatValidationError(err error) error {
 	return errors.New(msg)
 }
 
-func deriveBootstrapTarget(cfg *config.Config) string {
-	if cfg == nil {
-		return ""
-	}
-	if cfg.Mesh.BootstrapTarget != "" {
-		return cfg.Mesh.BootstrapTarget
-	}
-	if len(cfg.Listeners) != 1 {
-		return ""
-	}
-	l := cfg.Listeners[0]
-	return fmt.Sprintf("%s:%d", l.Host, l.Port)
-}
-
 // mustRandomHex generates a random hex string of the given byte length.
 // Panics if the OS entropy source fails — at that point the server can't
 // safely do any crypto at all, so a loud crash is the right response.
@@ -202,11 +276,54 @@ func mustRandomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func startHTTPServers(cfg *config.Config) []*http.Server {
-	var servers []*http.Server
+func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
+	rest := api.CreateRESTfulAPIServer()
 
-	dh := cfg.Distributor.Host
-	dp := cfg.Distributor.Port
+	accessKey := cfg.RESTful.JWTAccessKey
+	if accessKey == "" {
+		accessKey = mustRandomHex(32)
+		log.Info("No JWTAccessKey configured — generated a random one. Set RESTful.JWTAccessKey to keep tokens valid across restarts.")
+	}
+	refreshKey := cfg.RESTful.JWTRefreshKey
+	if refreshKey == "" {
+		refreshKey = mustRandomHex(32)
+		log.Info("No JWTRefreshKey configured — generated a random one. Set RESTful.JWTRefreshKey to keep refresh tokens valid across restarts.")
+	}
+	accessTTL := time.Duration(cfg.RESTful.AccessTTLOrDefault()) * time.Second
+	refreshTTL := time.Duration(cfg.RESTful.RefreshTTLOrDefault()) * time.Second
+	tokens, err := api.NewTokenIssuer(accessKey, refreshKey, accessTTL, refreshTTL)
+	if err != nil {
+		log.Error("token issuer: %v", err)
+		os.Exit(1)
+	}
+
+	auth := api.NewAuth()
+	auth.SetJWTFallback(tokens)
+	authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
+	usersH := api.NewUsersHandler(db)
+	projectsH := api.NewProjectsHandler(db)
+	hostsH := api.NewHostsHandler(db)
+	sessionsH := api.NewSessionsV2Handler(db)
+
+	pkiSvc := pki.New(db)
+	enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
+	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
+
+	// /install/<token> and /v1/manifest/* now live on the same gin
+	// engine — no dedicated distributor port. distributorBase is the
+	// public HTTPS origin the server is reachable at so admin-minted
+	// install links copy straight into `curl -k ... | sh`.
+	distributorBase := "https://" + api.PublicAddr
+	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
+	agentSessionsH := api.NewAgentSessionsHandler(db)
+	activitiesH := api.NewActivitiesHandler(db)
+	caH := api.NewCAHandler(db, pkiSvc)
+	topologyH := api.NewTopologyHandler(db)
+	rbac := api.NewRBACWithStorage(tokens, db)
+
+	api.SetActivityRecorder(api.NewActivityRecorder(db))
+	core.SetEnrollment(enrollSvc)
+
 	store, err := artifact.NewS3Store(artifact.S3Config{
 		Endpoint:        cfg.Distributor.Store.Endpoint,
 		Region:          cfg.Distributor.Store.Region,
@@ -224,145 +341,35 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 	if err != nil || ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
-	distributor := core.CreateDistributorServer(core.DistributorArgs{
-		Host:         dh,
-		Port:         dp,
+	core.RegisterDistributorRoutes(rest, core.DistributorArgs{
 		Url:          cfg.Distributor.Url,
 		Channel:      cfg.Distributor.ChannelOrDefault(),
 		PresignedTTL: ttl,
 		Store:        store,
 	})
-	distributorSrv := &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", dh, dp),
-		Handler:           distributor,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	servers = append(servers, distributorSrv)
 
-	go func() {
-		if err := distributorSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("distributor: %v", err)
-		}
-	}()
-	log.Success("Distributor at: http://%s:%d/", dh, dp)
+	api.RegisterWebSocketRoutes(rest, auth)
+	api.RegisterV1Routes(rest, auth)
+	api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
+	api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
+	api.RegisterV1HostsRoutes(rest, hostsH, rbac)
+	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
+	api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
+	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
+	api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
+	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
+	api.RegisterV1CARoutes(rest, caH, rbac)
+	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
+	api.RegisterSwaggerRoutes(rest)
 
-	if cfg.RESTful.Enable {
-		rh := cfg.RESTful.Host
-		rp := cfg.RESTful.Port
-		rest := api.CreateRESTfulAPIServer()
+	core.StartTopologyStream()
+	core.InstallTopologyObserver()
 
-		// Open the persistent store used by users, projects, hosts, etc.
-		// If it fails at startup there's nothing useful the server can do,
-		// so bail loudly.
-		dbFile := cfg.RESTful.DBFileOrDefault()
-		db, err := storage.Open(dbFile)
-		if err != nil {
-			log.Error("open database %q: %v", dbFile, err)
-			os.Exit(1)
-		}
-		core.Ctx.Storage = db
-		log.Success("Storage: %s", dbFile)
+	log.L.Info("api_ready",
+		"bootstrap_secret", auth.GetSecret(),
+		"public_base", "https://"+api.PublicAddr,
+	)
 
-		accessKey := cfg.RESTful.JWTAccessKey
-		if accessKey == "" {
-			accessKey = mustRandomHex(32)
-			log.Info("No JWTAccessKey configured — generated a random one. Set RESTful.JWTAccessKey to keep tokens valid across restarts.")
-		}
-		refreshKey := cfg.RESTful.JWTRefreshKey
-		if refreshKey == "" {
-			refreshKey = mustRandomHex(32)
-			log.Info("No JWTRefreshKey configured — generated a random one. Set RESTful.JWTRefreshKey to keep refresh tokens valid across restarts.")
-		}
-		accessTTL := time.Duration(cfg.RESTful.AccessTTLOrDefault()) * time.Second
-		refreshTTL := time.Duration(cfg.RESTful.RefreshTTLOrDefault()) * time.Second
-		tokens, err := api.NewTokenIssuer(accessKey, refreshKey, accessTTL, refreshTTL)
-		if err != nil {
-			log.Error("token issuer: %v", err)
-			os.Exit(1)
-		}
-
-		// Legacy Auth (shared secret + WS tickets) still guards the
-		// existing v1 routes. RBAC + new auth handlers layer on top and
-		// gate the new /auth/* + /users/* + /projects/* routes
-		// introduced by the redesign.
-		auth := api.NewAuth()
-		auth.SetJWTFallback(tokens) // browsers use JWTs; legacy middleware needs to accept them on /ws/ticket
-		authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
-		usersH := api.NewUsersHandler(db)
-		projectsH := api.NewProjectsHandler(db)
-		hostsH := api.NewHostsHandler(db)
-		sessionsH := api.NewSessionsV2Handler(db)
-		// Enrollment + (optional) PKI. Attaching the PKI issuer to the
-		// enrollment service makes every successful PAT / rotation
-		// response carry a freshly signed leaf cert when PLATYPUS_CA_KEK
-		// is configured; when it isn't, enrollment stays on PSK only.
-		pkiSvc := pki.New(db)
-		enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
-		patTokensH := api.NewPATTokensHandler(db, enrollSvc)
-		// Install-artifact admin endpoints use the distributor's host:port
-		// when rendering the curl command, so admins get a pasteable link
-		// without having to know the topology themselves.
-		distributorBase := fmt.Sprintf("http://%s:%d", cfg.Distributor.Host, cfg.Distributor.Port)
-		installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
-		agentSessionsH := api.NewAgentSessionsHandler(db)
-		activitiesH := api.NewActivitiesHandler(db)
-		caH := api.NewCAHandler(db, pkiSvc)
-		topologyH := api.NewTopologyHandler(db)
-		rbac := api.NewRBACWithStorage(tokens, db)
-
-		// Install the process-wide activity recorder so free-function
-		// handlers (ExecSessionV1, ReadFile, …) can write audit rows
-		// without threading a dependency through the v1 router.
-		api.SetActivityRecorder(api.NewActivityRecorder(db))
-
-		// Expose the enrollment service globally so the agent-facing TCP
-		// handshake in internal/core can call it without plumbing an
-		// extra parameter through CreateTCPServer.
-		core.SetEnrollment(enrollSvc)
-
-		api.RegisterWebSocketRoutes(rest, auth)
-		api.RegisterV1Routes(rest, auth)
-		api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
-		api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
-		api.RegisterV1HostsRoutes(rest, hostsH, rbac)
-		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
-		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
-		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
-		api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
-		api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
-		api.RegisterV1CARoutes(rest, caH, rbac)
-		api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
-		api.RegisterSwaggerRoutes(rest)
-
-		// Start the per-second topology broadcaster + link event
-		// observer. Runs until the process exits; cancel funcs are
-		// ignored because shutdown tears the whole process down.
-		core.StartTopologyStream()
-		core.InstallTopologyObserver()
-
-		log.L.Info("api_ready",
-			"bootstrap_secret", auth.GetSecret(),
-			"bootstrap_url", fmt.Sprintf("http://%s:%d/api/v1/auth/bootstrap", rh, rp),
-			"login_url", fmt.Sprintf("http://%s:%d/api/v1/auth/login", rh, rp),
-			"token_url", fmt.Sprintf("http://%s:%d/api/v1/auth/token", rh, rp),
-			"docs_url", fmt.Sprintf("http://%s:%d/swagger/index.html", rh, rp),
-		)
-
-		restSrv := &http.Server{
-			Addr:              fmt.Sprintf("%s:%d", rh, rp),
-			Handler:           rest,
-			ReadHeaderTimeout: 10 * time.Second,
-		}
-		servers = append(servers, restSrv)
-
-		go func() {
-			if err := restSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Error("rest: %v", err)
-			}
-		}()
-		log.Success("RESTful API at: http://%s:%d/api/v1/", rh, rp)
-		core.Ctx.RESTful = rest
-	}
-
-	return servers
+	core.Ctx.RESTful = rest
+	return rest
 }

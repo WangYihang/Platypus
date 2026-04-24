@@ -97,17 +97,11 @@ func emitTopologyTick(lastSampledAt map[string]int64, lastMu *sync.Mutex) {
 	//     which projects to scope the link_stats frame to, and so we
 	//     can look up the project_id for each link stat.
 	projects := map[string][]*AgentClient{} // projectID -> agents
-	for _, s := range Ctx.Servers {
-		srv, ok := s.(*TCPServer)
-		if !ok {
+	for _, ac := range allAgentClients() {
+		if ac == nil || ac.ProjectID == "" {
 			continue
 		}
-		for _, ac := range srv.GetAllAgentClients() {
-			if ac == nil || ac.ProjectID == "" {
-				continue
-			}
-			projects[ac.ProjectID] = append(projects[ac.ProjectID], ac)
-		}
+		projects[ac.ProjectID] = append(projects[ac.ProjectID], ac)
 	}
 
 	// --- Mesh link stats: broadcast once per project with the same

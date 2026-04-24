@@ -249,22 +249,16 @@ func BuildTopologySnapshot(ctx context.Context, projectID string) (*TopologySnap
 	return snap, nil
 }
 
-// collectProjectAgents walks all running TCPServers and returns the
-// subset of AgentClients whose ProjectID matches. The caller must
-// tolerate duplicate HostIDs (multiple sessions per machine).
+// collectProjectAgents walks every live AgentClient and returns the
+// subset whose ProjectID matches. The caller must tolerate duplicate
+// HostIDs (multiple sessions per machine).
 func collectProjectAgents(projectID string) []*AgentClient {
 	var out []*AgentClient
-	for _, s := range Ctx.Servers {
-		srv, ok := s.(*TCPServer)
-		if !ok {
+	for _, ac := range allAgentClients() {
+		if ac == nil || ac.ProjectID != projectID {
 			continue
 		}
-		for _, ac := range srv.GetAllAgentClients() {
-			if ac == nil || ac.ProjectID != projectID {
-				continue
-			}
-			out = append(out, ac)
-		}
+		out = append(out, ac)
 	}
 	return out
 }

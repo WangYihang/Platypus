@@ -4,14 +4,12 @@ package app
 
 import (
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 	socks5 "github.com/things-go/go-socks5"
 	"gopkg.in/olahol/melody.v1"
 
-	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/session"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -44,15 +42,11 @@ type PushTunnelInstance struct {
 
 // App is the top-level application container.
 type App struct {
-	Config    *config.Config
-	Sessions  *session.Manager
-	Listeners *listener.Manager
+	Config   *config.Config
+	Sessions *session.Manager
 
 	// Current session state
 	CurrentAgent interface{} // *core.AgentClient
-
-	// Server registry (keyed by hash)
-	Servers map[string]interface{} // map[string]*core.TCPServer
 
 	// Concurrency
 	Interacting *sync.Mutex
@@ -94,8 +88,6 @@ func New(cfg *config.Config) *App {
 	return &App{
 		Config:             cfg,
 		Sessions:           session.NewManager(),
-		Listeners:          listener.NewManager(),
-		Servers:            make(map[string]interface{}),
 		Interacting:        &sync.Mutex{},
 		PullTunnelConfig:   make(map[string]PullTunnelConfig),
 		PullTunnelInstance: make(map[string]PullTunnelInstance),
@@ -125,12 +117,4 @@ func (a *App) SetCurrentSession(s session.Session) {
 // AllSessions returns all sessions from all listeners.
 func (a *App) AllSessions() []session.Session {
 	return a.Sessions.All()
-}
-
-// FindListener searches listeners by hash prefix.
-func (a *App) FindListener(clue string) listener.Listener {
-	if clue == "" {
-		return nil
-	}
-	return a.Listeners.FindByHashPrefix(strings.ToLower(clue))
 }

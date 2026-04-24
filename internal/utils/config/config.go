@@ -1,16 +1,5 @@
 package config
 
-// ListenerConfig defines a TLS ingress port that managed-host agents dial
-// back to.
-type ListenerConfig struct {
-	Host           string `yaml:"host"            validate:"required"`
-	Port           uint16 `yaml:"port"            validate:"required,min=1,max=65535"`
-	HashFormat     string `yaml:"hashFormat"`
-	DisableHistory bool   `yaml:"disable_history"`
-	PublicIP       string `yaml:"public_ip"`
-	ShellPath      string `yaml:"shell_path"`
-}
-
 // IngressConfig binds the unified TLS ingress the server accepts all
 // agent, mesh, and admin HTTPS traffic on. The ALPN dispatcher fans
 // the accepted connections out to the relevant handlers:
@@ -43,16 +32,17 @@ func (c IngressConfig) PublicAddrOrAddr() string {
 	return c.Addr
 }
 
+// RESTfulConfig configures the REST/WebSocket admin surface. Since
+// the unified ingress merged every port into cfg.Ingress, only the
+// JWT/storage knobs remain here — the REST engine is mounted onto
+// the ingress dispatcher's virtual HTTP listener.
 type RESTfulConfig struct {
-	Host              string `yaml:"host"              mapstructure:"host"              validate:"required_if=Enable true"`
-	Port              uint16 `yaml:"port"              mapstructure:"port"              validate:"required_if=Enable true,min=0,max=65535"`
 	Enable            bool   `yaml:"enable"            mapstructure:"enable"`
 	JWTRefreshKey     string `yaml:"JWTRefreshKey"     mapstructure:"JWTRefreshKey"`
 	JWTAccessKey      string `yaml:"JWTAccessKey"      mapstructure:"JWTAccessKey"`
 	RefreshExpireTime int    `yaml:"RefreshExpireTime" mapstructure:"RefreshExpireTime"` // seconds; 0 defaults to 14 days
 	AccessExpireTime  int    `yaml:"AccessExpireTime"  mapstructure:"AccessExpireTime"`  // seconds; 0 defaults to 15 min
 	DBFile            string `yaml:"DBFile"            mapstructure:"DBFile"`            // empty defaults to ./platypus.db
-	Domain            string `yaml:"Domain"            mapstructure:"Domain"`
 }
 
 // AccessTTLOrDefault returns the configured access token lifetime in
@@ -82,17 +72,12 @@ func (c RESTfulConfig) DBFileOrDefault() string {
 	return "./platypus.db"
 }
 
-// DistributorConfig defines the HTTP endpoint that fronts the agent
-// release artifact store. The Distributor itself serves only a signed
-// manifest and redirects to presigned object-store URLs for artifact
-// downloads — the binaries live in Store.
-//
-// Every field carries a `mapstructure:` tag because viper's Unmarshal
-// reads those, not `yaml:`. Without it snake_case keys silently bind
-// to the zero value.
+// DistributorConfig defines the routes that front the agent release
+// artifact store. The distributor itself serves only a signed manifest
+// and redirects to presigned object-store URLs for artifact
+// downloads — the binaries live in Store. The HTTP routes are mounted
+// on the same gin engine the REST API runs on; no dedicated port.
 type DistributorConfig struct {
-	Host         string              `yaml:"host"          mapstructure:"host" validate:"required"`
-	Port         uint16              `yaml:"port"          mapstructure:"port" validate:"required,min=1,max=65535"`
 	Url          string              `yaml:"url"           mapstructure:"url"`
 	Channel      string              `yaml:"channel"       mapstructure:"channel"`       // default release channel; "stable" if empty
 	PresignedTTL string              `yaml:"presigned_ttl" mapstructure:"presigned_ttl"` // duration, e.g. "5m"; defaults to 5 minutes
@@ -138,7 +123,6 @@ type MeshConfig struct {
 }
 
 type Config struct {
-	Listeners   []ListenerConfig  `yaml:"listeners"`
 	Ingress     IngressConfig     `yaml:"ingress"`
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`

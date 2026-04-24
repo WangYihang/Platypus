@@ -2,7 +2,9 @@ package mesh
 
 import (
 	"context"
+	"crypto/tls"
 	"log/slog"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -10,27 +12,56 @@ import (
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
-// boot starts a Node on a random local port and waits until its
-// listener is bound. Returns the node + its listen address.
+// boot starts a Node on a random local port and stands up a minimal
+// stand-in for the unified-ingress dispatcher: a TLS listener whose
+// accept loop calls Node.AcceptRaw. Returns the node + its listen
+// address.
 func boot(t *testing.T, ctx context.Context, psk []byte, seeds []string) (*Node, string) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(discardWriter{}, &slog.HandlerOptions{Level: slog.LevelError}))
 	cfg := Config{
-		Identity:   mustIdentity(t),
-		PSK:        psk,
-		ListenAddr: "127.0.0.1:0",
-		Peers:      seeds,
-		Role:       "test",
+		Identity:       mustIdentity(t),
+		PSK:            psk,
+		ListenAddr:     "", // ingress is managed by the test harness
+		AdvertiseAddrs: nil,
+		Peers:          seeds,
+		Role:           "test",
 	}
 	n, err := NewNode(cfg, logger)
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
+
+	tlsCfg, err := selfSignedTLSConfig()
+	if err != nil {
+		t.Fatalf("selfSignedTLSConfig: %v", err)
+	}
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
+	if err != nil {
+		t.Fatalf("tls.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	addr := ln.Addr().String()
+	n.cfg.AdvertiseAddrs = []string{addr}
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go n.AcceptRaw(ctx, conn)
+		}
+	}()
+
 	if err := n.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	return n, n.ListenerAddr()
+	return n, addr
 }
+
+var _ = (*net.TCPListener)(nil) // silence unused net import when tests shrink
 
 // TestE2ETwoNodeHandshake brings up two in-process nodes with the same
 // PSK and verifies they establish a mesh link.

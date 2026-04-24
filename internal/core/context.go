@@ -16,25 +16,28 @@ type WindowSize struct {
 // Ctx is the global application state.
 var Ctx *app.App
 
-// --- Helper functions that operate on Ctx for backward compatibility ---
+// allAgentClients returns a snapshot of every live AgentClient the
+// process knows about. Iteration is safe — callers get a shallow copy
+// of the agent pointers and don't hold the AgentService lock.
+func allAgentClients() map[string]*AgentClient {
+	if agentSvc == nil {
+		return nil
+	}
+	return agentSvc.Snapshot()
+}
+
+// AllAgents is the exported version of allAgentClients. It exists so
+// api/* handlers that used to iterate Ctx.Servers can query the
+// registered AgentService without reaching into core internals.
+func AllAgents() map[string]*AgentClient { return allAgentClients() }
 
 func FindAgentClientByHash(hash string) *AgentClient {
 	if hash == "" {
 		return nil
 	}
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		for _, client := range server.GetAllAgentClients() {
-			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
-				return client
-			}
-		}
-	}
-	if agentSvc != nil {
-		for _, client := range agentSvc.Snapshot() {
-			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
-				return client
-			}
+	for _, client := range allAgentClients() {
+		if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
+			return client
 		}
 	}
 	return nil
@@ -44,57 +47,20 @@ func FindAgentClientByAlias(alias string) *AgentClient {
 	if alias == "" {
 		return nil
 	}
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		for _, client := range server.GetAllAgentClients() {
-			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
-				return client
-			}
-		}
-	}
-	if agentSvc != nil {
-		for _, client := range agentSvc.Snapshot() {
-			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
-				return client
-			}
+	for _, client := range allAgentClients() {
+		if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
+			return client
 		}
 	}
 	return nil
 }
 
-func FindServerByHash(hash string) *TCPServer {
-	if hash == "" {
-		return nil
-	}
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		if strings.HasPrefix(server.Hash, strings.ToLower(hash)) {
-			return server
-		}
-	}
-	return nil
-}
-
+// DeleteAgentClient removes the client from the service and fires the
+// disconnect bookkeeping (activity record, session row stamp). Callers
+// in the message-dispatch loop invoke this when Recv returns an error.
 func DeleteAgentClient(c *AgentClient) {
-	for _, s := range Ctx.Servers {
-		server := s.(*TCPServer)
-		server.DeleteAgentClient(c)
+	if agentSvc == nil || c == nil {
+		return
 	}
-	if agentSvc != nil {
-		agentSvc.removeClient(c)
-	}
-}
-
-func DeleteServer(s *TCPServer) {
-	s.Stop()
-	delete(Ctx.Servers, s.Hash)
-}
-
-// GetServers returns the typed server map for iteration.
-func GetServers() map[string]*TCPServer {
-	result := make(map[string]*TCPServer, len(Ctx.Servers))
-	for k, v := range Ctx.Servers {
-		result[k] = v.(*TCPServer)
-	}
-	return result
+	agentSvc.removeClient(c)
 }

@@ -1,143 +1,40 @@
 package core
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/phayes/freeport"
 
 	"github.com/WangYihang/Platypus/internal/app"
-	"github.com/WangYihang/Platypus/internal/listener"
 	"github.com/WangYihang/Platypus/internal/log"
-	"github.com/WangYihang/Platypus/internal/utils/crypto"
-	"github.com/WangYihang/Platypus/internal/utils/hash"
-	"github.com/WangYihang/Platypus/internal/utils/network"
 	agentpb "github.com/WangYihang/Platypus/pkg/proto/agent/v1"
 )
 
+// WebSocketMessage is the JSON envelope that client-lifecycle notify
+// broadcasts are sent over. Retained for wire-format stability with
+// existing browsers that still key off WebSocketMessageType.
 type WebSocketMessage struct {
 	Type WebSocketMessageType
 	Data interface{}
 }
 
-// Compile-time check: TCPServer implements listener.Listener
-var _ listener.Listener = (*TCPServer)(nil)
+type WebSocketMessageType int
 
-// TCPServer is a TLS ingress port where agents dial in.
-type TCPServer struct {
-	Host           string                    `json:"host"`
-	GroupDispatch  bool                      `json:"group_dispatch"`
-	Port           uint16                    `json:"port"`
-	AgentClients   map[string](*AgentClient) `json:"agent_clients"`
-	TimeStamp      time.Time                 `json:"timestamp"`
-	Interfaces     []string                  `json:"interfaces"`
-	Hash           string                    `json:"hash"`
-	DisableHistory bool                      `json:"disable_history"`
-	PublicIP       string                    `json:"public_ip"`
-	ShellPath      string                    `json:"shell_path"`
-	// ProjectID is the id of the storage.Project this listener is scoped
-	// to. Empty for listeners created via the pre-redesign config path —
-	// the agent-handshake code falls back to the "default" project slug
-	// in that case. P5 makes this field non-empty at construction time.
-	ProjectID  string        `json:"project_id"`
-	hashFormat string        `json:"-"`
-	stopped    chan struct{} `json:"-"`
-}
+const (
+	CLIENT_CONNECTED WebSocketMessageType = iota
+	CLIENT_DUPLICATED
+	SERVER_DUPLICATED
+)
 
-func (s *TCPServer) GetHash() string { return s.Hash }
-func (s *TCPServer) GetHost() string { return s.Host }
-func (s *TCPServer) GetPort() uint16 { return s.Port }
-
-// CreateTCPServer registers a new TLS listener. Agents dial in with
-// TLS+protobuf; no plain-TCP fallback is accepted.
-func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory bool, PublicIP string, ShellPath string) *TCPServer {
-	service := fmt.Sprintf("%s:%d", host, port)
-
-	if _, ok := Ctx.Servers[hash.MD5(service)]; ok {
-		log.Error("The server (%s) already exists", service)
-		return nil
-	}
-
-	// Default hashFormat
-	if hashFormat == "" {
-		hashFormat = "%i %u %m %o %t"
-	}
-
-	tcpServer := &TCPServer{
-		Host:           host,
-		Port:           port,
-		GroupDispatch:  true,
-		AgentClients:   make(map[string](*AgentClient)),
-		Interfaces:     []string{},
-		TimeStamp:      time.Now(),
-		hashFormat:     hashFormat,
-		Hash:           hash.MD5(fmt.Sprintf("%s:%d", host, port)),
-		stopped:        make(chan struct{}, 1),
-		DisableHistory: disableHistory,
-		PublicIP:       PublicIP,
-		ShellPath:      ShellPath,
-	}
-
-	Ctx.Servers[hash.MD5(service)] = tcpServer
-
-	// Gather listening interfaces
-	tcpServer.Interfaces = network.GatherInterfacesList(tcpServer.Host)
-
-	// Fetch real public IP address if not specified
-	if tcpServer.PublicIP == "" {
-		ip, err := network.GetPublicIP()
-		if err != nil {
-			log.Error("Public IP Detection failed: %s", err.Error())
-		}
-		tcpServer.PublicIP = ip
-	}
-
-	// Use /bin/bash if no ShellPath was specified
-	if tcpServer.ShellPath == "" {
-		tcpServer.ShellPath = "/bin/bash"
-	}
-
-	if _, err := net.ResolveTCPAddr("tcp4", service); err != nil {
-		log.Error("Resolve TCP address failed: %s", err)
-		DeleteServer(tcpServer)
-		return nil
-	}
-
-	probe, err := net.Listen("tcp", service)
-	if err != nil {
-		log.Error("Listen failed: %s", err)
-		DeleteServer(tcpServer)
-		return nil
-	}
-	probe.Close()
-
-	return tcpServer
-}
-
-func (s *TCPServer) Handle(conn net.Conn) {
-	client := CreateAgentClient(conn, AgentClientConfig{
-		HashFormat:     s.hashFormat,
-		ShellPath:      s.ShellPath,
-		IngressAddr:    fmt.Sprintf("%s:%d", s.Host, s.Port),
-		ProjectID:      s.ProjectID,
-		DisableHistory: s.DisableHistory,
-	}, s)
-	handleAgentConnection(client, s)
-}
-
-// handleAgentConnection is the shared post-accept pipeline the legacy
-// TCPServer and the new AgentService both call. It runs enrollment,
-// gathers client info, persists host + session rows, and registers the
-// client on its owner.
-func handleAgentConnection(client *AgentClient, server *TCPServer) {
+// handleAgentConnection is the shared post-accept pipeline every agent
+// connection runs through once the ingress dispatcher has given us a
+// live net.Conn speaking the protobuf protocol. Enrollment →
+// GatherClientInfo → host + session persistence → service
+// registration → message-dispatch goroutine.
+func handleAgentConnection(client *AgentClient) {
 	// Optional enrollment handshake. If the agent was built with
 	// credential support it sends AgentEnrollRequest first; we redeem
 	// and reply with AgentEnrollResponse. Legacy agents stay silent
@@ -164,168 +61,33 @@ func handleAgentConnection(client *AgentClient, server *TCPServer) {
 	}
 
 	log.Info("Gathering information from client...")
-	if client.GatherClientInfo(client.HashFormat) {
-		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
-		ctx := context.Background()
-		UpsertHostForAgent(ctx, client)
-		PersistSessionForAgent(ctx, client)
-		if server != nil {
-			server.AddAgentClient(client)
-		} else if agentSvc != nil {
-			agentSvc.addClient(client)
-		}
-		recordSessionOpen(client)
-	} else {
+	if !client.GatherClientInfo(client.HashFormat) {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())
 		client.Close()
-	}
-}
-
-func (s *TCPServer) Run() {
-	service := fmt.Sprintf("%s:%d", s.Host, s.Port)
-
-	certBuilder := new(strings.Builder)
-	keyBuilder := new(strings.Builder)
-	crypto.Generate(certBuilder, keyBuilder)
-
-	pemContent := []byte(fmt.Sprint(certBuilder))
-	keyContent := []byte(fmt.Sprint(keyBuilder))
-
-	cert, err := tls.X509KeyPair(pemContent, keyContent)
-	if err != nil {
-		log.Error("Listener failed to load keys: %s", err)
-		DeleteServer(s)
 		return
 	}
-	tlsConfig := tls.Config{Certificates: []tls.Certificate{cert}}
-	tlsConfig.Rand = rand.Reader
 
-	ln, err := tls.Listen("tcp", service, &tlsConfig)
-	if err != nil {
-		log.Error("Listen failed: %s", err)
-		DeleteServer(s)
-		return
-	}
-	log.L.Info("listener_ready",
-		"hash", s.Hash,
-		"address", service,
-		"interfaces", s.Interfaces,
-		"public_ip", s.PublicIP,
-		"shell", s.ShellPath,
-	)
-
-	for {
-		select {
-		case <-s.stopped:
-			ln.Close()
-			return
-		default:
-			conn, err := ln.Accept()
-			if err != nil {
-				continue
-			}
-			go s.Handle(conn)
-		}
-	}
-}
-
-func (s *TCPServer) OnelineDesc() string {
-	var buffer bytes.Buffer
-	buffer.WriteString(
-		fmt.Sprintf(
-			"%s:%d (%d online clients)",
-			s.Host,
-			s.Port,
-			len(s.AgentClients),
-		),
-	)
-	return buffer.String()
-}
-
-func (s *TCPServer) Stop() {
-	log.Info("Stopping server: %s", s.OnelineDesc())
-	s.stopped <- struct{}{}
-
-	for _, client := range s.AgentClients {
-		s.DeleteAgentClient(client)
-	}
-}
-
-type WebSocketMessageType int
-
-const (
-	CLIENT_CONNECTED WebSocketMessageType = iota
-	CLIENT_DUPLICATED
-	SERVER_DUPLICATED
-)
-
-func (s *TCPServer) NotifyWebSocketDuplicateAgentClient(client *AgentClient) {
-	// WebSocket Broadcast
-	type ClientDuplicateMessage struct {
-		Client     AgentClient
-		ServerHash string
-	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_DUPLICATED,
-		Data: ClientDuplicateMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	if Ctx.NotifyWebSocket != nil {
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-func (s *TCPServer) NotifyWebSocketOnlineAgentClient(client *AgentClient) {
-	// WebSocket Broadcast
-	type ClientOnlineMessage struct {
-		Client     AgentClient
-		ServerHash string
-	}
-	msg, _ := json.Marshal(WebSocketMessage{
-		Type: CLIENT_CONNECTED,
-		Data: ClientOnlineMessage{
-			Client:     *client,
-			ServerHash: s.Hash,
-		},
-	})
-	// Notify to all websocket clients
-	if Ctx.NotifyWebSocket != nil {
-		Ctx.NotifyWebSocket.Broadcast(msg)
-	}
-}
-
-// Encrypted clients
-func (s *TCPServer) AddAgentClient(client *AgentClient) {
-	client.GroupDispatch = s.GroupDispatch
-	if _, exists := s.AgentClients[client.Hash]; exists {
-		log.Error("Duplicated income connection detected!")
-
-		// Respond to agent that the client is duplicated
-		err := client.Send(&agentpb.Envelope{
-			Payload: &agentpb.Envelope_DuplicateClient{
-				DuplicateClient: &agentpb.DuplicateClientNotice{},
-			},
-		})
-
-		if err != nil {
-			// TODO: handle network error
-			log.Error("Network error: %s", err)
-		}
-
-		s.NotifyWebSocketDuplicateAgentClient(client)
-		client.Close()
+	log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
+	ctx := context.Background()
+	UpsertHostForAgent(ctx, client)
+	PersistSessionForAgent(ctx, client)
+	if agentSvc != nil {
+		agentSvc.addClient(client)
 	} else {
-		log.Success("Encrypted fire in the hole: %s", client.OnelineDesc())
-		s.AgentClients[client.Hash] = client
-		s.NotifyWebSocketOnlineAgentClient(client)
-		// Message Dispatcher
-		go func(client *AgentClient) { AgentMessageDispatcher(client) }(client)
+		// Without a service registered the connection has nowhere to
+		// live — close instead of leaking the goroutine.
+		log.Warn("no AgentService registered; dropping %s", client.conn.RemoteAddr())
+		client.Close()
+		return
 	}
+	recordSessionOpen(client)
 }
 
+// AgentMessageDispatcher is the per-connection read loop. Every
+// envelope the agent sends after enrollment is routed here; payload
+// types split across process control, tunnel I/O, file / exec RPC
+// responses, and the in-band session renewal handshake. The function
+// runs on its own goroutine per agent and returns when Recv fails.
 func AgentMessageDispatcher(client *AgentClient) {
 	for {
 		env, err := client.Recv()
@@ -422,7 +184,6 @@ func AgentMessageDispatcher(client *AgentClient) {
 				}
 			}
 		case *agentpb.Envelope_TunnelConnectRequest:
-			// Push tunnel: agent accepted a connection, server dials local target
 			token := p.TunnelConnectRequest.TunnelId
 			address := p.TunnelConnectRequest.Address
 			if tc, exists := Ctx.PushTunnelConfig[address]; exists {
@@ -493,9 +254,6 @@ func AgentMessageDispatcher(client *AgentClient) {
 			log.Error("%s", p.Socks5CreateFailed.Reason)
 
 		case *agentpb.Envelope_SysInfoResponse:
-			// Cache the sample in memory; the Topology / Hosts pages
-			// pick it up on their next request. Zero persistence
-			// here — time-series storage lands in PR3.
 			if p.SysInfoResponse != nil {
 				PutSysInfo(client.Hash, p.SysInfoResponse.Info)
 			}
@@ -522,24 +280,7 @@ func AgentMessageDispatcher(client *AgentClient) {
 			}
 
 		case *agentpb.Envelope_SessionRenewRequest:
-			// In-band session rotation. The agent has decided its current
-			// session_token is nearing expiry and wants a fresh one
-			// without tearing down the TLS connection. We validate the
-			// token the agent echoed, call the enrollment service to
-			// rotate, and send back the new plaintext in a
-			// SessionRenewResponse addressed to the same request id.
 			handleSessionRenew(client, env.RequestId, p.SessionRenewRequest)
 		}
 	}
-}
-
-func (s *TCPServer) DeleteAgentClient(client *AgentClient) {
-	delete(s.AgentClients, client.Hash)
-	DropSysInfo(client.Hash)
-	MarkSessionDisconnected(context.Background(), client)
-	client.Close()
-}
-
-func (s *TCPServer) GetAllAgentClients() map[string](*AgentClient) {
-	return s.AgentClients
 }

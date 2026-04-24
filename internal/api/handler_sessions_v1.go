@@ -31,13 +31,12 @@ type execResponse struct {
 	Output string `json:"output"`
 }
 
-// collectAllSessions returns every agent session across every listener.
+// collectAllSessions returns every connected agent.
 func collectAllSessions() []interface{} {
-	out := []interface{}{}
-	for _, server := range core.GetServers() {
-		for _, c := range server.AgentClients {
-			out = append(out, c)
-		}
+	agents := core.AllAgents()
+	out := make([]interface{}, 0, len(agents))
+	for _, c := range agents {
+		out = append(out, c)
 	}
 	return out
 }
@@ -88,12 +87,10 @@ func GetSessionV1(c *gin.Context) {
 // @Router      /api/v1/sessions/{id} [delete]
 func DeleteSessionV1(c *gin.Context) {
 	hash := c.Param("id")
-	for _, server := range core.GetServers() {
-		if client, ok := server.AgentClients[hash]; ok {
-			core.DeleteAgentClient(client)
-			c.Status(http.StatusNoContent)
-			return
-		}
+	if client := core.FindAgentClientByHash(hash); client != nil {
+		core.DeleteAgentClient(client)
+		c.Status(http.StatusNoContent)
+		return
 	}
 	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
@@ -119,30 +116,28 @@ func ExecSessionV1(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "command is required"})
 		return
 	}
-	for _, server := range core.GetServers() {
-		if client, ok := server.AgentClients[hash]; ok {
-			start := time.Now().UTC()
-			output := client.System(req.Command)
-			dur := time.Since(start).Milliseconds()
-			RecordActivity(c, ActivityInput{
-				Category:    storage.CategoryCommand,
-				Action:      "command.exec",
-				TargetType:  "session",
-				TargetID:    client.Hash,
-				TargetLabel: client.OnelineDesc(),
-				SessionID:   client.Hash,
-				DurationMs:  &dur,
-				At:          start,
-				Meta: map[string]any{
-					"command":      req.Command,
-					"stdout_bytes": len(output),
-					"host":         client.Host,
-					"remote_addr":  clientAddrOf(client),
-				},
-			})
-			c.JSON(http.StatusOK, execResponse{Output: output})
-			return
-		}
+	if client := core.FindAgentClientByHash(hash); client != nil {
+		start := time.Now().UTC()
+		output := client.System(req.Command)
+		dur := time.Since(start).Milliseconds()
+		RecordActivity(c, ActivityInput{
+			Category:    storage.CategoryCommand,
+			Action:      "command.exec",
+			TargetType:  "session",
+			TargetID:    client.Hash,
+			TargetLabel: client.OnelineDesc(),
+			SessionID:   client.Hash,
+			DurationMs:  &dur,
+			At:          start,
+			Meta: map[string]any{
+				"command":      req.Command,
+				"stdout_bytes": len(output),
+				"host":         client.Host,
+				"remote_addr":  clientAddrOf(client),
+			},
+		})
+		c.JSON(http.StatusOK, execResponse{Output: output})
+		return
 	}
 	// Recorded so a miss on a stale / unknown session shows up in the
 	// activity feed — useful for detecting drift between UI and agents.

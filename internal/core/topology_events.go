@@ -57,20 +57,11 @@ func InstallTopologyObserver() func() {
 // the 1 Hz stats loop to decide which projects receive a broadcast.
 func activeProjectSet() map[string]struct{} {
 	out := map[string]struct{}{}
-	if Ctx == nil {
-		return out
-	}
-	for _, s := range Ctx.Servers {
-		srv, ok := s.(*TCPServer)
-		if !ok {
+	for _, ac := range allAgentClients() {
+		if ac == nil || ac.ProjectID == "" {
 			continue
 		}
-		for _, ac := range srv.GetAllAgentClients() {
-			if ac == nil || ac.ProjectID == "" {
-				continue
-			}
-			out[ac.ProjectID] = struct{}{}
-		}
+		out[ac.ProjectID] = struct{}{}
 	}
 	return out
 }
