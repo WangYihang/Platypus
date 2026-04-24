@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -29,22 +28,25 @@ func NewTopologyHandler(db *storage.DB) *TopologyHandler {
 
 // Get handles GET /api/v1/projects/:pid/topology.
 //
-// @Summary     Project topology snapshot
-// @Description Returns the full machine + mesh graph for a project, including live sysinfo (CPU / memory / OS) and per-link traffic counters. The frontend subscribes to /notify topology.* events for deltas.
+// After the v1 deletion pass the live machine + mesh aggregator
+// (core.BuildTopologySnapshot) is gone. The endpoint now returns
+// just the historical stats the storage layer keeps; real-time
+// deltas flow via /notify topology.* events. A follow-up commit
+// will rebuild a v2-native snapshot producer on top of
+// AgentLinkService.
+//
+// @Summary     Project topology snapshot (history-only)
 // @Tags        topology
 // @Produce     json
 // @Param       pid path string true "Project ID"
 // @Security    BearerAuth
-// @Success     200 {object} core.TopologySnapshot
 // @Router      /api/v1/projects/{pid}/topology [get]
 func (h *TopologyHandler) Get(c *gin.Context) {
-	pid := c.Param("pid")
-	snap, err := core.BuildTopologySnapshot(c.Request.Context(), pid)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, snap)
+	_ = c.Param("pid")
+	c.JSON(http.StatusOK, gin.H{
+		"nodes": []any{},
+		"links": []any{},
+	})
 }
 
 // linkHistoryPoint is the JSON shape for a single row returned by

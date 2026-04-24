@@ -1,66 +1,33 @@
 package core
 
 import (
-	"strings"
-
 	"github.com/WangYihang/Platypus/internal/app"
+	"github.com/WangYihang/Platypus/internal/enrollment"
 )
 
-// WindowSize represents terminal dimensions for the websocket-driven
-// remote shell. Browsers serialise this as JSON on a TTY-resize message.
-type WindowSize struct {
-	Columns int
-	Rows    int
-}
-
-// Ctx is the global application state.
+// Ctx is the process-wide application container, set by main()
+// exactly once via CreateContext(). Callers that need the
+// database, session registry, or notify fan-out reach for this.
+//
+// The v1 agent machinery that used to hang off Ctx (AgentClient
+// maps, EnvelopeQueue, etc.) is gone; Ctx survives only because
+// the distributor + some REST handlers still stash cross-cutting
+// state here rather than threading it through every call.
 var Ctx *app.App
 
-// allAgentClients returns a snapshot of every live AgentClient the
-// process knows about. Iteration is safe — callers get a shallow copy
-// of the agent pointers and don't hold the AgentService lock.
-func allAgentClients() map[string]*AgentClient {
-	if agentSvc == nil {
-		return nil
-	}
-	return agentSvc.Snapshot()
-}
+// CreateContext is the one-time initialiser main() calls during
+// bootstrap. No-op today — App.New already returns a live object;
+// this entry point stays so call sites read cleanly and because
+// future wiring (lifecycle hooks, backgrounding jobs) will need a
+// place to land.
+func CreateContext() {}
 
-// AllAgents is the exported version of allAgentClients. It exists so
-// api/* handlers that used to iterate Ctx.Servers can query the
-// registered AgentService without reaching into core internals.
-func AllAgents() map[string]*AgentClient { return allAgentClients() }
+// enrollSvc is the singleton enrollment.Service used by the
+// distributor's install-token → PAT hand-off. Set once by
+// SetEnrollment during bootstrap.
+var enrollSvc *enrollment.Service
 
-func FindAgentClientByHash(hash string) *AgentClient {
-	if hash == "" {
-		return nil
-	}
-	for _, client := range allAgentClients() {
-		if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
-			return client
-		}
-	}
-	return nil
-}
-
-func FindAgentClientByAlias(alias string) *AgentClient {
-	if alias == "" {
-		return nil
-	}
-	for _, client := range allAgentClients() {
-		if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
-			return client
-		}
-	}
-	return nil
-}
-
-// DeleteAgentClient removes the client from the service and fires the
-// disconnect bookkeeping (activity record, session row stamp). Callers
-// in the message-dispatch loop invoke this when Recv returns an error.
-func DeleteAgentClient(c *AgentClient) {
-	if agentSvc == nil || c == nil {
-		return
-	}
-	agentSvc.removeClient(c)
-}
+// SetEnrollment wires the enrollment service into this package.
+// Safe to call before any request hits the distributor because
+// main() runs both before starting the HTTP server.
+func SetEnrollment(svc *enrollment.Service) { enrollSvc = svc }

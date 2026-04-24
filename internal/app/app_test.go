@@ -16,15 +16,6 @@ func TestNewApp(t *testing.T) {
 	if a.Sessions == nil {
 		t.Error("sessions manager not initialized")
 	}
-	if a.Interacting == nil {
-		t.Error("interacting mutex not initialized")
-	}
-	if a.EnvelopeQueue == nil {
-		t.Error("envelope queue not initialized")
-	}
-	if a.Socks5Servers == nil {
-		t.Error("socks5 servers map not initialized")
-	}
 }
 
 func TestFindSessionEmpty(t *testing.T) {

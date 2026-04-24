@@ -388,8 +388,14 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
 	api.RegisterSwaggerRoutes(rest)
 
-	core.StartTopologyStream()
-	core.InstallTopologyObserver()
+	// TopologyStream + observer were v1 — they relied on the
+	// AgentClient map and legacy sysinfo cache. Rebuilt on top of
+	// v2 in Phase IV (mesh hardening) which is the right layer for
+	// topology telemetry anyway.
+
+	// Point the info endpoint at our live agent link registry so
+	// /api/v1/info's session_count reflects actual v2 connections.
+	api.LiveAgentCounter = func() int { return len(agentLinkSvc.All()) }
 
 	log.L.Info("api_ready",
 		"bootstrap_secret", auth.GetSecret(),

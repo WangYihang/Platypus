@@ -6,9 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/pkg/version"
 )
+
+// LiveAgentCounter is set by main() so the info handler can report
+// the live session count without pulling in a direct dependency on
+// core.AgentLinkService. Defaults to "always zero" for tests that
+// don't bother wiring it.
+var LiveAgentCounter func() int = func() int { return 0 }
 
 // startedAt records when the process came up. Captured at import time
 // because the info endpoint has no better place to latch it and we want
@@ -49,6 +54,6 @@ func GetServerInfoV1(c *gin.Context) {
 		Date:         version.Date,
 		StartedAt:    startedAt.UTC().Format(time.RFC3339),
 		PublicAddr:   PublicAddr,
-		SessionCount: len(core.AllAgents()),
+		SessionCount: LiveAgentCounter(),
 	})
 }
