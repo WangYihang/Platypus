@@ -387,12 +387,17 @@ export async function CreateTunnel(
     });
 }
 
-// ---------- Terminal (ported opcode logic from ws_terminal.go) ----------
-// The /ws/:hash WebSocket uses subprotocol "tty" and binary frames shaped
-// [opcode byte][payload...]:
-//   '0' = INPUT (c→s) / OUTPUT (s→c)
-//   '1' = RESIZE_TERMINAL {cols,rows} (c→s) / SET_WINDOW_TITLE (s→c)
-//   '2' = SET_PREFERENCES (s→c)
+// ---------- Terminal (v2 /api/v1/terminal/:agent_id/ws) -----------------
+// The v2 browser terminal endpoint (internal/api/handler_terminal_v2.go)
+// uses subprotocol "tty" and binary frames shaped [opcode byte][payload...]:
+//   '0' = INPUT (c→s) / OUTPUT & STDERR (s→c)
+//   '1' = RESIZE {columns,rows}  (c→s; also required as the FIRST frame)
+//   '2'/'3' = pause/resume (ignored, legacy zmodem)
+//
+// The server blocks on the first WS read and uses that resize frame to
+// learn cols/rows before opening the agent-side PROCESS_OPEN stream —
+// Terminal.tsx sends a ResizeTerminal() call synchronously after
+// OpenTerminal resolves, which naturally satisfies that invariant.
 
 const OP_INPUT = 0x30; // '0'
 const OP_RESIZE = 0x31; // '1'
@@ -413,11 +418,11 @@ function wsURL(path: string): string {
 
 export async function OpenTerminal(sessionHash: string): Promise<string> {
     const termID = `t${++termSeq}`;
-    // Browsers can't set Bearer headers on a WS upgrade, so trade the
-    // token for a one-shot ticket first.
-    const { ticket } = await apiJSON<{ ticket: string }>("/api/v1/ws/ticket", { method: "POST" });
+    // v2 terminal has no ticket/Bearer gate — the server accepts the
+    // WS upgrade directly and uses the first resize frame to open the
+    // agent-side PROCESS_OPEN stream.
     const ws = new WebSocket(
-        wsURL("/ws/" + encodeURIComponent(sessionHash)) + "?ticket=" + encodeURIComponent(ticket),
+        wsURL("/api/v1/terminal/" + encodeURIComponent(sessionHash) + "/ws"),
         ["tty"],
     );
     ws.binaryType = "arraybuffer";
@@ -432,12 +437,11 @@ export async function OpenTerminal(sessionHash: string): Promise<string> {
         const op = buf[0];
         const payload = buf.subarray(1);
         switch (op) {
-            case 0x30: // OUTPUT → base64-encode to match the desktop Wails contract
-                // (Terminal.tsx does atob(b64)).
+            case 0x30: // OUTPUT / STDERR → base64-encode to match the desktop
+                // Wails contract (Terminal.tsx does atob(b64)).
                 emitEvent(`terminal:output:${termID}`, uint8ToBase64(payload));
                 break;
-            // 0x31 SET_WINDOW_TITLE and 0x32 SET_PREFERENCES are currently ignored
-            // (desktop side also doesn't surface them to the page).
+            // Other opcodes (title, prefs) aren't emitted by the v2 handler.
         }
     });
 
