@@ -6,6 +6,7 @@ toolchain go1.25.9
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/coder/websocket v1.8.14
 	github.com/creack/pty v1.1.24
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gin-contrib/cors v1.7.7
