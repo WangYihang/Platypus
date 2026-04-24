@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,17 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 )
+
+// infoSmokeReq runs a GET with an optional Bearer token.
+func infoSmokeReq(_ *testing.T, r *gin.Engine, method, path, tok string) *httptest.ResponseRecorder {
+	req, _ := http.NewRequest(method, path, nil)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
 
 func setupInfoV1Router(t *testing.T) (*gin.Engine, string) {
 	t.Helper()
@@ -22,7 +34,7 @@ func setupInfoV1Router(t *testing.T) (*gin.Engine, string) {
 
 func TestInfoV1_AuthRequired(t *testing.T) {
 	r, _ := setupInfoV1Router(t)
-	w := smokeReq(t, r, "GET", "/api/v1/info", "", "")
+	w := infoSmokeReq(t, r, "GET", "/api/v1/info", "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without token, got %d", w.Code)
 	}
@@ -30,7 +42,7 @@ func TestInfoV1_AuthRequired(t *testing.T) {
 
 func TestInfoV1_Happy(t *testing.T) {
 	r, tok := setupInfoV1Router(t)
-	w := smokeReq(t, r, "GET", "/api/v1/info", tok, "")
+	w := infoSmokeReq(t, r, "GET", "/api/v1/info", tok)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}

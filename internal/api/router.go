@@ -4,46 +4,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterV1Routes registers all /api/v1/ routes with authentication.
-// Call this after CreateRESTfulAPIServer() to add the new endpoints.
+// RegisterV1Routes wires the v1 API surface that the v2 rewrite did
+// NOT delete: server info, the WebSocket auth-ticket exchange. All
+// per-session endpoints (sessions CRUD, file R/W, tunnels, etc.) have
+// moved to /api/v1/agents/:agent_id/* (handler_file_v2.go,
+// handler_rpc_v2.go, handler_terminal_v2.go). handler_sessions_v2
+// still owns /api/v1/projects/:pid/sessions for the admin listing.
 func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 	// Public: token endpoint
 	engine.POST("/api/v1/auth/token", auth.TokenEndpoint())
 
-	// Protected routes
 	v1 := engine.Group("/api/v1")
 	v1.Use(auth.Middleware())
 	{
-		// Server info
 		v1.GET("/info", GetServerInfoV1)
 
-		// Sessions
-		v1.GET("/sessions", ListSessionsV1)
-		v1.GET("/sessions/:id", GetSessionV1)
-		v1.DELETE("/sessions/:id", DeleteSessionV1)
-		v1.PATCH("/sessions/:id", PatchSession)
-		v1.POST("/sessions/:id/exec", ExecSessionV1)
-		v1.POST("/sessions/:id/gather", GatherSession)
-		v1.POST("/sessions/dispatch", DispatchCommand)
-
-		// File operations
-		v1.GET("/sessions/:id/files", ReadFile)
-		v1.POST("/sessions/:id/files", WriteFile)
-		v1.DELETE("/sessions/:id/files", DeleteFileHandler)
-		v1.GET("/sessions/:id/files/size", GetFileSize)
-		v1.GET("/sessions/:id/files/list", ListDirHandler)
-		v1.GET("/sessions/:id/files/stat", StatHandler)
-		v1.POST("/sessions/:id/files/rename", RenameFileHandler)
-		v1.POST("/sessions/:id/files/mkdir", MkdirHandler)
-		v1.POST("/sessions/:id/files/chmod", ChmodHandler)
-
-		// Tunnels
-		v1.GET("/sessions/:id/tunnels", ListTunnels)
-		v1.POST("/sessions/:id/tunnels", CreateTunnel)
-
-		// WebSocket ticket issue — trades the Bearer token for a one-shot
-		// short-lived ticket that browsers can pass via ?ticket= when
-		// upgrading /ws/:hash or /notify.
+		// WebSocket ticket — browsers trade a Bearer token for a
+		// short-lived ?ticket= URL param so they can upgrade
+		// /notify without setting Authorization headers.
 		v1.POST("/ws/ticket", IssueWSTicket(auth))
 	}
 }
