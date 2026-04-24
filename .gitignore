@@ -28,6 +28,12 @@ go.work.sum
 build/
 dist/
 
+# Stray binaries at repo root left by `go build ./...` — the
+# Makefile puts proper builds under build/, but ad-hoc local
+# invocations drop them here.
+/platypus-server
+/platypus-agent
+
 # Wails desktop — un-ignore project scaffold under desktop/build/
 # (global build/ rule above would otherwise hide platform configs).
 # Desktop-specific build/bin, node_modules, frontend/dist live in desktop/.gitignore.
