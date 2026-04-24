@@ -23,11 +23,6 @@ export const BACKEND_PORT = 7332;
 export const FRONTEND_HOST = "127.0.0.1";
 export const FRONTEND_PORT = 5173;
 
-// Listener bound by the seed step. Picked away from config.yml's
-// :13337 default so a manually-running dev server doesn't collide.
-export const SEEDED_LISTENER_HOST = "127.0.0.1";
-export const SEEDED_LISTENER_PORT = 13399;
-
 // Seeded admin credentials. Specs log in via the UI with these.
 export const ADMIN_USERNAME = "admin";
 export const ADMIN_PASSWORD = "admin12345";

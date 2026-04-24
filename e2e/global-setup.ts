@@ -1,5 +1,4 @@
 import { ChildProcess, spawn } from "node:child_process";
-import * as fs from "node:fs";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import * as YAML from "yaml";
@@ -20,21 +19,12 @@ import {
     MESH_PSK,
     MESH_PSK_FILENAME,
     SCREENSHOT_DIR,
-    SEEDED_LISTENER_HOST,
-    SEEDED_LISTENER_PORT,
     SEEDED_PROJECTS,
     SERVER_BINARY,
     backendURL,
     makeTmpdir,
 } from "./fixtures/env";
-import {
-    bootstrapAdmin,
-    createListener,
-    createProject,
-    listProjects,
-    waitForBackend,
-    waitForSessions,
-} from "./fixtures/api";
+import { bootstrapAdmin, createProject, listProjects, waitForBackend } from "./fixtures/api";
 
 // globalSetup is the once-per-run bootstrapper. It:
 //   1. asserts the backend + agent binaries exist (build them via make)
@@ -43,18 +33,19 @@ import {
 //   3. captures the bootstrap secret from stdout
 //   4. waits for the REST API to respond
 //   5. POSTs /auth/bootstrap to create the admin user
-//   6. POSTs /projects to seed two projects + one listener
-//   7. spawns one ./build/platypus-agent against the seeded listener
-//      and polls the sessions API until the session row appears
+//   6. POSTs /projects to seed the "staging" project (the "default"
+//      project is auto-seeded by the server on first boot)
 //
 // Outputs (via process.env) consumed by the rest of the run:
-//   PLATYPUS_E2E_TMPDIR              temp dir holding config + db; teardown removes it
-//   PLATYPUS_E2E_PID                 backend PID; teardown SIGKILLs
-//   PLATYPUS_E2E_AGENT_PID           baseline agent PID; teardown SIGTERMs
-//   PLATYPUS_E2E_PROJECTS            JSON of seeded projects { slug, id }
-//   PLATYPUS_E2E_BASELINE_SESSION    session_id of the baseline agent
-//   PLATYPUS_E2E_BASELINE_HOST       host_id of the baseline agent
-//   PLATYPUS_E2E_ADMIN_TOKEN         a fresh JWT access token for spec-side API calls
+//   PLATYPUS_E2E_TMPDIR   temp dir holding config + db; teardown removes it
+//   PLATYPUS_E2E_PID      backend PID; teardown SIGKILLs
+//   PLATYPUS_E2E_PROJECTS JSON of seeded projects { slug, id }
+//   PLATYPUS_E2E_ADMIN_TOKEN a fresh JWT access token for spec-side API calls
+//
+// Baseline agent + per-session-fixtures are deliberately not started
+// here — they now require PAT-based enrollment against the project
+// CA, which is a larger rewrite landing in a follow-up commit. Specs
+// that need live sessions spawn their own agents via fixtures/agent.ts.
 //
 // Frontend lifecycle is Playwright's webServer (see playwright.config.ts)
 // — no double-managing.
@@ -221,76 +212,10 @@ export default async function globalSetup() {
     }
     process.env.PLATYPUS_E2E_PROJECTS = JSON.stringify(seeded);
 
-    // One seeded listener in the first project. Bound on a free port
-    // (13399) to avoid colliding with config.yml's :13337.
-    const defaultProject = seeded[0];
-    await createListener(
-        backendURL,
-        auth.access_token,
-        defaultProject.id,
-        SEEDED_LISTENER_HOST,
-        SEEDED_LISTENER_PORT,
-    );
-
-    // ---- Baseline agent --------------------------------------------------
-    //
-    // Spawn one platypus-agent against the seeded listener so every
-    // spec sees populated Hosts/Sessions/Overview state. Agent --token
-    // is required by the CLI but unused by Connect (internal/agent/agent.go:52).
-    // The connection is TLS+protobuf with InsecureSkipVerify, so no CA
-    // setup is needed.
-    const agentHome = path.join(tmpdir, "baseline-agent");
-    fs.mkdirSync(agentHome, { recursive: true });
-    const agent = spawn(
-        AGENT_BINARY,
-        [
-            "--host",
-            BACKEND_HOST,
-            "--port",
-            String(SEEDED_LISTENER_PORT),
-            "--token",
-            "e2e",
-            "--identity-dir",
-            agentHome,
-        ],
-        {
-            cwd: tmpdir,
-            stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env },
-        },
-    );
-    process.env.PLATYPUS_E2E_AGENT_PID = String(agent.pid);
-
-    const agentReaper = () => {
-        try {
-            if (agent.pid) process.kill(agent.pid, "SIGKILL");
-        } catch {
-            /* already gone */
-        }
-    };
-    process.once("exit", agentReaper);
-    process.once("SIGINT", agentReaper);
-    process.once("SIGTERM", agentReaper);
-
-    if (process.env.E2E_VERBOSE_AGENT) {
-        agent.stdout?.on("data", (c: Buffer) => process.stdout.write(`[agent] ${c}`));
-        agent.stderr?.on("data", (c: Buffer) => process.stderr.write(`[agent!] ${c}`));
-    }
-
     // Reuse the bootstrap's access_token for spec-side API calls.
     // Calling /auth/login back-to-back can race the refresh-token
     // persist (500 "persist refresh") under the same DB.
     process.env.PLATYPUS_E2E_ADMIN_TOKEN = auth.access_token;
-
-    const live = await waitForSessions(
-        backendURL,
-        auth.access_token,
-        defaultProject.id,
-        1,
-        15_000,
-    );
-    process.env.PLATYPUS_E2E_BASELINE_SESSION = live[0].id;
-    process.env.PLATYPUS_E2E_BASELINE_HOST = live[0].host_id;
 }
 
 // Re-export the backend handle for teardown via the env-passed PID.

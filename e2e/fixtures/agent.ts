@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test as base } from "@playwright/test";
 
-import { AGENT_BINARY, BACKEND_HOST, MESH_PSK_FILENAME, SEEDED_LISTENER_PORT, backendURL } from "./env";
+import { AGENT_BINARY, BACKEND_HOST, MESH_PSK_FILENAME, BACKEND_PORT, backendURL } from "./env";
 import { listProjectSessions, waitForSessions } from "./api";
 
 // startMeshAgent spawns an agent with mesh networking enabled.
@@ -33,7 +33,7 @@ export async function startMeshAgent(
         "--host",
         BACKEND_HOST,
         "--port",
-        String(SEEDED_LISTENER_PORT),
+        String(BACKEND_PORT),
         "--token",
         opts.token || "e2e-mesh",
         "--mesh-listen",
@@ -51,7 +51,7 @@ export async function startMeshAgent(
             "--host",
             BACKEND_HOST,
             "--port",
-            String(SEEDED_LISTENER_PORT),
+            String(BACKEND_PORT),
             "--token",
             opts.token || "e2e-mesh",
             "--mesh-listen",
@@ -117,7 +117,7 @@ export async function startZeroConfigAgent(
             "--host",
             BACKEND_HOST,
             "--port",
-            String(SEEDED_LISTENER_PORT),
+            String(BACKEND_PORT),
             "--token",
             opts.token,
             "--identity-dir",
@@ -179,7 +179,7 @@ export async function startExtraAgent(
             "--host",
             BACKEND_HOST,
             "--port",
-            String(SEEDED_LISTENER_PORT),
+            String(BACKEND_PORT),
             "--token",
             "e2e-extra",
             "--identity-dir",

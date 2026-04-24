@@ -25,13 +25,6 @@ export interface ProjectResp {
     name: string;
 }
 
-export interface ListenerResp {
-    id: string;
-    project_id: string;
-    host: string;
-    port: number;
-}
-
 async function postJSON<T>(url: string, body: unknown, token?: string): Promise<T> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -68,20 +61,6 @@ export async function createProject(
     return postJSON<ProjectResp>(
         `${backendURL}/api/v1/projects`,
         { name, slug },
-        token,
-    );
-}
-
-export async function createListener(
-    backendURL: string,
-    token: string,
-    projectID: string,
-    host: string,
-    port: number,
-): Promise<ListenerResp> {
-    return postJSON<ListenerResp>(
-        `${backendURL}/api/v1/projects/${projectID}/listeners`,
-        { host, port },
         token,
     );
 }
@@ -149,31 +128,6 @@ export async function waitForSessions(
     throw new Error(
         `expected ≥${min} live session(s) in project ${projectID} within ${timeoutMs}ms (saw ${last.length})`,
     );
-}
-
-// flagSessionForDispatch toggles the session's group_dispatch flag via
-// the legacy v1 PATCH endpoint (the same one App.web.ts:39 SetGroupDispatch
-// calls). Used by the dispatch-live spec to opt the baseline session in.
-export async function flagSessionForDispatch(
-    backendURL: string,
-    token: string,
-    sessionHash: string,
-    enabled: boolean,
-): Promise<void> {
-    const r = await fetch(
-        `${backendURL}/api/v1/sessions/${encodeURIComponent(sessionHash)}`,
-        {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ group_dispatch: enabled }),
-        },
-    );
-    if (!r.ok) {
-        throw new Error(`flag session → ${r.status}: ${await r.text()}`);
-    }
 }
 
 // waitForBackend polls the login endpoint until it returns 401 (rather
