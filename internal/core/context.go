@@ -30,6 +30,13 @@ func FindAgentClientByHash(hash string) *AgentClient {
 			}
 		}
 	}
+	if agentSvc != nil {
+		for _, client := range agentSvc.Snapshot() {
+			if strings.HasPrefix(client.Hash, strings.ToLower(hash)) {
+				return client
+			}
+		}
+	}
 	return nil
 }
 
@@ -40,6 +47,13 @@ func FindAgentClientByAlias(alias string) *AgentClient {
 	for _, s := range Ctx.Servers {
 		server := s.(*TCPServer)
 		for _, client := range server.GetAllAgentClients() {
+			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
+				return client
+			}
+		}
+	}
+	if agentSvc != nil {
+		for _, client := range agentSvc.Snapshot() {
 			if strings.HasPrefix(client.Alias, strings.ToLower(alias)) {
 				return client
 			}
@@ -65,6 +79,9 @@ func DeleteAgentClient(c *AgentClient) {
 	for _, s := range Ctx.Servers {
 		server := s.(*TCPServer)
 		server.DeleteAgentClient(c)
+	}
+	if agentSvc != nil {
+		agentSvc.removeClient(c)
 	}
 }
 

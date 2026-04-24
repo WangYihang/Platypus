@@ -67,8 +67,27 @@ type AgentClient struct {
 	Hostname  string `json:"hostname"`
 	// HostID + ProjectID are stamped by UpsertHostForAgent on successful
 	// handshake, pointing at the storage.Host row this session belongs to.
-	HostID            string               `json:"host_id"`
-	ProjectID         string               `json:"project_id"`
+	HostID string `json:"host_id"`
+	// ProjectID scopes the agent to a storage.Project. Seeded from the
+	// owning AgentService (unified-ingress) or TCPServer (legacy) at
+	// connect time, overridden by the enrollment outcome once that
+	// completes.
+	ProjectID string `json:"project_id"`
+	// HashFormat controls how the agent's unique hash is composed; see
+	// GatherClientInfo. Previously read off the owning TCPServer; now
+	// copied in at connect time so the agent doesn't depend on a
+	// server back-reference.
+	HashFormat string `json:"-"`
+	// ShellPath is the remote shell the websocket terminal launches
+	// by default.
+	ShellPath string `json:"-"`
+	// IngressAddr is the host:port the agent dialled to reach this
+	// server. Persisted on the session row for audit.
+	IngressAddr string `json:"ingress_addr"`
+	// server is retained for the duration of the unified-ingress
+	// transition so the existing DeleteAgentClient fan-out and
+	// websocket broadcast helpers keep working. PR-E removes it once
+	// AgentService owns the whole lifecycle.
 	server            *TCPServer           `json:"-"`
 	codec             *protocol.ProtoCodec `json:"-"`
 	atomLock          *sync.Mutex          `json:"-"`
@@ -76,9 +95,26 @@ type AgentClient struct {
 	currentProcessKey string               `json:"-"`
 }
 
-func CreateAgentClient(conn net.Conn, server *TCPServer, disableHistory bool) *AgentClient {
+// AgentClientConfig bundles the per-connection defaults the service
+// (or legacy TCPServer) injects when constructing a client. Zero-value
+// is a legal choice for tests.
+type AgentClientConfig struct {
+	HashFormat     string
+	ShellPath      string
+	IngressAddr    string
+	ProjectID      string
+	DisableHistory bool
+}
+
+func CreateAgentClient(conn net.Conn, cfg AgentClientConfig, server *TCPServer) *AgentClient {
 	host := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	port, _ := strconv.Atoi(strings.Split(conn.RemoteAddr().String(), ":")[1])
+	if cfg.ShellPath == "" {
+		cfg.ShellPath = "/bin/bash"
+	}
+	if cfg.HashFormat == "" {
+		cfg.HashFormat = "%i %u %m %o %t"
+	}
 	return &AgentClient{
 		conn:              conn,
 		Hash:              "",
@@ -91,12 +127,16 @@ func CreateAgentClient(conn net.Conn, server *TCPServer, disableHistory bool) *A
 		Python2:           "",
 		Python3:           "",
 		TimeStamp:         time.Now(),
+		HashFormat:        cfg.HashFormat,
+		ShellPath:         cfg.ShellPath,
+		IngressAddr:       cfg.IngressAddr,
+		ProjectID:         cfg.ProjectID,
 		server:            server,
 		codec:             protocol.NewProtoCodec(conn),
 		atomLock:          new(sync.Mutex),
 		processes:         map[string]*Process{},
 		currentProcessKey: "",
-		DisableHistory:    disableHistory,
+		DisableHistory:    cfg.DisableHistory,
 		GroupDispatch:     false,
 	}
 }
@@ -114,8 +154,8 @@ func (c *AgentClient) SetGroupDispatch(v bool)    { c.GroupDispatch = v }
 func (c *AgentClient) LockAtom()   { c.atomLock.Lock() }
 func (c *AgentClient) UnlockAtom() { c.atomLock.Unlock() }
 
-func (c *AgentClient) GetHashFormat() string { return c.server.hashFormat }
-func (c *AgentClient) GetShellPath() string  { return c.server.ShellPath }
+func (c *AgentClient) GetHashFormat() string { return c.HashFormat }
+func (c *AgentClient) GetShellPath() string  { return c.ShellPath }
 
 // Send sends a protobuf envelope to the agent.
 func (c *AgentClient) Send(env *agentpb.Envelope) error {

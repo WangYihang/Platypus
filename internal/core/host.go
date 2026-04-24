@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -55,7 +54,7 @@ func SplitAgentMachineID(reported string) (machineID string, isFallback bool) {
 // the AgentClient so downstream code (session persistence, dispatch,
 // etc.) can look it up without another round trip.
 //
-// When the TCPServer has no ProjectID set (today's legacy case — nothing
+// When the client has no ProjectID set (today's legacy case — nothing
 // writes the field yet), the "default" project is looked up by slug. If
 // even that is missing (e.g. no bootstrap has happened), we log and skip
 // — the session still works, just without a persisted Host row.
@@ -63,7 +62,7 @@ func UpsertHostForAgent(ctx context.Context, c *AgentClient) {
 	if Ctx == nil || Ctx.Storage == nil {
 		return
 	}
-	projectID, err := resolveProjectID(ctx, c.server)
+	projectID, err := resolveProjectID(ctx, c.ProjectID)
 	if err != nil {
 		log.Warn("Host upsert skipped (no project): %s", err)
 		return
@@ -95,9 +94,9 @@ func UpsertHostForAgent(ctx context.Context, c *AgentClient) {
 	})
 }
 
-func resolveProjectID(ctx context.Context, s *TCPServer) (string, error) {
-	if s != nil && s.ProjectID != "" {
-		return s.ProjectID, nil
+func resolveProjectID(ctx context.Context, preferred string) (string, error) {
+	if preferred != "" {
+		return preferred, nil
 	}
 	p, err := Ctx.Storage.Projects().GetBySlug(ctx, "default")
 	if err != nil {
@@ -107,17 +106,6 @@ func resolveProjectID(ctx context.Context, s *TCPServer) (string, error) {
 		return "", err
 	}
 	return p.ID, nil
-}
-
-// ingressAddrFor computes the host:port audit string persisted on the
-// session row. During the unified-ingress transition the TCPServer still
-// owns the port; once PR-E lands this falls back to the dispatcher's
-// PublicAddr exposed via core.AgentService.
-func ingressAddrFor(c *AgentClient) string {
-	if c == nil || c.server == nil {
-		return ""
-	}
-	return fmt.Sprintf("%s:%d", c.server.Host, c.server.Port)
 }
 
 // PersistSessionForAgent writes the session row. Requires HostID +
@@ -136,7 +124,7 @@ func PersistSessionForAgent(ctx context.Context, c *AgentClient) {
 	err := Ctx.Storage.Sessions().Insert(ctx, &storage.Session{
 		ID:             c.Hash,
 		ProjectID:      c.ProjectID,
-		IngressAddr:    ingressAddrFor(c),
+		IngressAddr:    c.IngressAddr,
 		HostID:         c.HostID,
 		Alias:          c.Alias,
 		User:           c.User,

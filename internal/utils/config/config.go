@@ -11,6 +11,38 @@ type ListenerConfig struct {
 	ShellPath      string `yaml:"shell_path"`
 }
 
+// IngressConfig binds the unified TLS ingress the server accepts all
+// agent, mesh, and admin HTTPS traffic on. The ALPN dispatcher fans
+// the accepted connections out to the relevant handlers:
+//
+//	ptps-agent → core.AgentService.Handle
+//	ptps-mesh  → mesh.Node.AcceptRaw
+//	h2/http    → gin via ingress.Dispatcher.HTTPListener()
+//
+// PublicAddr is the reachable host:port the installer template and
+// mesh auto-bootstrap advertise to remote agents. When empty it
+// falls back to Addr.
+type IngressConfig struct {
+	Addr       string `yaml:"addr"        mapstructure:"addr"`
+	Cert       string `yaml:"cert"        mapstructure:"cert"`
+	Key        string `yaml:"key"         mapstructure:"key"`
+	PublicAddr string `yaml:"public_addr" mapstructure:"public_addr"`
+
+	HashFormat     string `yaml:"hash_format"     mapstructure:"hash_format"`
+	ShellPath      string `yaml:"shell_path"      mapstructure:"shell_path"`
+	DisableHistory bool   `yaml:"disable_history" mapstructure:"disable_history"`
+}
+
+// PublicAddrOrAddr returns PublicAddr when set, otherwise Addr. This
+// is the host:port template callers should hand to the installer,
+// enrollment-response mesh peers, and /api/v1/info.
+func (c IngressConfig) PublicAddrOrAddr() string {
+	if c.PublicAddr != "" {
+		return c.PublicAddr
+	}
+	return c.Addr
+}
+
 type RESTfulConfig struct {
 	Host              string `yaml:"host"              mapstructure:"host"              validate:"required_if=Enable true"`
 	Port              uint16 `yaml:"port"              mapstructure:"port"              validate:"required_if=Enable true,min=0,max=65535"`
@@ -107,6 +139,7 @@ type MeshConfig struct {
 
 type Config struct {
 	Listeners   []ListenerConfig  `yaml:"listeners"`
+	Ingress     IngressConfig     `yaml:"ingress"`
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
 	Mesh        MeshConfig        `yaml:"mesh"`

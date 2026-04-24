@@ -123,8 +123,21 @@ func CreateTCPServer(host string, port uint16, hashFormat string, disableHistory
 }
 
 func (s *TCPServer) Handle(conn net.Conn) {
-	client := CreateAgentClient(conn, s, s.DisableHistory)
+	client := CreateAgentClient(conn, AgentClientConfig{
+		HashFormat:     s.hashFormat,
+		ShellPath:      s.ShellPath,
+		IngressAddr:    fmt.Sprintf("%s:%d", s.Host, s.Port),
+		ProjectID:      s.ProjectID,
+		DisableHistory: s.DisableHistory,
+	}, s)
+	handleAgentConnection(client, s)
+}
 
+// handleAgentConnection is the shared post-accept pipeline the legacy
+// TCPServer and the new AgentService both call. It runs enrollment,
+// gathers client info, persists host + session rows, and registers the
+// client on its owner.
+func handleAgentConnection(client *AgentClient, server *TCPServer) {
 	// Optional enrollment handshake. If the agent was built with
 	// credential support it sends AgentEnrollRequest first; we redeem
 	// and reply with AgentEnrollResponse. Legacy agents stay silent
@@ -145,18 +158,22 @@ func (s *TCPServer) Handle(conn net.Conn) {
 	if enroll.Succeeded {
 		log.Info("Agent enrolled from %s (agent_id=%s)",
 			client.conn.RemoteAddr(), enroll.AgentID)
+		if enroll.ProjectID != "" {
+			client.ProjectID = enroll.ProjectID
+		}
 	}
 
 	log.Info("Gathering information from client...")
-	if client.GatherClientInfo(s.hashFormat) {
+	if client.GatherClientInfo(client.HashFormat) {
 		log.Info("Agent (v%s) connected from %s", client.Version, client.conn.RemoteAddr())
 		ctx := context.Background()
-		// Persist / merge state in order: host (needs project), listener
-		// (FK target for session), then session row itself. Anything
-		// looking at the DB after AddAgentClient sees the full chain.
 		UpsertHostForAgent(ctx, client)
 		PersistSessionForAgent(ctx, client)
-		s.AddAgentClient(client)
+		if server != nil {
+			server.AddAgentClient(client)
+		} else if agentSvc != nil {
+			agentSvc.addClient(client)
+		}
 		recordSessionOpen(client)
 	} else {
 		log.Info("Failed to check encrypted income connection from %s", client.conn.RemoteAddr())

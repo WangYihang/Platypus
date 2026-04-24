@@ -40,6 +40,7 @@ type EnrollmentOutcome struct {
 	Succeeded    bool
 	AgentID      string
 	SessionID    string
+	ProjectID    string // resolved from the redeemed PAT / session — empty on failure
 	Outcome      string // e.g. "success" / "invalid_secret" / "timeout"
 	ErrorMessage string
 }
@@ -145,6 +146,16 @@ func TryEnroll(client *AgentClient) (*EnrollmentOutcome, error) {
 		AgentID:   result.AgentID,
 		SessionID: result.SessionID,
 		Outcome:   result.Outcome,
+	}
+	// Surface the project id so callers (Handle) can stamp it on the
+	// AgentClient before host/session persistence runs — the new
+	// unified-ingress path has no TCPServer to fall back to. The
+	// lookup is cheap (indexed on agent_id) and the DB is the source
+	// of truth.
+	if outcome.Succeeded && result.AgentID != "" && Ctx != nil && Ctx.Storage != nil {
+		if sess, err := Ctx.Storage.AgentSessions().GetActive(context.Background(), result.AgentID); err == nil && sess != nil {
+			outcome.ProjectID = sess.ProjectID
+		}
 	}
 	if redeemErr != nil {
 		outcome.ErrorMessage = redeemErr.Error()
