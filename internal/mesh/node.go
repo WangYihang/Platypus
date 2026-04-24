@@ -30,7 +30,7 @@ type Node struct {
 	cfg      Config
 	logger   *slog.Logger
 
-	dialer *Dialer
+	dialer   *Dialer
 	registry *Registry
 	lsdb     *LSDB
 	routes   *RouteTable
