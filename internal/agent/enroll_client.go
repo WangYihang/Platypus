@@ -1,0 +1,156 @@
+package agent
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
+)
+
+// EnrollOptions carries the inputs needed for a single POST to
+// /api/v1/agents/enroll. ProjectCA / InsecureSkipVerify control how
+// the HTTPS chain to the server is validated: on a first-run agent
+// that has the install-script-provided CA in PLATYPUS_PROJECT_CA,
+// ProjectCA is populated and InsecureSkipVerify stays false; when
+// the operator runs the agent with no CA material (local dev) they
+// can opt into InsecureSkipVerify.
+//
+// HTTPClient is an optional override so tests can inject a stub
+// server's client — production callers leave it nil and get a
+// freshly-built client with a 30s timeout.
+type EnrollOptions struct {
+	ServerURL          string
+	PAT                string
+	Hostname           string
+	MachineID          string
+	AgentVersion       string
+	ProjectCA          *x509.CertPool
+	InsecureSkipVerify bool
+	HTTPClient         *http.Client
+}
+
+// EnrollResult is what Enroll returns on success: the freshly-
+// minted identity material ready to hand to SaveIdentity, plus the
+// server-reported agent/project identifiers and cert expiry.
+// Distinct from the v1 in-band EnrollmentResult in enrollment.go.
+type EnrollResult struct {
+	Identity  Identity
+	AgentID   string
+	ProjectID string
+	ExpiresAt time.Time
+	// PrivateKey is also stored inside Identity.PrivateKey; exposed
+	// here as a convenience so callers that only want the key don't
+	// have to reach through the struct.
+	PrivateKey ed25519.PrivateKey
+}
+
+// ErrEnrollBadResponse is returned when the server replies with an
+// HTTP status that isn't a well-defined enroll outcome. Included in
+// the error chain so callers can distinguish "network / server
+// problem" from "PAT is invalid".
+var ErrEnrollBadResponse = errors.New("agent: enroll: unexpected server response")
+
+// Enroll performs one PAT-authenticated enrollment. It builds a
+// fresh Ed25519 keypair + CSR, sends the protobuf request, parses
+// the response, and returns everything SaveIdentity needs.
+//
+// On any non-2xx HTTP status we surface the status code and body so
+// operators can see exactly what the server said (PAT rejected,
+// PKI misconfigured, etc.) without having to turn on server-side
+// trace logging.
+func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
+	if opts.ServerURL == "" {
+		return nil, errors.New("agent: Enroll: ServerURL required")
+	}
+	if opts.PAT == "" {
+		return nil, errors.New("agent: Enroll: PAT required")
+	}
+
+	csrPEM, priv, err := GenerateCSR()
+	if err != nil {
+		return nil, fmt.Errorf("agent: Enroll generate CSR: %w", err)
+	}
+
+	reqBody, err := proto.Marshal(&v2pb.EnrollRequest{
+		Pat:          opts.PAT,
+		CsrPem:       csrPEM,
+		Hostname:     opts.Hostname,
+		MachineId:    opts.MachineID,
+		AgentVersion: opts.AgentVersion,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("agent: Enroll marshal request: %w", err)
+	}
+
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					MinVersion:         tls.VersionTLS12,
+					RootCAs:            opts.ProjectCA,
+					InsecureSkipVerify: opts.InsecureSkipVerify, //nolint:gosec // opt-in via opts
+				},
+			},
+		}
+	}
+
+	url := opts.ServerURL + "/api/v1/agents/enroll"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("agent: Enroll build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-protobuf-platypus-v2")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("agent: Enroll POST %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, fmt.Errorf("agent: Enroll read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// The server's text bodies are short, human-readable messages
+		// (e.g. "enroll: PAT rejected: expired"). Including them verbatim
+		// makes agent logs actionable without leaking anything the
+		// operator didn't already have.
+		return nil, fmt.Errorf("%w: status %d: %s",
+			ErrEnrollBadResponse, resp.StatusCode, bytes.TrimSpace(respBody))
+	}
+
+	var parsed v2pb.EnrollResponse
+	if err := proto.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("agent: Enroll parse response: %w", err)
+	}
+	if parsed.AgentId == "" || len(parsed.CertPem) == 0 || len(parsed.CaPem) == 0 {
+		return nil, fmt.Errorf("%w: response missing agent_id / cert_pem / ca_pem",
+			ErrEnrollBadResponse)
+	}
+
+	return &EnrollResult{
+		Identity: Identity{
+			PrivateKey: priv,
+			CertPEM:    parsed.CertPem,
+			CAPEM:      parsed.CaPem,
+		},
+		PrivateKey: priv,
+		AgentID:    parsed.AgentId,
+		ProjectID:  parsed.ProjectId,
+		ExpiresAt:  time.Unix(parsed.CertExpiresUnix, 0),
+	}, nil
+}
