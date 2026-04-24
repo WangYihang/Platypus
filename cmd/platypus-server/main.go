@@ -13,9 +13,12 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -93,16 +96,23 @@ func main() {
 	}
 	api.PublicAddr = publicAddr
 
-	// Mesh node (optional). Now that mesh identity is strictly
-	// cert-bound, the server needs a project-CA-signed leaf cert
-	// for itself before it can join the overlay. That wiring —
-	// self-issuing via internal/pki at startup + seeding the
-	// TrustedCAs pool with the matching project CA — is deferred
-	// to a follow-up commit. Until then, server-side mesh is
-	// disabled regardless of config.
+	// pkiSvc is constructed here (rather than inside buildRESTEngine)
+	// so the mesh bring-up below can self-issue the server's leaf
+	// cert against the configured project CA. buildRESTEngine
+	// receives the same instance.
+	pkiSvc := pki.New(db)
+
+	// Mesh node (optional). The server self-issues a cert-bound
+	// leaf under cfg.Mesh.ProjectID's CA — same chain agents in
+	// that project use — and joins the overlay. On any wiring
+	// failure mesh is skipped with an error log; server startup
+	// never aborts over mesh.
 	var meshNode *mesh.Node
 	if cfg.Mesh.PSKFile != "" {
-		log.Info("Mesh requested but server cert plumbing not wired yet; skipping")
+		if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr); node != nil {
+			core.Ctx.Mesh = node
+			meshNode = node
+		}
 	}
 
 	tlsCfg, err := ingress.BuildTLSConfig(ingress.CertSource{
@@ -145,7 +155,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rest := buildRESTEngine(cfg, db)
+	rest := buildRESTEngine(ctx, cfg, db, pkiSvc)
 
 	go func() {
 		if err := dispatcher.Serve(ctx, listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -250,7 +260,7 @@ func mustRandomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
+func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service) http.Handler {
 	rest := api.CreateRESTfulAPIServer()
 
 	accessKey := cfg.RESTful.JWTAccessKey
@@ -284,7 +294,6 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	agentLinkSvc := core.NewAgentLinkService()
 	sessionsH := api.NewSessionsV2Handler(db, agentLinkSvc)
 
-	pkiSvc := pki.New(db)
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
 	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 
@@ -375,4 +384,85 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 
 	core.Ctx.RESTful = rest
 	return rest
+}
+
+// tryStartServerMesh self-issues a cert-bound mesh identity for the
+// server against the configured project CA and starts the mesh
+// node. Any step failure is logged and returns nil — mesh is
+// optional; we never abort server startup over it.
+//
+// Project scoping: cfg.Mesh.ProjectID picks which project's CA to
+// chain the server's leaf to. Agents in the same project will
+// trust the resulting identity via the same CA.
+func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config, publicAddr string) *mesh.Node {
+	projectID := cfg.Mesh.ProjectID
+	if projectID == "" {
+		log.Error("mesh: cfg.Mesh.ProjectID is required for the server to self-issue a leaf cert; skipping")
+		return nil
+	}
+	// Ensure (or create) the project CA, then self-issue a leaf
+	// with SAN "platypus://agent/server".
+	if _, err := pkiSvc.EnsureCA(ctx, projectID, "server"); err != nil {
+		log.Error("mesh: ensure project CA for %q: %v", projectID, err)
+		return nil
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		log.Error("mesh: generate server identity key: %v", err)
+		return nil
+	}
+	certPEM, caPEM, err := pkiSvc.IssueForAgent(ctx, projectID, "server", pub, "mesh-self")
+	if err != nil || certPEM == "" {
+		log.Error("mesh: self-issue server leaf: %v", err)
+		return nil
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		log.Error("mesh: marshal server key: %v", err)
+		return nil
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	meshID, err := mesh.LoadIdentityFromCert([]byte(certPEM), keyPEM)
+	if err != nil {
+		log.Error("mesh: load self identity: %v", err)
+		return nil
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(caPEM)) {
+		log.Error("mesh: parse project CA PEM")
+		return nil
+	}
+
+	bootstrapTarget := cfg.Mesh.BootstrapTarget
+	if bootstrapTarget == "" {
+		bootstrapTarget = publicAddr
+	}
+	advertise := cfg.Mesh.AdvertiseAddrs
+	if len(advertise) == 0 && publicAddr != "" {
+		advertise = []string{publicAddr}
+	}
+	node, err := mesh.NewNode(mesh.Config{
+		PSKFile:           cfg.Mesh.PSKFile,
+		Identity:          meshID,
+		TrustedCAs:        pool,
+		ListenAddr:        "", // listener is the unified ingress
+		AdvertiseAddrs:    advertise,
+		Peers:             cfg.Mesh.Peers,
+		Role:              "server",
+		DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
+		DiscoveryInterval: cfg.Mesh.DiscoveryInterval,
+		ProjectID:         projectID,
+		BootstrapEnabled:  bootstrapTarget != "",
+		BootstrapTarget:   bootstrapTarget,
+	}, nil)
+	if err != nil {
+		log.Error("mesh: NewNode: %v", err)
+		return nil
+	}
+	if err := node.Start(ctx); err != nil {
+		log.Error("mesh: start: %v", err)
+		return nil
+	}
+	log.Success("Mesh enabled: node_id=%s advertise=%v", node.NodeID(), advertise)
+	return node
 }
