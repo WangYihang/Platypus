@@ -21,7 +21,6 @@ import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { fromNow, isOnline } from "../lib/time";
 import FilesTab from "./host/FilesTab";
 import TerminalTab from "./host/TerminalTab";
-import TunnelsTab from "./host/TunnelsTab";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,12 +38,12 @@ interface Props {
     hostID: string;
 }
 
-const TABS = ["terminal", "files", "tunnels", "sessions", "info"] as const;
+const TABS = ["terminal", "files", "sessions", "info"] as const;
 type TabKey = (typeof TABS)[number];
 
-// HostView is the main-panel view when a Host is selected. Five tabs
-// (Terminal, Files, Tunnels, Sessions, Info) live under the page header
-// — shadcn Tabs for the bar, but the panels render ourselves so the
+// HostView is the main-panel view when a Host is selected. Four tabs
+// (Terminal, Files, Sessions, Info) live under the page header —
+// shadcn Tabs for the bar, but the panels render ourselves so the
 // underlying tab components (Terminal with persistent xterm state) can
 // mount once and stay alive across tab switches.
 export default function HostView({ projectID, hostID }: Props) {
@@ -52,10 +51,10 @@ export default function HostView({ projectID, hostID }: Props) {
     const [sessions, setSessions] = useState<SessionRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    // pickedSessionID drives which session Terminal / Files / Tunnels
-    // operate on. Lifted here so all three tabs stay in sync and the
-    // "my session just disappeared, fall back to the next live one"
-    // effect runs once rather than in each tab.
+    // pickedSessionID drives which session Terminal / Files operate
+    // on. Lifted here so both tabs stay in sync and the "my session
+    // just disappeared, fall back to the next live one" effect runs
+    // once rather than in each tab.
     const [pickedSessionID, setPickedSessionID] = useState<string | null>(null);
 
     const project = useCurrentProject();
@@ -161,7 +160,6 @@ export default function HostView({ projectID, hostID }: Props) {
             <TabsList className="h-9">
                 <TabsTrigger value="terminal">Terminal</TabsTrigger>
                 <TabsTrigger value="files">Files</TabsTrigger>
-                <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
                 <TabsTrigger value="info">Info</TabsTrigger>
             </TabsList>
@@ -224,13 +222,6 @@ export default function HostView({ projectID, hostID }: Props) {
                 <div style={{ display: activeTab === "files" ? "block" : "none" }}>
                     {pickedSessionID ? (
                         <FilesTab sessionHash={pickedSessionID} />
-                    ) : (
-                        <NoLiveSessionNote />
-                    )}
-                </div>
-                <div style={{ display: activeTab === "tunnels" ? "block" : "none" }}>
-                    {pickedSessionID ? (
-                        <TunnelsTab sessionHash={pickedSessionID} />
                     ) : (
                         <NoLiveSessionNote />
                     )}

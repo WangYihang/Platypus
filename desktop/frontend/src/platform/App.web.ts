@@ -8,7 +8,6 @@
 // NOT manage its own token store any more (it used to, back when the
 // server only spoke the legacy single-secret /auth/token flow).
 
-import type { api } from "../../wailsjs/go/models";
 import { authFetch, authJSON, getSession } from "../lib/auth";
 import { emitEvent } from "./runtime.web";
 
@@ -25,35 +24,6 @@ function getServerURL(): string {
     const s = getSession();
     if (!s) throw new Error("not connected — log in first");
     return s.serverURL;
-}
-
-// ---------- Sessions ----------------------------------------------------
-
-export async function ListSessions(): Promise<api.Session[]> {
-    const resp = await apiJSON<{ sessions: any[] }>("/api/v1/sessions");
-    const out: api.Session[] = (resp.sessions || []).map((raw) => raw as api.Session);
-    out.sort((a, b) => (a.hash < b.hash ? -1 : 1));
-    return out;
-}
-
-export async function SetGroupDispatch(hash: string, enabled: boolean): Promise<void> {
-    await apiFetch("/api/v1/sessions/" + encodeURIComponent(hash), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group_dispatch: enabled }),
-    });
-}
-
-export async function DispatchCommand(
-    command: string,
-    timeoutSec: number,
-): Promise<api.DispatchResult[]> {
-    const resp = await apiJSON<{ results?: api.DispatchResult[] }>("/api/v1/sessions/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, timeout: timeoutSec }),
-    });
-    return resp.results || [];
 }
 
 // ---------- Files -------------------------------------------------------
@@ -363,28 +333,6 @@ export async function UploadBrowserFile(
             body: slice,
         });
     }
-}
-
-// ---------- Tunnels -----------------------------------------------------
-
-export async function ListTunnels(sessionHash: string): Promise<api.TunnelInfo[]> {
-    const resp = await apiJSON<{ tunnels?: api.TunnelInfo[] }>(
-        `/api/v1/sessions/${encodeURIComponent(sessionHash)}/tunnels`,
-    );
-    return resp.tunnels || [];
-}
-
-export async function CreateTunnel(
-    sessionHash: string,
-    mode: string,
-    srcAddress: string,
-    dstAddress: string,
-): Promise<void> {
-    await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionHash)}/tunnels`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, src_address: srcAddress, dst_address: dstAddress }),
-    });
 }
 
 // ---------- Terminal (v2 /api/v1/terminal/:agent_id/ws) -----------------
