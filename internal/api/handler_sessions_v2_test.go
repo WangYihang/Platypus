@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -25,7 +26,7 @@ func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) 
 
 	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
 	rbac := NewRBACWithStorage(issuer, db)
-	h := NewSessionsV2Handler(db)
+	h := NewSessionsV2Handler(db, core.NewAgentLinkService())
 
 	r := gin.New()
 	RegisterV1ProjectSessionsRoutes(r, h, rbac)

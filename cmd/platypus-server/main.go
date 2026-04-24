@@ -304,7 +304,12 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	usersH := api.NewUsersHandler(db)
 	projectsH := api.NewProjectsHandler(db)
 	hostsH := api.NewHostsHandler(db)
-	sessionsH := api.NewSessionsV2Handler(db)
+
+	// Agent link service registers live v2 agents by agent_id; every
+	// downstream handler that needs to reach an agent (sessionsH's
+	// dispatch, terminal, file REST, RPC REST) looks it up here.
+	agentLinkSvc := core.NewAgentLinkService()
+	sessionsH := api.NewSessionsV2Handler(db, agentLinkSvc)
 
 	pkiSvc := pki.New(db)
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
@@ -318,10 +323,9 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc)
 
-	// v2 agent link (yamux-over-WebSocket, mTLS-auth'd). The
-	// AgentLinkService is the process-wide registry other handlers
-	// use to look up a connected agent's session by agent_id.
-	agentLinkSvc := core.NewAgentLinkService()
+	// v2 agent link handler (yamux-over-WebSocket, mTLS-auth'd).
+	// agentLinkSvc was constructed upstream because SessionsV2Handler
+	// also depends on it for project-dispatch.
 	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db))
 	agentSessionsH := api.NewAgentSessionsHandler(db)
 	activitiesH := api.NewActivitiesHandler(db)

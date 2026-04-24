@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,18 +12,19 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
+	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// SessionsV2Handler exposes per-project + per-host session queries and
-// the project-scoped dispatch route. Kept separate from the legacy
-// flat /sessions handlers in handler_sessions_v1.go until P12 retires
-// that surface entirely.
+// SessionsV2Handler exposes per-project + per-host session queries
+// and the project-scoped dispatch route. Dispatch goes through the
+// v2 agent link (CallAgentRPC + exec) — no v1 dependency.
 type SessionsV2Handler struct {
-	db *storage.DB
+	db    *storage.DB
+	links *core.AgentLinkService
 }
 
-func NewSessionsV2Handler(db *storage.DB) *SessionsV2Handler {
-	return &SessionsV2Handler{db: db}
+func NewSessionsV2Handler(db *storage.DB, links *core.AgentLinkService) *SessionsV2Handler {
+	return &SessionsV2Handler{db: db, links: links}
 }
 
 type sessionResponse struct {
@@ -107,40 +109,44 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		return
 	}
 
-	results := []dispatchV2Result{}
+	// The v1 mirror (core.FindAgentClientByHash + in-memory
+	// GroupDispatch flag) is gone; we respect the stored flag only.
+	// Agent lookup uses the v2 AgentLinkService keyed by session ID
+	// — which in the v2 world IS the agent_id registered at link
+	// bring-up.
+	results := make([]dispatchV2Result, 0, len(live))
+	timeout := time.Duration(req.Timeout) * time.Second
 	for _, s := range live {
-		client := core.FindAgentClientByHash(s.ID)
-		if client == nil {
-			// Row is marked live but the runtime object is gone —
-			// likely a crash since the last disconnect stamp. Skip
-			// silently here (a future PATCH that flagged it would
-			// have updated the in-memory mirror); only the path
-			// where the user explicitly flagged it via the UI is
-			// reportable, and that case lives further below.
-			if s.GroupDispatch {
-				results = append(results, dispatchV2Result{
-					SessionHash: s.ID, HostID: s.HostID,
-					Error: "session runtime missing (server restart?)",
-				})
+		if !s.GroupDispatch {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+		resp, err := core.CallAgentRPC(ctx, h.links, s.ID, &v2pb.RpcRequest{
+			Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: req.Command}},
+		})
+		cancel()
+		switch {
+		case err != nil:
+			var notConnected *core.ErrAgentNotConnected
+			msg := err.Error()
+			if errors.As(err, &notConnected) {
+				msg = "session runtime missing"
 			}
-			continue
-		}
-		// PatchSession only flips the in-memory mirror today; consult
-		// it so the UI's dispatch flag is honoured even before a
-		// future commit persists to the DB row.
-		if !s.GroupDispatch && !client.GroupDispatch {
-			continue
-		}
-		ch := make(chan string, 1)
-		go func() { ch <- client.System(req.Command) }()
-		select {
-		case out := <-ch:
+			results = append(results, dispatchV2Result{
+				SessionHash: s.ID, HostID: s.HostID, Error: msg,
+			})
+		case resp.Error != "":
+			results = append(results, dispatchV2Result{
+				SessionHash: s.ID, HostID: s.HostID, Error: resp.Error,
+			})
+		default:
+			e := resp.GetExec()
+			out := ""
+			if e != nil {
+				out = string(e.Stdout)
+			}
 			results = append(results, dispatchV2Result{
 				SessionHash: s.ID, HostID: s.HostID, Output: out,
-			})
-		case <-time.After(time.Duration(req.Timeout) * time.Second):
-			results = append(results, dispatchV2Result{
-				SessionHash: s.ID, HostID: s.HostID, Error: "timeout",
 			})
 		}
 	}
