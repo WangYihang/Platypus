@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -139,6 +140,13 @@ func main() {
 		log.Error("ingress: build tls config: %v", err)
 		os.Exit(1)
 	}
+
+	// Accept client certificates when presented, but don't reject
+	// connections that lack them — browsers and the REST API still
+	// connect without a client cert. The v2 agent-link handler
+	// validates the chain in-handler against the live project-CA
+	// pool so revocations / rotations take effect without a restart.
+	tlsCfg.ClientAuth = tls.RequestClientCert
 
 	agentSvc := core.NewAgentService(core.AgentServiceConfig{
 		HashFormat:     cfg.Ingress.HashFormat,
@@ -316,6 +324,12 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	distributorBase := "https://" + api.PublicAddr
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc)
+
+	// v2 agent link (yamux-over-WebSocket, mTLS-auth'd). The
+	// AgentLinkService is the process-wide registry other handlers
+	// use to look up a connected agent's session by agent_id.
+	agentLinkSvc := core.NewAgentLinkService()
+	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db))
 	agentSessionsH := api.NewAgentSessionsHandler(db)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
@@ -367,6 +381,7 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
+	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
