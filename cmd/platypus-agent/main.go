@@ -93,14 +93,47 @@ func main() {
 		ctx,
 	)
 
+	// v2 connect loop: BootstrapV2 (enroll or load identity + dial) →
+	// ServeLink (accept streams, dispatch to per-type handlers) →
+	// return on any error so backoff retries. meshProjectID is
+	// retained as a local for when Phase IV rebuilds mesh on top
+	// of the v2 link primitives; nothing else in the v2 path
+	// touches it yet.
+	_ = meshProjectID
+
+	caPool, err := agent.LoadProjectCA(os.Getenv(agent.ProjectCAEnvVar))
+	if err != nil {
+		logger.Error("parse project CA env var", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	hostname, _ := os.Hostname()
+
 	connect := func() error {
 		if ctx.Err() != nil {
 			return backoff.Permanent(ctx.Err())
 		}
-		logger.Info("connecting to server", slog.String("endpoint", endpoint))
-		return agent.ConnectWithOptions(endpoint, opts.Token, state, &agent.ConnectOptions{
-			IdentityDir:   identityDir,
-			MeshProjectID: meshProjectID,
+		logger.Info("agent connect (v2)", slog.String("endpoint", endpoint))
+
+		sess, err := agent.BootstrapV2(ctx, agent.BootstrapV2Options{
+			IdentityDir:  identityDir,
+			ServerURL:    fmt.Sprintf("wss://%s/api/v1/agent/link", endpoint),
+			EnrollURL:    fmt.Sprintf("https://%s", endpoint),
+			PAT:          opts.Token,
+			ProjectCA:    caPool,
+			Hostname:     hostname,
+			AgentVersion: "v2",
+		})
+		if err != nil {
+			return err
+		}
+		defer sess.Close()
+
+		logger.Info("v2 link established; serving streams")
+		return agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
+			RPC: agent.AgentRPCHandlers{
+				Exec: agent.HandleExec,
+			},
 		})
 	}
 
@@ -108,5 +141,6 @@ func main() {
 		logger.Error("connection loop terminated", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	_ = state // kept for when mesh Phase IV wires v2 back into agent.State
 	logger.Info("agent stopped")
 }
