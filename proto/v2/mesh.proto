@@ -113,21 +113,29 @@ message MeshKeepalive {
 
 // MeshPeerAnnounce: sent once per direction after a handshake
 // completes, carrying the sender's full known-peer table so the
-// other side can quickly learn the wider mesh.
+// other side can quickly learn the wider mesh. Signed by the
+// sender (origin_node_id) so the receiver can reject a forged
+// announce from a relay that compromised an upstream link.
 message MeshPeerAnnounce {
   repeated NodeInfo nodes = 1;
+  string origin_node_id   = 2;
+  bytes  pubkey           = 3; // must match origin_node_id
+  bytes  sig              = 4; // Ed25519_sign(priv, canonical(announce without sig))
 }
 
 // MeshPeerDelta: incremental update broadcast to every directly-
 // connected neighbour when the sender's known-peer set changes.
 // seq is monotonic per origin_node_id so receivers deduplicate
-// across flooding paths.
+// across flooding paths. Signed by origin so floods can't be
+// forged by intermediate hops.
 message MeshPeerDelta {
   string origin_node_id = 1;
   uint64 seq            = 2;
   repeated NodeInfo added = 3;
   repeated string removed_ids = 4;
   uint32 ttl            = 5; // flood TTL, distinct from envelope.ttl
+  bytes  pubkey         = 6; // must match origin_node_id
+  bytes  sig            = 7; // Ed25519_sign(priv, canonical(delta without sig + ttl))
 }
 
 // MeshLSA: link-state advertisement. Each node periodically (and on

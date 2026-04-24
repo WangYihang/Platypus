@@ -720,10 +720,15 @@ func (x *MeshKeepalive) GetLifetimeMsgsOut() uint64 {
 
 // MeshPeerAnnounce: sent once per direction after a handshake
 // completes, carrying the sender's full known-peer table so the
-// other side can quickly learn the wider mesh.
+// other side can quickly learn the wider mesh. Signed by the
+// sender (origin_node_id) so the receiver can reject a forged
+// announce from a relay that compromised an upstream link.
 type MeshPeerAnnounce struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nodes         []*NodeInfo            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	OriginNodeId  string                 `protobuf:"bytes,2,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
+	Pubkey        []byte                 `protobuf:"bytes,3,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // must match origin_node_id
+	Sig           []byte                 `protobuf:"bytes,4,opt,name=sig,proto3" json:"sig,omitempty"`       // Ed25519_sign(priv, canonical(announce without sig))
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -765,17 +770,41 @@ func (x *MeshPeerAnnounce) GetNodes() []*NodeInfo {
 	return nil
 }
 
+func (x *MeshPeerAnnounce) GetOriginNodeId() string {
+	if x != nil {
+		return x.OriginNodeId
+	}
+	return ""
+}
+
+func (x *MeshPeerAnnounce) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *MeshPeerAnnounce) GetSig() []byte {
+	if x != nil {
+		return x.Sig
+	}
+	return nil
+}
+
 // MeshPeerDelta: incremental update broadcast to every directly-
 // connected neighbour when the sender's known-peer set changes.
 // seq is monotonic per origin_node_id so receivers deduplicate
-// across flooding paths.
+// across flooding paths. Signed by origin so floods can't be
+// forged by intermediate hops.
 type MeshPeerDelta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OriginNodeId  string                 `protobuf:"bytes,1,opt,name=origin_node_id,json=originNodeId,proto3" json:"origin_node_id,omitempty"`
 	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
 	Added         []*NodeInfo            `protobuf:"bytes,3,rep,name=added,proto3" json:"added,omitempty"`
 	RemovedIds    []string               `protobuf:"bytes,4,rep,name=removed_ids,json=removedIds,proto3" json:"removed_ids,omitempty"`
-	Ttl           uint32                 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"` // flood TTL, distinct from envelope.ttl
+	Ttl           uint32                 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`      // flood TTL, distinct from envelope.ttl
+	Pubkey        []byte                 `protobuf:"bytes,6,opt,name=pubkey,proto3" json:"pubkey,omitempty"` // must match origin_node_id
+	Sig           []byte                 `protobuf:"bytes,7,opt,name=sig,proto3" json:"sig,omitempty"`       // Ed25519_sign(priv, canonical(delta without sig + ttl))
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -843,6 +872,20 @@ func (x *MeshPeerDelta) GetTtl() uint32 {
 		return x.Ttl
 	}
 	return 0
+}
+
+func (x *MeshPeerDelta) GetPubkey() []byte {
+	if x != nil {
+		return x.Pubkey
+	}
+	return nil
+}
+
+func (x *MeshPeerDelta) GetSig() []byte {
+	if x != nil {
+		return x.Sig
+	}
+	return nil
 }
 
 // MeshLSA: link-state advertisement. Each node periodically (and on
@@ -1372,16 +1415,21 @@ const file_mesh_proto_rawDesc = "" +
 	"\x11lifetime_bytes_in\x18\x02 \x01(\x04R\x0flifetimeBytesIn\x12,\n" +
 	"\x12lifetime_bytes_out\x18\x03 \x01(\x04R\x10lifetimeBytesOut\x12(\n" +
 	"\x10lifetime_msgs_in\x18\x04 \x01(\x04R\x0elifetimeMsgsIn\x12*\n" +
-	"\x11lifetime_msgs_out\x18\x05 \x01(\x04R\x0flifetimeMsgsOut\"?\n" +
+	"\x11lifetime_msgs_out\x18\x05 \x01(\x04R\x0flifetimeMsgsOut\"\x8f\x01\n" +
 	"\x10MeshPeerAnnounce\x12+\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x15.platypus.v2.NodeInfoR\x05nodes\"\xa7\x01\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x15.platypus.v2.NodeInfoR\x05nodes\x12$\n" +
+	"\x0eorigin_node_id\x18\x02 \x01(\tR\foriginNodeId\x12\x16\n" +
+	"\x06pubkey\x18\x03 \x01(\fR\x06pubkey\x12\x10\n" +
+	"\x03sig\x18\x04 \x01(\fR\x03sig\"\xd1\x01\n" +
 	"\rMeshPeerDelta\x12$\n" +
 	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12+\n" +
 	"\x05added\x18\x03 \x03(\v2\x15.platypus.v2.NodeInfoR\x05added\x12\x1f\n" +
 	"\vremoved_ids\x18\x04 \x03(\tR\n" +
 	"removedIds\x12\x10\n" +
-	"\x03ttl\x18\x05 \x01(\rR\x03ttl\"\x8d\x02\n" +
+	"\x03ttl\x18\x05 \x01(\rR\x03ttl\x12\x16\n" +
+	"\x06pubkey\x18\x06 \x01(\fR\x06pubkey\x12\x10\n" +
+	"\x03sig\x18\a \x01(\fR\x03sig\"\x8d\x02\n" +
 	"\aMeshLSA\x12$\n" +
 	"\x0eorigin_node_id\x18\x01 \x01(\tR\foriginNodeId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x1d\n" +

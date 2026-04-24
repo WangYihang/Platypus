@@ -260,8 +260,15 @@ func (n *Node) onLinkUp(l *Link) {
 		slog.String("remote", l.RemoteAddr))
 	n.notifyObservers(func(o LinkObserver) { o.OnLinkUp(l.PeerNodeID, l.RemoteAddr) })
 	// Kick off a full announce to the new neighbour so it learns our
-	// known peers right away.
-	announce := &v2pb.MeshPeerAnnounce{Nodes: n.registry.ToNodeInfos()}
+	// known peers right away. Signed so the neighbour can still trust
+	// the nodes list if the Announce gets relayed end-to-end instead
+	// of staying link-local (future optimisation).
+	announce := &v2pb.MeshPeerAnnounce{
+		Nodes:        n.registry.ToNodeInfos(),
+		OriginNodeId: n.identity.NodeID,
+		Pubkey:       n.identity.PublicKey,
+	}
+	signPeerAnnounce(n.identity.PrivateKey, announce)
 	_ = l.Send(&v2pb.MeshEnvelope{
 		Version:   meshProtocolVersion,
 		Timestamp: time.Now().UnixNano(),
@@ -434,6 +441,19 @@ func (n *Node) forward(from *Link, env *v2pb.MeshEnvelope) {
 // Gossip ingest
 
 func (n *Node) ingestAnnounce(from *Link, ann *v2pb.MeshPeerAnnounce) {
+	// Pre-v2 announces had no origin/sig fields; tolerate them as
+	// unsigned from a trusted link-local peer to keep the migration
+	// backward-compatible during rollout, but reject a populated
+	// origin whose signature doesn't verify.
+	if ann.GetOriginNodeId() != "" {
+		if err := verifyPeerAnnounce(ann); err != nil {
+			n.logger.Warn("mesh peer announce sig rejected",
+				slog.String("peer", from.PeerNodeID),
+				slog.String("origin", ann.OriginNodeId),
+				slog.String("error", err.Error()))
+			return
+		}
+	}
 	for _, ni := range ann.GetNodes() {
 		if ni == nil || ni.NodeId == n.identity.NodeID {
 			continue
@@ -454,6 +474,15 @@ func (n *Node) ingestAnnounce(from *Link, ann *v2pb.MeshPeerAnnounce) {
 
 func (n *Node) ingestDelta(from *Link, delta *v2pb.MeshPeerDelta) {
 	if delta.OriginNodeId == "" {
+		return
+	}
+	// Deltas flood; every hop MUST verify so a compromised
+	// intermediate can't inject fake peer adds/removes.
+	if err := verifyPeerDelta(delta); err != nil {
+		n.logger.Warn("mesh peer delta sig rejected",
+			slog.String("peer", from.PeerNodeID),
+			slog.String("origin", delta.OriginNodeId),
+			slog.String("error", err.Error()))
 		return
 	}
 	n.linkMu.Lock()
@@ -605,6 +634,7 @@ func (n *Node) registryLoop(ctx context.Context) {
 				OriginNodeId: n.identity.NodeID,
 				Seq:          n.lastPeerDelta.Add(1),
 				Ttl:          maxFloodTTL,
+				Pubkey:       n.identity.PublicKey,
 			}
 			switch ev.Kind {
 			case EventAdded, EventUpdated:
@@ -624,6 +654,7 @@ func (n *Node) registryLoop(ctx context.Context) {
 			default:
 				continue
 			}
+			signPeerDelta(n.identity.PrivateKey, delta)
 			n.floodToAll(nil, &v2pb.MeshEnvelope{
 				Version:   meshProtocolVersion,
 				Timestamp: time.Now().UnixNano(),
