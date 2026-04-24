@@ -133,7 +133,19 @@ func main() {
 		})
 	}
 
-	if err := backoff.Retry(connect, bo); err != nil {
+	notify := func(err error, next time.Duration) {
+		// Without this, every connect/enroll failure gets swallowed
+		// by backoff and the operator sees nothing but repeating
+		// "agent connect (v2)" lines — the exact reason several
+		// recent debugging sessions had to resort to server-side
+		// packet captures. Log one line per failure with the actual
+		// error string and the retry delay.
+		logger.Warn("agent connect failed, retrying",
+			slog.String("error", err.Error()),
+			slog.Duration("next_retry_in", next),
+		)
+	}
+	if err := backoff.RetryNotify(connect, bo, notify); err != nil {
 		logger.Error("connection loop terminated", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
