@@ -108,19 +108,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Sweep any sessions row left in "live" state by a previous
-	// instance: a SIGKILL / OOM kill prevents the per-link defer in
-	// handler_agent_link_v2 from stamping disconnected_at, leaving
-	// dangling rows that the project-Sessions list would otherwise
-	// surface as currently-online. Connected agents reconnect after
-	// our backoff and create fresh rows; the only loss is the exact
-	// disconnect timestamp on the leaked rows, which we approximate
-	// as "now" (when the server came back).
-	if n, err := db.Sessions().MarkAllLiveDisconnected(ctx); err != nil {
-		log.L.Warn("startup_session_sweep_failed", "error", err.Error())
+	// Audit-tail close: stamp disconnected_at on any sessions row a
+	// previous instance left open. This is NOT a presence-state
+	// repair — live presence lives exclusively in
+	// core.AgentLinkService and the sessions handler intersects
+	// against it on every read. The sweep just stops historical
+	// queries from seeing eternally-open audit windows for links the
+	// previous server never got to close (SIGKILL, OOM, etc.).
+	if n, err := db.Sessions().StampOpenAuditRowsClosed(ctx); err != nil {
+		log.L.Warn("historical_session_audit_close_failed", "error", err.Error())
 	} else if n > 0 {
-		log.L.Info("startup_session_sweep", "swept", n,
-			"hint", "previous instance exited without graceful shutdown — these rows are best-effort historical")
+		log.L.Info("historical_session_audit_close", "rows", n,
+			"hint", "previous instance exited without graceful shutdown — audit-tail disconnected_at stamps are best-effort approximations of crash time")
 	}
 
 	ingressAddr := cfg.Ingress.Addr

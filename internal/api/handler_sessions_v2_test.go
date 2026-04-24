@@ -14,7 +14,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
+func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, *core.AgentLinkService) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -26,23 +26,28 @@ func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) 
 
 	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
 	rbac := NewRBACWithStorage(issuer, db)
-	h := NewSessionsV2Handler(db, core.NewAgentLinkService())
+	links := core.NewAgentLinkService()
+	h := NewSessionsV2Handler(db, links)
 
 	r := gin.New()
 	RegisterV1ProjectSessionsRoutes(r, h, rbac)
-	return r, db, issuer
+	return r, db, issuer, links
 }
 
 const testIngressAddr = "0.0.0.0:9443"
 
 // seedSessionRow inserts the minimum set of rows (host + session) and
-// returns the storage objects the test can reference.
+// returns the storage objects the test can reference. The host gets
+// agent_id="agent-<sessionID>" stamped so resolveLiveAgentForSession
+// can map session → host → agent without relying on a separate
+// enrollment fixture.
 func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sessionID string, disconnect bool) (*storage.Host, *storage.Session) {
 	t.Helper()
 	ctx := context.Background()
 	host, err := db.Hosts().Upsert(ctx, &storage.HostIdentity{
 		ProjectID: project.ID, MachineID: "m-" + sessionID, Fingerprint: "fp-" + sessionID,
 		Hostname: "host-" + sessionID, OS: "linux", SeenAt: time.Now().UTC(),
+		AgentID: "agent-" + sessionID,
 	})
 	if err != nil {
 		t.Fatalf("host upsert: %v", err)
@@ -59,7 +64,7 @@ func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sess
 }
 
 func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+	r, db, issuer, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
@@ -90,7 +95,7 @@ func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
 }
 
 func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+	r, db, issuer, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	prod := seedProjectForAPITest(t, db, "prod", admin)
 	stag := seedProjectForAPITest(t, db, "staging", admin)
@@ -107,13 +112,17 @@ func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
 }
 
 func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+	r, db, issuer, links := sessionsV2TestSetup(t)
 	ctx := context.Background()
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
-	// One closed session 2 days ago; one live now.
+	// One closed session 2 days ago; one live now. The live row's
+	// agent must be registered with AgentLinkService — that's the
+	// SoT for liveness now, and the handler intersects the DB rows
+	// against it. nil session pointer is fine for presence-only.
 	host, _ := seedSessionRow(t, db, proj, "live-now", false)
+	links.Register("agent-live-now", nil)
 	_ = db.Sessions().Insert(ctx, &storage.Session{
 		ID: "old-closed", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC().Add(-48 * time.Hour),
@@ -165,7 +174,7 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 }
 
 func TestSessionsV2_Dispatch_NoLiveSessions_EmptyResults(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+	r, db, issuer, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
@@ -186,18 +195,23 @@ func TestSessionsV2_Dispatch_NoLiveSessions_EmptyResults(t *testing.T) {
 	}
 }
 
-// A session whose runtime is missing (row live but no AgentClient in the
-// registry — i.e. a server restart while a session was alive) surfaces as
-// an error row, not a 500.
-func TestSessionsV2_Dispatch_RuntimeMissing_ReturnsErrorRow(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+// A "live" sessions row whose agent isn't registered in the
+// in-memory AgentLinkService is an audit-tail leak — typically a
+// previous server instance crashed before stamping disconnected_at.
+// Dispatch silently skips the row rather than producing a confusing
+// "session runtime missing" error: the SSOT model says liveness is
+// owned by AgentLinkService, and an unregistered agent simply isn't
+// live, regardless of what the DB still has open.
+func TestSessionsV2_Dispatch_AuditTailRow_SilentlySkipped(t *testing.T) {
+	r, db, issuer, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
-	// Insert a live session marked group_dispatch=true with no matching
-	// runtime AgentClient (core.FindAgentClientByHash returns nil).
-	_, _ = seedSessionRow(t, db, proj, "s-orphan", false)
-	_ = db.Sessions().SetGroupDispatch(context.Background(), "s-orphan", true)
+	// Open audit row marked for group dispatch, but no matching
+	// registration in AgentLinkService — exactly the post-crash
+	// shape the startup audit-close sweep eventually fixes.
+	_, _ = seedSessionRow(t, db, proj, "s-zombie", false)
+	_ = db.Sessions().SetGroupDispatch(context.Background(), "s-zombie", true)
 
 	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/dispatch", tok,
@@ -210,13 +224,44 @@ func TestSessionsV2_Dispatch_RuntimeMissing_ReturnsErrorRow(t *testing.T) {
 		Results []dispatchV2Result `json:"results"`
 	}
 	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if resp.Count != 1 || resp.Results[0].Error == "" {
-		t.Fatalf("expected one error-row result; got %+v", resp)
+	if resp.Count != 0 || len(resp.Results) != 0 {
+		t.Fatalf("audit-tail row should be skipped; got %+v", resp)
+	}
+}
+
+// The intersection between DB-open rows and AgentLinkService
+// registrations is what backs ?live=true. Two rows seeded here have
+// disconnected_at IS NULL, but only one has a registered agent —
+// the response must drop the unregistered (audit-tail) row.
+func TestSessionsV2_ListForProject_LiveFilter_ExcludesUnregisteredAgents(t *testing.T) {
+	r, db, issuer, links := sessionsV2TestSetup(t)
+	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
+	proj := seedProjectForAPITest(t, db, "prod", admin)
+
+	// Two open rows on different hosts. The seed helper stamps
+	// host.agent_id="agent-<sessionID>", so we can register one and
+	// leave the other absent.
+	_, _ = seedSessionRow(t, db, proj, "s-registered", false)
+	_, _ = seedSessionRow(t, db, proj, "s-zombie", false)
+	links.Register("agent-s-registered", nil)
+
+	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	w := probeReqWithPath(r, "GET",
+		"/api/v1/projects/"+proj.ID+"/sessions?live=true", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Sessions []sessionResponse `json:"sessions"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Sessions) != 1 || resp.Sessions[0].ID != "s-registered" {
+		t.Fatalf("expected only the registered row; got %+v", resp.Sessions)
 	}
 }
 
 func TestSessionsV2_Dispatch_ViewerBlocked(t *testing.T) {
-	r, db, issuer := sessionsV2TestSetup(t)
+	r, db, issuer, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleViewer)
 	proj := seedProjectForAPITest(t, db, "prod", admin)

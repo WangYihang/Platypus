@@ -111,13 +111,24 @@ func (r *SessionRepo) MarkDisconnected(ctx context.Context, id string) error {
 	return err
 }
 
-// MarkAllLiveDisconnected stamps disconnected_at on every row whose
-// disconnected_at is currently NULL. Run from main.go on server
-// startup: any session that survived a previous boot can't actually
-// still be live, since the server was the WS endpoint and a crash /
-// SIGKILL prevents the per-link defer from running. Returns the
-// number of rows swept so the caller can log a heads-up.
-func (r *SessionRepo) MarkAllLiveDisconnected(ctx context.Context) (int64, error) {
+// StampOpenAuditRowsClosed stamps disconnected_at on every sessions
+// row whose disconnected_at is still NULL at server startup. It is
+// PURELY an audit-tail closer — it does NOT mean those sessions were
+// "really" live, and the result of this call should never be used as
+// a presence signal. Live presence is owned exclusively by the
+// in-memory core.AgentLinkService; the DB just records open/close
+// time windows for history.
+//
+// Why this exists at all: a previous instance that exited via SIGKILL
+// or OOM kill never got to run the per-link defer that stamps
+// disconnected_at, leaving rows with an open audit window. Without
+// this sweep those windows would stretch forever and skew historical
+// queries ("how long was agent X connected on Tuesday"). Stamping at
+// startup uses "now" as the close time, which is approximate but
+// bounded by the gap between crash and restart.
+//
+// Returns the number of rows touched so the caller can log a heads-up.
+func (r *SessionRepo) StampOpenAuditRowsClosed(ctx context.Context) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE sessions SET disconnected_at = ? WHERE disconnected_at IS NULL`,
 		time.Now().UTC())

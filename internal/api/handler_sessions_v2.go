@@ -93,6 +93,15 @@ type dispatchV2Result struct {
 // every live session in the project whose group_dispatch flag is on,
 // returning per-session output (or a timeout error) without giving up
 // on the whole batch if one session hangs.
+//
+// "Live" here is decided by core.AgentLinkService — the in-memory
+// registry of currently-registered agent links. The DB rows from
+// ListLiveForProject (rows with disconnected_at IS NULL) are an
+// audit-tail filter only; a row whose host's agent isn't in the
+// registry right now is a stale audit window (crash + reboot before
+// the next sweep) and gets dropped silently rather than producing a
+// "session runtime missing" error row that would just confuse
+// operators.
 func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 	var req dispatchV2Request
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -103,25 +112,29 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		req.Timeout = 3
 	}
 
-	live, err := h.db.Sessions().ListLiveForProject(c.Request.Context(), c.Param("pid"))
+	openRows, err := h.db.Sessions().ListLiveForProject(c.Request.Context(), c.Param("pid"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "list live sessions"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list sessions"})
 		return
 	}
+	liveAgents := liveAgentSet(h.links)
 
-	// The v1 mirror (core.FindAgentClientByHash + in-memory
-	// GroupDispatch flag) is gone; we respect the stored flag only.
-	// Agent lookup uses the v2 AgentLinkService keyed by session ID
-	// — which in the v2 world IS the agent_id registered at link
-	// bring-up.
-	results := make([]dispatchV2Result, 0, len(live))
+	results := make([]dispatchV2Result, 0, len(openRows))
 	timeout := time.Duration(req.Timeout) * time.Second
-	for _, s := range live {
+	for _, s := range openRows {
 		if !s.GroupDispatch {
 			continue
 		}
+		agentID, ok := h.resolveLiveAgentForSession(c.Request.Context(), s, liveAgents)
+		if !ok {
+			// Audit-tail row whose agent isn't actually live — drop
+			// it. A real "agent went down between filter and call"
+			// race shows up below as ErrAgentNotConnected and gets
+			// surfaced as a session-runtime-missing error row.
+			continue
+		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
-		resp, err := core.CallAgentRPC(ctx, h.links, s.ID, &v2pb.RpcRequest{
+		resp, err := core.CallAgentRPC(ctx, h.links, agentID, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: req.Command}},
 		})
 		cancel()
@@ -151,6 +164,34 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"count": len(results), "results": results})
+}
+
+// liveAgentSet snapshots AgentLinkService into a set the handler can
+// O(1) probe per row. Cheap because AgentLinkService.IDs() already
+// returns a defensive slice; we just reshape it.
+func liveAgentSet(links *core.AgentLinkService) map[string]struct{} {
+	ids := links.IDs()
+	out := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+// resolveLiveAgentForSession returns the agent_id behind a session
+// row's host, but only if that agent is currently registered with
+// AgentLinkService. Returns ("", false) when the host has no agent_id
+// yet (transient enroll race) or the agent is not in the live set
+// (audit-tail row).
+func (h *SessionsV2Handler) resolveLiveAgentForSession(ctx context.Context, s *storage.Session, liveAgents map[string]struct{}) (string, bool) {
+	host, err := h.db.Hosts().GetByID(ctx, s.HostID)
+	if err != nil || host.AgentID == "" {
+		return "", false
+	}
+	if _, ok := liveAgents[host.AgentID]; !ok {
+		return "", false
+	}
+	return host.AgentID, true
 }
 
 // ListForProject handles GET /projects/:pid/sessions. Returns sessions
@@ -200,6 +241,26 @@ func (h *SessionsV2Handler) ListForProject(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list sessions"})
 		return
 	}
+
+	// SSOT presence intersection: when the caller asked for "live",
+	// every returned row must correspond to an agent that is right
+	// now registered in core.AgentLinkService. The DB filter
+	// (disconnected_at IS NULL) is a coarse audit-window pre-filter
+	// — it can return rows the previous server instance left open
+	// after a SIGKILL. AgentLinkService is the only source of truth
+	// for "this link is alive", so we drop any row whose host's
+	// agent isn't in it.
+	if opts.Live != nil && *opts.Live {
+		live := liveAgentSet(h.links)
+		filtered := sessions[:0]
+		for _, s := range sessions {
+			if _, ok := h.resolveLiveAgentForSession(c.Request.Context(), s, live); ok {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
 	out := make([]sessionResponse, 0, len(sessions))
 	for _, s := range sessions {
 		out = append(out, toSessionResponse(s))

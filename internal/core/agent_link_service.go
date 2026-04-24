@@ -68,3 +68,19 @@ func (s *AgentLinkService) All() map[string]*link.Session {
 	}
 	return out
 }
+
+// IDs returns a snapshot of every agent_id with a live link. Cheap
+// alternative to All() when callers only need the set of identifiers
+// — typically to build a `map[string]bool` for SQL-result intersection
+// (the "is this row's agent actually live right now?" check the
+// sessions handler uses to filter audit-tail rows out of the live
+// view).
+func (s *AgentLinkService) IDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, 0, len(s.links))
+	for k := range s.links {
+		out = append(out, k)
+	}
+	return out
+}

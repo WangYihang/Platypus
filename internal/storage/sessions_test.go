@@ -226,3 +226,63 @@ func TestSessions_FieldRoundtrip(t *testing.T) {
 		t.Fatalf("roundtrip: %+v", got)
 	}
 }
+
+// StampOpenAuditRowsClosed only stamps the still-open rows and is
+// safely idempotent on a second call. Pure historical maintenance —
+// the result has no bearing on liveness, which lives in
+// core.AgentLinkService.
+func TestSessions_StampOpenAuditRowsClosed_IdempotentAndScoped(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "prod", "Production", admin)
+	host, _ := db.Hosts().Upsert(ctx, &storage.HostIdentity{
+		ProjectID: proj.ID, MachineID: "m-x", Fingerprint: "fp-x",
+		Hostname: "h-x", OS: "linux", SeenAt: time.Now().UTC(),
+	})
+
+	open := &storage.Session{
+		ID: "open-1", ProjectID: proj.ID, IngressAddr: "0.0.0.0:9443", HostID: host.ID,
+		ConnectedAt: time.Now().UTC(),
+	}
+	if err := db.Sessions().Insert(ctx, open); err != nil {
+		t.Fatalf("Insert open: %v", err)
+	}
+	closed := &storage.Session{
+		ID: "closed-1", ProjectID: proj.ID, IngressAddr: "0.0.0.0:9443", HostID: host.ID,
+		ConnectedAt: time.Now().UTC().Add(-time.Hour),
+	}
+	if err := db.Sessions().Insert(ctx, closed); err != nil {
+		t.Fatalf("Insert closed: %v", err)
+	}
+	if err := db.Sessions().MarkDisconnected(ctx, "closed-1"); err != nil {
+		t.Fatalf("MarkDisconnected: %v", err)
+	}
+	closedBefore, _ := db.Sessions().Get(ctx, "closed-1")
+
+	n, err := db.Sessions().StampOpenAuditRowsClosed(ctx)
+	if err != nil {
+		t.Fatalf("StampOpenAuditRowsClosed: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("first sweep stamped %d rows; want 1 (the open one)", n)
+	}
+	openAfter, _ := db.Sessions().Get(ctx, "open-1")
+	if openAfter.DisconnectedAt == nil {
+		t.Fatalf("open row's disconnected_at not stamped")
+	}
+	closedAfter, _ := db.Sessions().Get(ctx, "closed-1")
+	if !closedAfter.DisconnectedAt.Equal(*closedBefore.DisconnectedAt) {
+		t.Fatalf("already-closed row's disconnected_at moved: before=%v after=%v",
+			closedBefore.DisconnectedAt, closedAfter.DisconnectedAt)
+	}
+
+	// Second call: nothing left to stamp, no error.
+	n, err = db.Sessions().StampOpenAuditRowsClosed(ctx)
+	if err != nil {
+		t.Fatalf("idempotent sweep: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("second sweep stamped %d rows; want 0", n)
+	}
+}
