@@ -315,6 +315,7 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	// install links copy straight into `curl -k ... | sh`.
 	distributorBase := "https://" + api.PublicAddr
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
+	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc)
 	agentSessionsH := api.NewAgentSessionsHandler(db)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
@@ -365,6 +366,7 @@ func buildRESTEngine(cfg *config.Config, db *storage.DB) http.Handler {
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 	api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
+	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV1AgentSessionsRoutes(rest, agentSessionsH, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)

@@ -259,6 +259,7 @@ func (s *Service) RevokePAT(ctx context.Context, tokenID, actorUser, reason stri
 // it in AgentEnrollResponse and drops the reference immediately.
 type RedeemResult struct {
 	AgentID          string
+	ProjectID        string
 	SessionID        string
 	SessionPlaintext string
 	SessionExpiresAt time.Time
@@ -321,6 +322,7 @@ func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext)
 
 	return &RedeemResult{
 		AgentID:          agentID,
+		ProjectID:        tok.ProjectID,
 		SessionID:        sess.SessionID,
 		SessionPlaintext: plaintext,
 		SessionExpiresAt: sess.ExpiresAt,
@@ -369,6 +371,7 @@ func (s *Service) RedeemSession(ctx context.Context, raw string, rctx RedeemCont
 	certPEM, caPEM := s.maybeIssueCert(ctx, current.ProjectID, current.AgentID, rctx.AgentPubKey, "rotation")
 	return &RedeemResult{
 		AgentID:          current.AgentID,
+		ProjectID:        current.ProjectID,
 		SessionID:        next.SessionID,
 		SessionPlaintext: plaintext,
 		SessionExpiresAt: next.ExpiresAt,
