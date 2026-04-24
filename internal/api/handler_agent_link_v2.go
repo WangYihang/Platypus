@@ -67,7 +67,11 @@ func (h *AgentLinkHandler) WithDB(db *storage.DB) *AgentLinkHandler {
 // immediately with a StreamReject referencing "not-yet-implemented".
 // Subsequent commits wire up per-stream-type dispatch.
 func (h *AgentLinkHandler) Handle(c *gin.Context) {
+	linkStart := time.Now()
 	if c.Request.TLS == nil || len(c.Request.TLS.PeerCertificates) == 0 {
+		log.L.Warn("agent_link_no_client_cert",
+			"remote_addr", c.Request.RemoteAddr,
+		)
 		c.String(http.StatusUnauthorized, "agent link: client certificate required")
 		return
 	}
@@ -80,12 +84,20 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		Roots:     h.caPoolFn(),
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}); err != nil {
+		log.L.Warn("agent_link_cert_verify_failed",
+			"remote_addr", c.Request.RemoteAddr,
+			"error", err.Error(),
+		)
 		c.String(http.StatusUnauthorized, "agent link: client cert verification failed: %s", err)
 		return
 	}
 
 	agentID, projectID, err := parseAgentSANs(leaf)
 	if err != nil {
+		log.L.Warn("agent_link_san_parse_failed",
+			"remote_addr", c.Request.RemoteAddr,
+			"error", err.Error(),
+		)
 		c.String(http.StatusBadRequest, "agent link: %s", err)
 		return
 	}
@@ -113,11 +125,26 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 	// displaced one so its accept loop unwinds.
 	if prev := h.svc.Register(agentID, sess); prev != nil {
 		_ = prev.Close()
-		log.Info("agent link: displaced stale session for %s", agentID)
+		log.L.Warn("agent_link_displaced_stale",
+			"agent_id", agentID,
+			"project_id", projectID,
+		)
 	}
-	defer h.svc.Unregister(agentID)
+	defer func() {
+		h.svc.Unregister(agentID)
+		log.L.Info("agent_link_unregistered",
+			"agent_id", agentID,
+			"project_id", projectID,
+			"duration_ms", time.Since(linkStart).Milliseconds(),
+		)
+	}()
 
-	log.Success("agent link: %s (project=%s) connected", agentID, projectID)
+	log.L.Info("agent_link_connected",
+		"agent_id", agentID,
+		"project_id", projectID,
+		"remote_addr", c.Request.RemoteAddr,
+		"client_ip", c.ClientIP(),
+	)
 
 	// Fire-and-forget: fetch a fresh SysInfo snapshot and upsert the
 	// host row so the Web UI reflects this reconnect within a few
@@ -150,16 +177,38 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		hdr, stream, err := sess.Accept()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Info("agent link: %s disconnected", agentID)
+				log.L.Info("agent_link_disconnected",
+					"agent_id", agentID,
+					"project_id", projectID,
+					"reason", "peer_eof",
+					"duration_ms", time.Since(linkStart).Milliseconds(),
+				)
 				return
 			}
 			// Treat "shutdown via our own Close" as a clean exit.
 			if c.Request.Context().Err() != nil {
+				log.L.Info("agent_link_disconnected",
+					"agent_id", agentID,
+					"project_id", projectID,
+					"reason", "ctx_cancelled",
+					"duration_ms", time.Since(linkStart).Milliseconds(),
+				)
 				return
 			}
-			log.Warn("agent link: %s accept: %v", agentID, err)
+			log.L.Warn("agent_link_accept_failed",
+				"agent_id", agentID,
+				"project_id", projectID,
+				"error", err.Error(),
+				"duration_ms", time.Since(linkStart).Milliseconds(),
+			)
 			return
 		}
+		log.L.Debug("agent_link_stream_accept",
+			"agent_id", agentID,
+			"project_id", projectID,
+			"stream_type", hdr.GetType().String(),
+			"corr_id", hdr.GetCorrelationId(),
+		)
 		go h.dispatchStream(agentID, hdr, stream)
 	}
 }
@@ -211,8 +260,15 @@ func (h *AgentLinkHandler) endLiveSession(sessionID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := h.db.Sessions().MarkDisconnected(ctx, sessionID); err != nil {
-		log.Warn("agent link: mark session disconnected (id=%s): %v", sessionID, err)
+		log.L.Warn("agent_link_session_mark_disconnected_failed",
+			"session_id", sessionID,
+			"error", err.Error(),
+		)
+		return
 	}
+	log.L.Info("agent_link_session_ended",
+		"session_id", sessionID,
+	)
 }
 
 // heartbeatHostLastSeen ticks every hostHeartbeatInterval and bumps

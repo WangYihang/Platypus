@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/log"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -27,14 +29,38 @@ import (
 // URL shapes mirror the REST conventions used elsewhere in the
 // project (verbs on path segments, filesystem-ish nouns under /fs).
 func RegisterV2AgentRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService) {
-	engine.GET("/api/v1/agents/:agent_id/fs/list", v2RPCListDir(svc))
-	engine.GET("/api/v1/agents/:agent_id/fs/stat", v2RPCStat(svc))
-	engine.DELETE("/api/v1/agents/:agent_id/fs/remove", v2RPCDelete(svc))
-	engine.POST("/api/v1/agents/:agent_id/fs/rename", v2RPCRename(svc))
-	engine.POST("/api/v1/agents/:agent_id/fs/mkdir", v2RPCMkdir(svc))
-	engine.PATCH("/api/v1/agents/:agent_id/fs/mode", v2RPCChmod(svc))
-	engine.GET("/api/v1/agents/:agent_id/sys", v2RPCSysInfo(svc))
-	engine.POST("/api/v1/agents/:agent_id/exec", v2RPCExec(svc))
+	engine.GET("/api/v1/agents/:agent_id/fs/list", logRPCHandler("list_dir", v2RPCListDir(svc)))
+	engine.GET("/api/v1/agents/:agent_id/fs/stat", logRPCHandler("stat", v2RPCStat(svc)))
+	engine.DELETE("/api/v1/agents/:agent_id/fs/remove", logRPCHandler("delete", v2RPCDelete(svc)))
+	engine.POST("/api/v1/agents/:agent_id/fs/rename", logRPCHandler("rename", v2RPCRename(svc)))
+	engine.POST("/api/v1/agents/:agent_id/fs/mkdir", logRPCHandler("mkdir", v2RPCMkdir(svc)))
+	engine.PATCH("/api/v1/agents/:agent_id/fs/mode", logRPCHandler("chmod", v2RPCChmod(svc)))
+	engine.GET("/api/v1/agents/:agent_id/sys", logRPCHandler("sys_info", v2RPCSysInfo(svc)))
+	engine.POST("/api/v1/agents/:agent_id/exec", logRPCHandler("exec", v2RPCExec(svc)))
+}
+
+// logRPCHandler wraps a per-endpoint gin handler with enter / exit
+// structured logs so each v2 agent-RPC HTTP call is traceable
+// without touching each body. The CallAgentRPC round-trip itself
+// is logged independently in internal/core, so these two layers
+// together show: handler wallclock vs. RPC wallclock vs. middleware
+// overhead.
+func logRPCHandler(name string, fn gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		log.L.Info("http_rpc_enter",
+			"name", name,
+			"agent_id", c.Param("agent_id"),
+			"path", c.Request.URL.Path,
+		)
+		fn(c)
+		log.L.Info("http_rpc_exit",
+			"name", name,
+			"agent_id", c.Param("agent_id"),
+			"status", c.Writer.Status(),
+			"elapsed_ms", time.Since(start).Milliseconds(),
+		)
+	}
 }
 
 // callOrAbort is the shared plumbing: lookup agent, call the RPC,

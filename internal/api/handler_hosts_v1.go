@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
@@ -154,6 +155,19 @@ func (h *HostsHandler) Get(c *gin.Context) {
 // the cached hostResponse fields. Viewer role is sufficient: this
 // is read-only instrumentation, same tier as the host row itself.
 func (h *HostsHandler) GetSysInfo(c *gin.Context) {
+	start := time.Now()
+	log.L.Info("http_sysinfo_enter",
+		"project_id", c.Param("pid"),
+		"host_id", c.Param("hid"),
+	)
+	defer func() {
+		log.L.Info("http_sysinfo_exit",
+			"project_id", c.Param("pid"),
+			"host_id", c.Param("hid"),
+			"status", c.Writer.Status(),
+			"elapsed_ms", time.Since(start).Milliseconds(),
+		)
+	}()
 	if h.svc == nil {
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "live sys info not configured"})
 		return
@@ -203,6 +217,33 @@ func (h *HostsHandler) GetSysInfo(c *gin.Context) {
 // Viewer role is sufficient: process enumeration is read-only and
 // already lets operators see what's running via the Terminal tab.
 func (h *HostsHandler) GetProcesses(c *gin.Context) {
+	start := time.Now()
+	var topN uint32
+	if s := c.Query("top"); s != "" {
+		if n, err := strconv.ParseUint(s, 10, 32); err == nil {
+			topN = uint32(n)
+		}
+	}
+	sortBy := c.DefaultQuery("sort", "cpu")
+	log.L.Info("http_processes_enter",
+		"project_id", c.Param("pid"),
+		"host_id", c.Param("hid"),
+		"top", topN,
+		"sort", sortBy,
+	)
+	var returned int
+	var totalCount uint32
+	defer func() {
+		log.L.Info("http_processes_exit",
+			"project_id", c.Param("pid"),
+			"host_id", c.Param("hid"),
+			"status", c.Writer.Status(),
+			"returned", returned,
+			"total_count", totalCount,
+			"elapsed_ms", time.Since(start).Milliseconds(),
+		)
+	}()
+
 	if h.svc == nil {
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "live process list not configured"})
 		return
@@ -221,14 +262,6 @@ func (h *HostsHandler) GetProcesses(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "host has no registered agent"})
 		return
 	}
-
-	var topN uint32
-	if s := c.Query("top"); s != "" {
-		if n, err := strconv.ParseUint(s, 10, 32); err == nil {
-			topN = uint32(n)
-		}
-	}
-	sortBy := c.DefaultQuery("sort", "cpu")
 
 	resp, err := core.CallAgentRPC(c.Request.Context(), h.svc, host.AgentID, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_ProcessList{ProcessList: &v2pb.ProcessListRequest{
@@ -249,7 +282,12 @@ func (h *HostsHandler) GetProcesses(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": resp.Error})
 		return
 	}
-	c.JSON(http.StatusOK, resp.GetProcessList())
+	pl := resp.GetProcessList()
+	if pl != nil {
+		returned = len(pl.Processes)
+		totalCount = pl.TotalCount
+	}
+	c.JSON(http.StatusOK, pl)
 }
 
 // RegisterV1HostsRoutes mounts the per-project host routes under

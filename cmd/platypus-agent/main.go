@@ -94,11 +94,17 @@ func main() {
 
 	hostname, _ := os.Hostname()
 
+	var connectAttempt int
 	connect := func() error {
 		if ctx.Err() != nil {
 			return backoff.Permanent(ctx.Err())
 		}
-		logger.Info("agent connect (v2)", slog.String("endpoint", endpoint))
+		connectAttempt++
+		dialStart := time.Now()
+		logger.Info("agent connect (v2)",
+			slog.String("endpoint", endpoint),
+			slog.Int("attempt", connectAttempt),
+		)
 
 		sess, err := agent.BootstrapV2(ctx, agent.BootstrapV2Options{
 			IdentityDir:  identityDir,
@@ -110,12 +116,23 @@ func main() {
 			AgentVersion: "v2",
 		})
 		if err != nil {
+			logger.Warn("agent bootstrap failed",
+				slog.String("endpoint", endpoint),
+				slog.Int("attempt", connectAttempt),
+				slog.Duration("elapsed", time.Since(dialStart)),
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
 		defer sess.Close()
 
-		logger.Info("v2 link established; serving streams")
-		return agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
+		linkStart := time.Now()
+		logger.Info("v2 link established; serving streams",
+			slog.String("endpoint", endpoint),
+			slog.Int("attempt", connectAttempt),
+			slog.Duration("dial_elapsed", time.Since(dialStart)),
+		)
+		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
 			RPC: agent.AgentRPCHandlers{
 				Exec:        agent.HandleExec,
 				ListDir:     agent.HandleListDir,
@@ -132,6 +149,17 @@ func main() {
 			FileWrite:  agent.HandleFileWriteStream,
 			TunnelPull: agent.HandleTunnelPullStream,
 		})
+		reason := "peer_close"
+		if serveErr != nil {
+			reason = serveErr.Error()
+		}
+		logger.Info("v2 link terminated",
+			slog.String("endpoint", endpoint),
+			slog.Int("attempt", connectAttempt),
+			slog.Duration("link_duration", time.Since(linkStart)),
+			slog.String("reason", reason),
+		)
+		return serveErr
 	}
 
 	notify := func(err error, next time.Duration) {
@@ -144,6 +172,7 @@ func main() {
 		logger.Warn("agent connect failed, retrying",
 			slog.String("error", err.Error()),
 			slog.Duration("next_retry_in", next),
+			slog.Int("attempt", connectAttempt),
 		)
 	}
 	if err := backoff.RetryNotify(connect, bo, notify); err != nil {

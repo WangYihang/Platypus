@@ -8,8 +8,15 @@ import (
 
 	procinfo "github.com/shirou/gopsutil/v4/process"
 
+	"github.com/WangYihang/Platypus/internal/log"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
+
+// slowProbeMs is the per-process snapshot threshold above which we
+// emit a debug line identifying the offending pid. Useful when a
+// single wedged /proc/<pid>/... read dominates wallclock — the log
+// pinpoints the pid without needing strace.
+const slowProbeMs = 100
 
 // processListCap is the hard ceiling on how many entries the agent
 // will ever ship in a single ProcessListResponse. Even with top_n=0
@@ -27,27 +34,48 @@ const cmdlineTruncateBytes = 512
 // single wedged /proc entry doesn't stall the collection. The
 // returned response always carries total_count (pre-truncation).
 func CollectProcessList(ctx context.Context, top uint32, sortBy string) *v2pb.ProcessListResponse {
+	t0 := time.Now()
 	resp := &v2pb.ProcessListResponse{}
 	procs, err := procinfo.ProcessesWithContext(ctx)
 	if err != nil {
+		log.L.Warn("process_list_enumerate_failed",
+			"error", err.Error(),
+			"elapsed_ms", time.Since(t0).Milliseconds(),
+		)
 		resp.Error = err.Error()
 		return resp
 	}
+	tEnumerate := time.Now()
 	resp.TotalCount = uint32(len(procs))
+	log.L.Info("process_list_enumerated",
+		"count", len(procs),
+		"elapsed_ms", tEnumerate.Sub(t0).Milliseconds(),
+	)
 
+	var slowCount int
 	out := make([]*v2pb.ProcessInfo, 0, len(procs))
 	for _, p := range procs {
 		if p == nil {
 			continue
 		}
+		probeStart := time.Now()
 		info := snapshotProcess(ctx, p)
+		if d := time.Since(probeStart); d.Milliseconds() > slowProbeMs {
+			slowCount++
+			log.L.Debug("process_list_slow_probe",
+				"pid", p.Pid,
+				"elapsed_ms", d.Milliseconds(),
+			)
+		}
 		if info == nil {
 			continue
 		}
 		out = append(out, info)
 	}
+	tSnapshot := time.Now()
 
 	sortProcesses(out, sortBy)
+	tSort := time.Now()
 
 	limit := int(top)
 	if limit <= 0 || limit > processListCap {
@@ -57,6 +85,16 @@ func CollectProcessList(ctx context.Context, top uint32, sortBy string) *v2pb.Pr
 		out = out[:limit]
 	}
 	resp.Processes = out
+
+	log.L.Info("process_list_done",
+		"total", resp.TotalCount,
+		"returned", len(resp.Processes),
+		"slow_probes", slowCount,
+		"enumerate_ms", tEnumerate.Sub(t0).Milliseconds(),
+		"snapshot_ms", tSnapshot.Sub(tEnumerate).Milliseconds(),
+		"sort_ms", tSort.Sub(tSnapshot).Milliseconds(),
+		"total_ms", time.Since(t0).Milliseconds(),
+	)
 	return resp
 }
 
