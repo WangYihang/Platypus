@@ -4,8 +4,8 @@ option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 
 // ProcessOpenRequest is the StreamHeader.metadata for a
 // STREAM_TYPE_PROCESS_OPEN stream. The agent acks with
-// ProcessOpenResponse; after that, raw PTY frames flow with a
-// 1-byte opcode prefix (not protobuf): see internal/protocol/v2.
+// ProcessOpenResponse (first protobuf frame on the stream);
+// after that, both sides exchange ProcessFrame messages.
 message ProcessOpenRequest {
   // Command to exec. Empty means default shell (heuristic on agent).
   string command = 1;
@@ -23,8 +23,8 @@ message ProcessOpenRequest {
   uint32 rows = 6;
 
   // If true, allocate a PTY (default). If false, exec without a PTY
-  // and pipe stdout/stderr separately; the 1B-opcode framing still
-  // applies but only 0/1/2/4 opcodes are used.
+  // and pipe stdout/stderr separately; stderr frames only flow in
+  // this mode.
   bool pty = 7;
 }
 
@@ -33,4 +33,52 @@ message ProcessOpenResponse {
   // audit); the stream itself identifies the process for the
   // server.
   int64 pid = 1;
+
+  // Populated on spawn failure (binary not found, permission
+  // denied). When non-empty the agent closes the stream
+  // immediately after this frame.
+  string error = 2;
+}
+
+// ProcessFrame is the per-frame payload that flows on the stream
+// AFTER the ProcessOpenRequest (carried in StreamHeader.metadata)
+// and the ProcessOpenResponse (first frame written by agent). Each
+// subsequent frame in either direction is a ProcessFrame with one
+// oneof field set.
+//
+// Framing is the same length-prefixed pattern used elsewhere in v2
+// (internal/link.WriteFrame / ReadFrame) so a frame boundary is
+// well-defined even though yamux presents a byte stream.
+message ProcessFrame {
+  oneof payload {
+    // server -> agent: bytes to write to the PTY / process stdin.
+    bytes stdin = 1;
+
+    // agent -> server: bytes read from the PTY (or stdout, in
+    // non-PTY mode).
+    bytes stdout = 2;
+
+    // agent -> server: bytes from stderr. Only populated when the
+    // agent is in non-PTY mode; in PTY mode stdout and stderr
+    // share the master and all data arrives as stdout frames.
+    bytes stderr = 3;
+
+    // server -> agent: new window size. Applies immediately.
+    WindowSize resize = 4;
+
+    // agent -> server: final frame before close. code is the
+    // child's raw exit status; signal is non-empty when the child
+    // was killed by a signal (e.g. "killed", "terminated").
+    ExitInfo exit = 5;
+  }
+}
+
+message WindowSize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message ExitInfo {
+  int32  code   = 1;
+  string signal = 2;
 }

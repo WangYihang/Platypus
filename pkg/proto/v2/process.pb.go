@@ -23,8 +23,8 @@ const (
 
 // ProcessOpenRequest is the StreamHeader.metadata for a
 // STREAM_TYPE_PROCESS_OPEN stream. The agent acks with
-// ProcessOpenResponse; after that, raw PTY frames flow with a
-// 1-byte opcode prefix (not protobuf): see internal/protocol/v2.
+// ProcessOpenResponse (first protobuf frame on the stream);
+// after that, both sides exchange ProcessFrame messages.
 type ProcessOpenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Command to exec. Empty means default shell (heuristic on agent).
@@ -39,8 +39,8 @@ type ProcessOpenRequest struct {
 	Cols uint32 `protobuf:"varint,5,opt,name=cols,proto3" json:"cols,omitempty"`
 	Rows uint32 `protobuf:"varint,6,opt,name=rows,proto3" json:"rows,omitempty"`
 	// If true, allocate a PTY (default). If false, exec without a PTY
-	// and pipe stdout/stderr separately; the 1B-opcode framing still
-	// applies but only 0/1/2/4 opcodes are used.
+	// and pipe stdout/stderr separately; stderr frames only flow in
+	// this mode.
 	Pty           bool `protobuf:"varint,7,opt,name=pty,proto3" json:"pty,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -130,7 +130,11 @@ type ProcessOpenResponse struct {
 	// Agent-side process id. Purely informational (for logs and
 	// audit); the stream itself identifies the process for the
 	// server.
-	Pid           int64 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	Pid int64 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	// Populated on spawn failure (binary not found, permission
+	// denied). When non-empty the agent closes the stream
+	// immediately after this frame.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -172,6 +176,266 @@ func (x *ProcessOpenResponse) GetPid() int64 {
 	return 0
 }
 
+func (x *ProcessOpenResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// ProcessFrame is the per-frame payload that flows on the stream
+// AFTER the ProcessOpenRequest (carried in StreamHeader.metadata)
+// and the ProcessOpenResponse (first frame written by agent). Each
+// subsequent frame in either direction is a ProcessFrame with one
+// oneof field set.
+//
+// Framing is the same length-prefixed pattern used elsewhere in v2
+// (internal/link.WriteFrame / ReadFrame) so a frame boundary is
+// well-defined even though yamux presents a byte stream.
+type ProcessFrame struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*ProcessFrame_Stdin
+	//	*ProcessFrame_Stdout
+	//	*ProcessFrame_Stderr
+	//	*ProcessFrame_Resize
+	//	*ProcessFrame_Exit
+	Payload       isProcessFrame_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessFrame) Reset() {
+	*x = ProcessFrame{}
+	mi := &file_process_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessFrame) ProtoMessage() {}
+
+func (x *ProcessFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_process_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessFrame.ProtoReflect.Descriptor instead.
+func (*ProcessFrame) Descriptor() ([]byte, []int) {
+	return file_process_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProcessFrame) GetPayload() isProcessFrame_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *ProcessFrame) GetStdin() []byte {
+	if x != nil {
+		if x, ok := x.Payload.(*ProcessFrame_Stdin); ok {
+			return x.Stdin
+		}
+	}
+	return nil
+}
+
+func (x *ProcessFrame) GetStdout() []byte {
+	if x != nil {
+		if x, ok := x.Payload.(*ProcessFrame_Stdout); ok {
+			return x.Stdout
+		}
+	}
+	return nil
+}
+
+func (x *ProcessFrame) GetStderr() []byte {
+	if x != nil {
+		if x, ok := x.Payload.(*ProcessFrame_Stderr); ok {
+			return x.Stderr
+		}
+	}
+	return nil
+}
+
+func (x *ProcessFrame) GetResize() *WindowSize {
+	if x != nil {
+		if x, ok := x.Payload.(*ProcessFrame_Resize); ok {
+			return x.Resize
+		}
+	}
+	return nil
+}
+
+func (x *ProcessFrame) GetExit() *ExitInfo {
+	if x != nil {
+		if x, ok := x.Payload.(*ProcessFrame_Exit); ok {
+			return x.Exit
+		}
+	}
+	return nil
+}
+
+type isProcessFrame_Payload interface {
+	isProcessFrame_Payload()
+}
+
+type ProcessFrame_Stdin struct {
+	// server -> agent: bytes to write to the PTY / process stdin.
+	Stdin []byte `protobuf:"bytes,1,opt,name=stdin,proto3,oneof"`
+}
+
+type ProcessFrame_Stdout struct {
+	// agent -> server: bytes read from the PTY (or stdout, in
+	// non-PTY mode).
+	Stdout []byte `protobuf:"bytes,2,opt,name=stdout,proto3,oneof"`
+}
+
+type ProcessFrame_Stderr struct {
+	// agent -> server: bytes from stderr. Only populated when the
+	// agent is in non-PTY mode; in PTY mode stdout and stderr
+	// share the master and all data arrives as stdout frames.
+	Stderr []byte `protobuf:"bytes,3,opt,name=stderr,proto3,oneof"`
+}
+
+type ProcessFrame_Resize struct {
+	// server -> agent: new window size. Applies immediately.
+	Resize *WindowSize `protobuf:"bytes,4,opt,name=resize,proto3,oneof"`
+}
+
+type ProcessFrame_Exit struct {
+	// agent -> server: final frame before close. code is the
+	// child's raw exit status; signal is non-empty when the child
+	// was killed by a signal (e.g. "killed", "terminated").
+	Exit *ExitInfo `protobuf:"bytes,5,opt,name=exit,proto3,oneof"`
+}
+
+func (*ProcessFrame_Stdin) isProcessFrame_Payload() {}
+
+func (*ProcessFrame_Stdout) isProcessFrame_Payload() {}
+
+func (*ProcessFrame_Stderr) isProcessFrame_Payload() {}
+
+func (*ProcessFrame_Resize) isProcessFrame_Payload() {}
+
+func (*ProcessFrame_Exit) isProcessFrame_Payload() {}
+
+type WindowSize struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cols          uint32                 `protobuf:"varint,1,opt,name=cols,proto3" json:"cols,omitempty"`
+	Rows          uint32                 `protobuf:"varint,2,opt,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WindowSize) Reset() {
+	*x = WindowSize{}
+	mi := &file_process_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WindowSize) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WindowSize) ProtoMessage() {}
+
+func (x *WindowSize) ProtoReflect() protoreflect.Message {
+	mi := &file_process_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WindowSize.ProtoReflect.Descriptor instead.
+func (*WindowSize) Descriptor() ([]byte, []int) {
+	return file_process_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *WindowSize) GetCols() uint32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
+func (x *WindowSize) GetRows() uint32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+type ExitInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Signal        string                 `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExitInfo) Reset() {
+	*x = ExitInfo{}
+	mi := &file_process_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExitInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExitInfo) ProtoMessage() {}
+
+func (x *ExitInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_process_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExitInfo.ProtoReflect.Descriptor instead.
+func (*ExitInfo) Descriptor() ([]byte, []int) {
+	return file_process_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ExitInfo) GetCode() int32 {
+	if x != nil {
+		return x.Code
+	}
+	return 0
+}
+
+func (x *ExitInfo) GetSignal() string {
+	if x != nil {
+		return x.Signal
+	}
+	return ""
+}
+
 var File_process_proto protoreflect.FileDescriptor
 
 const file_process_proto_rawDesc = "" +
@@ -187,9 +451,24 @@ const file_process_proto_rawDesc = "" +
 	"\x03pty\x18\a \x01(\bR\x03pty\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"'\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"=\n" +
 	"\x13ProcessOpenResponse\x12\x10\n" +
-	"\x03pid\x18\x01 \x01(\x03R\x03pidB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x03pid\x18\x01 \x01(\x03R\x03pid\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xc5\x01\n" +
+	"\fProcessFrame\x12\x16\n" +
+	"\x05stdin\x18\x01 \x01(\fH\x00R\x05stdin\x12\x18\n" +
+	"\x06stdout\x18\x02 \x01(\fH\x00R\x06stdout\x12\x18\n" +
+	"\x06stderr\x18\x03 \x01(\fH\x00R\x06stderr\x121\n" +
+	"\x06resize\x18\x04 \x01(\v2\x17.platypus.v2.WindowSizeH\x00R\x06resize\x12+\n" +
+	"\x04exit\x18\x05 \x01(\v2\x15.platypus.v2.ExitInfoH\x00R\x04exitB\t\n" +
+	"\apayload\"4\n" +
+	"\n" +
+	"WindowSize\x12\x12\n" +
+	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
+	"\x04rows\x18\x02 \x01(\rR\x04rows\"6\n" +
+	"\bExitInfo\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x16\n" +
+	"\x06signal\x18\x02 \x01(\tR\x06signalB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_process_proto_rawDescOnce sync.Once
@@ -203,19 +482,24 @@ func file_process_proto_rawDescGZIP() []byte {
 	return file_process_proto_rawDescData
 }
 
-var file_process_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_process_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_process_proto_goTypes = []any{
 	(*ProcessOpenRequest)(nil),  // 0: platypus.v2.ProcessOpenRequest
 	(*ProcessOpenResponse)(nil), // 1: platypus.v2.ProcessOpenResponse
-	nil,                         // 2: platypus.v2.ProcessOpenRequest.EnvEntry
+	(*ProcessFrame)(nil),        // 2: platypus.v2.ProcessFrame
+	(*WindowSize)(nil),          // 3: platypus.v2.WindowSize
+	(*ExitInfo)(nil),            // 4: platypus.v2.ExitInfo
+	nil,                         // 5: platypus.v2.ProcessOpenRequest.EnvEntry
 }
 var file_process_proto_depIdxs = []int32{
-	2, // 0: platypus.v2.ProcessOpenRequest.env:type_name -> platypus.v2.ProcessOpenRequest.EnvEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	5, // 0: platypus.v2.ProcessOpenRequest.env:type_name -> platypus.v2.ProcessOpenRequest.EnvEntry
+	3, // 1: platypus.v2.ProcessFrame.resize:type_name -> platypus.v2.WindowSize
+	4, // 2: platypus.v2.ProcessFrame.exit:type_name -> platypus.v2.ExitInfo
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_process_proto_init() }
@@ -223,13 +507,20 @@ func file_process_proto_init() {
 	if File_process_proto != nil {
 		return
 	}
+	file_process_proto_msgTypes[2].OneofWrappers = []any{
+		(*ProcessFrame_Stdin)(nil),
+		(*ProcessFrame_Stdout)(nil),
+		(*ProcessFrame_Stderr)(nil),
+		(*ProcessFrame_Resize)(nil),
+		(*ProcessFrame_Exit)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_process_proto_rawDesc), len(file_process_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

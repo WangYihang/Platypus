@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
@@ -16,11 +18,18 @@ import (
 // types get a StreamReject back to the server so dashboards can
 // surface capability gaps explicitly.
 //
-// Only RPC is wired right now; PTY / tunnel / file / event / socks5
-// slots will be added as those handlers land.
+// Process is optional: when nil, STREAM_TYPE_PROCESS_OPEN streams
+// get rejected. Tunnel / file / event / socks5 slots will land
+// alongside their respective handlers.
 type AgentHandlerDeps struct {
-	RPC AgentRPCHandlers
+	RPC     AgentRPCHandlers
+	Process ProcessHandler
 }
+
+// ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
+// The production implementation is HandleProcessStream; tests can
+// substitute a stub.
+type ProcessHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.ProcessOpenRequest) error
 
 // ServeLink is the agent-side accept loop. For each incoming yamux
 // stream it reads the StreamHeader (already done by sess.Accept),
@@ -69,6 +78,19 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 	case v2pb.StreamType_STREAM_TYPE_RPC:
 		if err := ServeRPCStream(ctx, stream, deps.RPC); err != nil {
 			log.Warn("agent: RPC stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN:
+		if deps.Process == nil {
+			rejectStream(stream, "unsupported_type", "process handler not registered")
+			return
+		}
+		var req v2pb.ProcessOpenRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse ProcessOpenRequest: "+err.Error())
+			return
+		}
+		if err := deps.Process(ctx, stream, &req); err != nil {
+			log.Warn("agent: process stream for %s: %v", hdr.CorrelationId, err)
 		}
 	default:
 		rejectStream(stream, "unsupported_type", fmt.Sprintf("no handler for %s", hdr.Type))
