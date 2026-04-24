@@ -84,32 +84,31 @@ func TestWSTicketEndpoint_ReturnsTicketWithBearer(t *testing.T) {
 	}
 }
 
-// TestWebSocketAuth_RejectsUnauthenticated asserts that /notify and /ws/:hash
-// bounce unauthenticated requests at the HTTP layer — before any WS upgrade.
+// TestWebSocketAuth_RejectsUnauthenticated asserts that /notify
+// bounces unauthenticated requests at the HTTP layer — before any
+// WS upgrade. The legacy /ws/:hash terminal was removed; v2
+// terminal sits at /api/v1/terminal/:agent_id/ws and carries its
+// own mTLS-based auth inside handler_terminal_v2.
 func TestWebSocketAuth_RejectsUnauthenticated(t *testing.T) {
 	r, _, _ := setupWSRouter(t)
-	for _, path := range []string{"/notify", "/ws/deadbeef"} {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", path, nil)
-		r.ServeHTTP(w, req)
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("GET %s without auth → %d; want 401", path, w.Code)
-		}
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/notify", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("GET /notify without auth → %d; want 401", w.Code)
 	}
 }
 
 func TestWebSocketAuth_AcceptsBearer(t *testing.T) {
 	r, _, tok := setupWSRouter(t)
-	for _, path := range []string{"/notify", "/ws/deadbeef"} {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", path, nil)
-		req.Header.Set("Authorization", "Bearer "+tok)
-		r.ServeHTTP(w, req)
-		// No upgrade headers → melody returns !=200; the assertion is
-		// narrower: we didn't bounce at the auth layer.
-		if w.Code == http.StatusUnauthorized {
-			t.Errorf("GET %s with Bearer → 401; middleware should have accepted: %s", path, w.Body.String())
-		}
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/notify", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	r.ServeHTTP(w, req)
+	// No upgrade headers → melody returns !=200; the assertion is
+	// narrower: we didn't bounce at the auth layer.
+	if w.Code == http.StatusUnauthorized {
+		t.Errorf("GET /notify with Bearer → 401; middleware should have accepted: %s", w.Body.String())
 	}
 }
 

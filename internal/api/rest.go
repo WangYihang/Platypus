@@ -1,31 +1,12 @@
 package api
 
 import (
-	"fmt"
 	"io"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
-
-func paramsExistOrAbort(c *gin.Context, params []string) bool {
-	for _, param := range params {
-		if c.Param(param) == "" {
-			return abortWithError(c, 400, fmt.Sprintf("%s is required", param))
-		}
-	}
-	return true
-}
-
-// abortWithError emits {error: msg} at the given status and aborts the gin
-// handler chain. Used by middleware/utility paths that need to bail before
-// the normal handler body runs (e.g. websocket upgrade path parameter checks).
-func abortWithError(c *gin.Context, status int, msg string) bool {
-	c.JSON(status, gin.H{"error": msg})
-	c.Abort()
-	return false
-}
 
 // CreateRESTfulAPIServer assembles the bare gin engine with CORS middleware.
 // Routes are registered separately via RegisterWebSocketRoutes and

@@ -148,18 +148,11 @@ func main() {
 	// pool so revocations / rotations take effect without a restart.
 	tlsCfg.ClientAuth = tls.RequestClientCert
 
-	agentSvc := core.NewAgentService(core.AgentServiceConfig{
-		HashFormat:     cfg.Ingress.HashFormat,
-		ShellPath:      cfg.Ingress.ShellPath,
-		IngressAddr:    publicAddr,
-		ProjectID:      cfg.Mesh.ProjectID,
-		DisableHistory: cfg.Ingress.DisableHistory,
-	})
-	core.SetAgentService(agentSvc)
-
+	// v1 AgentService is gone; v2 agents reach us through the h2/http1
+	// ALPN path (see Gin's /api/v1/agent/link handler). We keep the
+	// ptps-mesh ALPN so mesh peers can still dial the same port.
 	dispatcher, err := ingress.New(ingress.Config{
 		TLSConfig: tlsCfg,
-		OnAgent:   agentSvc.Handle,
 		OnMesh: func(conn net.Conn) {
 			if meshNode == nil {
 				_ = conn.Close()
