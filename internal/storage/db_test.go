@@ -21,7 +21,6 @@ func TestOpen_AppliesInitialSchema(t *testing.T) {
 		"refresh_tokens",
 		"projects",
 		"project_members",
-		"listeners",
 		"hosts",
 		"sessions",
 	}

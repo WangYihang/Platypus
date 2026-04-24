@@ -12,11 +12,9 @@ import (
 // constants is what guards the wire format — the test in notify_test.go
 // asserts the exact strings.
 const (
-	EventHostSeen        = "host.seen"
-	EventSessionOpened   = "session.opened"
-	EventSessionClosed   = "session.closed"
-	EventListenerCreated = "listener.created"
-	EventListenerDeleted = "listener.deleted"
+	EventHostSeen      = "host.seen"
+	EventSessionOpened = "session.opened"
+	EventSessionClosed = "session.closed"
 
 	// Topology events. The 1 Hz coalescer in core/topology_stream.go
 	// batches rapid stat changes into one link_stats / machine_stats

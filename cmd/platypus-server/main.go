@@ -291,7 +291,6 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		usersH := api.NewUsersHandler(db)
 		projectsH := api.NewProjectsHandler(db)
 		hostsH := api.NewHostsHandler(db)
-		listenersH := api.NewListenersV2Handler(db, core.CoreLiveListeners{})
 		sessionsH := api.NewSessionsV2Handler(db)
 		// Enrollment + (optional) PKI. Attaching the PKI issuer to the
 		// enrollment service makes every successful PAT / rotation
@@ -326,7 +325,6 @@ func startHTTPServers(cfg *config.Config) []*http.Server {
 		api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
 		api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
 		api.RegisterV1HostsRoutes(rest, hostsH, rbac)
-		api.RegisterV1ProjectListenersRoutes(rest, listenersH, rbac)
 		api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 		api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
 		api.RegisterV1InstallTokenRoutes(rest, installH, rbac)

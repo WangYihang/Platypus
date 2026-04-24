@@ -54,9 +54,6 @@ func TestInfoV1_Happy(t *testing.T) {
 		t.Errorf("started_at missing")
 	}
 	// Fresh core.Ctx has no servers or agents.
-	if body.ListenerCount != 0 {
-		t.Errorf("listener_count=%d, want 0", body.ListenerCount)
-	}
 	if body.SessionCount != 0 {
 		t.Errorf("session_count=%d, want 0", body.SessionCount)
 	}

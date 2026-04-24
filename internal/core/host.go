@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -108,40 +109,20 @@ func resolveProjectID(ctx context.Context, s *TCPServer) (string, error) {
 	return p.ID, nil
 }
 
-// EnsureListenerRow makes sure the persistent listeners row exists for s
-// before any session persistence attempts to reference it. TCPServers
-// created through the legacy config path don't get a row at startup; we
-// upsert-on-first-use here so session inserts don't FK-fail.
-func EnsureListenerRow(ctx context.Context, s *TCPServer) error {
-	if Ctx == nil || Ctx.Storage == nil || s == nil {
-		return nil
+// ingressAddrFor computes the host:port audit string persisted on the
+// session row. During the unified-ingress transition the TCPServer still
+// owns the port; once PR-E lands this falls back to the dispatcher's
+// PublicAddr exposed via core.AgentService.
+func ingressAddrFor(c *AgentClient) string {
+	if c == nil || c.server == nil {
+		return ""
 	}
-	if _, err := Ctx.Storage.Listeners().GetByID(ctx, s.Hash); err == nil {
-		return nil
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-	projectID, err := resolveProjectID(ctx, s)
-	if err != nil {
-		return err
-	}
-	return Ctx.Storage.Listeners().Create(ctx, &storage.Listener{
-		ID:             s.Hash,
-		ProjectID:      projectID,
-		Host:           s.Host,
-		Port:           s.Port,
-		PublicIP:       s.PublicIP,
-		ShellPath:      s.ShellPath,
-		DisableHistory: s.DisableHistory,
-		GroupDispatch:  s.GroupDispatch,
-		CreatedAt:      s.TimeStamp.UTC(),
-	})
+	return fmt.Sprintf("%s:%d", c.server.Host, c.server.Port)
 }
 
 // PersistSessionForAgent writes the session row. Requires HostID +
-// ProjectID to already be populated (UpsertHostForAgent does this) and
-// the listener row to exist (EnsureListenerRow). Skips silently when
-// storage is absent.
+// ProjectID to already be populated (UpsertHostForAgent does this).
+// Skips silently when storage is absent.
 func PersistSessionForAgent(ctx context.Context, c *AgentClient) {
 	if Ctx == nil || Ctx.Storage == nil {
 		return
@@ -155,7 +136,7 @@ func PersistSessionForAgent(ctx context.Context, c *AgentClient) {
 	err := Ctx.Storage.Sessions().Insert(ctx, &storage.Session{
 		ID:             c.Hash,
 		ProjectID:      c.ProjectID,
-		ListenerID:     c.server.Hash,
+		IngressAddr:    ingressAddrFor(c),
 		HostID:         c.HostID,
 		Alias:          c.Alias,
 		User:           c.User,

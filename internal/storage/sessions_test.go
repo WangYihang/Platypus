@@ -9,12 +9,13 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func seedSessionDeps(t *testing.T, db *storage.DB) (*storage.Project, *storage.Listener, *storage.Host) {
+const testIngressAddr = "0.0.0.0:9443"
+
+func seedSessionDeps(t *testing.T, db *storage.DB) (*storage.Project, *storage.Host) {
 	t.Helper()
 	ctx := context.Background()
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "prod", "Production", admin)
-	lis := seedListener(t, db, "lis-1", proj, "0.0.0.0", 13337)
 	host, err := db.Hosts().Upsert(ctx, &storage.HostIdentity{
 		ProjectID:   proj.ID,
 		MachineID:   "m-abc",
@@ -26,17 +27,17 @@ func seedSessionDeps(t *testing.T, db *storage.DB) (*storage.Project, *storage.L
 	if err != nil {
 		t.Fatalf("seed host: %v", err)
 	}
-	return proj, lis, host
+	return proj, host
 }
 
 func TestSessions_InsertAndListForHost(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	proj, lis, host := seedSessionDeps(t, db)
+	proj, host := seedSessionDeps(t, db)
 
 	now := time.Now().UTC()
 	s1 := &storage.Session{
-		ID: "s-1", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "s-1", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		User: "root", RemoteAddr: "10.0.0.5:47212",
 		ConnectedAt: now,
 	}
@@ -51,6 +52,9 @@ func TestSessions_InsertAndListForHost(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "s-1" {
 		t.Fatalf("list: %+v", got)
 	}
+	if got[0].IngressAddr != testIngressAddr {
+		t.Fatalf("IngressAddr roundtrip: got %q want %q", got[0].IngressAddr, testIngressAddr)
+	}
 	if got[0].DisconnectedAt != nil {
 		t.Fatalf("new session should have DisconnectedAt=nil; got %v", got[0].DisconnectedAt)
 	}
@@ -59,10 +63,10 @@ func TestSessions_InsertAndListForHost(t *testing.T) {
 func TestSessions_MarkDisconnected(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	proj, lis, host := seedSessionDeps(t, db)
+	proj, host := seedSessionDeps(t, db)
 
 	_ = db.Sessions().Insert(ctx, &storage.Session{
-		ID: "s-1", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "s-1", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC(),
 	})
 
@@ -86,14 +90,14 @@ func TestSessions_MarkDisconnected(t *testing.T) {
 func TestSessions_ListLiveForProject(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	proj, lis, host := seedSessionDeps(t, db)
+	proj, host := seedSessionDeps(t, db)
 
 	_ = db.Sessions().Insert(ctx, &storage.Session{
-		ID: "live", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "live", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC(),
 	})
 	_ = db.Sessions().Insert(ctx, &storage.Session{
-		ID: "dead", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "dead", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC(),
 	})
 	_ = db.Sessions().MarkDisconnected(ctx, "dead")
@@ -113,7 +117,7 @@ func TestSessions_ListLiveForProject(t *testing.T) {
 func TestSessions_ListForProject(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	proj, lis, host := seedSessionDeps(t, db)
+	proj, host := seedSessionDeps(t, db)
 
 	// Three sessions: one closed two days ago, one live an hour ago, one
 	// live ten minutes ago. The 2-day-old one should fall out of a "since
@@ -122,7 +126,7 @@ func TestSessions_ListForProject(t *testing.T) {
 	insert := func(id string, connected time.Time, alive bool) {
 		t.Helper()
 		if err := db.Sessions().Insert(ctx, &storage.Session{
-			ID: id, ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+			ID: id, ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 			ConnectedAt: connected,
 		}); err != nil {
 			t.Fatalf("Insert %s: %v", id, err)
@@ -203,11 +207,11 @@ func ids(ss []*storage.Session) []string {
 func TestSessions_FieldRoundtrip(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	proj, lis, host := seedSessionDeps(t, db)
+	proj, host := seedSessionDeps(t, db)
 
 	now := time.Now().UTC()
 	orig := &storage.Session{
-		ID: "s-1", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "s-1", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		Alias: "box-01", User: "root", RemoteAddr: "10.0.0.5:47212",
 		Version: "1.2.3", Python3: "python3", GroupDispatch: true,
 		InterfacesJSON: `{"eth0":"aa:bb"}`, ConnectedAt: now,

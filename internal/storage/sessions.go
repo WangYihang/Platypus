@@ -14,7 +14,7 @@ import (
 type Session struct {
 	ID             string
 	ProjectID      string
-	ListenerID     string
+	IngressAddr    string
 	HostID         string
 	Alias          string
 	User           string
@@ -35,11 +35,11 @@ type SessionRepo struct{ db *sql.DB }
 func (r *SessionRepo) Insert(ctx context.Context, s *Session) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sessions
-		  (id, project_id, listener_id, host_id, alias, user, remote_addr,
+		  (id, project_id, ingress_addr, host_id, alias, user, remote_addr,
 		   version, python2, python3, interfaces_json, group_dispatch,
 		   connected_at, disconnected_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-		s.ID, s.ProjectID, s.ListenerID, s.HostID,
+		s.ID, s.ProjectID, s.IngressAddr, s.HostID,
 		nullIfEmpty(s.Alias), nullIfEmpty(s.User), nullIfEmpty(s.RemoteAddr),
 		nullIfEmpty(s.Version), nullIfEmpty(s.Python2), nullIfEmpty(s.Python3),
 		nullIfEmpty(s.InterfacesJSON), s.GroupDispatch,
@@ -124,7 +124,7 @@ func (r *SessionRepo) SetGroupDispatch(ctx context.Context, id string, on bool) 
 }
 
 const sessionSelect = `
-	SELECT id, project_id, listener_id, host_id, alias, user, remote_addr,
+	SELECT id, project_id, ingress_addr, host_id, alias, user, remote_addr,
 	       version, python2, python3, interfaces_json, group_dispatch,
 	       connected_at, disconnected_at
 	  FROM sessions`
@@ -165,7 +165,7 @@ func scanSession(s rowScanner) (*Session, error) {
 		alias, userS, remote, version, py2, py3, ifacesJ sql.NullString
 		disc                                             sql.NullTime
 	)
-	err := s.Scan(&row.ID, &row.ProjectID, &row.ListenerID, &row.HostID,
+	err := s.Scan(&row.ID, &row.ProjectID, &row.IngressAddr, &row.HostID,
 		&alias, &userS, &remote, &version, &py2, &py3, &ifacesJ,
 		&row.GroupDispatch, &row.ConnectedAt, &disc)
 	if err != nil {

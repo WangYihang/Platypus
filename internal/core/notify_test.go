@@ -47,8 +47,6 @@ func TestNotifyEventConstants(t *testing.T) {
 		{EventHostSeen, "host.seen"},
 		{EventSessionOpened, "session.opened"},
 		{EventSessionClosed, "session.closed"},
-		{EventListenerCreated, "listener.created"},
-		{EventListenerDeleted, "listener.deleted"},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("event const = %q; want %q", tc.got, tc.want)

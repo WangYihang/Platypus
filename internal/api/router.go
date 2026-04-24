@@ -17,13 +17,6 @@ func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
 		// Server info
 		v1.GET("/info", GetServerInfoV1)
 
-		// Listeners
-		v1.GET("/listeners", ListListenersV1)
-		v1.GET("/listeners/:id", GetListenerV1)
-		v1.POST("/listeners", CreateListenerV1)
-		v1.DELETE("/listeners/:id", DeleteListenerV1)
-		v1.GET("/listeners/:id/sessions", ListenerSessionsV1)
-
 		// Sessions
 		v1.GET("/sessions", ListSessionsV1)
 		v1.GET("/sessions/:id", GetSessionV1)

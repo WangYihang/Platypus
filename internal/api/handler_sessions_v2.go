@@ -28,7 +28,7 @@ func NewSessionsV2Handler(db *storage.DB) *SessionsV2Handler {
 type sessionResponse struct {
 	ID             string     `json:"id"`
 	ProjectID      string     `json:"project_id"`
-	ListenerID     string     `json:"listener_id"`
+	IngressAddr    string     `json:"ingress_addr"`
 	HostID         string     `json:"host_id"`
 	Alias          string     `json:"alias,omitempty"`
 	User           string     `json:"user,omitempty"`
@@ -41,7 +41,7 @@ type sessionResponse struct {
 
 func toSessionResponse(s *storage.Session) sessionResponse {
 	return sessionResponse{
-		ID: s.ID, ProjectID: s.ProjectID, ListenerID: s.ListenerID, HostID: s.HostID,
+		ID: s.ID, ProjectID: s.ProjectID, IngressAddr: s.IngressAddr, HostID: s.HostID,
 		Alias: s.Alias, User: s.User, RemoteAddr: s.RemoteAddr, Version: s.Version,
 		GroupDispatch: s.GroupDispatch,
 		ConnectedAt:   s.ConnectedAt, DisconnectedAt: s.DisconnectedAt,

@@ -32,9 +32,11 @@ func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) 
 	return r, db, issuer
 }
 
-// seedSessionRow inserts the minimum set of rows (host + listener +
-// session) and returns the storage objects the test can reference.
-func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sessionID string, disconnect bool) (*storage.Host, *storage.Listener, *storage.Session) {
+const testIngressAddr = "0.0.0.0:9443"
+
+// seedSessionRow inserts the minimum set of rows (host + session) and
+// returns the storage objects the test can reference.
+func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sessionID string, disconnect bool) (*storage.Host, *storage.Session) {
 	t.Helper()
 	ctx := context.Background()
 	host, err := db.Hosts().Upsert(ctx, &storage.HostIdentity{
@@ -44,21 +46,15 @@ func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sess
 	if err != nil {
 		t.Fatalf("host upsert: %v", err)
 	}
-	lis := &storage.Listener{
-		ID:        "lis-" + sessionID,
-		ProjectID: project.ID,
-		Host:      "0.0.0.0", Port: 13337, CreatedAt: time.Now().UTC(),
-	}
-	_ = db.Listeners().Create(ctx, lis)
 	sess := &storage.Session{
-		ID: sessionID, ProjectID: project.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: sessionID, ProjectID: project.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		User: "root", ConnectedAt: time.Now().UTC(),
 	}
 	_ = db.Sessions().Insert(ctx, sess)
 	if disconnect {
 		_ = db.Sessions().MarkDisconnected(ctx, sessionID)
 	}
-	return host, lis, sess
+	return host, sess
 }
 
 func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
@@ -69,10 +65,10 @@ func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
 	// Seed two sessions on the same host: one still live, one already
 	// disconnected. The response must include both, newest-connected
 	// first.
-	host, lis, _ := seedSessionRow(t, db, proj, "s-live", false)
+	host, _ := seedSessionRow(t, db, proj, "s-live", false)
 	ctx := context.Background()
 	_ = db.Sessions().Insert(ctx, &storage.Session{
-		ID: "s-dead", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "s-dead", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC(),
 	})
 	_ = db.Sessions().MarkDisconnected(ctx, "s-dead")
@@ -99,7 +95,7 @@ func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
 	stag := seedProjectForAPITest(t, db, "staging", admin)
 
 	// Host in prod.
-	host, _, _ := seedSessionRow(t, db, prod, "s-1", false)
+	host, _ := seedSessionRow(t, db, prod, "s-1", false)
 
 	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
 	w := probeReqWithPath(r, "GET",
@@ -116,9 +112,9 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
 	// One closed session 2 days ago; one live now.
-	host, lis, _ := seedSessionRow(t, db, proj, "live-now", false)
+	host, _ := seedSessionRow(t, db, proj, "live-now", false)
 	_ = db.Sessions().Insert(ctx, &storage.Session{
-		ID: "old-closed", ProjectID: proj.ID, ListenerID: lis.ID, HostID: host.ID,
+		ID: "old-closed", ProjectID: proj.ID, IngressAddr: testIngressAddr, HostID: host.ID,
 		ConnectedAt: time.Now().UTC().Add(-48 * time.Hour),
 	})
 	_ = db.Sessions().MarkDisconnected(ctx, "old-closed")
@@ -199,10 +195,8 @@ func TestSessionsV2_Dispatch_RuntimeMissing_ReturnsErrorRow(t *testing.T) {
 
 	// Insert a live session marked group_dispatch=true with no matching
 	// runtime AgentClient (core.FindAgentClientByHash returns nil).
-	host, lis, _ := seedSessionRow(t, db, proj, "s-orphan", false)
+	_, _ = seedSessionRow(t, db, proj, "s-orphan", false)
 	_ = db.Sessions().SetGroupDispatch(context.Background(), "s-orphan", true)
-	_ = host
-	_ = lis
 
 	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/dispatch", tok,
