@@ -138,6 +138,33 @@ func TestPeerDelta_CertBoundVerify_RejectsSANMismatch(t *testing.T) {
 	}
 }
 
+// TestPeerDelta_CertPresentNoPool_MixedMode: cert_pem is populated
+// but the receiver has no trusted CA pool. The mixed-mode
+// migration aid path kicks in — we still enforce SAN ↔ node_id
+// and SPKI ↔ pubkey consistency locally, just without a chain
+// check. Pass when consistent; fail on a tampered cert SAN.
+func TestPeerDelta_CertPresentNoPool_MixedMode(t *testing.T) {
+	_, leafPEM, leafPriv := mintCAAndLeaf(t, "agent-dx", "proj-v")
+	pub := leafPriv.Public().(ed25519.PublicKey)
+	delta := &v2pb.MeshPeerDelta{
+		OriginNodeId:  "agent-dx",
+		Pubkey:        pub,
+		Seq:           1,
+		Ttl:           5,
+		OriginCertPem: leafPEM,
+	}
+	signPeerDelta(leafPriv, delta)
+	if err := verifyPeerDelta(delta, nil); err != nil {
+		t.Fatalf("mixed-mode verify: %v", err)
+	}
+	// Now swap the claimed origin id. Local check should still fire.
+	delta.OriginNodeId = "agent-forged"
+	signPeerDelta(leafPriv, delta)
+	if err := verifyPeerDelta(delta, nil); err == nil {
+		t.Fatal("mixed-mode verify should still catch SAN ↔ id mismatch")
+	}
+}
+
 // TestPeerDelta_LegacyPathStillWorksWithoutCert verifies the
 // fallback: no OriginCertPem + no trustedCAs → legacy DeriveNodeID
 // check is used.

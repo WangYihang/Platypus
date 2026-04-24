@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -69,6 +72,30 @@ func main() {
 			DiscoveryLAN:      opts.MeshDiscoveryLAN,
 			DiscoveryInterval: opts.MeshDiscoveryInterval,
 			ProjectID:         meshProjectID,
+		}
+		// Prefer the cert-bound mesh identity when the agent has
+		// already been enrolled: NodeID = cert SAN id, and gossip
+		// from peers is verified against the project CA loaded from
+		// disk alongside the cert. On a fresh install (no cert yet)
+		// we fall through to the self-certifying mesh.Identity path
+		// — the next restart, after BootstrapV2 persists the cert,
+		// will pick up the cert-bound identity automatically.
+		if id, err := agent.LoadIdentity(identityDir); err == nil {
+			if meshID, mErr := meshIdentityFromAgentID(id); mErr != nil {
+				logger.Warn("mesh: build cert-bound identity failed, falling back to self-cert",
+					slog.String("error", mErr.Error()))
+			} else {
+				cfg.Identity = meshID
+				if pool, pErr := certPoolFromPEM(id.CAPEM); pErr != nil {
+					logger.Warn("mesh: parse project CA failed, cert verification disabled",
+						slog.String("error", pErr.Error()))
+				} else {
+					cfg.TrustedCAs = pool
+				}
+			}
+		} else if !errors.Is(err, agent.ErrIdentityNotFound) {
+			logger.Warn("mesh: load agent identity failed, falling back to self-cert",
+				slog.String("error", err.Error()))
 		}
 		node, err := mesh.NewNode(cfg, logger)
 		if err != nil {
@@ -154,4 +181,28 @@ func main() {
 	}
 	_ = state // kept for when mesh Phase IV wires v2 back into agent.State
 	logger.Info("agent stopped")
+}
+
+// meshIdentityFromAgentID turns the enrolled agent.Identity (cert
+// PEM + parsed Ed25519 key) into a mesh.Identity by re-marshalling
+// the key to PKCS#8 PEM and feeding both into LoadIdentityFromCert.
+// The round-trip is cheap and lets mesh own the parsing contract.
+func meshIdentityFromAgentID(id *agent.Identity) (*mesh.Identity, error) {
+	keyDER, err := x509.MarshalPKCS8PrivateKey(id.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal agent key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	return mesh.LoadIdentityFromCert(id.CertPEM, keyPEM)
+}
+
+// certPoolFromPEM builds an x509.CertPool from one or more
+// concatenated CERTIFICATE PEM blocks. Used to trust the agent's
+// project CA when verifying cert-bound mesh gossip.
+func certPoolFromPEM(caPEM []byte) (*x509.CertPool, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, errors.New("no valid CERTIFICATE blocks in CA PEM")
+	}
+	return pool, nil
 }
