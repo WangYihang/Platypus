@@ -22,13 +22,12 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
 // ProjectSettings is the per-project configuration surface. Today it
-// hosts a single General tab — project name / slug (read-only for
-// now) plus a Danger Zone with Delete. The Tabs shell is in place so
-// new facets (access control, integrations, webhooks, …) drop in
-// without restructuring the page.
+// hosts a single section ("General") — project identity and a Danger
+// Zone. A TabsList strip with a single trigger reads as visual noise
+// (and implies more sections exist than there are), so we render
+// the body inline; reintroduce <Tabs> here when a second section
+// lands.
 export default function ProjectSettings() {
     const project = useCurrentProject();
     const { refresh } = useShell();
@@ -54,19 +53,14 @@ export default function ProjectSettings() {
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <PageHeader title="Settings" subtitle={`Project · ${project.slug}`} />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                <Tabs defaultValue="general" className="w-full">
-                    <TabsList>
-                        <TabsTrigger value="general">General</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="general" style={{ marginTop: space[4] }}>
-                        <div
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: space[4],
-                                maxWidth: 720,
-                            }}
-                        >
+                <div
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: space[4],
+                        maxWidth: 720,
+                    }}
+                >
                             <Card header="Identity" padding={5}>
                                 <DataList
                                     items={[
@@ -122,9 +116,7 @@ export default function ProjectSettings() {
                                     </Button>
                                 </div>
                             </Card>
-                        </div>
-                    </TabsContent>
-                </Tabs>
+                </div>
             </div>
 
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
