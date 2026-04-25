@@ -81,13 +81,24 @@ export default function TopologyPanel() {
                                         position: "absolute",
                                         inset: 0,
                                         display: "flex",
+                                        flexDirection: "column",
                                         alignItems: "center",
                                         justifyContent: "center",
                                         color: palette.textMuted,
                                         fontSize: 13,
+                                        gap: 4,
+                                        textAlign: "center",
+                                        padding: space[6],
                                     }}
                                 >
-                                    No agents currently connected to this project.
+                                    <span style={{ color: palette.textSecondary }}>
+                                        No mesh topology yet
+                                    </span>
+                                    <span>
+                                        Agents and the links between them appear here as the
+                                        mesh comes up. Check the Table view to see enrolled
+                                        hosts.
+                                    </span>
                                 </div>
                             )}
                         <MeshGraph
