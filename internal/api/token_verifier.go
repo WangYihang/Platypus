@@ -33,6 +33,12 @@ func (v *TokenVerifier) WithClock(now func() time.Time) *TokenVerifier {
 	return v
 }
 
+// SessionIdleWindow is how far ahead each successful Verify pushes a
+// user_session's idle_expires_at. 24h matches the documented session
+// behaviour: a user idle longer than this re-authenticates regardless
+// of the hard ExpiresAt.
+const SessionIdleWindow = 24 * time.Hour
+
 // Verify resolves the raw token and returns the authenticated principal
 // alongside a reason string callers log to the audit trail. The reason
 // is one of:
@@ -83,20 +89,40 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 		return nil, reason, nil
 	}
 
+	// Sessions inherit role/username from the live users row so a
+	// demote takes effect within one cache TTL (≤30s). AATs keep
+	// their on-row role/scope — issuer-time intent is the source of
+	// truth for tokens. A users row that has been deleted out from
+	// under a session yields auth failure (treated as revoked).
+	if kind == optoken.KindUserSession {
+		u, err := v.db.Users().GetByID(ctx, verified.UserID)
+		if err != nil {
+			return nil, "revoked", nil
+		}
+		verified.Role = u.Role
+		verified.Username = u.Username
+		verified.Scopes = optoken.ScopesFromRole(u.Role)
+	}
+
 	v.cache.Put(id, verified)
 
 	// last_used_* update runs detached so it never blocks the
-	// request hot path. context.WithoutCancel preserves any
-	// values (request id, etc.) but lets the goroutine outlive
-	// the request without picking up its cancellation.
-	go func(id, ip, ua string, t time.Time) {
+	// request hot path. Sessions also need their idle window
+	// pushed forward — that's the sliding-window mechanism. AATs
+	// pass nil so idle_expires_at stays NULL on their rows.
+	var newIdle *time.Time
+	if kind == optoken.KindUserSession {
+		bumped := now.Add(SessionIdleWindow)
+		newIdle = &bumped
+	}
+	go func(id string, idle *time.Time, t time.Time) {
 		bg := context.WithoutCancel(ctx)
 		ctx2, cancel := context.WithTimeout(bg, 2*time.Second)
 		defer cancel()
 		// Errors are best-effort; a missed touch is a stale
 		// last_used, not a security issue.
-		_ = v.db.AuthTokens().TouchLastUsed(ctx2, id, ip, ua, nil, t)
-	}(id, "", "", now)
+		_ = v.db.AuthTokens().TouchLastUsed(ctx2, id, "", "", idle, t)
+	}(id, newIdle, now)
 
 	return PrincipalFromVerified(verified), "success", nil
 }

@@ -68,18 +68,27 @@ func PrincipalFromClaims(c AccessClaims) *Principal {
 	}
 }
 
-// PrincipalFromVerified builds an AAT-kind Principal from a successful
-// optoken Verify result. The verifier passes through the storage row's
-// scopes / project / role verbatim — no implicit broadening.
+// PrincipalFromVerified builds a Principal from a successful optoken
+// Verify result. The kind in Verified determines the resulting
+// PrincipalKind: AAT rows produce a PrincipalAATKind, user_session
+// rows produce a PrincipalUser (sessions are human bearers, just
+// authenticated via an opaque token instead of a JWT).
 func PrincipalFromVerified(v *optoken.Verified) *Principal {
-	return &Principal{
-		Kind:      PrincipalAATKind,
+	p := &Principal{
 		UserID:    v.UserID,
+		Username:  v.Username,
 		Role:      v.Role,
 		Scopes:    append([]string(nil), v.Scopes...),
 		ProjectID: v.ProjectID,
 		TokenID:   v.TokenID,
 	}
+	switch v.Kind {
+	case optoken.KindUserSession:
+		p.Kind = PrincipalUser
+	default:
+		p.Kind = PrincipalAATKind
+	}
+	return p
 }
 
 // principalCtxKey is the gin context slot for the authenticated
