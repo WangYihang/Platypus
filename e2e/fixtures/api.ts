@@ -13,10 +13,34 @@ export interface LoginBody {
     password: string;
 }
 
-export interface TokenPair {
-    access_token: string;
-    refresh_token: string;
+// LoginResponse mirrors the Phase-2 /auth/login + /auth/bootstrap shape:
+// a single opaque session_token plus server-supplied expiry markers.
+// access_token is kept as a JS-side alias of session_token so older
+// fixture call-sites that still read .access_token compile until their
+// follow-up cleanup; new code should prefer session_token.
+export interface LoginResponse {
+    session_token: string;
+    token_id: string;
+    expires_at: string;
+    idle_expires_at: string;
     user: { id: string; username: string; role: "admin" | "operator" | "viewer" };
+    /** @deprecated alias of session_token for legacy call-sites. */
+    access_token: string;
+}
+
+// TokenPair is the legacy name kept for any spec still importing it.
+export type TokenPair = LoginResponse;
+
+interface RawLoginBody {
+    session_token: string;
+    token_id: string;
+    expires_at: string;
+    idle_expires_at: string;
+    user: LoginResponse["user"];
+}
+
+function aliasAccess(r: RawLoginBody): LoginResponse {
+    return { ...r, access_token: r.session_token };
 }
 
 export interface ProjectResp {
@@ -44,12 +68,17 @@ async function postJSON<T>(url: string, body: unknown, token?: string): Promise<
 export async function bootstrapAdmin(
     backendURL: string,
     body: BootstrapBody,
-): Promise<TokenPair> {
-    return postJSON<TokenPair>(`${backendURL}/api/v1/auth/bootstrap`, body);
+): Promise<LoginResponse> {
+    const r = await postJSON<RawLoginBody>(`${backendURL}/api/v1/auth/bootstrap`, body);
+    return aliasAccess(r);
 }
 
-export async function loginAPI(backendURL: string, body: LoginBody): Promise<TokenPair> {
-    return postJSON<TokenPair>(`${backendURL}/api/v1/auth/login`, body);
+export async function loginAPI(
+    backendURL: string,
+    body: LoginBody,
+): Promise<LoginResponse> {
+    const r = await postJSON<RawLoginBody>(`${backendURL}/api/v1/auth/login`, body);
+    return aliasAccess(r);
 }
 
 export async function createProject(

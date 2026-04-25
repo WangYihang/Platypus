@@ -41,3 +41,11 @@ Keyboard-first nav: jump between pages, switch project, open a terminal on any h
 <video src="05-command-palette.webm" controls width="900"></video>
 
 _1.7 MB · WebM (VP8/Opus)_
+
+## Phase 1+2 auth redesign — opaque session + AAT lifecycle
+
+End-to-end demonstration of the new auth path: log in via the UI to receive a single `pst_` session token (no JWT pair, no refresh dance), mint an `aat_` AI agent token via REST, use it to call a protected endpoint, revoke it, and watch the same bearer immediately fail — the verifier cache invalidates synchronously, so revocation is 0-latency on the issuing node.
+
+<video src="06-auth-redesign.webm" controls width="900"></video>
+
+_~743 KB · WebM (VP8/Opus)_
