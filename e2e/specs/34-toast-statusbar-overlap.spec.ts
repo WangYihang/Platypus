@@ -32,7 +32,7 @@ test.describe("toast / statusbar layout", () => {
             .first();
         await expect(toast).toBeVisible({ timeout: 5_000 });
 
-        const sb = page.locator('[role="status"]').first();
+        const sb = page.getByTestId("status-bar");
         await expect(sb).toBeVisible();
 
         const tb = await toast.boundingBox();

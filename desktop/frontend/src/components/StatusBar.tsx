@@ -94,6 +94,7 @@ export default function StatusBar() {
     return (
         <div
             role="status"
+            data-testid="status-bar"
             style={{
                 flexShrink: 0,
                 height: 28,

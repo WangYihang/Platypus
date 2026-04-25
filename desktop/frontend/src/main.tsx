@@ -17,7 +17,12 @@ root.render(
             Toaster renders the sonner portal for toast.* calls. */}
         <TooltipProvider delayDuration={200}>
             <RouterProvider router={router} />
-            <Toaster position="bottom-right" richColors closeButton />
+            {/* offset=44 keeps toasts above the 28px StatusBar with
+                a visible gap so the two regions read as separate
+                elements instead of a stacked block. (The default
+                offset of 32 plus a 56-ish-px toast still overlapped
+                the bar in practice.) */}
+            <Toaster position="bottom-right" offset={44} richColors closeButton />
         </TooltipProvider>
     </React.StrictMode>,
 );
