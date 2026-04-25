@@ -188,11 +188,10 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                                 : undefined
                         }
                     />
-                    <MetricCard
-                        label="Ingress"
-                        value={publicAddr || "—"}
-                        hint="Single TLS port agents dial"
-                    />
+                    {/* Ingress is an address, not a stat — surfaced in
+                        the dedicated "Ingress" Card below the chart row
+                        instead of a KPI tile. Mixing host:port into the
+                        same big-number slot wrecked the grid rhythm. */}
                     <MetricCard
                         label="Live sessions"
                         value={liveSessionsCount}
