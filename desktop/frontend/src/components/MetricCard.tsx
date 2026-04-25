@@ -24,7 +24,7 @@ export default function MetricCard({ label, value, hint, accent = "default" }: P
             : palette.textPrimary;
 
     return (
-        <Card padding={5}>
+        <Card padding={5} data-testid="metric-card">
             <div style={{ display: "flex", flexDirection: "column", gap: space[2] }}>
                 <div
                     style={{

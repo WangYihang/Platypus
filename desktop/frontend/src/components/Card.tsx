@@ -13,6 +13,7 @@ interface Props {
     className?: string;
     style?: CSSProperties;
     onClick?: () => void;
+    "data-testid"?: string;
 }
 
 // Card is the Vercel-style surface primitive: 1px hairline border on
@@ -28,6 +29,7 @@ export default function Card({
     className,
     style,
     onClick,
+    "data-testid": dataTestid,
 }: Props) {
     const pad = padding === 0 ? 0 : space[padding];
     const cls = ["pl-card", interactive ? "pl-card--interactive" : "", className]
@@ -37,6 +39,7 @@ export default function Card({
     return (
         <div
             className={cls}
+            data-testid={dataTestid}
             onClick={onClick}
             role={interactive && onClick ? "button" : undefined}
             tabIndex={interactive && onClick ? 0 : undefined}
