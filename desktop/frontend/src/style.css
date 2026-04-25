@@ -89,8 +89,20 @@
     --color-text-primary: var(--color-text-primary);
     --color-text-secondary: var(--color-text-secondary);
     --color-text-muted: var(--color-text-muted);
-    --color-accent: var(--color-accent);
-    --color-accent-fg: var(--color-accent-fg);
+    /* `--color-accent` is the Tailwind utility shadcn components reach
+       for via `bg-accent` / `text-accent-foreground` (Toggle, Dropdown,
+       FileTable selection, ActivitiesPage hover). Wire it to the
+       shadcn semantic `--accent` (surface-hover dark gray) so the
+       active toggle pill stays visible — pointing it at the raw
+       `--color-accent` (#fafafa) collided with `--accent-foreground`
+       (also white) and rendered the active state as a blank white
+       block. The brand-white token is still available via the JS
+       `palette.accent` export for inline-style consumers, and via
+       `bg-brand` for class-based consumers that genuinely want it.   */
+    --color-accent: var(--accent);
+    --color-accent-fg: var(--accent-foreground);
+    --color-brand: #fafafa;
+    --color-brand-fg: #0a0a0a;
     --color-success: var(--color-success);
     --color-success-dot: var(--color-success-dot);
     --color-danger: var(--color-danger);
