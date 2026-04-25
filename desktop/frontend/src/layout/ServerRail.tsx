@@ -281,7 +281,16 @@ function ServerTile({ profile, index, active, onActivate }: TileProps) {
                                 data-testid="rail-active-indicator"
                                 style={{
                                     position: "absolute",
-                                    left: -12,
+                                    // Tile is 40px centred in a 64px
+                                    // rail (12px gap each side) but
+                                    // the rail's scroll container has
+                                    // overflow:auto, so a bar at
+                                    // left:-12 leaks half a pixel past
+                                    // the rail's left edge on most
+                                    // viewports. -8 keeps it firmly
+                                    // inside without sacrificing the
+                                    // Slack-style "edge accent" look.
+                                    left: -8,
                                     top: "50%",
                                     transform: "translateY(-50%)",
                                     width: 3,
