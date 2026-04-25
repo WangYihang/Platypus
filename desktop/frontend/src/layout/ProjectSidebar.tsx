@@ -111,6 +111,7 @@ export default function ProjectSidebar({
 
     return (
         <aside
+            data-testid="project-sidebar"
             style={{
                 width: 240,
                 height: "100%",
