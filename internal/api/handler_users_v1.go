@@ -146,8 +146,16 @@ func (h *UsersHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "update password"})
 			return
 		}
-		// Password change invalidates existing refresh tokens.
-		_ = h.db.RefreshTokens().RevokeAllForUser(ctx, id)
+		// Password change invalidates every existing user_session for
+		// the target user. Other live tabs lose access on next request.
+		// AAT rows the user issued are left alone — they have their
+		// own rotation lifecycle and the change of an issuer's
+		// password doesn't imply intent to kill their tokens.
+		actor := ""
+		if p, ok := PrincipalFromContext(c); ok {
+			actor = p.UserID
+		}
+		_, _ = h.db.AuthTokens().RevokeAllSessionsForUser(ctx, id, actor, "admin password reset", time.Now().UTC())
 	}
 
 	u, err := h.db.Users().GetByID(ctx, id)

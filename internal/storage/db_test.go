@@ -18,7 +18,7 @@ func TestOpen_AppliesInitialSchema(t *testing.T) {
 
 	wantTables := []string{
 		"users",
-		"refresh_tokens",
+		"auth_tokens",
 		"projects",
 		"project_members",
 		"hosts",
