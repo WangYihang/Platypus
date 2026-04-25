@@ -278,6 +278,7 @@ function ServerTile({ profile, index, active, onActivate }: TileProps) {
                         {active && (
                             <span
                                 aria-hidden
+                                data-testid="rail-active-indicator"
                                 style={{
                                     position: "absolute",
                                     left: -12,
