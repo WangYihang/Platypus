@@ -11,8 +11,13 @@ import (
 // handler_rpc_v2.go, handler_terminal_v2.go). handler_sessions_v2
 // still owns /api/v1/projects/:pid/sessions for the admin listing.
 func RegisterV1Routes(engine *gin.Engine, auth *Auth) {
-	// Public: token endpoint
+	// Public: token endpoint + build trio. /version is the strict
+	// subset of /info that's safe to leak to unauthenticated callers
+	// (no uptime, no public_addr, no session count) so dashboards and
+	// upgrade banners can read the running build without trading for
+	// a token first.
 	engine.POST("/api/v1/auth/token", auth.TokenEndpoint())
+	engine.GET("/api/v1/version", GetVersionV1)
 
 	v1 := engine.Group("/api/v1")
 	v1.Use(auth.Middleware())

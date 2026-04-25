@@ -47,6 +47,7 @@ const FileViewerPaged = lazy(() => import("./FileViewerPaged"));
 const SMALL_FILE_LIMIT = 5 * 1024 * 1024;
 
 interface Props {
+    projectID: string;
     sessionHash: string;
 }
 
@@ -83,8 +84,8 @@ function CrumbDroppable({
     );
 }
 
-export default function FileBrowser({ sessionHash }: Props) {
-    const dir = useDirectory(sessionHash);
+export default function FileBrowser({ projectID, sessionHash }: Props) {
+    const dir = useDirectory(projectID, sessionHash);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
     const [openingEntry, setOpeningEntry] = useState<FileEntryDTO | null>(null);
@@ -112,6 +113,7 @@ export default function FileBrowser({ sessionHash }: Props) {
     // --- DnD: OS drop + container-level droppable for "drop into this
     // directory" (the breadcrumb also registers a droppable per crumb).
     const { dragOver, dropHandlers } = useDragDrop({
+        projectID,
         sessionHash,
         currentPath: dir.path,
         onFinished: () => {
@@ -149,7 +151,7 @@ export default function FileBrowser({ sessionHash }: Props) {
         if (!src) return;
         const name = basename(src);
         try {
-            await UploadFile(sessionHash, joinPath(dir.path, name), src);
+            await UploadFile(projectID, sessionHash, joinPath(dir.path, name), src);
             toast.success(`Uploaded ${name}`);
             dir.reload();
         } catch (err) {
@@ -166,7 +168,7 @@ export default function FileBrowser({ sessionHash }: Props) {
         const dst = await PickSaveLocation("Save to", entry.name);
         if (!dst) return;
         try {
-            await DownloadFile(sessionHash, joinPath(dir.path, entry.name), dst);
+            await DownloadFile(projectID, sessionHash, joinPath(dir.path, entry.name), dst);
             toast.success(`Downloaded ${entry.name}`);
         } catch (err) {
             toast.error(`download: ${String(err instanceof Error ? err.message : err)}`);
@@ -175,7 +177,7 @@ export default function FileBrowser({ sessionHash }: Props) {
 
     async function handleCreateFolder(name: string) {
         try {
-            await Mkdir(sessionHash, joinPath(dir.path, name), false, 0o755);
+            await Mkdir(projectID, sessionHash, joinPath(dir.path, name), false, 0o755);
             toast.success(`Created ${name}`);
             dir.reload();
         } catch (err) {
@@ -188,6 +190,7 @@ export default function FileBrowser({ sessionHash }: Props) {
         if (!entry) return;
         try {
             await RenameFile(
+                projectID,
                 sessionHash,
                 joinPath(dir.path, entry.name),
                 joinPath(dir.path, newName),
@@ -203,7 +206,7 @@ export default function FileBrowser({ sessionHash }: Props) {
         const entry = selectedEntries[0];
         if (!entry) return;
         try {
-            await Chmod(sessionHash, joinPath(dir.path, entry.name), mode);
+            await Chmod(projectID, sessionHash, joinPath(dir.path, entry.name), mode);
             toast.success(`chmod ${mode.toString(8)} ${entry.name}`);
             dir.reload();
         } catch (err) {
@@ -214,7 +217,7 @@ export default function FileBrowser({ sessionHash }: Props) {
     async function handleDelete() {
         for (const entry of selectedEntries) {
             try {
-                await DeleteFile(sessionHash, joinPath(dir.path, entry.name), entry.isDir);
+                await DeleteFile(projectID, sessionHash, joinPath(dir.path, entry.name), entry.isDir);
             } catch (err) {
                 toast.error(`delete ${entry.name}: ${String(err instanceof Error ? err.message : err)}`);
                 dir.reload();
@@ -239,7 +242,7 @@ export default function FileBrowser({ sessionHash }: Props) {
         if (sourcePath === destPath) return;
         (async () => {
             try {
-                await RenameFile(sessionHash, sourcePath, destPath);
+                await RenameFile(projectID, sessionHash, sourcePath, destPath);
                 toast.success(`Moved ${from.name} → ${destDir}`);
                 dir.reload();
             } catch (err) {
@@ -417,6 +420,7 @@ export default function FileBrowser({ sessionHash }: Props) {
                             >
                                 {openingEntry.size > SMALL_FILE_LIMIT ? (
                                     <FileViewerPaged
+                                        projectID={projectID}
                                         sessionHash={sessionHash}
                                         path={joinPath(dir.path, openingEntry.name)}
                                         size={openingEntry.size}
@@ -424,6 +428,7 @@ export default function FileBrowser({ sessionHash }: Props) {
                                     />
                                 ) : (
                                     <FileEditor
+                                        projectID={projectID}
                                         sessionHash={sessionHash}
                                         path={joinPath(dir.path, openingEntry.name)}
                                         size={openingEntry.size}

@@ -21,6 +21,7 @@ export interface UploadProgress {
 // element. The returned helpers wire those for us.
 
 interface UseDragDropOpts {
+    projectID: string;
     sessionHash: string;
     currentPath: string;
     onFinished?: () => void;
@@ -29,6 +30,7 @@ interface UseDragDropOpts {
 }
 
 export function useDragDrop({
+    projectID,
     sessionHash,
     currentPath,
     onFinished,
@@ -52,7 +54,7 @@ export function useDragDrop({
                 const filename = basenameOSPath(p);
                 onProgress?.({ filename, done: i, total: paths.length });
                 try {
-                    await UploadFile(sessionHash, joinPath(pathRef.current, filename), p);
+                    await UploadFile(projectID, sessionHash, joinPath(pathRef.current, filename), p);
                 } catch (err) {
                     const msg = String(err instanceof Error ? err.message : err);
                     onError?.(`upload ${filename}: ${msg}`);
@@ -67,7 +69,7 @@ export function useDragDrop({
         return () => {
             EventsOff("files:os-drop");
         };
-    }, [sessionHash, onFinished, onError, onProgress]);
+    }, [projectID, sessionHash, onFinished, onError, onProgress]);
 
     // --- Web: HTML5 drop handlers — returned so a container element
     // can spread them on.
@@ -91,6 +93,7 @@ export function useDragDrop({
                 onProgress?.({ filename: f.name, done: i, total: files.length });
                 try {
                     await UploadBrowserFile(
+                        projectID,
                         sessionHash,
                         joinPath(pathRef.current, f.name),
                         f,

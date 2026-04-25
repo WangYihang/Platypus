@@ -220,6 +220,7 @@ export default function HostView({ projectID, hostID }: Props) {
             onClick={() => {
                 if (!host.agent_id) return;
                 openShell({
+                    projectID: project.id,
                     projectSlug: project.slug,
                     hostId: hostID,
                     sessionHash: host.agent_id,
@@ -278,7 +279,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     etc.) don't rebuild state on tab switch. */}
                 <div style={{ display: activeTab === "files" ? "block" : "none" }}>
                     {pickedSessionID ? (
-                        <FilesTab sessionHash={pickedSessionID} />
+                        <FilesTab projectID={projectID} sessionHash={pickedSessionID} />
                     ) : (
                         <NoLiveSessionNote />
                     )}

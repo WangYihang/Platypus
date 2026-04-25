@@ -57,3 +57,32 @@ func GetServerInfoV1(c *gin.Context) {
 		SessionCount: LiveAgentCounter(),
 	})
 }
+
+// versionResponse is the public, auth-free shape of GET
+// /api/v1/version. Strict subset of serverInfoResponse: no uptime, no
+// public_addr, no session count. Lets clients (release banner, CLI
+// upgrade nags, dashboards) check the running build without trading
+// for a token first.
+type versionResponse struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Date    string `json:"date"`
+}
+
+// GetVersionV1 returns the build trio. Unlike /api/v1/info this is
+// public — it leaks no environment-specific data, just what binary is
+// running.
+//
+// @Summary     Get server version
+// @Description Returns the server's build version, commit, and date. Public — no auth required. Strict subset of /api/v1/info; safe to expose to unauthenticated callers.
+// @Tags        info
+// @Produce     json
+// @Success     200 {object} versionResponse
+// @Router      /api/v1/version [get]
+func GetVersionV1(c *gin.Context) {
+	c.JSON(http.StatusOK, versionResponse{
+		Version: version.Version,
+		Commit:  version.Commit,
+		Date:    version.Date,
+	})
+}

@@ -17,6 +17,7 @@ import { humanize } from "../../../lib/format";
 const PAGE_SIZE = 64 * 1024;
 
 interface Props {
+    projectID: string;
     sessionHash: string;
     path: string;
     size: number;
@@ -41,7 +42,7 @@ function safeDecode(bytes: Uint8Array): string {
     }
 }
 
-export default function FileViewerPaged({ sessionHash, path, size, onDownload }: Props) {
+export default function FileViewerPaged({ projectID, sessionHash, path, size, onDownload }: Props) {
     const [offset, setOffset] = useState(0);
     const [content, setContent] = useState("");
     const [loading, setLoading] = useState(true);
@@ -55,7 +56,7 @@ export default function FileViewerPaged({ sessionHash, path, size, onDownload }:
             try {
                 const clamped = Math.max(0, Math.min(at, Math.max(0, size - 1)));
                 const want = Math.min(PAGE_SIZE, Math.max(0, size - clamped));
-                const raw = await ReadFile(sessionHash, path, clamped, want);
+                const raw = await ReadFile(projectID, sessionHash, path, clamped, want);
                 setContent(bytesToText(raw));
                 setOffset(clamped);
                 setGotoInput(String(clamped));
@@ -65,7 +66,7 @@ export default function FileViewerPaged({ sessionHash, path, size, onDownload }:
                 setLoading(false);
             }
         },
-        [sessionHash, path, size],
+        [projectID, sessionHash, path, size],
     );
 
     useEffect(() => {

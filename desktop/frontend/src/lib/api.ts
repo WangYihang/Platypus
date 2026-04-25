@@ -546,43 +546,6 @@ export async function revokeInstallArtifact(pid: string, downloadID: string, rea
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
 }
 
-// --- Agent sessions --------------------------------------------------
-//
-// Admin view of a specific agent's session lineage and kill-switch.
-// Routes aren't project-scoped on the server (agent_id is global).
-
-export interface AgentSessionRow {
-    session_id: string;
-    agent_id: string;
-    project_id: string;
-    issued_at: string;
-    issued_reason: string;
-    rotated_from?: string;
-    expires_at: string;
-    rotated_at?: string;
-    revoked_at?: string;
-    revoked_reason?: string;
-    revoked_by_user?: string;
-    last_seen_at?: string;
-    last_seen_ip?: string;
-    machine_id?: string;
-    active: boolean;
-}
-
-export async function listAgentSessions(agentID: string): Promise<AgentSessionRow[]> {
-    const j = await authJSON<{ sessions: AgentSessionRow[] }>(`/api/v1/agents/${agentID}/sessions`);
-    return j.sessions ?? [];
-}
-
-export async function revokeAgentSession(agentID: string, reason?: string): Promise<void> {
-    const r = await authFetch(`/api/v1/agents/${agentID}/sessions/revoke`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason ?? "" }),
-    });
-    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
-}
-
 // --- Activities / audit timeline ------------------------------------
 //
 // A single append-only `activities` table on the server backs both the

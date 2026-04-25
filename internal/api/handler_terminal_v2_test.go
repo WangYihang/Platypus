@@ -18,7 +18,7 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// v2 terminal handler at /api/v1/terminal/:agent_id/ws:
+// v2 terminal handler at /api/v1/projects/:pid/agents/:agent_id/terminal/ws:
 //   1. Look up the agent's *link.Session via AgentLinkService.
 //   2. Read the first binary WS frame (must be resize opcode '1')
 //      to learn cols/rows.
@@ -29,12 +29,23 @@ import (
 //      ProcessFrame.stdout → browser binary frame '0' + bytes.
 //   6. On stream or WS EOF, close the other.
 
+// terminalTestEnv pairs the live test server with the auth fixture so
+// each test can build the WS URL + cookie auth (browsers can't set
+// Bearer headers on WS Upgrade so the handler itself doesn't gate on
+// the WS auth-ticket here — Bearer is allowed and is what real
+// non-browser callers use).
+type terminalTestEnv struct {
+	srv     *httptest.Server
+	fixture *agentRouteFixture
+}
+
 // setupTerminalV2Test stands up an httptest.Server running the v2
 // terminal handler against a fake agent that implements
-// HandleProcessStream. Returns the server + a paired-to-registered-
+// HandleProcessStream. Returns the env + a paired-to-registered-
 // agent teardown.
-func setupTerminalV2Test(t *testing.T, agentID string) *httptest.Server {
+func setupTerminalV2Test(t *testing.T, agentID string) *terminalTestEnv {
 	t.Helper()
+	fixture := newAgentRouteFixture(t, agentID)
 
 	// Build paired Sessions: one acts as the "agent", registered in
 	// AgentLinkService under agentID; the other is what the handler
@@ -92,20 +103,23 @@ func setupTerminalV2Test(t *testing.T, agentID string) *httptest.Server {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2TerminalRoute(r, svc)
-	return httptest.NewServer(r)
+	RegisterV2TerminalRoute(r, svc, fixture.RBAC)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	return &terminalTestEnv{srv: srv, fixture: fixture}
 }
 
 func TestTerminalV2_StdoutBridge(t *testing.T) {
-	srv := setupTerminalV2Test(t, "agent-term-1")
-	defer srv.Close()
+	env := setupTerminalV2Test(t, "agent-term-1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	wsURL := strings.Replace(srv.URL, "http://", "ws://", 1) +
-		"/api/v1/terminal/agent-term-1/ws"
-	c, _, err := websocket.Dial(ctx, wsURL, nil)
+	wsURL := strings.Replace(env.srv.URL, "http://", "ws://", 1) +
+		env.fixture.URL("/terminal/ws")
+	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + env.fixture.Token}},
+	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -140,16 +154,22 @@ func TestTerminalV2_StdoutBridge(t *testing.T) {
 	t.Fatalf("did not see expected stdout; got %q", got)
 }
 
-// Unknown agent id → 404 on the HTTP Upgrade.
+// Unknown agent id (no live link.Session) → 404 on the HTTP Upgrade.
+// The host row + project membership are pre-seeded by the fixture so
+// the request makes it past the auth and project-scope gates and
+// reaches the link-service lookup.
 func TestTerminalV2_UnknownAgent404(t *testing.T) {
+	fixture := newAgentRouteFixture(t, "ghost-agent")
 	svc := core.NewAgentLinkService()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2TerminalRoute(r, svc)
+	RegisterV2TerminalRoute(r, svc, fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/v1/terminal/missing/ws")
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+fixture.URL("/terminal/ws"), nil)
+	req.Header.Set("Authorization", "Bearer "+fixture.Token)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

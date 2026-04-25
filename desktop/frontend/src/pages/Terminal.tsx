@@ -13,6 +13,7 @@ import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
 import { palette } from "../layout/theme";
 
 interface Props {
+    projectID: string;
     sessionHash: string;
     onClose?: () => void;
 }
@@ -47,7 +48,7 @@ const xtermTheme = {
 // One <Terminal> per open session tab. Owns the xterm instance and the
 // underlying termID returned from OpenTerminal; reroutes Wails events to
 // xterm.write() and xterm.onData → SendTerminalInput.
-export default function Terminal({ sessionHash, onClose }: Props) {
+export default function Terminal({ projectID, sessionHash, onClose }: Props) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const xtermRef = useRef<Xterm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -82,7 +83,7 @@ export default function Terminal({ sessionHash, onClose }: Props) {
         let cancelled = false;
         let cleanupFns: Array<() => void> = [];
 
-        OpenTerminal(sessionHash)
+        OpenTerminal(projectID, sessionHash)
             .then((id: string) => {
                 if (cancelled) {
                     CloseTerminal(id);
@@ -167,7 +168,7 @@ export default function Terminal({ sessionHash, onClose }: Props) {
             }
             xterm.dispose();
         };
-    }, [sessionHash]);
+    }, [projectID, sessionHash]);
 
     return (
         <div

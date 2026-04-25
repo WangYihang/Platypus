@@ -17,21 +17,33 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// v2 one-shot RPCs routed through CallAgentRPC:
-//   GET    /api/v1/agents/:agent_id/fs/list?path=...
-//   GET    /api/v1/agents/:agent_id/fs/stat?path=...
-//   DELETE /api/v1/agents/:agent_id/fs/remove?path=...&recursive=true
-//   POST   /api/v1/agents/:agent_id/fs/rename?from=...&to=...
-//   POST   /api/v1/agents/:agent_id/fs/mkdir?path=...&mkdirs=true
-//   PATCH  /api/v1/agents/:agent_id/fs/mode?path=...&mode=...
-//   GET    /api/v1/agents/:agent_id/sys
-//   POST   /api/v1/agents/:agent_id/exec  (JSON body)
+// v2 one-shot RPCs routed through CallAgentRPC (project-scoped):
+//   GET    /api/v1/projects/:pid/agents/:agent_id/fs/list?path=...
+//   GET    /api/v1/projects/:pid/agents/:agent_id/fs/stat?path=...
+//   DELETE /api/v1/projects/:pid/agents/:agent_id/fs/remove?path=...&recursive=true
+//   POST   /api/v1/projects/:pid/agents/:agent_id/fs/rename?from=...&to=...
+//   POST   /api/v1/projects/:pid/agents/:agent_id/fs/mkdir?path=...&mkdirs=true
+//   PATCH  /api/v1/projects/:pid/agents/:agent_id/fs/mode?path=...&mode=...
+//   GET    /api/v1/projects/:pid/agents/:agent_id/sys
+//   POST   /api/v1/projects/:pid/agents/:agent_id/exec  (JSON body)
+
+// rpcTestEnv bundles the live test server + the auth fixture so tests
+// can build authorized requests against the project-scoped routes
+// without re-stating the URL prefix and Bearer token in every block.
+type rpcTestEnv struct {
+	srv     *httptest.Server
+	fixture *agentRouteFixture
+}
 
 // setupRPCAgent registers a stub agent that echoes whatever RPC
-// payload it receives back with a canned response. Returns the
-// gin engine mounted with the v2 RPC routes.
-func setupRPCAgent(t *testing.T, agentID string, handler func(*v2pb.RpcRequest) *v2pb.RpcResponse) *httptest.Server {
+// payload it receives back with a canned response, then mounts the
+// project-scoped agent RPC routes on a fresh gin engine. The returned
+// env carries the URL prefix + admin Bearer token so each test can
+// build requests with newRPCRequest.
+func setupRPCAgent(t *testing.T, agentID string, handler func(*v2pb.RpcRequest) *v2pb.RpcResponse) *rpcTestEnv {
 	t.Helper()
+	fixture := newAgentRouteFixture(t, agentID)
+
 	svc := core.NewAgentLinkService()
 	clientConn, serverConn := net.Pipe()
 	serverCh := make(chan *link.Session, 1)
@@ -78,14 +90,37 @@ func setupRPCAgent(t *testing.T, agentID string, handler func(*v2pb.RpcRequest) 
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2AgentRPCRoutes(r, svc)
+	RegisterV2AgentRPCRoutes(r, svc, fixture.RBAC)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return srv
+	return &rpcTestEnv{srv: srv, fixture: fixture}
+}
+
+// newRPCRequest builds an authorized request against env.srv at the
+// project-scoped path env.fixture.URL(suffix).
+func (e *rpcTestEnv) newRPCRequest(t *testing.T, method, suffix string, body io.Reader) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest(method, e.srv.URL+e.fixture.URL(suffix), body)
+	if err != nil {
+		t.Fatalf("http.NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+e.fixture.Token)
+	return req
+}
+
+// do is a convenience: build the request and run it on http.DefaultClient.
+func (e *rpcTestEnv) do(t *testing.T, method, suffix string, body io.Reader) *http.Response {
+	t.Helper()
+	req := e.newRPCRequest(t, method, suffix, body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	return resp
 }
 
 func TestRPCv2_ListDir(t *testing.T) {
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		if req.GetListDir() == nil {
 			return &v2pb.RpcResponse{Error: "expected list_dir"}
 		}
@@ -96,7 +131,7 @@ func TestRPCv2_ListDir(t *testing.T) {
 		}}
 	})
 
-	resp, _ := http.Get(srv.URL + "/api/v1/agents/a1/fs/list?path=/tmp")
+	resp := env.do(t, http.MethodGet, "/fs/list?path=/tmp", nil)
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status %d body %s", resp.StatusCode, b)
@@ -114,12 +149,12 @@ func TestRPCv2_ListDir(t *testing.T) {
 }
 
 func TestRPCv2_Stat(t *testing.T) {
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Stat{
 			Stat: &v2pb.StatResponse{Entry: &v2pb.FileEntry{Name: "f", Size: 99}},
 		}}
 	})
-	resp, _ := http.Get(srv.URL + "/api/v1/agents/a1/fs/stat?path=/f")
+	resp := env.do(t, http.MethodGet, "/fs/stat?path=/f", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -137,15 +172,13 @@ func TestRPCv2_Stat(t *testing.T) {
 
 func TestRPCv2_Remove(t *testing.T) {
 	var got *v2pb.DeleteRequest
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		got = req.GetDelete()
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Delete{
 			Delete: &v2pb.DeleteResponse{},
 		}}
 	})
-	req, _ := http.NewRequest(http.MethodDelete,
-		srv.URL+"/api/v1/agents/a1/fs/remove?path=/tree&recursive=true", nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp := env.do(t, http.MethodDelete, "/fs/remove?path=/tree&recursive=true", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -156,14 +189,13 @@ func TestRPCv2_Remove(t *testing.T) {
 
 func TestRPCv2_Rename(t *testing.T) {
 	var got *v2pb.RenameRequest
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		got = req.GetRename()
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Rename{
 			Rename: &v2pb.RenameResponse{},
 		}}
 	})
-	resp, _ := http.Post(srv.URL+"/api/v1/agents/a1/fs/rename?from=/a&to=/b",
-		"", nil)
+	resp := env.do(t, http.MethodPost, "/fs/rename?from=/a&to=/b", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -173,13 +205,12 @@ func TestRPCv2_Rename(t *testing.T) {
 }
 
 func TestRPCv2_Mkdir(t *testing.T) {
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Mkdir{
 			Mkdir: &v2pb.MkdirResponse{},
 		}}
 	})
-	resp, _ := http.Post(srv.URL+"/api/v1/agents/a1/fs/mkdir?path=/d&mkdirs=true&mode=493",
-		"", nil)
+	resp := env.do(t, http.MethodPost, "/fs/mkdir?path=/d&mkdirs=true&mode=493", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -187,15 +218,13 @@ func TestRPCv2_Mkdir(t *testing.T) {
 
 func TestRPCv2_Chmod(t *testing.T) {
 	var got *v2pb.ChmodRequest
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		got = req.GetChmod()
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Chmod{
 			Chmod: &v2pb.ChmodResponse{},
 		}}
 	})
-	req, _ := http.NewRequest(http.MethodPatch,
-		srv.URL+"/api/v1/agents/a1/fs/mode?path=/f&mode=384", nil) // 0600
-	resp, _ := http.DefaultClient.Do(req)
+	resp := env.do(t, http.MethodPatch, "/fs/mode?path=/f&mode=384", nil) // 0600
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -205,12 +234,12 @@ func TestRPCv2_Chmod(t *testing.T) {
 }
 
 func TestRPCv2_SysInfo(t *testing.T) {
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_SysInfo{
 			SysInfo: &v2pb.SysInfoResponse{Os: "linux", Arch: "amd64", Hostname: "h"},
 		}}
 	})
-	resp, _ := http.Get(srv.URL + "/api/v1/agents/a1/sys")
+	resp := env.do(t, http.MethodGet, "/sys", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -223,15 +252,14 @@ func TestRPCv2_SysInfo(t *testing.T) {
 
 func TestRPCv2_Exec(t *testing.T) {
 	var got *v2pb.ExecRequest
-	srv := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+	env := setupRPCAgent(t, "a1", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
 		got = req.GetExec()
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Exec{
 			Exec: &v2pb.ExecResponse{Stdout: []byte("hi"), ExitCode: 0},
 		}}
 	})
 	body := bytes.NewReader([]byte(`{"command":"uname","args":["-a"]}`))
-	resp, _ := http.Post(srv.URL+"/api/v1/agents/a1/exec",
-		"application/json", body)
+	resp := env.do(t, http.MethodPost, "/exec", body)
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s", resp.StatusCode, b)
@@ -249,13 +277,20 @@ func TestRPCv2_Exec(t *testing.T) {
 	}
 }
 
+// AgentNotConnected exercises the path where the agent_id passes the
+// host-row check (RequireAgentInProject finds it) but the
+// AgentLinkService doesn't have a live session for it. Expect 404
+// from callOrAbort, not 403/401.
 func TestRPCv2_AgentNotConnected(t *testing.T) {
+	fixture := newAgentRouteFixture(t, "nope")
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2AgentRPCRoutes(r, core.NewAgentLinkService())
+	RegisterV2AgentRPCRoutes(r, core.NewAgentLinkService(), fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
-	resp, _ := http.Get(srv.URL + "/api/v1/agents/nope/sys")
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+fixture.URL("/sys"), nil)
+	req.Header.Set("Authorization", "Bearer "+fixture.Token)
+	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != 404 {
 		t.Fatalf("status = %d; want 404", resp.StatusCode)
 	}

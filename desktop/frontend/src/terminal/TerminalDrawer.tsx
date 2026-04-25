@@ -73,6 +73,7 @@ export default function TerminalDrawer() {
                         }}
                     >
                         <Terminal
+                            projectID={s.projectID}
                             sessionHash={s.sessionHash}
                             onClose={() => closeShell(s.id)}
                         />
@@ -279,7 +280,13 @@ function TabBar({
 }
 
 interface NewShellButtonProps {
-    activeShell: { hostId: string; sessionHash: string; projectSlug: string; label: string } | null;
+    activeShell: {
+        hostId: string;
+        sessionHash: string;
+        projectID: string;
+        projectSlug: string;
+        label: string;
+    } | null;
 }
 
 // NewShellButton offers two affordances:
@@ -299,6 +306,7 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
     const quickNew = () => {
         if (!activeShell) return;
         openShell({
+            projectID: activeShell.projectID,
             projectSlug: activeShell.projectSlug,
             hostId: activeShell.hostId,
             sessionHash: activeShell.sessionHash,
@@ -397,6 +405,7 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
                                         onSelect={() => {
                                             if (!project || !h.agent_id) return;
                                             openShell({
+                                                projectID: project.id,
                                                 projectSlug: project.slug,
                                                 hostId: h.id,
                                                 sessionHash: h.agent_id,

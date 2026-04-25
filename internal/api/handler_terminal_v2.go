@@ -15,6 +15,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -224,7 +225,23 @@ func parseResizeFrame(data []byte) (cols, rows uint32, err error) {
 	return r.Columns, r.Rows, nil
 }
 
-// RegisterV2TerminalRoute mounts GET /api/v1/terminal/:agent_id/ws.
-func RegisterV2TerminalRoute(engine *gin.Engine, svc *core.AgentLinkService) {
-	engine.GET("/api/v1/terminal/:agent_id/ws", NewV2TerminalHandler(svc))
+// RegisterV2TerminalRoute mounts the project-scoped terminal WS
+// endpoint at GET /api/v1/projects/:pid/agents/:agent_id/terminal/ws.
+// Operator-tier — opening a shell on an agent is a privileged action
+// even for members of the project. RequireAgentInProject blocks
+// cross-project pivots through a forged agent_id.
+//
+// Auth uses RequireAuthWS (not RequireAuth) because browsers can't set
+// Authorization headers on WebSocket upgrade requests. The browser
+// passes the JWT as a "Bearer.<jwt>" Sec-WebSocket-Protocol entry; the
+// middleware extracts it and stamps AccessClaims for the downstream
+// RBAC checks.
+func RegisterV2TerminalRoute(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC) {
+	grp := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
+	grp.Use(
+		rbac.RequireAuthWS(),
+		rbac.RequireProjectRole("pid", user.RoleOperator),
+		rbac.RequireAgentInProject("pid", "agent_id"),
+	)
+	grp.GET("/terminal/ws", NewV2TerminalHandler(svc))
 }

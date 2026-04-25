@@ -87,13 +87,13 @@ func RegisterDistributorRoutes(engine *gin.Engine, cfg DistributorArgs) *Distrib
 	engine.GET("/v1/manifest/:channel/signature", d.handleManifestSignature)
 	engine.GET("/v1/artifacts/:os/:arch/:version", d.handleArtifact)
 
-	// GET /install/<dl-token> returns a runnable shell script with the
-	// minted PAT hard-coded into the agent command line. Single-use:
-	// the install token gets marked consumed atomically on first valid
-	// hit, and subsequent curls receive 404. Public (no JWT) — the
-	// bootstrap script must be reachable before the agent has any
-	// credential to authenticate with.
-	engine.GET("/install/:token", serveInstallScript)
+	// GET /api/v1/install/<dl-token> returns a runnable shell script
+	// with the minted PAT hard-coded into the agent command line.
+	// Single-use: the install token gets marked consumed atomically on
+	// first valid hit, and subsequent curls receive 404. Public (no
+	// JWT) — the bootstrap script must be reachable before the agent
+	// has any credential to authenticate with.
+	engine.GET("/api/v1/install/:token", serveInstallScript)
 
 	return d
 }
@@ -239,7 +239,7 @@ func (m *Manifest) findArtifact(os, arch string) *ManifestArtifact {
 	return nil
 }
 
-// serveInstallScript handles GET /install/<dl_id>.<secret>. It is the
+// serveInstallScript handles GET /api/v1/install/<dl_id>.<secret>. It is the
 // public, auth-free counterpart to POST /api/v1/projects/:pid/install-
 // artifacts. On success the response body is a POSIX shell script the
 // admin pastes into `curl ... | sh`.

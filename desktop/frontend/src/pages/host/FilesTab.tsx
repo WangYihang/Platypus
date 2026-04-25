@@ -7,13 +7,14 @@ import FileBrowser from "./files/FileBrowser";
 // for files under 5 MiB, and a paged read-only viewer for larger ones.
 
 interface Props {
+    projectID: string;
     sessionHash: string;
 }
 
-export default function FilesTab({ sessionHash }: Props) {
+export default function FilesTab({ projectID, sessionHash }: Props) {
     return (
         <div className="h-full">
-            <FileBrowser sessionHash={sessionHash} />
+            <FileBrowser projectID={projectID} sessionHash={sessionHash} />
         </div>
     );
 }

@@ -20,7 +20,7 @@ type InstallTokensHandler struct {
 	db     *storage.DB
 	enroll *enrollment.Service
 
-	// defaultDistributorBase is what we prepend to "/install/<id>" when
+	// defaultDistributorBase is what we prepend to "/api/v1/install/<id>" when
 	// composing the curl command we hand back to admins. Exposed as a
 	// field so server bootstrap can inject something like
 	// "http://1.2.3.4:13339" derived from distributor config.
@@ -174,7 +174,7 @@ func (h *InstallTokensHandler) renderInstallCommand(req *http.Request, token str
 		}
 		base = scheme + "://" + host
 	}
-	return "curl -fsSL " + base + "/install/" + token + " | sh"
+	return "curl -fsSL " + base + "/api/v1/install/" + token + " | sh"
 }
 
 // List handles GET /projects/:pid/install-artifacts.

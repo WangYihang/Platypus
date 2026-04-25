@@ -18,7 +18,7 @@ export interface DirectoryState {
     error: string | null;
 }
 
-export function useDirectory(sessionHash: string, initialPath = "/") {
+export function useDirectory(projectID: string, sessionHash: string, initialPath = "/") {
     const [state, setState] = useState<DirectoryState>(() => {
         let path = initialPath;
         try {
@@ -34,7 +34,7 @@ export function useDirectory(sessionHash: string, initialPath = "/") {
         async (targetPath: string) => {
             setState((s) => ({ ...s, path: targetPath, loading: true, error: null }));
             try {
-                const result = await ListDir(sessionHash, targetPath, 0, 0);
+                const result = await ListDir(projectID, sessionHash, targetPath, 0, 0);
                 setState({
                     path: targetPath,
                     entries: result.entries,
@@ -56,7 +56,7 @@ export function useDirectory(sessionHash: string, initialPath = "/") {
                 }));
             }
         },
-        [sessionHash],
+        [projectID, sessionHash],
     );
 
     const cd = useCallback(

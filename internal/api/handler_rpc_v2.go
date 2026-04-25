@@ -13,6 +13,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -26,17 +27,38 @@ import (
 //   - Agent-reported err → 502 with the error text
 //   - RPC not implemented by this agent build → 501 with "unsupported"
 //
-// URL shapes mirror the REST conventions used elsewhere in the
-// project (verbs on path segments, filesystem-ish nouns under /fs).
-func RegisterV2AgentRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService) {
-	engine.GET("/api/v1/agents/:agent_id/fs/list", logRPCHandler("list_dir", v2RPCListDir(svc)))
-	engine.GET("/api/v1/agents/:agent_id/fs/stat", logRPCHandler("stat", v2RPCStat(svc)))
-	engine.DELETE("/api/v1/agents/:agent_id/fs/remove", logRPCHandler("delete", v2RPCDelete(svc)))
-	engine.POST("/api/v1/agents/:agent_id/fs/rename", logRPCHandler("rename", v2RPCRename(svc)))
-	engine.POST("/api/v1/agents/:agent_id/fs/mkdir", logRPCHandler("mkdir", v2RPCMkdir(svc)))
-	engine.PATCH("/api/v1/agents/:agent_id/fs/mode", logRPCHandler("chmod", v2RPCChmod(svc)))
-	engine.GET("/api/v1/agents/:agent_id/sys", logRPCHandler("sys_info", v2RPCSysInfo(svc)))
-	engine.POST("/api/v1/agents/:agent_id/exec", logRPCHandler("exec", v2RPCExec(svc)))
+// URL shapes are project-scoped: every endpoint is mounted under
+// /api/v1/projects/:pid/agents/:agent_id/... so the existing
+// project-RBAC middleware (RequireProjectRole) enforces who may even
+// reach the agent. RequireAgentInProject closes the cross-project
+// pivot vector by verifying the agent actually belongs to :pid.
+//
+// The viewer/operator split mirrors the action's blast radius: read
+// ops (list, stat, sys) require viewer; mutations (delete, rename,
+// mkdir, chmod, exec) require operator.
+func RegisterV2AgentRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC) {
+	base := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
+	base.Use(rbac.RequireAuth())
+
+	viewer := base.Group("")
+	viewer.Use(
+		rbac.RequireProjectRole("pid", user.RoleViewer),
+		rbac.RequireAgentInProject("pid", "agent_id"),
+	)
+	viewer.GET("/fs/list", logRPCHandler("list_dir", v2RPCListDir(svc)))
+	viewer.GET("/fs/stat", logRPCHandler("stat", v2RPCStat(svc)))
+	viewer.GET("/sys", logRPCHandler("sys_info", v2RPCSysInfo(svc)))
+
+	operator := base.Group("")
+	operator.Use(
+		rbac.RequireProjectRole("pid", user.RoleOperator),
+		rbac.RequireAgentInProject("pid", "agent_id"),
+	)
+	operator.DELETE("/fs/remove", logRPCHandler("delete", v2RPCDelete(svc)))
+	operator.POST("/fs/rename", logRPCHandler("rename", v2RPCRename(svc)))
+	operator.POST("/fs/mkdir", logRPCHandler("mkdir", v2RPCMkdir(svc)))
+	operator.PATCH("/fs/mode", logRPCHandler("chmod", v2RPCChmod(svc)))
+	operator.POST("/exec", logRPCHandler("exec", v2RPCExec(svc)))
 }
 
 // logRPCHandler wraps a per-endpoint gin handler with enter / exit

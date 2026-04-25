@@ -74,6 +74,64 @@ func (r *RBAC) RequireAuth() gin.HandlerFunc {
 	}
 }
 
+// RequireAuthWS is RequireAuth's WebSocket-friendly cousin. Browsers
+// can't set Authorization: Bearer on the WebSocket upgrade, so this
+// middleware accepts three credential carriers (in order):
+//
+//  1. Authorization: Bearer <jwt>           — native clients.
+//  2. Sec-WebSocket-Protocol: ..., Bearer.<jwt>
+//     The browser passes the JWT as a sentinel subprotocol entry
+//     alongside the real one (e.g. ["tty", "Bearer.<jwt>"]). The
+//     handler still negotiates only its real subprotocol via
+//     websocket.Accept's Subprotocols list, so the auth sentinel is
+//     dropped and never reaches the live connection.
+//  3. ?access_token=<jwt>                    — last-resort fallback
+//     for tools that can't set custom subprotocols. Use sparingly;
+//     query strings are easier to leak via referer / logs.
+//
+// On success the parsed AccessClaims are stamped on the gin context
+// just like RequireAuth, so downstream RequireProjectRole etc. work
+// transparently.
+func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 1) Bearer header (native clients).
+		if h := c.GetHeader("Authorization"); h != "" {
+			parts := strings.SplitN(h, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+				if claims, err := r.tokens.ParseAccess(parts[1]); err == nil {
+					c.Set(claimsCtxKey, &claims)
+					c.Next()
+					return
+				}
+			}
+		}
+		// 2) Sec-WebSocket-Protocol "Bearer.<jwt>" sentinel.
+		if h := c.GetHeader("Sec-WebSocket-Protocol"); h != "" {
+			for _, p := range strings.Split(h, ",") {
+				p = strings.TrimSpace(p)
+				if !strings.HasPrefix(p, "Bearer.") {
+					continue
+				}
+				jwt := strings.TrimPrefix(p, "Bearer.")
+				if claims, err := r.tokens.ParseAccess(jwt); err == nil {
+					c.Set(claimsCtxKey, &claims)
+					c.Next()
+					return
+				}
+			}
+		}
+		// 3) Query-param fallback.
+		if t := c.Query("access_token"); t != "" {
+			if claims, err := r.tokens.ParseAccess(t); err == nil {
+				c.Set(claimsCtxKey, &claims)
+				c.Next()
+				return
+			}
+		}
+		abortUnauthorized(c, "missing or invalid websocket auth (Bearer header, Sec-WebSocket-Protocol, or ?access_token=)")
+	}
+}
+
 // RequireGlobalRole gates a route behind a minimum global role. Role
 // ordering is admin > operator > viewer; higher roles implicitly satisfy
 // lower requirements. Must be used downstream of RequireAuth.
@@ -168,6 +226,59 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 		}
 		if !roleAtLeast(role, min) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireAgentInProject closes the gap between the project-membership
+// gate (RequireProjectRole, which only checks the *user* against pid)
+// and per-agent endpoints. Without it, a viewer of project A could
+// pass `:pid=A&:agent_id=<agent in project B>` and reach project B's
+// agent. The middleware looks up the host row for :agent_id and 403s
+// when its project_id doesn't match the URL :pid.
+//
+// Status codes mirror RequireProjectRole's discretion: a non-admin who
+// asks about an unknown agent gets 403 (not 404) so the route doesn't
+// leak which agent ids exist; admins get a 404. Must run downstream of
+// RequireAuth + RequireProjectRole so claims and pid have already been
+// validated.
+func (r *RBAC) RequireAgentInProject(projectParam, agentParam string) gin.HandlerFunc {
+	if r.storage == nil {
+		return func(c *gin.Context) {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "RBAC missing storage — constructed without it"})
+		}
+	}
+	return func(c *gin.Context) {
+		claims, ok := ClaimsFromContext(c)
+		if !ok {
+			abortUnauthorized(c, "no claims on context — RequireAuth missing?")
+			return
+		}
+		pid := c.Param(projectParam)
+		agentID := c.Param(agentParam)
+		if agentID == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "agent_id required"})
+			return
+		}
+		host, err := r.storage.Hosts().GetByAgentID(c.Request.Context(), agentID)
+		if errors.Is(err, storage.ErrNotFound) {
+			if claims.Role == user.RoleAdmin {
+				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "agent not found"})
+				return
+			}
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
+			return
+		}
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "agent lookup"})
+			return
+		}
+		if host.ProjectID != pid {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
 			return
 		}
 		c.Next()

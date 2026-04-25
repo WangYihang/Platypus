@@ -19,9 +19,9 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// v2 file endpoints:
-//   GET  /api/v1/agents/:agent_id/fs/read?path=...   — download
-//   PUT  /api/v1/agents/:agent_id/fs/write?path=...  — upload
+// v2 file endpoints (project-scoped):
+//   GET  /api/v1/projects/:pid/agents/:agent_id/fs/read?path=...   — download
+//   PUT  /api/v1/projects/:pid/agents/:agent_id/fs/write?path=...  — upload
 //
 // Both look up the agent in AgentLinkService and open the matching
 // STREAM_TYPE_FILE_* stream on its link.Session.
@@ -31,8 +31,9 @@ import (
 // request from the header; they're responsible for writing the
 // response frames.
 type fileTestAgent struct {
-	svc  *core.AgentLinkService
-	peer *link.Session
+	svc     *core.AgentLinkService
+	peer    *link.Session
+	fixture *agentRouteFixture
 }
 
 func setupFileAgent(t *testing.T, agentID string,
@@ -40,6 +41,8 @@ func setupFileAgent(t *testing.T, agentID string,
 	onWrite func(*v2pb.FileWriteRequest, io.ReadWriteCloser),
 ) *fileTestAgent {
 	t.Helper()
+	fixture := newAgentRouteFixture(t, agentID)
+
 	svc := core.NewAgentLinkService()
 	clientConn, serverConn := net.Pipe()
 	serverCh := make(chan *link.Session, 1)
@@ -83,7 +86,23 @@ func setupFileAgent(t *testing.T, agentID string,
 		agentSess.Close()
 		peer.Close()
 	})
-	return &fileTestAgent{svc: svc, peer: peer}
+	return &fileTestAgent{svc: svc, peer: peer, fixture: fixture}
+}
+
+// authedGet fires an authorized GET against the project-scoped agent
+// path. Centralised so each test stays focused on the assertion.
+func (a *fileTestAgent) authedGet(t *testing.T, srvURL, suffix string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, srvURL+a.fixture.URL(suffix), nil)
+	if err != nil {
+		t.Fatalf("http.NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+a.fixture.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	return resp
 }
 
 func TestFileV2_DownloadHappy(t *testing.T) {
@@ -101,17 +120,15 @@ func TestFileV2_DownloadHappy(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, a.svc)
+	RegisterV2FileRoutes(r, a.svc, a.fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/v1/agents/agent-dl/fs/read?path=/whatever")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
+	resp := a.authedGet(t, srv.URL, "/fs/read?path=/whatever")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d; want 200", resp.StatusCode)
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d; want 200; body=%s", resp.StatusCode, b)
 	}
 	got, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -134,14 +151,11 @@ func TestFileV2_DownloadAgentError(t *testing.T) {
 	)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, a.svc)
+	RegisterV2FileRoutes(r, a.svc, a.fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/v1/agents/agent-missing/fs/read?path=/nope")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
+	resp := a.authedGet(t, srv.URL, "/fs/read?path=/nope")
 	defer resp.Body.Close()
 	// Server should surface a 502-ish status since the agent said no.
 	if resp.StatusCode == http.StatusOK {
@@ -181,7 +195,7 @@ func TestFileV2_UploadHappy(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, a.svc)
+	RegisterV2FileRoutes(r, a.svc, a.fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
@@ -189,7 +203,8 @@ func TestFileV2_UploadHappy(t *testing.T) {
 	defer cancel()
 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut,
-		srv.URL+"/api/v1/agents/agent-up/fs/write?path=/dest", bytes.NewReader(payload))
+		srv.URL+a.fixture.URL("/fs/write?path=/dest"), bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer "+a.fixture.Token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Put: %v", err)
@@ -210,14 +225,21 @@ func TestFileV2_UploadHappy(t *testing.T) {
 	}
 }
 
+// UnknownAgent404 covers the case where the agent_id is in the project
+// (host row exists) but no live link.Session is registered. The
+// project + agent middleware lets the request through, then lookupAgent
+// 404s on the missing presence entry.
 func TestFileV2_UnknownAgent404(t *testing.T) {
+	fixture := newAgentRouteFixture(t, "ghost")
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, core.NewAgentLinkService())
+	RegisterV2FileRoutes(r, core.NewAgentLinkService(), fixture.RBAC)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, _ := http.Get(srv.URL + "/api/v1/agents/missing/fs/read?path=/x")
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+fixture.URL("/fs/read?path=/x"), nil)
+	req.Header.Set("Authorization", "Bearer "+fixture.Token)
+	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d; want 404", resp.StatusCode)
 	}

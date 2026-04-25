@@ -365,10 +365,10 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 
-	// /install/<token> and /v1/manifest/* now live on the same gin
-	// engine — no dedicated distributor port. distributorBase is the
-	// public HTTPS origin the server is reachable at so admin-minted
-	// install links copy straight into `curl -k ... | sh`.
+	// /api/v1/install/<token> and /v1/manifest/* now live on the same
+	// gin engine — no dedicated distributor port. distributorBase is
+	// the public HTTPS origin the server is reachable at so
+	// admin-minted install links copy straight into `curl -k ... | sh`.
 	distributorBase := "https://" + api.PublicAddr
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc).WithDB(db)
@@ -422,9 +422,9 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
-	api.RegisterV2TerminalRoute(rest, agentLinkSvc)
-	api.RegisterV2FileRoutes(rest, agentLinkSvc)
-	api.RegisterV2AgentRPCRoutes(rest, agentLinkSvc)
+	api.RegisterV2TerminalRoute(rest, agentLinkSvc, rbac)
+	api.RegisterV2FileRoutes(rest, agentLinkSvc, rbac)
+	api.RegisterV2AgentRPCRoutes(rest, agentLinkSvc, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
@@ -479,7 +479,7 @@ func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg
 		host = addr // no port — treat the whole string as the hostname
 	}
 	hosts := []string{host}
-	// Always add localhost + loopback so the `curl -fsSL http://localhost:<port>/install/...`
+	// Always add localhost + loopback so the `curl -fsSL http://localhost:<port>/api/v1/install/...`
 	// bootstrap path, and plain `curl https://127.0.0.1:<port>/...`, both
 	// verify against the same leaf without the operator having to line up
 	// hostnames with public_addr.

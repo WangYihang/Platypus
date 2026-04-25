@@ -10,7 +10,7 @@ import (
 )
 
 // InstallDownloadToken backs one row in install_download_tokens. It is
-// minted by an admin and consumed exactly once by `curl /install/<id>`,
+// minted by an admin and consumed exactly once by `curl /api/v1/install/<id>`,
 // at which point a fresh PAT gets minted atomically and embedded in
 // the rendered bootstrap script. The plaintext secret only exists in
 // memory at mint and at consume time; the stored column is SHA-256(secret).

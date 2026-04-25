@@ -271,6 +271,7 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                                                 run(() => {
                                                     if (!h.agent_id) return;
                                                     openShell({
+                                                        projectID: project.id,
                                                         projectSlug: project.slug,
                                                         hostId: h.id,
                                                         sessionHash: h.agent_id,

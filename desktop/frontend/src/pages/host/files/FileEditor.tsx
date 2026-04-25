@@ -20,6 +20,7 @@ export const SMALL_FILE_LIMIT = 5 * 1024 * 1024;
 const WRITE_CHUNK = 256 * 1024;
 
 interface Props {
+    projectID: string;
     sessionHash: string;
     path: string;
     size: number;
@@ -46,7 +47,7 @@ function decodeText(bytes: Uint8Array): string {
     }
 }
 
-export default function FileEditor({ sessionHash, path, size, onSaved }: Props) {
+export default function FileEditor({ projectID, sessionHash, path, size, onSaved }: Props) {
     const [loaded, setLoaded] = useState(false);
     const [loading, setLoading] = useState(true);
     const [content, setContent] = useState("");
@@ -69,7 +70,7 @@ export default function FileEditor({ sessionHash, path, size, onSaved }: Props) 
         setDirty(false);
         (async () => {
             try {
-                const raw = await ReadFile(sessionHash, path, 0, 0);
+                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled || pathRef.current !== path) return;
                 const bytes = bytesFromWailsRead(raw);
                 setContent(decodeText(bytes));
@@ -84,7 +85,7 @@ export default function FileEditor({ sessionHash, path, size, onSaved }: Props) 
         return () => {
             cancelled = true;
         };
-    }, [sessionHash, path]);
+    }, [projectID, sessionHash, path]);
 
     // Lazy-load the language extension per file type. Keeps the initial
     // editor bundle minimal.
@@ -152,11 +153,11 @@ export default function FileEditor({ sessionHash, path, size, onSaved }: Props) 
             // First chunk overwrites; subsequent append. Matches the
             // contract the existing UploadFile logic uses.
             if (bytes.length === 0) {
-                await WriteFile(sessionHash, path, [], false);
+                await WriteFile(projectID, sessionHash, path, [], false);
             } else {
                 for (let off = 0; off < bytes.length; off += WRITE_CHUNK) {
                     const slice = bytes.subarray(off, Math.min(off + WRITE_CHUNK, bytes.length));
-                    await WriteFile(sessionHash, path, Array.from(slice), off > 0);
+                    await WriteFile(projectID, sessionHash, path, Array.from(slice), off > 0);
                 }
             }
             setDirty(false);
@@ -167,7 +168,7 @@ export default function FileEditor({ sessionHash, path, size, onSaved }: Props) 
         } finally {
             setSaving(false);
         }
-    }, [content, dirty, saving, sessionHash, path, onSaved]);
+    }, [content, dirty, saving, projectID, sessionHash, path, onSaved]);
 
     // Cmd/Ctrl+S keyboard shortcut inside the editor container.
     const keymapExt = useMemo<Extension>(

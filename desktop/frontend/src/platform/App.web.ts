@@ -79,29 +79,36 @@ export async function PickSaveLocation(_title: string, defaultName: string): Pro
 // carried as the legacy parameter name but its value is actually the v2
 // agent_id (which is also the session id — see internal/core.AgentLinkService).
 //
-// v2 REST contract (internal/api/handler_file_v2.go + handler_rpc_v2.go):
-//   GET    /api/v1/agents/:id/fs/read?path=&offset=&length=   → octet-stream
-//   PUT    /api/v1/agents/:id/fs/write?path=&append=&mkdirs=  → { bytes_written }
-//   GET    /api/v1/agents/:id/fs/list?path=                   → { entries }
-//   GET    /api/v1/agents/:id/fs/stat?path=                   → { entry }
-//   DELETE /api/v1/agents/:id/fs/remove?path=&recursive=      → 200 or 502
-//   POST   /api/v1/agents/:id/fs/rename?from=&to=             → 200 or 502
-//   POST   /api/v1/agents/:id/fs/mkdir?path=&mkdirs=&mode=    → 200 or 502
-//   PATCH  /api/v1/agents/:id/fs/mode?path=&mode=             → 200 or 502
+// v2 REST contract (internal/api/handler_file_v2.go + handler_rpc_v2.go),
+// project-scoped under /api/v1/projects/:pid/agents/:agent_id/...:
+//   GET    .../fs/read?path=&offset=&length=   → octet-stream
+//   PUT    .../fs/write?path=&append=&mkdirs=  → { bytes_written }
+//   GET    .../fs/list?path=                   → { entries }
+//   GET    .../fs/stat?path=                   → { entry }
+//   DELETE .../fs/remove?path=&recursive=      → 200 or 502
+//   POST   .../fs/rename?from=&to=             → 200 or 502
+//   POST   .../fs/mkdir?path=&mkdirs=&mode=    → 200 or 502
+//   PATCH  .../fs/mode?path=&mode=             → 200 or 502
 // Errors surface as HTTP 4xx/5xx bodies; authFetch throws those automatically.
+//
+// projectID gates RBAC server-side: a viewer of pid A can't read files on
+// an agent in pid B even if they know its agent_id (handler_file_v2.go +
+// rbac.RequireAgentInProject). Callers always thread Project.id from
+// useShell() into these helpers; never hard-code or guess it.
 
-function fsURL(agentID: string, suffix: string): string {
-    return `/api/v1/agents/${encodeURIComponent(agentID)}/fs/${suffix}`;
+function fsURL(projectID: string, agentID: string, suffix: string): string {
+    return `/api/v1/projects/${encodeURIComponent(projectID)}/agents/${encodeURIComponent(agentID)}/fs/${suffix}`;
 }
 
-export async function FileSize(sessionHash: string, path: string): Promise<number> {
-    const entry = await StatFile(sessionHash, path);
+export async function FileSize(projectID: string, sessionHash: string, path: string): Promise<number> {
+    const entry = await StatFile(projectID, sessionHash, path);
     return entry.size || 0;
 }
 
 const CHUNK_SIZE = 256 * 1024;
 
 export async function ReadFile(
+    projectID: string,
     sessionHash: string,
     path: string,
     offset: number,
@@ -112,19 +119,20 @@ export async function ReadFile(
         offset: String(offset),
         length: String(size),
     });
-    const r = await apiFetch(fsURL(sessionHash, `read?${q}`));
+    const r = await apiFetch(fsURL(projectID, sessionHash, `read?${q}`));
     const buf = new Uint8Array(await r.arrayBuffer());
     return Array.from(buf);
 }
 
 export async function WriteFile(
+    projectID: string,
     sessionHash: string,
     path: string,
     data: number[],
     appendMode: boolean,
 ): Promise<void> {
     const q = new URLSearchParams({ path, append: String(appendMode) });
-    await apiFetch(fsURL(sessionHash, `write?${q}`), {
+    await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
         method: "PUT",
         headers: { "Content-Type": "application/octet-stream" },
         body: new Uint8Array(data),
@@ -132,6 +140,7 @@ export async function WriteFile(
 }
 
 export async function DownloadFile(
+    projectID: string,
     sessionHash: string,
     remotePath: string,
     localPath: string,
@@ -143,7 +152,7 @@ export async function DownloadFile(
     // offset=0 & length=0 — the server sets Content-Length on full
     // downloads so the browser gets a proper progress bar.
     const q = new URLSearchParams({ path: remotePath, offset: "0", length: "0" });
-    const r = await apiFetch(fsURL(sessionHash, `read?${q}`));
+    const r = await apiFetch(fsURL(projectID, sessionHash, `read?${q}`));
     const blob = await r.blob();
 
     const url = URL.createObjectURL(blob);
@@ -158,6 +167,7 @@ export async function DownloadFile(
 }
 
 export async function UploadFile(
+    projectID: string,
     sessionHash: string,
     remotePath: string,
     localPath: string,
@@ -170,7 +180,7 @@ export async function UploadFile(
     // Empty file: truncate the destination with an empty payload.
     if (bytes.length === 0) {
         const q = new URLSearchParams({ path: remotePath, append: "false" });
-        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
             method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: new Uint8Array(0),
@@ -184,7 +194,7 @@ export async function UploadFile(
             path: remotePath,
             append: String(off > 0),
         });
-        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
             method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: slice,
@@ -244,6 +254,7 @@ function adaptEntry(e: V2FileEntry): FileEntryDTO {
 }
 
 export async function ListDir(
+    projectID: string,
     sessionHash: string,
     path: string,
     _offset: number,
@@ -254,36 +265,38 @@ export async function ListDir(
     // don't need to branch.
     const q = new URLSearchParams({ path });
     const resp = await apiJSON<{ entries?: V2FileEntry[] }>(
-        fsURL(sessionHash, `list?${q}`),
+        fsURL(projectID, sessionHash, `list?${q}`),
     );
     const entries = (resp.entries || []).map(adaptEntry);
     return { entries, total: entries.length, eof: true };
 }
 
-export async function StatFile(sessionHash: string, path: string): Promise<FileEntryDTO> {
+export async function StatFile(projectID: string, sessionHash: string, path: string): Promise<FileEntryDTO> {
     const q = new URLSearchParams({ path });
     const resp = await apiJSON<{ entry?: V2FileEntry }>(
-        fsURL(sessionHash, `stat?${q}`),
+        fsURL(projectID, sessionHash, `stat?${q}`),
     );
     if (!resp.entry) throw new Error("stat: empty entry");
     return adaptEntry(resp.entry);
 }
 
 export async function DeleteFile(
+    projectID: string,
     sessionHash: string,
     path: string,
     recursive: boolean,
 ): Promise<void> {
     const q = new URLSearchParams({ path, recursive: String(recursive) });
-    await apiFetch(fsURL(sessionHash, `remove?${q}`), { method: "DELETE" });
+    await apiFetch(fsURL(projectID, sessionHash, `remove?${q}`), { method: "DELETE" });
 }
 
-export async function RenameFile(sessionHash: string, from: string, to: string): Promise<void> {
+export async function RenameFile(projectID: string, sessionHash: string, from: string, to: string): Promise<void> {
     const q = new URLSearchParams({ from, to });
-    await apiFetch(fsURL(sessionHash, `rename?${q}`), { method: "POST" });
+    await apiFetch(fsURL(projectID, sessionHash, `rename?${q}`), { method: "POST" });
 }
 
 export async function Mkdir(
+    projectID: string,
     sessionHash: string,
     path: string,
     parents: boolean,
@@ -293,12 +306,12 @@ export async function Mkdir(
     // numeric FileMode like 0o755, which stringifies to "493" — correct.
     const q = new URLSearchParams({ path, mkdirs: String(parents) });
     if (mode && mode !== 0) q.set("mode", String(mode));
-    await apiFetch(fsURL(sessionHash, `mkdir?${q}`), { method: "POST" });
+    await apiFetch(fsURL(projectID, sessionHash, `mkdir?${q}`), { method: "POST" });
 }
 
-export async function Chmod(sessionHash: string, path: string, mode: number): Promise<void> {
+export async function Chmod(projectID: string, sessionHash: string, path: string, mode: number): Promise<void> {
     const q = new URLSearchParams({ path, mode: String(mode) });
-    await apiFetch(fsURL(sessionHash, `mode?${q}`), { method: "PATCH" });
+    await apiFetch(fsURL(projectID, sessionHash, `mode?${q}`), { method: "PATCH" });
 }
 
 // UploadBrowserFile streams a File object directly (no synthetic token
@@ -306,6 +319,7 @@ export async function Chmod(sessionHash: string, path: string, mode: number): Pr
 // OS-drop callbacks. The React drop zone iterates dataTransfer.files and
 // calls this per file.
 export async function UploadBrowserFile(
+    projectID: string,
     sessionHash: string,
     remotePath: string,
     file: File,
@@ -314,7 +328,7 @@ export async function UploadBrowserFile(
     if (bytes.length === 0) {
         // Empty file: truncate the destination with an empty payload.
         const q = new URLSearchParams({ path: remotePath, append: "false" });
-        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
             method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: new Uint8Array(0),
@@ -327,7 +341,7 @@ export async function UploadBrowserFile(
             path: remotePath,
             append: String(off > 0),
         });
-        await apiFetch(fsURL(sessionHash, `write?${q}`), {
+        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
             method: "PUT",
             headers: { "Content-Type": "application/octet-stream" },
             body: slice,
@@ -335,7 +349,7 @@ export async function UploadBrowserFile(
     }
 }
 
-// ---------- Terminal (v2 /api/v1/terminal/:agent_id/ws) -----------------
+// ---------- Terminal (project-scoped /api/v1/projects/:pid/agents/:id/terminal/ws)
 // The v2 browser terminal endpoint (internal/api/handler_terminal_v2.go)
 // uses subprotocol "tty" and binary frames shaped [opcode byte][payload...]:
 //   '0' = INPUT (c→s) / OUTPUT & STDERR (s→c)
@@ -346,6 +360,12 @@ export async function UploadBrowserFile(
 // learn cols/rows before opening the agent-side PROCESS_OPEN stream —
 // Terminal.tsx sends a ResizeTerminal() call synchronously after
 // OpenTerminal resolves, which naturally satisfies that invariant.
+//
+// Auth: the route is gated by RequireAuthWS + project-RBAC, but
+// browsers can't set Authorization on a WebSocket upgrade. We pass the
+// JWT as a "Bearer.<jwt>" Sec-WebSocket-Protocol entry alongside "tty";
+// the server picks it out for auth and only echoes "tty" back, so the
+// auth sentinel is dropped before the live connection starts.
 
 const OP_INPUT = 0x30; // '0'
 const OP_RESIZE = 0x31; // '1'
@@ -364,14 +384,16 @@ function wsURL(path: string): string {
     return base.replace(/^http/, "ws") + path;
 }
 
-export async function OpenTerminal(sessionHash: string): Promise<string> {
+export async function OpenTerminal(projectID: string, sessionHash: string): Promise<string> {
     const termID = `t${++termSeq}`;
-    // v2 terminal has no ticket/Bearer gate — the server accepts the
-    // WS upgrade directly and uses the first resize frame to open the
-    // agent-side PROCESS_OPEN stream.
+    const session = getSession();
+    if (!session) throw new Error("not connected — log in first");
     const ws = new WebSocket(
-        wsURL("/api/v1/terminal/" + encodeURIComponent(sessionHash) + "/ws"),
-        ["tty"],
+        wsURL(
+            "/api/v1/projects/" + encodeURIComponent(projectID) +
+                "/agents/" + encodeURIComponent(sessionHash) + "/terminal/ws",
+        ),
+        ["tty", "Bearer." + session.accessToken],
     );
     ws.binaryType = "arraybuffer";
 

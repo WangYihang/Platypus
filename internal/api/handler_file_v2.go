@@ -12,6 +12,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -20,13 +21,32 @@ import (
 // chunk size so end-to-end paste-sized uploads aren't fragmented.
 const fileUploadChunkSize = 256 * 1024
 
-// RegisterV2FileRoutes mounts the v2 file endpoints. Both operate
-// on a live agent looked up via AgentLinkService; missing agent →
-// 404; agent-reported errors → 502 so the frontend knows the
-// request reached the agent but the agent refused.
-func RegisterV2FileRoutes(engine *gin.Engine, svc *core.AgentLinkService) {
-	engine.GET("/api/v1/agents/:agent_id/fs/read", v2FileDownload(svc))
-	engine.PUT("/api/v1/agents/:agent_id/fs/write", v2FileUpload(svc))
+// RegisterV2FileRoutes mounts the v2 file endpoints under the
+// project-scoped agent group. Both operate on a live agent looked up
+// via AgentLinkService; missing agent → 404; agent-reported errors →
+// 502 so the frontend knows the request reached the agent but the
+// agent refused.
+//
+// fs/read is viewer-tier (a read), fs/write is operator-tier (a
+// mutation). RequireAgentInProject prevents cross-project pivots via
+// a forged agent_id under a project the caller is a member of.
+func RegisterV2FileRoutes(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC) {
+	base := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
+	base.Use(rbac.RequireAuth())
+
+	viewer := base.Group("")
+	viewer.Use(
+		rbac.RequireProjectRole("pid", user.RoleViewer),
+		rbac.RequireAgentInProject("pid", "agent_id"),
+	)
+	viewer.GET("/fs/read", v2FileDownload(svc))
+
+	operator := base.Group("")
+	operator.Use(
+		rbac.RequireProjectRole("pid", user.RoleOperator),
+		rbac.RequireAgentInProject("pid", "agent_id"),
+	)
+	operator.PUT("/fs/write", v2FileUpload(svc))
 }
 
 // v2FileDownload streams the remote file's content back to the
@@ -174,6 +194,9 @@ func v2FileUpload(svc *core.AgentLinkService) gin.HandlerFunc {
 // session, and writes the appropriate HTTP error on miss. Returns
 // (session, true) on success; caller proceeds. On false it's
 // already written the response — caller returns immediately.
+//
+// Cross-project access is prevented upstream by RequireAgentInProject;
+// this function only checks live presence in AgentLinkService.
 func lookupAgent(c *gin.Context, svc *core.AgentLinkService) (*link.Session, bool) {
 	agentID := c.Param("agent_id")
 	if agentID == "" {

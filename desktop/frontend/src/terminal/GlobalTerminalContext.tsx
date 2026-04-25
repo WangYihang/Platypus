@@ -37,12 +37,14 @@ function openKey(serverId: string): string {
 export interface ShellEntry {
     id: string;
     label: string;
+    projectID: string;
     projectSlug: string;
     hostId: string;
     sessionHash: string;
 }
 
 export interface OpenShellInput {
+    projectID: string;
     projectSlug: string;
     hostId: string;
     sessionHash: string;
@@ -166,6 +168,7 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
                 {
                     id,
                     label,
+                    projectID: input.projectID,
                     projectSlug: input.projectSlug,
                     hostId: input.hostId,
                     sessionHash: input.sessionHash,
