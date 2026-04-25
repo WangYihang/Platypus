@@ -36,6 +36,26 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { palette, radius, space } from "./theme";
 import {
@@ -342,47 +362,104 @@ function ContextMenuWrapper({
     profile: ServerProfile;
     children: React.ReactNode;
 }) {
-    const [open, setOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [renameOpen, setRenameOpen] = useState(false);
+    const [renameValue, setRenameValue] = useState(profile.name);
+    const [removeOpen, setRemoveOpen] = useState(false);
+
     const onContextMenu = (e: MouseEvent) => {
         e.preventDefault();
-        setOpen(true);
+        setMenuOpen(true);
     };
+
+    const commitRename = () => {
+        const next = renameValue.trim();
+        if (next && next !== profile.name) {
+            renameServer(profile.id, next);
+        }
+        setRenameOpen(false);
+    };
+
     return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild>
-                <span onContextMenu={onContextMenu} style={{ display: "inline-flex" }}>
-                    {children}
-                </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="start">
-                <DropdownMenuItem
-                    onSelect={() => {
-                        const name = window.prompt("Rename server", profile.name);
-                        if (name && name.trim()) renameServer(profile.id, name.trim());
-                    }}
-                >
-                    Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => forgetServer(profile.id)}>
-                    Sign out
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => {
-                        if (
-                            window.confirm(
-                                `Remove ${profile.name}? The saved URL and refresh token will be deleted.`,
-                            )
-                        ) {
-                            forgetAndRemoveServer(profile.id);
-                        }
-                    }}
-                >
-                    Remove
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                    <span onContextMenu={onContextMenu} style={{ display: "inline-flex" }}>
+                        {children}
+                    </span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start">
+                    <DropdownMenuItem
+                        onSelect={() => {
+                            setRenameValue(profile.name);
+                            setRenameOpen(true);
+                        }}
+                    >
+                        Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => forgetServer(profile.id)}>
+                        Sign out
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setRemoveOpen(true)}
+                    >
+                        Remove
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle>Rename server</DialogTitle>
+                        <DialogDescription>
+                            The display name shows up on the rail tile and in
+                            the Manage Servers dialog.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") setRenameOpen(false);
+                        }}
+                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenameOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={commitRename} disabled={!renameValue.trim()}>
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove {profile.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The saved URL, display name, and refresh token will
+                            be deleted from this client. The server itself is
+                            untouched — you can always add it back.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => forgetAndRemoveServer(profile.id)}
+                        >
+                            Remove
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
 

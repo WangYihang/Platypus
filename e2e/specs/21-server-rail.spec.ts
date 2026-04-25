@@ -48,12 +48,13 @@ test.describe("server rail", () => {
         );
 
         // Remove the second profile via the rail's right-click menu.
-        // Accept the window.confirm prompt that ContextMenuWrapper
-        // uses today.
-        page.on("dialog", (d) => void d.accept());
         await page.getByTestId("server-tile-1").click({ button: "right" });
+        await page.getByRole("menuitem", { name: /Remove/ }).click();
+        // ContextMenuWrapper now uses an AlertDialog instead of
+        // window.confirm — confirm via the dialog's Remove action.
         await page
-            .getByRole("menuitem", { name: /Remove/ })
+            .getByRole("alertdialog")
+            .getByRole("button", { name: /^Remove$/ })
             .click();
         // Rail is back to one tile; active flips to the remaining
         // profile as removeServer reassigns the active pointer.
