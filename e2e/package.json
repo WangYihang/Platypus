@@ -7,7 +7,8 @@
         "e2e": "playwright test && tsx scripts/build-gallery.ts",
         "e2e:headed": "playwright test --headed --workers=1",
         "e2e:ui": "playwright test --ui",
-        "screenshots": "playwright test && tsx scripts/build-gallery.ts"
+        "screenshots": "playwright test && tsx scripts/build-gallery.ts",
+        "demos": "playwright test --project=demo && tsx scripts/build-demos.ts"
     },
     "devDependencies": {
         "@playwright/test": "^1.49.0",

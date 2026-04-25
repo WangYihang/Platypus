@@ -30,7 +30,29 @@ export default defineConfig({
     projects: [
         {
             name: "chromium",
+            // Demos live under specs/_demo/ and are produced via
+            // `pnpm run demos` (the dedicated `demo` project). Skip
+            // them in the default regression run so a regular test
+            // pass doesn't churn out 5 narrated videos.
+            testIgnore: ["**/_demo/**"],
             use: { ...devices["Desktop Chrome"] },
+        },
+        {
+            name: "demo",
+            testDir: "./specs/_demo",
+            // Demo specs use *.demo.ts (not *.spec.ts) so the default
+            // glob would skip them. Match them explicitly here.
+            testMatch: "**/*.demo.ts",
+            use: {
+                ...devices["Desktop Chrome"],
+                viewport: { width: 1440, height: 900 },
+                // 250ms slowMo turns "click → wait → type" into
+                // something a viewer can follow. Each demo also
+                // stages explicit pause()s and captions on top.
+                launchOptions: { slowMo: 250 },
+                video: { mode: "on", size: { width: 1440, height: 900 } },
+                trace: "off",
+            },
         },
     ],
     globalSetup: "./global-setup.ts",
