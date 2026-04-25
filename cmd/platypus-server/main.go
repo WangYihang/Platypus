@@ -41,6 +41,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/ingress"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -365,6 +366,15 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
 
+	// optoken cache + verifier: the hot-path reader for AAT (and Phase 2
+	// user-session) bearers. 4096 entries × 30s TTL bounds memory and
+	// keeps a missed-revoke damage window short. RBAC's RequireAuth
+	// dispatches opaque-prefix bearers here; JWT bearers stay on
+	// the TokenIssuer path.
+	authTokenCache := optoken.NewCache(4096, 30*time.Second)
+	tokenVerifier := api.NewTokenVerifier(db, authTokenCache)
+	aatH := api.NewAATHandler(db, tokenVerifier)
+
 	// /api/v1/install/<token> and /v1/manifest/* now live on the same
 	// gin engine — no dedicated distributor port. distributorBase is
 	// the public HTTPS origin the server is reachable at so
@@ -380,7 +390,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db)
-	rbac := api.NewRBACWithStorage(tokens, db)
+	rbac := api.NewRBACWithVerifier(tokens, db, tokenVerifier)
 
 	api.SetActivityRecorder(api.NewActivityRecorder(db))
 	core.SetEnrollment(enrollSvc)
@@ -419,6 +429,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1HostsRoutes(rest, hostsH, rbac)
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 	api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
+	api.RegisterV1AATRoutes(rest, aatH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
