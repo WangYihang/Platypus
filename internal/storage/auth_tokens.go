@@ -38,6 +38,27 @@ type AAT struct {
 	RevokedReason string
 }
 
+// UserSession is the typed view of an auth_tokens row with kind=
+// 'user_session'. Roles / scopes are intentionally absent — sessions
+// inherit them from the live users.role at verify time so a demoted
+// admin sees the change on the next request rather than at the next
+// logout.
+type UserSession struct {
+	TokenID       string
+	SecretHash    []byte
+	UserID        string
+	UserAgent     string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	IdleExpiresAt time.Time
+	LastUsedAt    *time.Time
+	LastUsedIP    string
+	Revoked       bool
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
+}
+
 // AuthTokens returns the repo accessor. Mirrors the (db *DB).PATTokens()
 // pattern so callers don't learn about a different access shape per kind.
 func (db *DB) AuthTokens() *AuthTokenRepo { return &AuthTokenRepo{db: db.DB} }
@@ -112,6 +133,112 @@ func (r *AuthTokenRepo) GetAAT(ctx context.Context, tokenID string) (*AAT, error
 		return nil, err
 	}
 	return rowToAAT(rec), nil
+}
+
+// CreateSession inserts an auth_tokens row with kind='user_session'.
+// Validates the input shape against what the table CHECK requires —
+// the DB will reject any inconsistency, but a Go-side check gives the
+// caller a precise error message instead of a generic CHECK failure.
+func (r *AuthTokenRepo) CreateSession(ctx context.Context, s *UserSession) error {
+	if err := validateSession(s); err != nil {
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO auth_tokens (
+			token_id, kind, secret_hash, user_id,
+			user_agent,
+			created_at, expires_at, idle_expires_at
+		) VALUES (?, 'user_session', ?, ?, ?, ?, ?, ?)`,
+		s.TokenID,
+		s.SecretHash,
+		s.UserID,
+		nullableString(s.UserAgent),
+		s.CreatedAt.UTC(),
+		s.ExpiresAt.UTC(),
+		s.IdleExpiresAt.UTC(),
+	)
+	return err
+}
+
+func validateSession(s *UserSession) error {
+	switch {
+	case s == nil:
+		return errors.New("storage: UserSession is nil")
+	case s.TokenID == "":
+		return errors.New("storage: UserSession.TokenID empty")
+	case s.UserID == "":
+		return errors.New("storage: UserSession.UserID empty")
+	case len(s.SecretHash) == 0:
+		return errors.New("storage: UserSession.SecretHash empty")
+	case s.CreatedAt.IsZero():
+		return errors.New("storage: UserSession.CreatedAt unset")
+	case s.ExpiresAt.IsZero():
+		return errors.New("storage: UserSession.ExpiresAt unset")
+	case s.IdleExpiresAt.IsZero():
+		return errors.New("storage: UserSession.IdleExpiresAt unset")
+	}
+	return nil
+}
+
+// GetSession fetches a single user_session by id. Same contract as
+// GetAAT: ErrNotFound for missing rows, kind filter rejects AAT rows.
+func (r *AuthTokenRepo) GetSession(ctx context.Context, tokenID string) (*UserSession, error) {
+	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = 'user_session'`, tokenID)
+	rec, err := scanAuthTokenRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rowToSession(rec), nil
+}
+
+// ListSessionsForUser returns active (non-revoked) sessions a user
+// holds, newest first. Drives the "Active sessions" UI in account
+// settings — revoked rows would only confuse a user looking at their
+// live device list.
+func (r *AuthTokenRepo) ListSessionsForUser(ctx context.Context, userID string) ([]*UserSession, error) {
+	rows, err := r.db.QueryContext(ctx, baseSelect+`
+		WHERE kind = 'user_session' AND user_id = ? AND revoked_at IS NULL
+		ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*UserSession
+	for rows.Next() {
+		rec, err := scanAuthTokenRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rowToSession(rec))
+	}
+	return out, rows.Err()
+}
+
+// RevokeAllSessionsForUser kills every active session for a user.
+// Returns the number of rows touched. Called on password change,
+// account suspension, or admin-initiated forced logout. AAT rows owned
+// by the same user are deliberately left alone — they have their own
+// rotation lifecycle and the issuer may want them to outlive the
+// session reset.
+func (r *AuthTokenRepo) RevokeAllSessionsForUser(ctx context.Context, userID, byUser, reason string, at time.Time) (int, error) {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE auth_tokens
+		   SET revoked_at = ?, revoked_by_user = ?, revoked_reason = ?
+		 WHERE kind = 'user_session'
+		   AND user_id = ?
+		   AND revoked_at IS NULL`,
+		at.UTC(), byUser, nullableString(reason), userID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
 }
 
 // ListAATsByCreator returns AATs the user issued, newest first. When
@@ -333,6 +460,33 @@ func rowToAAT(r *authTokenRow) *AAT {
 		a.RevokedAt = &t
 	}
 	return a
+}
+
+func rowToSession(r *authTokenRow) *UserSession {
+	s := &UserSession{
+		TokenID:       r.tokenID,
+		SecretHash:    r.secretHash,
+		UserID:        r.userID,
+		UserAgent:     r.userAgent.String,
+		CreatedAt:     r.createdAt,
+		ExpiresAt:     r.expiresAt,
+		LastUsedIP:    r.lastUsedIP.String,
+		Revoked:       r.revokedAt.Valid,
+		RevokedByUser: r.revokedByUser.String,
+		RevokedReason: r.revokedReason.String,
+	}
+	if r.idleExpiresAt.Valid {
+		s.IdleExpiresAt = r.idleExpiresAt.Time
+	}
+	if r.lastUsedAt.Valid {
+		t := r.lastUsedAt.Time
+		s.LastUsedAt = &t
+	}
+	if r.revokedAt.Valid {
+		t := r.revokedAt.Time
+		s.RevokedAt = &t
+	}
+	return s
 }
 
 // rowToVerified projects an authTokenRow into the cache-ready
