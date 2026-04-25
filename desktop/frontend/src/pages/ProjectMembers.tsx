@@ -224,8 +224,8 @@ export default function ProjectMembers({ project }: Props) {
                         title="No members"
                         description={
                             canAdd
-                                ? "Add a user to grant them access to this project."
-                                : "Ask a global admin to add a user to this project."
+                                ? "Global admins (including you) already have access to every project — explicit project members are only needed for operators and viewers. Add a user to grant them access here."
+                                : "No members on this project yet. Global admins still have access; ask one to add a user if other operators or viewers need it."
                         }
                     />
                 ) : !members ? (
