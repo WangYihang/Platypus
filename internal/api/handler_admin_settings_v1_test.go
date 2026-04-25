@@ -8,12 +8,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func adminSettingsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, *settings.Registry) {
+func adminSettingsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *settings.Registry) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -23,20 +24,21 @@ func adminSettingsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssue
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	reg := settings.New(db, nil)
 	h := NewAdminSettingsHandler(reg)
 
 	r := gin.New()
 	RegisterV1AdminSettingsRoutes(r, h, rbac)
-	return r, db, issuer, reg
+	return r, db, reg
 }
 
 func TestAdminSettings_ListReturnsAllDescriptors(t *testing.T) {
-	r, db, issuer, _ := adminSettingsTestSetup(t)
+	r, db, _ := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/admin/settings", tok, nil)
 	if w.Code != http.StatusOK {
@@ -54,9 +56,9 @@ func TestAdminSettings_ListReturnsAllDescriptors(t *testing.T) {
 }
 
 func TestAdminSettings_UpdatePersistsAndInvalidatesCache(t *testing.T) {
-	r, db, issuer, reg := adminSettingsTestSetup(t)
+	r, db, reg := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "PUT", "/api/v1/admin/settings/"+settings.KeyAuthAccessTokenTTL, tok,
 		map[string]int{"value": 60})
@@ -71,9 +73,9 @@ func TestAdminSettings_UpdatePersistsAndInvalidatesCache(t *testing.T) {
 }
 
 func TestAdminSettings_UpdateRejectsBadType(t *testing.T) {
-	r, db, issuer, _ := adminSettingsTestSetup(t)
+	r, db, _ := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	// mesh.discovery_lan is a bool; sending a string should fail validation.
 	w := probeReqWithPath(r, "PUT", "/api/v1/admin/settings/"+settings.KeyMeshDiscoveryLAN, tok,
@@ -84,9 +86,9 @@ func TestAdminSettings_UpdateRejectsBadType(t *testing.T) {
 }
 
 func TestAdminSettings_UpdateRejectsUnknownKey(t *testing.T) {
-	r, db, issuer, _ := adminSettingsTestSetup(t)
+	r, db, _ := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "PUT", "/api/v1/admin/settings/not.a.key", tok,
 		map[string]int{"value": 1})
@@ -96,9 +98,9 @@ func TestAdminSettings_UpdateRejectsUnknownKey(t *testing.T) {
 }
 
 func TestAdminSettings_NonAdminForbidden(t *testing.T) {
-	r, db, issuer, _ := adminSettingsTestSetup(t)
+	r, db, _ := adminSettingsTestSetup(t)
 	viewer := seedUserForAPITest(t, db, "viewer", user.RoleViewer)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: viewer.ID, Role: user.RoleViewer})
+	tok := mintBearerForUserID(t, db, viewer.ID, user.RoleViewer)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/admin/settings", tok, nil)
 	if w.Code != http.StatusForbidden {
@@ -113,7 +115,7 @@ func TestAdminSettings_NonAdminForbidden(t *testing.T) {
 }
 
 func TestAdminSettings_UnauthenticatedRejected(t *testing.T) {
-	r, _, _, _ := adminSettingsTestSetup(t)
+	r, _, _ := adminSettingsTestSetup(t)
 	w := probeReqWithPath(r, "GET", "/api/v1/admin/settings", "", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d", w.Code)
@@ -121,9 +123,9 @@ func TestAdminSettings_UnauthenticatedRejected(t *testing.T) {
 }
 
 func TestAdminSettings_ResetRevertsToDefault(t *testing.T) {
-	r, db, issuer, reg := adminSettingsTestSetup(t)
+	r, db, reg := adminSettingsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	// Seed an override.
 	w := probeReqWithPath(r, "PUT", "/api/v1/admin/settings/"+settings.KeyAuthAccessTokenTTL, tok,

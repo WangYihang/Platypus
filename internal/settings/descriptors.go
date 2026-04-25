@@ -177,14 +177,9 @@ func (r *Registry) describeYAML(m descriptorMeta) any {
 		return nil
 	}
 	switch m.Key {
-	case KeyAuthAccessTokenTTL:
-		if r.cfg.RESTful.AccessExpireTime > 0 {
-			return int64(r.cfg.RESTful.AccessExpireTime)
-		}
-	case KeyAuthRefreshTokenTTL:
-		if r.cfg.RESTful.RefreshExpireTime > 0 {
-			return int64(r.cfg.RESTful.RefreshExpireTime)
-		}
+	case KeyAuthAccessTokenTTL, KeyAuthRefreshTokenTTL:
+		// Retired in Phase-2 auth; YAML override no longer applies.
+		return nil
 	case KeyDistributorChannel:
 		if r.cfg.Distributor.Channel != "" {
 			return r.cfg.Distributor.Channel

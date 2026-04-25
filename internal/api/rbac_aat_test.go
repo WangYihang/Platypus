@@ -14,14 +14,12 @@ import (
 )
 
 // aatRBACSetup builds an RBAC wired with an AAT-aware verifier and an
-// in-memory db. The test issuer is still attached so JWT-path
-// regressions can be asserted in the same fixture.
+// in-memory db.
 type aatFixture struct {
-	router  *gin.Engine
-	db      *storage.DB
-	issuer  *TokenIssuer
-	rbac    *RBAC
-	cache   *optoken.Cache
+	router *gin.Engine
+	db     *storage.DB
+	rbac   *RBAC
+	cache  *optoken.Cache
 }
 
 func aatRBACSetup(t *testing.T) *aatFixture {
@@ -33,13 +31,9 @@ func aatRBACSetup(t *testing.T) *aatFixture {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, err := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
-	rbac := NewRBACWithVerifier(issuer, db, verifier)
+	rbac := NewRBAC(db, verifier)
 
 	r := gin.New()
 	// Two probes: one global (RequireAuth only), one project-scoped.
@@ -72,7 +66,7 @@ func aatRBACSetup(t *testing.T) *aatFixture {
 		rbac.RequireScope(optoken.ScopeHostsRead),
 		func(c *gin.Context) { c.String(http.StatusOK, "read-ok") },
 	)
-	return &aatFixture{router: r, db: db, issuer: issuer, rbac: rbac, cache: cache}
+	return &aatFixture{router: r, db: db, rbac: rbac, cache: cache}
 }
 
 // seedAAT mints an AAT row and returns its plaintext bearer.
@@ -130,12 +124,13 @@ func TestRequireAuth_AAT_Revoked(t *testing.T) {
 	}
 }
 
-func TestRequireAuth_JWT_StillWorks(t *testing.T) {
+func TestRequireAuth_Session(t *testing.T) {
 	f := aatRBACSetup(t)
-	tok, _ := f.issuer.IssueAccess(AccessClaims{UserID: "u1", Role: user.RoleViewer})
+	u := seedUserForAPITest(t, f.db, "u1", user.RoleViewer)
+	tok := mintSessionForTest(t, f.db, u)
 	w := probeReqWithPath(f.router, "GET", "/probe", tok, nil)
 	if w.Code != http.StatusOK {
-		t.Errorf("JWT-path regression: status=%d body=%s", w.Code, w.Body.String())
+		t.Errorf("session-path: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -251,7 +246,7 @@ func TestRequireScope_HumanOperator_AlwaysPass(t *testing.T) {
 	bob := seedUserForAPITest(t, f.db, "bob", user.RoleOperator)
 	_ = f.db.Projects().AddMember(context.Background(), p.ID, bob.ID, user.RoleOperator)
 
-	tok, _ := f.issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleOperator})
+	tok := mintBearerForUserID(t, f.db, bob.ID, user.RoleOperator)
 	w := probeReqWithPath(f.router, "GET", "/projects/"+p.ID+"/exec", tok, nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("operator on /exec: status=%d body=%s; humans should pass scope checks via ScopesFromRole",
@@ -266,7 +261,7 @@ func TestRequireScope_HumanViewer_DeniedExec(t *testing.T) {
 	bob := seedUserForAPITest(t, f.db, "bob", user.RoleViewer)
 	_ = f.db.Projects().AddMember(context.Background(), p.ID, bob.ID, user.RoleViewer)
 
-	tok, _ := f.issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleViewer})
+	tok := mintBearerForUserID(t, f.db, bob.ID, user.RoleViewer)
 	w := probeReqWithPath(f.router, "GET", "/projects/"+p.ID+"/exec", tok, nil)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("viewer on /exec: status=%d; viewers must not pass hosts:exec", w.Code)

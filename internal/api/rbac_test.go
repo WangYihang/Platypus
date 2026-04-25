@@ -8,21 +8,29 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func rbacTestSetup(t *testing.T) (*RBAC, *TokenIssuer) {
+// rbacTestSetup builds an RBAC backed by an in-memory db + cache. Tests
+// use the returned db to seed users and mint session bearers via
+// mintBearerForUserID.
+func rbacTestSetup(t *testing.T) (*RBAC, *storage.DB) {
 	t.Helper()
-	issuer, err := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
+	db, err := storage.Open(":memory:")
 	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
+		t.Fatalf("storage.Open: %v", err)
 	}
-	return NewRBAC(issuer), issuer
+	t.Cleanup(func() { db.Close() })
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	return NewRBAC(db, verifier), db
 }
 
-// mountProtected mounts a single /probe route guarded by the given middleware
-// chain. The handler writes the authenticated user's role into the body so
-// tests can assert both status and identity.
+// mountProtected mounts a single /probe route guarded by the given
+// middleware chain. The handler writes the authenticated user's role
+// into the body so tests can assert both status and identity.
 func mountProtected(mw ...gin.HandlerFunc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -76,22 +84,17 @@ func TestRequireAuth_InvalidToken(t *testing.T) {
 	rb, _ := rbacTestSetup(t)
 	r := mountProtected(rb.RequireAuth())
 
-	w := probeReq(r, "not-a-jwt")
+	w := probeReq(r, "not-a-known-prefix")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d", w.Code)
 	}
 }
 
 func TestRequireAuth_ValidTokenPutsClaimsOnContext(t *testing.T) {
-	rb, issuer := rbacTestSetup(t)
+	rb, db := rbacTestSetup(t)
 	r := mountProtected(rb.RequireAuth())
 
-	tok, err := issuer.IssueAccess(AccessClaims{
-		UserID: "u1", Username: "alice", Role: user.RoleOperator,
-	})
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
+	tok := mintBearerForUserID(t, db, "u1", user.RoleOperator)
 	w := probeReq(r, tok)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
@@ -102,12 +105,10 @@ func TestRequireAuth_ValidTokenPutsClaimsOnContext(t *testing.T) {
 }
 
 func TestRequireGlobalRole_BlocksLowerRole(t *testing.T) {
-	rb, issuer := rbacTestSetup(t)
+	rb, db := rbacTestSetup(t)
 	r := mountProtected(rb.RequireAuth(), rb.RequireGlobalRole(user.RoleAdmin))
 
-	tok, _ := issuer.IssueAccess(AccessClaims{
-		UserID: "u1", Role: user.RoleViewer,
-	})
+	tok := mintBearerForUserID(t, db, "u1", user.RoleViewer)
 	w := probeReq(r, tok)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("viewer hitting admin-only route status=%d; want 403", w.Code)
@@ -115,27 +116,23 @@ func TestRequireGlobalRole_BlocksLowerRole(t *testing.T) {
 }
 
 func TestRequireGlobalRole_AllowsMatch(t *testing.T) {
-	rb, issuer := rbacTestSetup(t)
+	rb, db := rbacTestSetup(t)
 	r := mountProtected(rb.RequireAuth(), rb.RequireGlobalRole(user.RoleAdmin))
 
-	tok, _ := issuer.IssueAccess(AccessClaims{
-		UserID: "u1", Role: user.RoleAdmin,
-	})
+	tok := mintBearerForUserID(t, db, "u1", user.RoleAdmin)
 	w := probeReq(r, tok)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin hitting admin-only route status=%d; want 200", w.Code)
 	}
 }
 
-// Role ordering: admin > operator > viewer. RequireGlobalRole should allow
-// any role at or above the threshold.
+// Role ordering: admin > operator > viewer. RequireGlobalRole should
+// allow any role at or above the threshold.
 func TestRequireGlobalRole_AllowsHigher(t *testing.T) {
-	rb, issuer := rbacTestSetup(t)
+	rb, db := rbacTestSetup(t)
 	r := mountProtected(rb.RequireAuth(), rb.RequireGlobalRole(user.RoleOperator))
 
-	tok, _ := issuer.IssueAccess(AccessClaims{
-		UserID: "u1", Role: user.RoleAdmin,
-	})
+	tok := mintBearerForUserID(t, db, "u1", user.RoleAdmin)
 	w := probeReq(r, tok)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin hitting operator-only route status=%d; want 200", w.Code)

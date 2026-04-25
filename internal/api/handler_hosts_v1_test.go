@@ -9,11 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func hostsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
+func hostsTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -23,21 +24,22 @@ func hostsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	h := NewHostsHandler(db)
 
 	r := gin.New()
 	RegisterV1HostsRoutes(r, h, rbac)
-	return r, db, issuer
+	return r, db
 }
 
 func TestHosts_ListEmpty(t *testing.T) {
-	r, db, issuer := hostsTestSetup(t)
+	r, db := hostsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/hosts", tok, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
@@ -52,7 +54,7 @@ func TestHosts_ListEmpty(t *testing.T) {
 }
 
 func TestHosts_ListFiltersByProject(t *testing.T) {
-	r, db, issuer := hostsTestSetup(t)
+	r, db := hostsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	prod := seedProjectForAPITest(t, db, "prod", admin)
 	stag := seedProjectForAPITest(t, db, "staging", admin)
@@ -68,7 +70,7 @@ func TestHosts_ListFiltersByProject(t *testing.T) {
 		Hostname: "beta", OS: "linux", SeenAt: now,
 	})
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+prod.ID+"/hosts", tok, nil)
 	var resp struct {
 		Hosts []hostResponse `json:"hosts"`
@@ -80,12 +82,12 @@ func TestHosts_ListFiltersByProject(t *testing.T) {
 }
 
 func TestHosts_ViewerBlocked_NonMember(t *testing.T) {
-	r, db, issuer := hostsTestSetup(t)
+	r, db := hostsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	stranger := seedUserForAPITest(t, db, "stranger", user.RoleViewer)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: stranger.ID, Role: user.RoleViewer})
+	tok := mintBearerForUserID(t, db, stranger.ID, user.RoleViewer)
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/hosts", tok, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status=%d; want 403", w.Code)
@@ -93,11 +95,11 @@ func TestHosts_ViewerBlocked_NonMember(t *testing.T) {
 }
 
 func TestHosts_Get404(t *testing.T) {
-	r, db, issuer := hostsTestSetup(t)
+	r, db := hostsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+proj.ID+"/hosts/missing-id", tok, nil)
 	if w.Code != http.StatusNotFound {
@@ -107,7 +109,7 @@ func TestHosts_Get404(t *testing.T) {
 
 // A host in one project is not accessible via another project's URL.
 func TestHosts_GetCrossProjectIsolated(t *testing.T) {
-	r, db, issuer := hostsTestSetup(t)
+	r, db := hostsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	prod := seedProjectForAPITest(t, db, "prod", admin)
 	stag := seedProjectForAPITest(t, db, "staging", admin)
@@ -117,7 +119,7 @@ func TestHosts_GetCrossProjectIsolated(t *testing.T) {
 		ProjectID: prod.ID, MachineID: "m-1", Fingerprint: "fp-1",
 		Hostname: "alpha", OS: "linux", SeenAt: now,
 	})
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	// GET stag/hosts/<prod_host_id> must 404.
 	w := probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+stag.ID+"/hosts/"+h.ID, tok, nil)

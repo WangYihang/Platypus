@@ -30,7 +30,7 @@ func NewAATHandler(db *storage.DB, verifier *TokenVerifier) *AATHandler {
 // below MinAATTTL is rejected so a misconfigured client can't mint
 // near-expired tokens.
 const (
-	DefaultAATTTL = 30 * 24 * time.Hour  // 30 days
+	DefaultAATTTL = 30 * 24 * time.Hour // 30 days
 	MinAATTTL     = 1 * time.Minute
 	MaxAATTTL     = 365 * 24 * time.Hour // 1 year
 )

@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/optoken"
 )
 
 // Auth manages Bearer Token authentication for the API.
@@ -16,12 +18,13 @@ type Auth struct {
 	tokens    map[string]bool // valid tokens (legacy single-secret path)
 	secret    string          // server secret for obtaining tokens
 	wsTickets *wsTicketStore  // short-lived one-shot tickets for WS auth
-	// jwtFallback, if set, lets Middleware also accept JWT access tokens
-	// alongside legacy single-secret tokens. Wired by main.go after the
-	// JWT issuer is constructed so that browser clients (which use JWTs)
-	// can hit endpoints still mounted under the legacy middleware —
+	// opaqueVerifier, if set, lets Middleware also accept opaque
+	// session / AAT tokens alongside the legacy single-secret path.
+	// Wired by main.go after the verifier is constructed so that
+	// browser clients (which carry pst_ session tokens) can hit
+	// endpoints still mounted under the legacy middleware —
 	// notably /api/v1/ws/ticket.
-	jwtFallback *TokenIssuer
+	opaqueVerifier *TokenVerifier
 }
 
 // NewAuth creates an Auth instance with a random server secret.
@@ -52,11 +55,11 @@ func (a *Auth) GetSecret() string {
 	return a.secret
 }
 
-// SetJWTFallback enables JWT access-token acceptance in Middleware().
-// Pass the same TokenIssuer used by RegisterV1AuthRoutes. Optional —
+// SetOpaqueVerifier enables opaque-token (session / AAT) acceptance in
+// Middleware(). Pass the same TokenVerifier used by RBAC. Optional —
 // without it Middleware() only accepts legacy single-secret tokens.
-func (a *Auth) SetJWTFallback(t *TokenIssuer) {
-	a.jwtFallback = t
+func (a *Auth) SetOpaqueVerifier(v *TokenVerifier) {
+	a.opaqueVerifier = v
 }
 
 // CreateToken generates a new bearer token and registers it.
@@ -141,10 +144,14 @@ func (a *Auth) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if a.jwtFallback != nil {
-			if _, err := a.jwtFallback.ParseAccess(parts[1]); err == nil {
-				c.Next()
-				return
+		if a.opaqueVerifier != nil {
+			if _, _, isOpaque := optoken.DetectKind(parts[1]); isOpaque {
+				p, reason, err := a.opaqueVerifier.Verify(c.Request.Context(), parts[1])
+				if err == nil && reason == "success" && p != nil {
+					SetPrincipal(c, p)
+					c.Next()
+					return
+				}
 			}
 		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})

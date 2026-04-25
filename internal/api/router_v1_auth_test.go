@@ -23,10 +23,9 @@ func TestRegisterV1AuthRoutes_BootstrapLoginList(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
-	rbac := NewRBACWithVerifier(issuer, db, verifier)
+	rbac := NewRBAC(db, verifier)
 	authH := NewAuthHandler(db, verifier, "seekret")
 	usersH := NewUsersHandler(db)
 

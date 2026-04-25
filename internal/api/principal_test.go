@@ -13,27 +13,35 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func TestPrincipalFromClaims(t *testing.T) {
+// PrincipalFromClaims was removed alongside the JWT path. The
+// equivalent test now exercises PrincipalFromVerified for a
+// user_session-kind Verified — that's the production constructor for
+// human principals after Phase 2.
+func TestPrincipalFromVerified_UserSession(t *testing.T) {
 	t.Parallel()
-	claims := api.AccessClaims{
+	v := &optoken.Verified{
+		TokenID:  "pst_alice",
+		Kind:     optoken.KindUserSession,
 		UserID:   "u-alice",
 		Username: "alice",
 		Role:     user.RoleOperator,
+		Scopes:   optoken.ScopesFromRole(user.RoleOperator),
 	}
-	p := api.PrincipalFromClaims(claims)
+	p := api.PrincipalFromVerified(v)
 	if p.Kind != api.PrincipalUser {
 		t.Errorf("Kind = %v, want PrincipalUser", p.Kind)
 	}
 	if p.UserID != "u-alice" || p.Username != "alice" || p.Role != user.RoleOperator {
 		t.Errorf("identity mismatch: %+v", p)
 	}
-	// Human users derive scopes from role; the api never reads
-	// scopes for them off the wire.
 	if !optoken.HasScope(p.Scopes, optoken.ScopeHostsRead) {
 		t.Errorf("operator scopes missing hosts:read: %v", p.Scopes)
 	}
-	if p.ProjectID != "" || p.TokenID != "" {
-		t.Errorf("user-kind should leave ProjectID/TokenID empty: %+v", p)
+	if p.ProjectID != "" {
+		t.Errorf("user_session principal should leave ProjectID empty: %+v", p)
+	}
+	if p.TokenID != "pst_alice" {
+		t.Errorf("TokenID = %q, want pst_alice (audit join key)", p.TokenID)
 	}
 }
 

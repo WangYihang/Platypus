@@ -12,46 +12,41 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-// RBAC carries the dependencies needed for auth middleware: the token
-// issuer for parsing access JWTs (legacy human auth), the storage layer
-// for project_members lookups, and the opaque-token verifier that
-// handles AAT (and later user-session) credentials.
+// RBAC owns the auth + project-membership middleware for the v1 REST
+// surface. After the JWT pair was retired in Phase 2, the only
+// dependencies left are storage (for project_members lookups) and the
+// opaque-token verifier (for session and AAT bearers).
 type RBAC struct {
-	tokens   *TokenIssuer
 	storage  *storage.DB
 	verifier *TokenVerifier
 }
 
-// NewRBAC builds an RBAC that can only enforce RequireAuth and
-// RequireGlobalRole. RequireProjectRole requires storage and will panic
-// at middleware call time if used with this constructor.
-func NewRBAC(tokens *TokenIssuer) *RBAC {
-	return &RBAC{tokens: tokens}
+// NewRBAC wires the full middleware: opaque-token verifier for both
+// session (pst_) and AAT (aat_) bearers, and storage for project gate
+// lookups. There is no longer a JWT path — RequireAuth rejects any
+// bearer whose prefix doesn't match a registered optoken kind.
+func NewRBAC(db *storage.DB, verifier *TokenVerifier) *RBAC {
+	return &RBAC{storage: db, verifier: verifier}
 }
 
-// NewRBACWithStorage additionally enables RequireProjectRole by providing
-// the DB handle used for project_members lookups. AAT verification is
-// disabled — bearers with the aat_ prefix fall through to the JWT
-// parser which rejects them as invalid signatures.
-func NewRBACWithStorage(tokens *TokenIssuer, db *storage.DB) *RBAC {
-	return &RBAC{tokens: tokens, storage: db}
+// AccessClaims is the legacy claim shape kept on gin.Context for
+// backward compat with handlers that haven't migrated to
+// PrincipalFromContext. It's not a JWT claim set anymore; the auth
+// middleware populates it directly from the verified Principal so
+// existing `claims.UserID` / `claims.Role` reads keep working without
+// each handler being rewritten.
+type AccessClaims struct {
+	UserID   string
+	Username string
+	Role     user.Role
 }
 
-// NewRBACWithVerifier wires the full RBAC: JWT for humans, opaque-token
-// verifier for AAT (and Phase 2 user sessions). The verifier is the only
-// path that accepts AAT bearers; without it, RequireAuth treats every
-// bearer as a JWT.
-func NewRBACWithVerifier(tokens *TokenIssuer, db *storage.DB, verifier *TokenVerifier) *RBAC {
-	return &RBAC{tokens: tokens, storage: db, verifier: verifier}
-}
-
-// claimsCtxKey is the Gin context key under which RequireAuth stores the
-// parsed AccessClaims for downstream handlers.
+// claimsCtxKey is the gin context slot for the legacy AccessClaims.
 const claimsCtxKey = "platypus.auth.claims"
 
-// ClaimsFromContext returns the AccessClaims set by RequireAuth on success.
-// The second return is false when the middleware hasn't run or the token
-// was invalid — in which case the handler should not have been reached.
+// ClaimsFromContext returns the AccessClaims stamped by RequireAuth on
+// success. Prefer PrincipalFromContext in new code — that carries
+// kind, scopes, and project binding too.
 func ClaimsFromContext(c *gin.Context) (*AccessClaims, bool) {
 	v, ok := c.Get(claimsCtxKey)
 	if !ok {
@@ -62,14 +57,9 @@ func ClaimsFromContext(c *gin.Context) (*AccessClaims, bool) {
 }
 
 // RequireAuth validates the Authorization: Bearer <token> header and
-// stores both the parsed AccessClaims (legacy compat) and the unified
-// *Principal on the gin context.
-//
-// Bearer dispatch is by token format: any registered opaque prefix
-// (aat_, ...) goes through the TokenVerifier; everything else falls
-// through to JWT parsing. On any failure — missing header, wrong
-// scheme, invalid signature, revoked / expired opaque token — the
-// middleware aborts with 401.
+// stores both the unified *Principal and a legacy AccessClaims on the
+// gin context. Bearer must carry a registered optoken prefix (pst_ for
+// human sessions, aat_ for AI agent tokens); anything else is 401.
 func (r *RBAC) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := c.GetHeader("Authorization")
@@ -86,59 +76,57 @@ func (r *RBAC) RequireAuth() gin.HandlerFunc {
 	}
 }
 
-// authenticate is the shared body of RequireAuth / RequireAuthWS. It
-// receives the bearer payload (already past Bearer scheme parsing) and
-// either stamps Principal+Claims and calls c.Next, or aborts with 401.
+// authenticate is the shared body of RequireAuth / RequireAuthWS. On
+// success it stamps Principal + AccessClaims and calls c.Next; on
+// failure it aborts with 401.
 func (r *RBAC) authenticate(c *gin.Context, bearer string) {
-	if r.verifier != nil {
-		if _, _, isOpaque := optoken.DetectKind(bearer); isOpaque {
-			p, reason, err := r.verifier.Verify(c.Request.Context(), bearer)
-			if err != nil {
-				// Internal storage error — distinct from "token bad".
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth lookup"})
-				return
-			}
-			if reason != "success" || p == nil {
-				abortUnauthorized(c, "invalid token")
-				return
-			}
-			SetPrincipal(c, p)
-			c.Set(claimsCtxKey, syntheticClaimsForAAT(p))
-			c.Next()
-			return
-		}
-	}
-	// JWT path (humans).
-	claims, err := r.tokens.ParseAccess(bearer)
-	if err != nil {
-		abortUnauthorized(c, "invalid access token")
+	if r.verifier == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth verifier not wired"})
 		return
 	}
-	c.Set(claimsCtxKey, &claims)
-	SetPrincipal(c, PrincipalFromClaims(claims))
+	if _, _, isOpaque := optoken.DetectKind(bearer); !isOpaque {
+		abortUnauthorized(c, "unrecognized token format")
+		return
+	}
+	p, reason, err := r.verifier.Verify(c.Request.Context(), bearer)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth lookup"})
+		return
+	}
+	if reason != "success" || p == nil {
+		abortUnauthorized(c, "invalid token")
+		return
+	}
+	SetPrincipal(c, p)
+	c.Set(claimsCtxKey, claimsForPrincipal(p))
 	c.Next()
 }
 
-// syntheticClaimsForAAT lets pre-Principal handlers continue to read
-// ClaimsFromContext on AAT-authenticated requests. UserID is set to
-// the TokenID — never the issuer's user_id — so any handler that
-// uses it in an audit field or "owns this row" check stays
-// distinguishable from a real human user.
-//
-// Role mirrors the AAT's role for global tokens; project-bound AATs
-// have their role floored to viewer here so the legacy admin-bypass
-// in any handler still reading claims directly cannot accidentally
-// escape the project binding. Handlers migrated to PrincipalFromContext
-// see the real Role and the binding via Principal.IsGlobalAdmin().
-func syntheticClaimsForAAT(p *Principal) *AccessClaims {
-	role := p.Role
-	if p.ProjectID != "" && role == user.RoleAdmin {
-		role = user.RoleViewer
-	}
-	return &AccessClaims{
-		UserID:   p.TokenID,
-		Username: "<aat:" + p.TokenID + ">",
-		Role:     role,
+// claimsForPrincipal projects a Principal into the legacy AccessClaims
+// shape. Human sessions get their real UserID / Username / Role.
+// AAT principals get UserID=TokenID + a sentinel username + the
+// AAT's role floored to viewer when project-bound — that way any
+// pre-Principal handler reading claims.UserID stays distinguishable
+// from a real human, and the legacy "claims.Role==admin" bypass
+// can't accidentally escape an AAT's project binding.
+func claimsForPrincipal(p *Principal) *AccessClaims {
+	switch p.Kind {
+	case PrincipalAATKind:
+		role := p.Role
+		if p.ProjectID != "" && role == user.RoleAdmin {
+			role = user.RoleViewer
+		}
+		return &AccessClaims{
+			UserID:   p.TokenID,
+			Username: "<aat:" + p.TokenID + ">",
+			Role:     role,
+		}
+	default: // PrincipalUser
+		return &AccessClaims{
+			UserID:   p.UserID,
+			Username: p.Username,
+			Role:     p.Role,
+		}
 	}
 }
 
@@ -146,23 +134,18 @@ func syntheticClaimsForAAT(p *Principal) *AccessClaims {
 // can't set Authorization: Bearer on the WebSocket upgrade, so this
 // middleware accepts three credential carriers (in order):
 //
-//  1. Authorization: Bearer <jwt>           — native clients.
-//  2. Sec-WebSocket-Protocol: ..., Bearer.<jwt>
-//     The browser passes the JWT as a sentinel subprotocol entry
-//     alongside the real one (e.g. ["tty", "Bearer.<jwt>"]). The
-//     handler still negotiates only its real subprotocol via
+//  1. Authorization: Bearer <token>          — native clients.
+//  2. Sec-WebSocket-Protocol: ..., Bearer.<token>
+//     The browser passes the token as a sentinel subprotocol entry
+//     alongside the real one (e.g. ["tty", "Bearer.<token>"]). The
+//     handler negotiates only its real subprotocol via
 //     websocket.Accept's Subprotocols list, so the auth sentinel is
 //     dropped and never reaches the live connection.
-//  3. ?access_token=<jwt>                    — last-resort fallback
+//  3. ?access_token=<token>                  — last-resort fallback
 //     for tools that can't set custom subprotocols. Use sparingly;
 //     query strings are easier to leak via referer / logs.
-//
-// On success the parsed AccessClaims are stamped on the gin context
-// just like RequireAuth, so downstream RequireProjectRole etc. work
-// transparently.
 func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1) Bearer header (native clients).
 		if h := c.GetHeader("Authorization"); h != "" {
 			parts := strings.SplitN(h, " ", 2)
 			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
@@ -171,7 +154,6 @@ func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 				}
 			}
 		}
-		// 2) Sec-WebSocket-Protocol "Bearer.<token>" sentinel.
 		if h := c.GetHeader("Sec-WebSocket-Protocol"); h != "" {
 			for _, p := range strings.Split(h, ",") {
 				p = strings.TrimSpace(p)
@@ -183,7 +165,6 @@ func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 				}
 			}
 		}
-		// 3) Query-param fallback.
 		if t := c.Query("access_token"); t != "" {
 			if r.tryAuthenticateWS(c, t) {
 				return
@@ -193,36 +174,26 @@ func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 	}
 }
 
-// tryAuthenticateWS attempts the same dispatch as authenticate but
-// returns ok=true only on success so the WS middleware can fall
-// through to other carriers on failure. On success it stamps the
-// context and calls c.Next.
 func (r *RBAC) tryAuthenticateWS(c *gin.Context, bearer string) bool {
-	if r.verifier != nil {
-		if _, _, isOpaque := optoken.DetectKind(bearer); isOpaque {
-			p, reason, err := r.verifier.Verify(c.Request.Context(), bearer)
-			if err != nil || reason != "success" || p == nil {
-				return false
-			}
-			SetPrincipal(c, p)
-			c.Set(claimsCtxKey, syntheticClaimsForAAT(p))
-			c.Next()
-			return true
-		}
-	}
-	claims, err := r.tokens.ParseAccess(bearer)
-	if err != nil {
+	if r.verifier == nil {
 		return false
 	}
-	c.Set(claimsCtxKey, &claims)
-	SetPrincipal(c, PrincipalFromClaims(claims))
+	if _, _, isOpaque := optoken.DetectKind(bearer); !isOpaque {
+		return false
+	}
+	p, reason, err := r.verifier.Verify(c.Request.Context(), bearer)
+	if err != nil || reason != "success" || p == nil {
+		return false
+	}
+	SetPrincipal(c, p)
+	c.Set(claimsCtxKey, claimsForPrincipal(p))
 	c.Next()
 	return true
 }
 
 // RequireGlobalRole gates a route behind a minimum global role. Role
-// ordering is admin > operator > viewer; higher roles implicitly satisfy
-// lower requirements. Must be used downstream of RequireAuth.
+// ordering is admin > operator > viewer; higher roles implicitly
+// satisfy lower requirements. Must run downstream of RequireAuth.
 //
 // AAT principals carry the role their issuer set on the row; project-
 // bound AATs are NOT lowered here (the project gate, not the global
@@ -249,12 +220,8 @@ func (r *RBAC) RequireGlobalRole(min user.Role) gin.HandlerFunc {
 // on the row, so a viewer-AAT cannot reach a route that demands
 // hosts:exec even if its global role would otherwise pass. Human
 // principals derive scopes from their global role
-// (optoken.ScopesFromRole) — admin/operator hold every scope and pass
-// any RequireScope gate; viewers hold only the read subset.
-//
-// Always run downstream of RequireAuth — and typically downstream of
-// RequireProjectRole too, so the project gate runs first and emits a
-// 403 with project-binding language before any scope-language 403.
+// (optoken.ScopesFromRole) — admin/operator hold every scope and
+// pass any RequireScope gate; viewers hold only the read subset.
 func (r *RBAC) RequireScope(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p, ok := PrincipalFromContext(c)
@@ -271,8 +238,8 @@ func (r *RBAC) RequireScope(scope string) gin.HandlerFunc {
 	}
 }
 
-// roleAtLeast encodes the role ordering. Kept as a switch rather than a map
-// so the compiler catches typos on Role renames.
+// roleAtLeast encodes the role ordering. Kept as a switch rather than
+// a map so the compiler catches typos on Role renames.
 func roleAtLeast(got, min user.Role) bool {
 	rank := func(r user.Role) int {
 		switch r {
@@ -293,15 +260,16 @@ func abortUnauthorized(c *gin.Context, reason string) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": reason})
 }
 
-// RequireProjectRole gates a route behind project-level membership. The
-// URL param named by `projectParam` is resolved as a project id; a global
-// admin passes regardless of membership, otherwise the user must hold a
-// project_members row for that project with role >= min.
+// RequireProjectRole gates a route behind project-level membership.
+// The URL param named by `projectParam` is resolved as a project id;
+// a global admin (human OR unbound admin AAT) passes regardless of
+// membership, otherwise the principal must hold a project_members row
+// with role >= min — or, for AAT principals, be bound to that exact
+// project.
 //
-// Not-found vs forbidden: if the project doesn't exist we return 404 so
-// the route is indistinguishable from a missing record for users without
-// access (it already 403s before we reach the NotFound codepath for
-// non-admins). Admins get the honest 404.
+// Not-found vs forbidden: if the project doesn't exist we return 404
+// for global admins (the honest answer) and 403 for everyone else (so
+// the route doesn't leak project-id existence to unauthorized users).
 func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.HandlerFunc {
 	if r.storage == nil {
 		return func(c *gin.Context) {
@@ -317,9 +285,6 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 		}
 		projectID := c.Param(projectParam)
 
-		// Global admin (human or unbound admin AAT) bypasses
-		// project membership but still needs to confirm the project
-		// exists so 404 vs 200 matches admin reality.
 		if p.IsGlobalAdmin() {
 			if _, err := r.storage.Projects().GetByID(c.Request.Context(), projectID); err != nil {
 				if errors.Is(err, storage.ErrNotFound) {
@@ -334,10 +299,9 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 			return
 		}
 
-		// AAT principals: enforce row-level project binding
-		// directly. project_members never has rows for tokens, so
-		// the human-path lookup below would always 403 even on the
-		// AAT's own project.
+		// AAT principals: enforce row-level project binding directly.
+		// project_members never has rows for tokens, so the human-path
+		// lookup below would always 403 even on the AAT's own project.
 		if p.Kind == PrincipalAATKind {
 			if p.ProjectID == "" || p.ProjectID != projectID {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "token not bound to this project"})
@@ -351,12 +315,8 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 			return
 		}
 
-		// Human user: project_members lookup decides membership.
 		role, err := r.storage.Projects().MemberRole(c.Request.Context(), projectID, p.UserID)
 		if errors.Is(err, storage.ErrNotFound) {
-			// No membership row: pretend the project doesn't exist for
-			// non-admins. Avoids disclosing project existence to
-			// unauthorized users.
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
 			return
 		}
@@ -382,9 +342,9 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 //
 // Status codes mirror RequireProjectRole's discretion: a non-admin who
 // asks about an unknown agent gets 403 (not 404) so the route doesn't
-// leak which agent ids exist; admins get a 404. Must run downstream of
-// RequireAuth + RequireProjectRole so claims and pid have already been
-// validated.
+// leak which agent ids exist; admins get a 404. Must run downstream
+// of RequireAuth + RequireProjectRole so the principal and pid have
+// already been validated.
 func (r *RBAC) RequireAgentInProject(projectParam, agentParam string) gin.HandlerFunc {
 	if r.storage == nil {
 		return func(c *gin.Context) {

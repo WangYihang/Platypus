@@ -56,10 +56,6 @@ func TestStartupFlow(t *testing.T) {
 	// /api/v1/users) the same way cmd/platypus-server/main.go does,
 	// so the bootstrap → login → users-list path we exercise is the
 	// production surface, not a test-only subset.
-	issuer, err := NewTokenIssuer("access-key", "refresh-key", 15*time.Minute, 24*time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
 	const bootstrapSecretValue = "startup-integration-secret"
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
@@ -68,7 +64,7 @@ func TestStartupFlow(t *testing.T) {
 		engine,
 		NewAuthHandler(db, verifier, bootstrapSecretValue),
 		NewUsersHandler(db),
-		NewRBACWithVerifier(issuer, db, verifier),
+		NewRBAC(db, verifier),
 	)
 
 	pkiSvc := pki.New(db)

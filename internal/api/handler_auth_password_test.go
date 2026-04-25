@@ -31,11 +31,10 @@ func passwordTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenVerifier, 
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 15*time.Minute, 24*time.Hour)
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
 	h := NewAuthHandler(db, verifier, "unused")
-	rbac := NewRBACWithVerifier(issuer, db, verifier)
+	rbac := NewRBAC(db, verifier)
 
 	r := gin.New()
 	g := r.Group("/api/v1/auth")

@@ -331,35 +331,16 @@ func mustRandomHex(n int) string {
 func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) http.Handler {
 	rest := api.CreateRESTfulAPIServer()
 
-	accessKey := cfg.RESTful.JWTAccessKey
-	if accessKey == "" {
-		accessKey = mustRandomHex(32)
-		log.Info("No JWTAccessKey configured — generated a random one. Set RESTful.JWTAccessKey to keep tokens valid across restarts.")
-	}
-	refreshKey := cfg.RESTful.JWTRefreshKey
-	if refreshKey == "" {
-		refreshKey = mustRandomHex(32)
-		log.Info("No JWTRefreshKey configured — generated a random one. Set RESTful.JWTRefreshKey to keep refresh tokens valid across restarts.")
-	}
-	accessTTL := settingsReg.AccessTokenTTL()
-	refreshTTL := settingsReg.RefreshTokenTTL()
-	tokens, err := api.NewTokenIssuer(accessKey, refreshKey, accessTTL, refreshTTL)
-	if err != nil {
-		log.Error("token issuer: %v", err)
-		os.Exit(1)
-	}
-	tokens.SetTTLProviders(settingsReg.AccessTokenTTL, settingsReg.RefreshTokenTTL)
-
 	auth := api.NewAuth()
-	auth.SetJWTFallback(tokens)
 
-	// optoken cache + verifier: the hot-path reader for opaque
-	// bearers (AAT + user_session). 4096 entries × 30s TTL bounds
-	// memory and keeps the missed-revoke damage window short.
-	// Constructed early so the AuthHandler can take it for
-	// synchronous cache invalidation on logout / password-change.
+	// optoken cache + verifier: the hot-path reader for every opaque
+	// bearer the server accepts (pst_ user sessions, aat_ AI agent
+	// tokens). 4096 entries × 30s TTL bounds memory and keeps the
+	// missed-revoke damage window short. The verifier is the SOLE
+	// authenticator after the JWT pair was retired in Phase 2.
 	authTokenCache := optoken.NewCache(4096, 30*time.Second)
 	tokenVerifier := api.NewTokenVerifier(db, authTokenCache)
+	auth.SetOpaqueVerifier(tokenVerifier)
 
 	authH := api.NewAuthHandler(db, tokenVerifier, auth.GetSecret())
 	usersH := api.NewUsersHandler(db)
@@ -391,7 +372,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db)
-	rbac := api.NewRBACWithVerifier(tokens, db, tokenVerifier)
+	rbac := api.NewRBAC(db, tokenVerifier)
 
 	api.SetActivityRecorder(api.NewActivityRecorder(db))
 	core.SetEnrollment(enrollSvc)

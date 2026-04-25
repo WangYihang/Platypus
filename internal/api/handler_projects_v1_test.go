@@ -8,11 +8,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func projectsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
+func projectsTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -22,13 +23,14 @@ func projectsTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	h := NewProjectsHandler(db)
 
 	r := gin.New()
 	RegisterV1ProjectsRoutes(r, h, rbac)
-	return r, db, issuer
+	return r, db
 }
 
 type projectBody struct {
@@ -39,9 +41,9 @@ type projectBody struct {
 }
 
 func TestProjects_AdminCreatesAndLists(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/projects", tok, map[string]string{
 		"name": "Production", "slug": "prod",
@@ -64,9 +66,9 @@ func TestProjects_AdminCreatesAndLists(t *testing.T) {
 }
 
 func TestProjects_CreateForbiddenForNonAdmin(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleOperator)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleOperator})
+	tok := mintBearerForUserID(t, db, bob.ID, user.RoleOperator)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/projects", tok, map[string]string{
 		"name": "Other", "slug": "other",
@@ -77,7 +79,7 @@ func TestProjects_CreateForbiddenForNonAdmin(t *testing.T) {
 }
 
 func TestProjects_ListForUserFiltersByMembership(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleOperator)
 
@@ -86,7 +88,7 @@ func TestProjects_ListForUserFiltersByMembership(t *testing.T) {
 	seedProjectForAPITest(t, db, "staging", admin)
 	_ = db.Projects().AddMember(testCtx(), prod.ID, bob.ID, user.RoleOperator)
 
-	bobTok, _ := issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleOperator})
+	bobTok := mintBearerForUserID(t, db, bob.ID, user.RoleOperator)
 	w := probeReqWithPath(r, "GET", "/api/v1/projects", bobTok, nil)
 	var resp struct {
 		Projects []projectBody `json:"projects"`
@@ -98,18 +100,18 @@ func TestProjects_ListForUserFiltersByMembership(t *testing.T) {
 }
 
 func TestProjects_DeleteAdminOnly(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleOperator)
 	p := seedProjectForAPITest(t, db, "prod", admin)
 
-	bobTok, _ := issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleOperator})
+	bobTok := mintBearerForUserID(t, db, bob.ID, user.RoleOperator)
 	w := probeReqWithPath(r, "DELETE", "/api/v1/projects/"+p.ID, bobTok, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("bob delete status=%d; want 403", w.Code)
 	}
 
-	adminTok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	adminTok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w = probeReqWithPath(r, "DELETE", "/api/v1/projects/"+p.ID, adminTok, nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("admin delete status=%d body=%s", w.Code, w.Body.String())
@@ -117,12 +119,12 @@ func TestProjects_DeleteAdminOnly(t *testing.T) {
 }
 
 func TestProjects_MemberManagement(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleOperator)
 	p := seedProjectForAPITest(t, db, "prod", admin)
 
-	adminTok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	adminTok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	// Add bob as operator.
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+p.ID+"/members", adminTok,
@@ -154,7 +156,7 @@ func TestProjects_MemberManagement(t *testing.T) {
 
 // A project admin (not global) can also manage members.
 func TestProjects_ProjectAdminCanManageMembers(t *testing.T) {
-	r, db, issuer := projectsTestSetup(t)
+	r, db := projectsTestSetup(t)
 	globalAdmin := seedUserForAPITest(t, db, "root", user.RoleAdmin)
 	alice := seedUserForAPITest(t, db, "alice", user.RoleOperator)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleOperator)
@@ -163,7 +165,7 @@ func TestProjects_ProjectAdminCanManageMembers(t *testing.T) {
 	// Make alice a project admin.
 	_ = db.Projects().AddMember(testCtx(), p.ID, alice.ID, user.RoleAdmin)
 
-	aliceTok, _ := issuer.IssueAccess(AccessClaims{UserID: alice.ID, Role: user.RoleOperator})
+	aliceTok := mintBearerForUserID(t, db, alice.ID, user.RoleOperator)
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+p.ID+"/members", aliceTok,
 		map[string]string{"user_id": bob.ID, "role": "viewer"})
 	if w.Code != http.StatusNoContent {

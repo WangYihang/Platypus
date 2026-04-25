@@ -49,22 +49,21 @@ func New(db *storage.DB, cfg *config.Config) *Registry {
 // Each accessor does: cache → DB → YAML → hardcoded default. On a
 // cache miss, a cacheEntry is stored so subsequent reads stay hot.
 
-// AccessTokenTTL is the lifetime of issued access JWTs.
+// AccessTokenTTL is retained for backward compat with the admin
+// settings UI. Phase-2 auth uses opaque session tokens whose
+// lifetimes are server-side constants (SessionIdleWindow /
+// SessionHardTTL) — this getter now just surfaces whatever value
+// is in the DB / YAML for display, with no production effect.
 func (r *Registry) AccessTokenTTL() time.Duration {
 	return r.getDuration(KeyAuthAccessTokenTTL, func() time.Duration {
-		if r.cfg != nil && r.cfg.RESTful.AccessExpireTime > 0 {
-			return time.Duration(r.cfg.RESTful.AccessExpireTime) * time.Second
-		}
 		return DefaultAccessTokenTTL
 	})
 }
 
-// RefreshTokenTTL is the lifetime of issued refresh JWTs.
+// RefreshTokenTTL is retained for backward compat with the admin
+// settings UI. The session model has no refresh — see AccessTokenTTL.
 func (r *Registry) RefreshTokenTTL() time.Duration {
 	return r.getDuration(KeyAuthRefreshTokenTTL, func() time.Duration {
-		if r.cfg != nil && r.cfg.RESTful.RefreshExpireTime > 0 {
-			return time.Duration(r.cfg.RESTful.RefreshExpireTime) * time.Second
-		}
 		return DefaultRefreshTokenTTL
 	})
 }

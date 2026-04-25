@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -19,7 +20,6 @@ import (
 // fixture.URL("/fs/list?path=/tmp") to keep the prefix in one place.
 type agentRouteFixture struct {
 	DB        *storage.DB
-	Issuer    *TokenIssuer
 	RBAC      *RBAC
 	Token     string
 	ProjectID string
@@ -40,10 +40,8 @@ func newAgentRouteFixture(t *testing.T, agentID string) *agentRouteFixture {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, err := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
 
 	admin := seedUserForAPITest(t, db, "agent-route-admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "agent-route-prod", admin)
@@ -60,15 +58,11 @@ func newAgentRouteFixture(t *testing.T, agentID string) *agentRouteFixture {
 		t.Fatalf("seed host: %v", err)
 	}
 
-	tok, err := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
+	tok := mintSessionForTest(t, db, admin)
 
 	return &agentRouteFixture{
 		DB:        db,
-		Issuer:    issuer,
-		RBAC:      NewRBACWithStorage(issuer, db),
+		RBAC:      NewRBAC(db, verifier),
 		Token:     tok,
 		ProjectID: proj.ID,
 		AgentID:   agentID,

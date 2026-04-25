@@ -16,16 +16,15 @@ import (
 )
 
 type aatHandlerFixture struct {
-	router  *gin.Engine
-	db      *storage.DB
-	issuer  *TokenIssuer
+	router   *gin.Engine
+	db       *storage.DB
 	verifier *TokenVerifier
-	cache   *optoken.Cache
-	rbac    *RBAC
-	admin   *user.User
-	op      *user.User
-	viewer  *user.User
-	project *storage.Project
+	cache    *optoken.Cache
+	rbac     *RBAC
+	admin    *user.User
+	op       *user.User
+	viewer   *user.User
+	project  *storage.Project
 }
 
 func aatHandlerSetup(t *testing.T) *aatHandlerFixture {
@@ -37,13 +36,9 @@ func aatHandlerSetup(t *testing.T) *aatHandlerFixture {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, err := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
-	rbac := NewRBACWithVerifier(issuer, db, verifier)
+	rbac := NewRBAC(db, verifier)
 
 	admin := seedUserForAPITest(t, db, "alice-admin", user.RoleAdmin)
 	op := seedUserForAPITest(t, db, "bob-op", user.RoleOperator)
@@ -57,14 +52,14 @@ func aatHandlerSetup(t *testing.T) *aatHandlerFixture {
 	RegisterV1AATRoutes(r, h, rbac)
 
 	return &aatHandlerFixture{
-		router: r, db: db, issuer: issuer, verifier: verifier, cache: cache, rbac: rbac,
+		router: r, db: db, verifier: verifier, cache: cache, rbac: rbac,
 		admin: admin, op: op, viewer: viewer, project: project,
 	}
 }
 
-func (f *aatHandlerFixture) tokenFor(u *user.User) string {
-	tok, _ := f.issuer.IssueAccess(AccessClaims{UserID: u.ID, Username: u.Username, Role: u.Role})
-	return tok
+func (f *aatHandlerFixture) tokenFor(t *testing.T, u *user.User) string {
+	t.Helper()
+	return mintSessionForTest(t, f.db, u)
 }
 
 // ---- Issuance ----
@@ -77,7 +72,7 @@ func TestAATHandler_IssueGlobal_AdminOK(t *testing.T) {
 		"scopes":      []string{"hosts:read"},
 		"ttl_seconds": 3600,
 	}
-	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(f.admin), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(t, f.admin), body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -109,7 +104,7 @@ func TestAATHandler_IssueGlobal_NonAdminDenied(t *testing.T) {
 		"scopes":      []string{"hosts:read"},
 		"ttl_seconds": 3600,
 	}
-	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(f.op), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(t, f.op), body)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("operator issuing global AAT: status=%d, want 403", w.Code)
 	}
@@ -128,12 +123,12 @@ func TestAATHandler_IssueGlobal_RoleEscalationRejected(t *testing.T) {
 	// Even bypassing the global-admin gate (op isn't admin so it 403s
 	// at the gate), this test pins the handler-level guard. Use the
 	// project-scoped endpoint so op can reach the handler.
-	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(op), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
 	// op was added as admin on the project in setup; allow this op
 	// to reach handler. But we want a fresh op who is project admin
 	// but only operator globally.
 	_ = f.db.Projects().AddMember(context.Background(), f.project.ID, op.ID, user.RoleAdmin)
-	w = probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(op), body)
+	w = probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("operator issuing admin AAT: status=%d body=%s; want 403", w.Code, w.Body.String())
 	}
@@ -147,7 +142,7 @@ func TestAATHandler_IssueProject_AdminOK(t *testing.T) {
 		"scopes":      []string{"hosts:read", "hosts:exec"},
 		"ttl_seconds": 600,
 	}
-	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(f.op), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, f.op), body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -167,7 +162,7 @@ func TestAATHandler_IssueProject_ViewerDenied(t *testing.T) {
 		"scopes":      []string{"hosts:read"},
 		"ttl_seconds": 600,
 	}
-	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(f.viewer), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, f.viewer), body)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("viewer issuing project AAT: status=%d, want 403", w.Code)
 	}
@@ -179,7 +174,7 @@ func TestAATHandler_IssueRequiresName(t *testing.T) {
 		"role":   "viewer",
 		"scopes": []string{"hosts:read"},
 	}
-	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(f.admin), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/aat", f.tokenFor(t, f.admin), body)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("missing name: status=%d, want 400", w.Code)
 	}
@@ -198,7 +193,7 @@ func TestAATHandler_IssueScopeEscalationRejected(t *testing.T) {
 	// at the gate. Re-check at the project endpoint they can hit.
 	// Promote viewer to project admin first so the gate lets them through.
 	_ = f.db.Projects().AddMember(context.Background(), f.project.ID, f.viewer.ID, user.RoleAdmin)
-	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(f.viewer), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, f.viewer), body)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("viewer issuing exec scope: status=%d body=%s; want 403", w.Code, w.Body.String())
 	}
@@ -234,7 +229,7 @@ func mintTestAAT(t *testing.T, f *aatHandlerFixture, creator *user.User, opt fun
 func TestAATHandler_GetByCreator(t *testing.T) {
 	f := aatHandlerSetup(t)
 	a := mintTestAAT(t, f, f.op, nil)
-	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(f.op), nil)
+	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(t, f.op), nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -247,7 +242,7 @@ func TestAATHandler_GetByOtherDenied(t *testing.T) {
 	f := aatHandlerSetup(t)
 	a := mintTestAAT(t, f, f.op, nil)
 	// viewer (different user, not admin) attempts to read op's AAT
-	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(f.viewer), nil)
+	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(t, f.viewer), nil)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("viewer reading other's AAT: status=%d, want 404 (not 403, to avoid existence leak)", w.Code)
 	}
@@ -256,7 +251,7 @@ func TestAATHandler_GetByOtherDenied(t *testing.T) {
 func TestAATHandler_GetByAdminAlwaysAllowed(t *testing.T) {
 	f := aatHandlerSetup(t)
 	a := mintTestAAT(t, f, f.op, nil)
-	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(f.admin), nil)
+	w := probeReqWithPath(f.router, "GET", "/api/v1/aat/"+a.TokenID, f.tokenFor(t, f.admin), nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("admin reading op's AAT: status=%d", w.Code)
 	}
@@ -268,7 +263,7 @@ func TestAATHandler_ListMine(t *testing.T) {
 	mintTestAAT(t, f, f.op, nil)
 	mintTestAAT(t, f, f.viewer, nil) // shouldn't show up
 
-	w := probeReqWithPath(f.router, "GET", "/api/v1/aat", f.tokenFor(f.op), nil)
+	w := probeReqWithPath(f.router, "GET", "/api/v1/aat", f.tokenFor(t, f.op), nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d", w.Code)
 	}
@@ -302,7 +297,7 @@ func TestAATHandler_RevokeByCreator(t *testing.T) {
 		t.Fatal("priming verify failed")
 	}
 
-	w := probeReqWithPath(f.router, "DELETE", "/api/v1/aat/"+a.TokenID, f.tokenFor(f.op), nil)
+	w := probeReqWithPath(f.router, "DELETE", "/api/v1/aat/"+a.TokenID, f.tokenFor(t, f.op), nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -317,7 +312,7 @@ func TestAATHandler_RevokeByCreator(t *testing.T) {
 func TestAATHandler_RevokeByOther_404(t *testing.T) {
 	f := aatHandlerSetup(t)
 	a := mintTestAAT(t, f, f.op, nil)
-	w := probeReqWithPath(f.router, "DELETE", "/api/v1/aat/"+a.TokenID, f.tokenFor(f.viewer), nil)
+	w := probeReqWithPath(f.router, "DELETE", "/api/v1/aat/"+a.TokenID, f.tokenFor(t, f.viewer), nil)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("non-creator revoke: status=%d, want 404", w.Code)
 	}

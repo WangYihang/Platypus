@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/WangYihang/Platypus/internal/activity"
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -18,7 +19,7 @@ import (
 // activitiesTestSetup stands up a minimal router that exercises both the
 // project-scoped and global activity endpoints, plus a token issuer so we
 // can mint Bearer tokens for the RBAC middleware.
-func activitiesTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, string, string) {
+func activitiesTestSetup(t *testing.T) (*gin.Engine, *storage.DB, string, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -28,10 +29,8 @@ func activitiesTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, 
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, err := NewTokenIssuer("access-key", "refresh-key", 15*time.Minute, 24*time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
 
 	// Admin user + one project, so the project-scoped route resolves.
 	ctx := context.Background()
@@ -48,17 +47,17 @@ func activitiesTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, 
 		t.Fatalf("Projects.Create: %v", err)
 	}
 
-	rbac := NewRBACWithStorage(issuer, db)
+	rbac := NewRBAC(db, verifier)
 	h := NewActivitiesHandler(db)
 	r := gin.New()
 	RegisterV1ActivitiesRoutes(r, h, rbac)
-	return r, db, issuer, adminID, projectID
+	return r, db, adminID, projectID
 }
 
 // TestActivities_ListProject exercises the happy path of the project-scoped
 // list endpoint: the handler surfaces seeded rows, newest first.
 func TestActivities_ListProject(t *testing.T) {
-	r, db, issuer, adminID, pid := activitiesTestSetup(t)
+	r, db, adminID, pid := activitiesTestSetup(t)
 	ctx := context.Background()
 
 	now := time.Now().UTC()
@@ -76,12 +75,7 @@ func TestActivities_ListProject(t *testing.T) {
 		}
 	}
 
-	token, err := issuer.IssueAccess(AccessClaims{
-		UserID: adminID, Username: "admin", Role: user.RoleAdmin,
-	})
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
+	token := mintBearerForUserID(t, db, adminID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+pid+"/activities", token, nil)
 	if w.Code != http.StatusOK {
@@ -102,7 +96,7 @@ func TestActivities_ListProject(t *testing.T) {
 // RBAC: a caller without a project membership and without global-admin is
 // 403'd on the project-scoped endpoint.
 func TestActivities_ListProject_DeniesNonMember(t *testing.T) {
-	r, db, issuer, _, pid := activitiesTestSetup(t)
+	r, db, _, pid := activitiesTestSetup(t)
 	ctx := context.Background()
 
 	viewerID := uuid.NewString()
@@ -111,9 +105,7 @@ func TestActivities_ListProject_DeniesNonMember(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Users.Create: %v", err)
 	}
-	token, _ := issuer.IssueAccess(AccessClaims{
-		UserID: viewerID, Username: "viewer", Role: user.RoleViewer,
-	})
+	token := mintBearerForUserID(t, db, viewerID, user.RoleViewer)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+pid+"/activities", token, nil)
 	if w.Code != http.StatusForbidden {

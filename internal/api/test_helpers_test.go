@@ -66,11 +66,24 @@ func mintSessionForTest(t *testing.T, db *storage.DB, u *user.User) string {
 	return plaintext
 }
 
-// mintSessionForUserID is the by-id variant for tests where seeding a
-// real users row would be excessive. The auth_tokens FK still
-// requires the row to exist, so callers must have created the user
-// (typically via seedUserForAPITest).
-func mintSessionForUserID(t *testing.T, db *storage.DB, userID string) string {
+// mintBearerForUserID is the legacy shim for tests that hand-craft
+// synthetic claims (UserID="u-test") without seeding a real user row.
+// auth_tokens.user_id is FK to users.id, so we ensure the row exists
+// (idempotent insert) before issuing the session. Used by tests that
+// migrated away from issuer.IssueAccess(AccessClaims{UserID, Role})
+// — the call shape is identical so the migration is a one-liner.
+func mintBearerForUserID(t *testing.T, db *storage.DB, userID string, role user.Role) string {
 	t.Helper()
-	return mintSessionForTest(t, db, &user.User{ID: userID})
+	u := &user.User{
+		ID:           userID,
+		Username:     userID,
+		PasswordHash: "x",
+		Role:         role,
+		CreatedAt:    time.Now().UTC(),
+	}
+	// Create is idempotent enough for tests — duplicate key just
+	// means the user was seeded earlier in the same test, which is
+	// fine.
+	_ = db.Users().Create(context.Background(), u)
+	return mintSessionForTest(t, db, u)
 }

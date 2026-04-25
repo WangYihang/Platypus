@@ -28,16 +28,17 @@ func (c IngressConfig) PublicAddrOrAddr() string {
 	return c.Addr
 }
 
-// RESTfulConfig configures the JWT/storage knobs of the REST surface.
+// RESTfulConfig configures the storage knobs of the REST surface.
 // The REST engine itself is mounted onto the unified ingress
 // dispatcher's virtual HTTP listener — there is no per-protocol
 // enable flag because v2 has no other control-plane mode.
+//
+// JWT-related fields (jwt_access_key / jwt_refresh_key /
+// access_expire_time / refresh_expire_time) were retired alongside
+// Phase-2 auth. Operators who still have them in their YAML can
+// leave them — viper ignores unknown keys.
 type RESTfulConfig struct {
-	JWTRefreshKey     string `yaml:"jwt_refresh_key"     mapstructure:"jwt_refresh_key"`
-	JWTAccessKey      string `yaml:"jwt_access_key"      mapstructure:"jwt_access_key"`
-	RefreshExpireTime int    `yaml:"refresh_expire_time" mapstructure:"refresh_expire_time"` // seconds; 0 defaults to 14 days
-	AccessExpireTime  int    `yaml:"access_expire_time"  mapstructure:"access_expire_time"`  // seconds; 0 defaults to 15 min
-	DBFile            string `yaml:"db_file"             mapstructure:"db_file"`             // empty defaults to ./platypus.db
+	DBFile string `yaml:"db_file" mapstructure:"db_file"` // empty defaults to ./platypus.db
 }
 
 // DBFileOrDefault returns the configured SQLite path, or "./platypus.db"

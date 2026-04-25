@@ -20,12 +20,9 @@ import (
 const bootstrapSecret = "bootstrap-secret"
 
 // authTestSetup brings up a router that mounts the full Phase-2 auth
-// surface. Returns the router, the storage DB (so tests can assert
-// against rows directly), the verifier (so cache can be checked),
-// and the still-constructed TokenIssuer (some legacy tests still
-// expect to drive it for cross-credential setups — the field stays
-// even though /auth no longer issues JWTs).
-func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
+// surface and returns the router + DB so tests can drive the real
+// HTTP path and assert against the underlying rows.
+func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, err := storage.Open(":memory:")
@@ -34,13 +31,9 @@ func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, err := NewTokenIssuer("access-key", "refresh-key", 15*time.Minute, 24*time.Hour)
-	if err != nil {
-		t.Fatalf("NewTokenIssuer: %v", err)
-	}
 	cache := optoken.NewCache(64, 30*time.Second)
 	verifier := NewTokenVerifier(db, cache)
-	rbac := NewRBACWithVerifier(issuer, db, verifier)
+	rbac := NewRBAC(db, verifier)
 
 	h := NewAuthHandler(db, verifier, bootstrapSecret)
 	r := gin.New()
@@ -53,7 +46,7 @@ func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	authed.Use(rbac.RequireAuth())
 	authed.POST("/logout", h.Logout)
 	authed.GET("/sessions", h.ListSessions)
-	return r, db, issuer
+	return r, db
 }
 
 func jsonReq(t *testing.T, r http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -85,7 +78,7 @@ type loginBody struct {
 }
 
 func TestBootstrap_CreatesFirstAdmin(t *testing.T) {
-	r, db, _ := authTestSetup(t)
+	r, db := authTestSetup(t)
 
 	w := jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "root",
@@ -122,7 +115,7 @@ func TestBootstrap_CreatesFirstAdmin(t *testing.T) {
 }
 
 func TestBootstrap_RejectsWrongSecret(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	w := jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": "nope", "username": "root", "password": "pw",
 	})
@@ -132,7 +125,7 @@ func TestBootstrap_RejectsWrongSecret(t *testing.T) {
 }
 
 func TestBootstrap_RejectsSecondCall(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "root", "password": "pw",
 	})
@@ -145,7 +138,7 @@ func TestBootstrap_RejectsSecondCall(t *testing.T) {
 }
 
 func TestLogin_Success(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
@@ -166,7 +159,7 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_WrongPassword(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
@@ -179,7 +172,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 }
 
 func TestLogin_UnknownUser(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
 		"username": "nobody", "password": "x",
 	})
@@ -189,7 +182,7 @@ func TestLogin_UnknownUser(t *testing.T) {
 }
 
 func TestRefresh_DeprecationGone(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	w := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
 		"refresh_token": "anything",
 	})
@@ -199,7 +192,7 @@ func TestRefresh_DeprecationGone(t *testing.T) {
 }
 
 func TestLogout_RevokesSession(t *testing.T) {
-	r, db, _ := authTestSetup(t)
+	r, db := authTestSetup(t)
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
@@ -236,7 +229,7 @@ func TestLogout_RevokesSession(t *testing.T) {
 }
 
 func TestListSessions_OnlyOwnSessions(t *testing.T) {
-	r, _, _ := authTestSetup(t)
+	r, _ := authTestSetup(t)
 	// Create two users via bootstrap+login dance: one alice, plus a
 	// second login from alice's account (simulating another device).
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{

@@ -59,10 +59,6 @@ func TestRegistry_DefaultWhenNoConfigOrDB(t *testing.T) {
 func TestRegistry_YAMLFallbackWinsOverDefault(t *testing.T) {
 	db := newTestDB(t)
 	cfg := &config.Config{
-		RESTful: config.RESTfulConfig{
-			AccessExpireTime:  123,
-			RefreshExpireTime: 456,
-		},
 		Distributor: config.DistributorConfig{
 			Channel:      "yaml-channel",
 			PresignedTTL: "2m",
@@ -74,12 +70,10 @@ func TestRegistry_YAMLFallbackWinsOverDefault(t *testing.T) {
 	}
 	reg := settings.New(db, cfg)
 
-	if got := reg.AccessTokenTTL(); got != 123*time.Second {
-		t.Errorf("AccessTokenTTL yaml = %v, want 123s", got)
-	}
-	if got := reg.RefreshTokenTTL(); got != 456*time.Second {
-		t.Errorf("RefreshTokenTTL yaml = %v, want 456s", got)
-	}
+	// Auth TTLs no longer take YAML overrides — Phase-2 sessions use
+	// hardcoded SessionIdleWindow / SessionHardTTL constants. The
+	// settings entries survive only as DB-overrideable advisory
+	// values in the admin UI.
 	if got := reg.DistributorChannel(); got != "yaml-channel" {
 		t.Errorf("DistributorChannel yaml = %q", got)
 	}
@@ -94,13 +88,10 @@ func TestRegistry_YAMLFallbackWinsOverDefault(t *testing.T) {
 	}
 }
 
-func TestRegistry_DBOverrideWinsOverYAML(t *testing.T) {
+func TestRegistry_DBOverrideWinsOverDefault(t *testing.T) {
 	db := newTestDB(t)
 	seedAdminUser(t, db, "admin")
-	cfg := &config.Config{
-		RESTful: config.RESTfulConfig{AccessExpireTime: 999},
-	}
-	reg := settings.New(db, cfg)
+	reg := settings.New(db, nil)
 
 	ctx := context.Background()
 	if err := reg.Set(ctx, settings.KeyAuthAccessTokenTTL, "60", "admin"); err != nil {
@@ -111,13 +102,10 @@ func TestRegistry_DBOverrideWinsOverYAML(t *testing.T) {
 	}
 }
 
-func TestRegistry_ResetRevertsToYAML(t *testing.T) {
+func TestRegistry_ResetRevertsToDefault(t *testing.T) {
 	db := newTestDB(t)
 	seedAdminUser(t, db, "admin")
-	cfg := &config.Config{
-		RESTful: config.RESTfulConfig{AccessExpireTime: 999},
-	}
-	reg := settings.New(db, cfg)
+	reg := settings.New(db, nil)
 
 	ctx := context.Background()
 	if err := reg.Set(ctx, settings.KeyAuthAccessTokenTTL, "60", "admin"); err != nil {
@@ -129,8 +117,8 @@ func TestRegistry_ResetRevertsToYAML(t *testing.T) {
 	if err := reg.Reset(ctx, settings.KeyAuthAccessTokenTTL, "admin"); err != nil {
 		t.Fatalf("Reset: %v", err)
 	}
-	if got := reg.AccessTokenTTL(); got != 999*time.Second {
-		t.Errorf("AccessTokenTTL after Reset = %v, want 999s (yaml)", got)
+	if got := reg.AccessTokenTTL(); got != settings.DefaultAccessTokenTTL {
+		t.Errorf("AccessTokenTTL after Reset = %v, want default", got)
 	}
 }
 
@@ -200,10 +188,7 @@ func TestRegistry_SetRejectsNegativeDuration(t *testing.T) {
 func TestRegistry_DescribeAll(t *testing.T) {
 	db := newTestDB(t)
 	seedAdminUser(t, db, "admin")
-	cfg := &config.Config{
-		RESTful: config.RESTfulConfig{AccessExpireTime: 200},
-	}
-	reg := settings.New(db, cfg)
+	reg := settings.New(db, nil)
 
 	// Override one key via Set so we can assert source="db" for it.
 	if err := reg.Set(context.Background(), settings.KeyDistributorChannel, "\"beta\"", "admin"); err != nil {
@@ -223,12 +208,10 @@ func TestRegistry_DescribeAll(t *testing.T) {
 		byKey[d.Key] = d
 	}
 
+	// Auth TTLs no longer take YAML overrides — see registry.go.
 	access := byKey[settings.KeyAuthAccessTokenTTL]
-	if access.Source != "yaml" {
-		t.Errorf("access source = %q, want yaml", access.Source)
-	}
-	if access.YAMLValue == nil {
-		t.Errorf("access yaml value missing")
+	if access.Source != "default" {
+		t.Errorf("access source = %q, want default", access.Source)
 	}
 
 	channel := byKey[settings.KeyDistributorChannel]

@@ -10,11 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, *core.AgentLinkService) {
+func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *core.AgentLinkService) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -24,14 +25,15 @@ func sessionsV2TestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, 
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	links := core.NewAgentLinkService()
 	h := NewSessionsV2Handler(db, links)
 
 	r := gin.New()
 	RegisterV1ProjectSessionsRoutes(r, h, rbac)
-	return r, db, issuer, links
+	return r, db, links
 }
 
 const testIngressAddr = "0.0.0.0:9443"
@@ -64,7 +66,7 @@ func seedSessionRow(t *testing.T, db *storage.DB, project *storage.Project, sess
 }
 
 func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
-	r, db, issuer, _ := sessionsV2TestSetup(t)
+	r, db, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
@@ -79,7 +81,7 @@ func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
 	})
 	_ = db.Sessions().MarkDisconnected(ctx, "s-dead")
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+proj.ID+"/hosts/"+host.ID+"/sessions", tok, nil)
 	if w.Code != http.StatusOK {
@@ -95,7 +97,7 @@ func TestSessionsV2_ListForHost_IncludesHistorical(t *testing.T) {
 }
 
 func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
-	r, db, issuer, _ := sessionsV2TestSetup(t)
+	r, db, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	prod := seedProjectForAPITest(t, db, "prod", admin)
 	stag := seedProjectForAPITest(t, db, "staging", admin)
@@ -103,7 +105,7 @@ func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
 	// Host in prod.
 	host, _ := seedSessionRow(t, db, prod, "s-1", false)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+stag.ID+"/hosts/"+host.ID+"/sessions", tok, nil)
 	if w.Code != http.StatusNotFound {
@@ -112,7 +114,7 @@ func TestSessionsV2_ListForHost_CrossProject404(t *testing.T) {
 }
 
 func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
-	r, db, issuer, links := sessionsV2TestSetup(t)
+	r, db, links := sessionsV2TestSetup(t)
 	ctx := context.Background()
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
@@ -129,7 +131,7 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 	})
 	_ = db.Sessions().MarkDisconnected(ctx, "old-closed")
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	// No filter → both rows.
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/sessions", tok, nil)
@@ -174,12 +176,12 @@ func TestSessionsV2_ListForProject_FiltersLiveAndSince(t *testing.T) {
 }
 
 func TestSessionsV2_Dispatch_NoLiveSessions_EmptyResults(t *testing.T) {
-	r, db, issuer, _ := sessionsV2TestSetup(t)
+	r, db, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
 	// No live flagged sessions -> empty result, not an error.
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/dispatch", tok,
 		map[string]any{"command": "id", "timeout": 1})
 	if w.Code != http.StatusOK {
@@ -203,7 +205,7 @@ func TestSessionsV2_Dispatch_NoLiveSessions_EmptyResults(t *testing.T) {
 // owned by AgentLinkService, and an unregistered agent simply isn't
 // live, regardless of what the DB still has open.
 func TestSessionsV2_Dispatch_AuditTailRow_SilentlySkipped(t *testing.T) {
-	r, db, issuer, _ := sessionsV2TestSetup(t)
+	r, db, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
@@ -213,7 +215,7 @@ func TestSessionsV2_Dispatch_AuditTailRow_SilentlySkipped(t *testing.T) {
 	_, _ = seedSessionRow(t, db, proj, "s-zombie", false)
 	_ = db.Sessions().SetGroupDispatch(context.Background(), "s-zombie", true)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/dispatch", tok,
 		map[string]any{"command": "id", "timeout": 1})
 	if w.Code != http.StatusOK {
@@ -234,7 +236,7 @@ func TestSessionsV2_Dispatch_AuditTailRow_SilentlySkipped(t *testing.T) {
 // disconnected_at IS NULL, but only one has a registered agent —
 // the response must drop the unregistered (audit-tail) row.
 func TestSessionsV2_ListForProject_LiveFilter_ExcludesUnregisteredAgents(t *testing.T) {
-	r, db, issuer, links := sessionsV2TestSetup(t)
+	r, db, links := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 
@@ -245,7 +247,7 @@ func TestSessionsV2_ListForProject_LiveFilter_ExcludesUnregisteredAgents(t *test
 	_, _ = seedSessionRow(t, db, proj, "s-zombie", false)
 	links.Register("agent-s-registered", nil)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 	w := probeReqWithPath(r, "GET",
 		"/api/v1/projects/"+proj.ID+"/sessions?live=true", tok, nil)
 	if w.Code != http.StatusOK {
@@ -261,13 +263,13 @@ func TestSessionsV2_ListForProject_LiveFilter_ExcludesUnregisteredAgents(t *test
 }
 
 func TestSessionsV2_Dispatch_ViewerBlocked(t *testing.T) {
-	r, db, issuer, _ := sessionsV2TestSetup(t)
+	r, db, _ := sessionsV2TestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	bob := seedUserForAPITest(t, db, "bob", user.RoleViewer)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 	_ = db.Projects().AddMember(context.Background(), proj.ID, bob.ID, user.RoleViewer)
 
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: bob.ID, Role: user.RoleViewer})
+	tok := mintBearerForUserID(t, db, bob.ID, user.RoleViewer)
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/dispatch", tok,
 		map[string]any{"command": "id"})
 	if w.Code != http.StatusForbidden {

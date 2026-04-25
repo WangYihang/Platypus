@@ -53,21 +53,6 @@ func (p *Principal) IsGlobalAdmin() bool {
 	return true
 }
 
-// PrincipalFromClaims builds a user-kind Principal from the JWT
-// AccessClaims set by the existing token issuer. Used during the
-// transition period (Phase 1) when JWT remains the human auth path —
-// RequireAuth populates both ClaimsFromContext (legacy) and
-// PrincipalFromContext (new) from the same claims.
-func PrincipalFromClaims(c AccessClaims) *Principal {
-	return &Principal{
-		Kind:     PrincipalUser,
-		UserID:   c.UserID,
-		Username: c.Username,
-		Role:     c.Role,
-		Scopes:   optoken.ScopesFromRole(c.Role),
-	}
-}
-
 // PrincipalFromVerified builds a Principal from a successful optoken
 // Verify result. The kind in Verified determines the resulting
 // PrincipalKind: AAT rows produce a PrincipalAATKind, user_session
@@ -94,7 +79,7 @@ func PrincipalFromVerified(v *optoken.Verified) *Principal {
 // principalCtxKey is the gin context slot for the authenticated
 // principal. Distinct from claimsCtxKey so handlers that have
 // migrated to the new abstraction don't accidentally read a
-// half-populated AccessClaims when the request was AAT-authenticated.
+// half-populated AccessClaims for an AAT-authenticated request.
 const principalCtxKey = "platypus.auth.principal"
 
 // SetPrincipal stamps the principal on the gin context. Exported so

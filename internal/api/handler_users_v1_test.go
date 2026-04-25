@@ -8,11 +8,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func usersTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
+func usersTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -22,8 +23,9 @@ func usersTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rb := NewRBAC(issuer)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rb := NewRBAC(db, verifier)
 	h := NewUsersHandler(db)
 
 	r := gin.New()
@@ -36,39 +38,36 @@ func usersTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 		g.PATCH("/:id", h.Update)
 		g.DELETE("/:id", h.Delete)
 	}
-	return r, db, issuer
+	return r, db
 }
 
-func tokenFor(t *testing.T, issuer *TokenIssuer, role user.Role) string {
+// tokenFor seeds a synthetic user (id="tester-<role>") and returns
+// their session bearer. The user is created idempotently so callers
+// can ask for the same role twice without collision.
+func tokenFor(t *testing.T, db *storage.DB, role user.Role) string {
 	t.Helper()
-	tok, err := issuer.IssueAccess(AccessClaims{
-		UserID: "tester-" + string(role), Username: "tester", Role: role,
-	})
-	if err != nil {
-		t.Fatalf("IssueAccess: %v", err)
-	}
-	return tok
+	return mintBearerForUserID(t, db, "tester-"+string(role), role)
 }
 
 func TestUsersList_AdminOnly(t *testing.T) {
-	r, _, issuer := usersTestSetup(t)
+	r, db := usersTestSetup(t)
 
 	// Viewer → 403
-	w := probeReqWithPath(r, "GET", "/api/v1/users", tokenFor(t, issuer, user.RoleViewer), nil)
+	w := probeReqWithPath(r, "GET", "/api/v1/users", tokenFor(t, db, user.RoleViewer), nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("viewer: status=%d; want 403", w.Code)
 	}
 
 	// Admin → 200
-	w = probeReqWithPath(r, "GET", "/api/v1/users", tokenFor(t, issuer, user.RoleAdmin), nil)
+	w = probeReqWithPath(r, "GET", "/api/v1/users", tokenFor(t, db, user.RoleAdmin), nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestUsersCreateAndList(t *testing.T) {
-	r, _, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/users", admin, map[string]string{
 		"username": "bob",
@@ -84,14 +83,22 @@ func TestUsersCreateAndList(t *testing.T) {
 		Users []userBody `json:"users"`
 	}
 	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.Users) != 1 || resp.Users[0].Username != "bob" || resp.Users[0].Role != user.RoleOperator {
-		t.Fatalf("list mismatch: %+v", resp.Users)
+	// tokenFor seeds a tester-admin user under the covers, plus the
+	// bob row this test created — list must contain both.
+	var bobFound bool
+	for _, u := range resp.Users {
+		if u.Username == "bob" && u.Role == user.RoleOperator {
+			bobFound = true
+		}
+	}
+	if !bobFound {
+		t.Fatalf("list missing bob: %+v", resp.Users)
 	}
 }
 
 func TestUsersCreate_DuplicateUsername(t *testing.T) {
-	r, _, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	body := map[string]string{"username": "bob", "password": "x", "role": "operator"}
 	w := probeReqWithPath(r, "POST", "/api/v1/users", admin, body)
@@ -105,8 +112,8 @@ func TestUsersCreate_DuplicateUsername(t *testing.T) {
 }
 
 func TestUsersCreate_InvalidRole(t *testing.T) {
-	r, _, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/users", admin, map[string]string{
 		"username": "bob", "password": "x", "role": "superuser",
@@ -117,8 +124,8 @@ func TestUsersCreate_InvalidRole(t *testing.T) {
 }
 
 func TestUsersUpdateRole(t *testing.T) {
-	r, db, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	probeReqWithPath(r, "POST", "/api/v1/users", admin, map[string]string{
 		"username": "bob", "password": "x", "role": "operator",
@@ -138,8 +145,8 @@ func TestUsersUpdateRole(t *testing.T) {
 }
 
 func TestUsersDelete(t *testing.T) {
-	r, db, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	probeReqWithPath(r, "POST", "/api/v1/users", admin, map[string]string{
 		"username": "bob", "password": "x", "role": "viewer",
@@ -156,8 +163,8 @@ func TestUsersDelete(t *testing.T) {
 }
 
 func TestUsersGet_NotFound(t *testing.T) {
-	r, _, issuer := usersTestSetup(t)
-	admin := tokenFor(t, issuer, user.RoleAdmin)
+	r, db := usersTestSetup(t)
+	admin := tokenFor(t, db, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/users/missing-id", admin, nil)
 	if w.Code != http.StatusNotFound {

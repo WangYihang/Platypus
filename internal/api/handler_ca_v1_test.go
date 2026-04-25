@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
@@ -24,7 +25,7 @@ import (
 // everything a test might need — router, db, issuer, and the live
 // pki.Service so tests can seed certs via the underlying API instead
 // of going through admin HTTP flows.
-func caTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, *pki.Service) {
+func caTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *pki.Service) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -38,21 +39,22 @@ func caTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer, *pki.Ser
 	_, _ = rand.Read(kek)
 	t.Setenv(pki.KEKEnvVar, hex.EncodeToString(kek))
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	svc := pki.New(db)
 	h := NewCAHandler(db, svc)
 
 	r := gin.New()
 	RegisterV1CARoutes(r, h, rbac)
-	return r, db, issuer, svc
+	return r, db, svc
 }
 
 func TestCA_InitAndGet(t *testing.T) {
-	r, db, issuer, _ := caTestSetup(t)
+	r, db, _ := caTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "p1", admin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	// POST initialises the CA and returns a parseable self-signed cert.
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/ca", tok, nil)
@@ -88,10 +90,10 @@ func TestCA_InitAndGet(t *testing.T) {
 // GET /ca on a project without one returns 404 so admin UI can
 // distinguish "initialise me" from an error state.
 func TestCA_Get_NotInitialised(t *testing.T) {
-	r, db, issuer, _ := caTestSetup(t)
+	r, db, _ := caTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "p1", admin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "GET", "/api/v1/projects/"+proj.ID+"/ca", tok, nil)
 	if w.Code != http.StatusNotFound {
@@ -107,8 +109,9 @@ func TestCA_Init_KEKMissing(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	t.Setenv(pki.KEKEnvVar, "")
 
-	issuer, _ := NewTokenIssuer("a", "b", 5*time.Minute, time.Hour)
-	rbac := NewRBACWithStorage(issuer, db)
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBAC(db, verifier)
 	svc := pki.New(db)
 	h := NewCAHandler(db, svc)
 	r := gin.New()
@@ -116,7 +119,7 @@ func TestCA_Init_KEKMissing(t *testing.T) {
 
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "p1", admin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/ca", tok, nil)
 	if w.Code != http.StatusServiceUnavailable {
@@ -127,10 +130,10 @@ func TestCA_Init_KEKMissing(t *testing.T) {
 // Full admin flow: init CA → issue two certs → list → revoke one →
 // CRL reflects the revocation in both DER and PEM forms.
 func TestCA_ListRevokeCRL(t *testing.T) {
-	r, db, issuer, svc := caTestSetup(t)
+	r, db, svc := caTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "p1", admin)
-	tok, _ := issuer.IssueAccess(AccessClaims{UserID: admin.ID, Role: user.RoleAdmin})
+	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	w := probeReqWithPath(r, "POST", "/api/v1/projects/"+proj.ID+"/ca", tok, nil)
 	if w.Code != http.StatusOK {
