@@ -1,0 +1,356 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/WangYihang/Platypus/internal/optoken"
+	"github.com/WangYihang/Platypus/internal/user"
+)
+
+// AAT is the typed view of an auth_tokens row with kind='aat'. SecretHash
+// stays in the struct (mirroring PATToken's shape) but never escapes
+// past the storage layer — handlers serialise via response DTOs that
+// omit it. Phase 2 will introduce a UserSession sibling type for
+// kind='user_session' rows; the underlying table is the same.
+type AAT struct {
+	TokenID     string
+	SecretHash  []byte
+	UserID      string // creator
+	Name        string
+	Description string
+	ProjectID   string // empty = global token, no project binding
+	Role        user.Role
+	Scopes      []string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	LastUsedAt  *time.Time
+	LastUsedIP  string
+	UserAgent   string
+	Revoked     bool
+	RevokedAt   *time.Time
+	// RevokedByUser is the users.id of the actor that called Revoke;
+	// empty when the row is still alive.
+	RevokedByUser string
+	RevokedReason string
+}
+
+// AuthTokens returns the repo accessor. Mirrors the (db *DB).PATTokens()
+// pattern so callers don't learn about a different access shape per kind.
+func (db *DB) AuthTokens() *AuthTokenRepo { return &AuthTokenRepo{db: db.DB} }
+
+type AuthTokenRepo struct {
+	db *sql.DB
+}
+
+// CreateAAT inserts a row representing a freshly-minted AAT. Caller has
+// already hashed the secret; the plaintext never touches storage. The
+// row's CHECK constraint enforces (name, role, scopes) presence — we
+// also validate up-front so the error message points at the offending
+// field instead of returning a generic CHECK violation.
+func (r *AuthTokenRepo) CreateAAT(ctx context.Context, a *AAT) error {
+	if err := validateAAT(a); err != nil {
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO auth_tokens (
+			token_id, kind, secret_hash, user_id,
+			name, description,
+			created_at, expires_at,
+			project_id, role, scopes
+		) VALUES (?, 'aat', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.TokenID,
+		a.SecretHash,
+		a.UserID,
+		a.Name,
+		nullableString(a.Description),
+		a.CreatedAt.UTC(),
+		a.ExpiresAt.UTC(),
+		nullableString(a.ProjectID),
+		string(a.Role),
+		optoken.FormatList(a.Scopes),
+	)
+	return err
+}
+
+func validateAAT(a *AAT) error {
+	switch {
+	case a == nil:
+		return errors.New("storage: AAT is nil")
+	case a.TokenID == "":
+		return errors.New("storage: AAT.TokenID empty")
+	case a.UserID == "":
+		return errors.New("storage: AAT.UserID empty")
+	case a.Name == "":
+		return errors.New("storage: AAT.Name empty (required by CHECK)")
+	case len(a.SecretHash) == 0:
+		return errors.New("storage: AAT.SecretHash empty")
+	case a.CreatedAt.IsZero():
+		return errors.New("storage: AAT.CreatedAt unset")
+	case a.ExpiresAt.IsZero():
+		return errors.New("storage: AAT.ExpiresAt unset")
+	}
+	if _, err := user.ParseRole(string(a.Role)); err != nil {
+		return fmt.Errorf("storage: AAT.Role: %w", err)
+	}
+	return nil
+}
+
+// GetAAT fetches a single AAT by id. Returns ErrNotFound for missing
+// rows and rejects rows of the wrong kind — the typed accessor must
+// not silently leak a session row as an AAT.
+func (r *AuthTokenRepo) GetAAT(ctx context.Context, tokenID string) (*AAT, error) {
+	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = 'aat'`, tokenID)
+	rec, err := scanAuthTokenRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rowToAAT(rec), nil
+}
+
+// ListAATsByCreator returns AATs the user issued, newest first. When
+// includeRevoked is false, revoked rows are filtered server-side.
+func (r *AuthTokenRepo) ListAATsByCreator(ctx context.Context, userID string, includeRevoked bool) ([]*AAT, error) {
+	q := baseSelect + ` WHERE kind = 'aat' AND user_id = ?`
+	if !includeRevoked {
+		q += ` AND revoked_at IS NULL`
+	}
+	q += ` ORDER BY created_at DESC`
+	return r.queryAATList(ctx, q, userID)
+}
+
+// ListAATsByProject returns AATs scoped to a project, newest first.
+// Global AATs (project_id IS NULL) are deliberately excluded — admins
+// list those via ListAATsByCreator with their own user id.
+func (r *AuthTokenRepo) ListAATsByProject(ctx context.Context, projectID string, includeRevoked bool) ([]*AAT, error) {
+	q := baseSelect + ` WHERE kind = 'aat' AND project_id = ?`
+	if !includeRevoked {
+		q += ` AND revoked_at IS NULL`
+	}
+	q += ` ORDER BY created_at DESC`
+	return r.queryAATList(ctx, q, projectID)
+}
+
+func (r *AuthTokenRepo) queryAATList(ctx context.Context, q string, args ...any) ([]*AAT, error) {
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*AAT
+	for rows.Next() {
+		rec, err := scanAuthTokenRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rowToAAT(rec))
+	}
+	return out, rows.Err()
+}
+
+// Verify is the hot-path lookup the API verifier calls on every
+// authenticated request. The (token_id, kind) WHERE pair is what
+// guarantees a kind-mismatch in the verifier dispatch can never
+// resolve to a row of the wrong kind — the SQL filter itself is the
+// safety property, not Go-side branching.
+//
+// Reason classification (caller logs verbatim):
+//
+//	"success"         — token valid, *Verified populated
+//	"unknown"         — no row with that (id, kind)
+//	"invalid_secret"  — hash mismatch
+//	"expired"         — expires_at <= now
+//	"idle_expired"    — kind=user_session AND idle_expires_at <= now
+//	"revoked"         — revoked_at IS NOT NULL
+func (r *AuthTokenRepo) Verify(ctx context.Context, tokenID string, secret []byte, expectedKind optoken.Kind, now time.Time) (*optoken.Verified, string, error) {
+	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = ?`, tokenID, string(expectedKind))
+	rec, err := scanAuthTokenRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "unknown", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	// Order: secret check first to keep timing equivalent across
+	// success and the "row exists but wrong secret" path. Other checks
+	// (revoked, expired) are fine to run after — they don't reveal
+	// per-token timing.
+	hashOfPresented := optoken.Hash(secret)
+	if !optoken.Equal(hashOfPresented, rec.secretHash) {
+		return nil, "invalid_secret", nil
+	}
+	if rec.revokedAt.Valid {
+		return nil, "revoked", nil
+	}
+	if !rec.expiresAt.After(now) {
+		return nil, "expired", nil
+	}
+	if expectedKind == optoken.KindUserSession {
+		if !rec.idleExpiresAt.Valid || !rec.idleExpiresAt.Time.After(now) {
+			return nil, "idle_expired", nil
+		}
+	}
+	return rowToVerified(rec), "success", nil
+}
+
+// Revoke marks a token revoked. Idempotent: re-revoking a revoked
+// token is a no-op (no error, original revoked metadata preserved).
+// Returns ErrNotFound if no row matches the id at all.
+func (r *AuthTokenRepo) Revoke(ctx context.Context, tokenID, byUser, reason string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE auth_tokens
+		   SET revoked_at = ?, revoked_by_user = ?, revoked_reason = ?
+		 WHERE token_id = ? AND revoked_at IS NULL`,
+		at.UTC(), byUser, nullableString(reason), tokenID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		// Either the row doesn't exist or it was already revoked. The
+		// existence check distinguishes 404 from "already revoked".
+		var exists int
+		err := r.db.QueryRowContext(ctx,
+			`SELECT 1 FROM auth_tokens WHERE token_id = ? LIMIT 1`, tokenID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		// Row exists and was already revoked — caller treats as success.
+	}
+	return nil
+}
+
+// TouchLastUsed records the latest authenticated use of a token. Best
+// effort — callers run this asynchronously off the request hot path.
+// idleExpiresAt is honored only for user_session rows (the CHECK
+// constraint already enforces it must stay NULL for AATs); pass nil
+// for AAT touches.
+func (r *AuthTokenRepo) TouchLastUsed(ctx context.Context, tokenID, ip, ua string, idleExpiresAt *time.Time, at time.Time) error {
+	if idleExpiresAt != nil {
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE auth_tokens
+			   SET last_used_at = ?, last_used_ip = ?, user_agent = ?, idle_expires_at = ?
+			 WHERE token_id = ?`,
+			at.UTC(), nullableString(ip), nullableString(ua), idleExpiresAt.UTC(), tokenID)
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE auth_tokens
+		   SET last_used_at = ?, last_used_ip = ?, user_agent = ?
+		 WHERE token_id = ?`,
+		at.UTC(), nullableString(ip), nullableString(ua), tokenID)
+	return err
+}
+
+// baseSelect is shared by Get / Verify / List paths so column order
+// stays in lockstep across queries — scanAuthTokenRow assumes this
+// exact ordering.
+const baseSelect = `
+	SELECT token_id, kind, secret_hash, user_id,
+	       name, description,
+	       created_at, expires_at,
+	       last_used_at, last_used_ip, user_agent,
+	       revoked_at, revoked_by_user, revoked_reason,
+	       project_id, role, scopes,
+	       idle_expires_at
+	  FROM auth_tokens`
+
+// authTokenRow is the unified internal row. Both AAT and (future)
+// UserSession views are built from it. Private — the layer above this
+// (api) deals only with typed views.
+type authTokenRow struct {
+	tokenID                       string
+	kind                          string
+	secretHash                    []byte
+	userID                        string
+	name                          sql.NullString
+	description                   sql.NullString
+	createdAt                     time.Time
+	expiresAt                     time.Time
+	lastUsedAt                    sql.NullTime
+	lastUsedIP                    sql.NullString
+	userAgent                     sql.NullString
+	revokedAt                     sql.NullTime
+	revokedByUser                 sql.NullString
+	revokedReason                 sql.NullString
+	projectID, roleStr, scopesStr sql.NullString
+	idleExpiresAt                 sql.NullTime
+}
+
+func scanAuthTokenRow(s rowScanner) (*authTokenRow, error) {
+	var r authTokenRow
+	err := s.Scan(
+		&r.tokenID, &r.kind, &r.secretHash, &r.userID,
+		&r.name, &r.description,
+		&r.createdAt, &r.expiresAt,
+		&r.lastUsedAt, &r.lastUsedIP, &r.userAgent,
+		&r.revokedAt, &r.revokedByUser, &r.revokedReason,
+		&r.projectID, &r.roleStr, &r.scopesStr,
+		&r.idleExpiresAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func rowToAAT(r *authTokenRow) *AAT {
+	a := &AAT{
+		TokenID:       r.tokenID,
+		SecretHash:    r.secretHash,
+		UserID:        r.userID,
+		Name:          r.name.String,
+		Description:   r.description.String,
+		ProjectID:     r.projectID.String,
+		Role:          user.Role(r.roleStr.String),
+		Scopes:        optoken.ParseList(r.scopesStr.String),
+		CreatedAt:     r.createdAt,
+		ExpiresAt:     r.expiresAt,
+		LastUsedIP:    r.lastUsedIP.String,
+		UserAgent:     r.userAgent.String,
+		Revoked:       r.revokedAt.Valid,
+		RevokedByUser: r.revokedByUser.String,
+		RevokedReason: r.revokedReason.String,
+	}
+	if r.lastUsedAt.Valid {
+		t := r.lastUsedAt.Time
+		a.LastUsedAt = &t
+	}
+	if r.revokedAt.Valid {
+		t := r.revokedAt.Time
+		a.RevokedAt = &t
+	}
+	return a
+}
+
+// rowToVerified projects an authTokenRow into the cache-ready
+// optoken.Verified shape. The verifier in api uses the result both as
+// a Principal source and as a cache value.
+func rowToVerified(r *authTokenRow) *optoken.Verified {
+	v := &optoken.Verified{
+		TokenID:   r.tokenID,
+		Kind:      optoken.Kind(r.kind),
+		Hash:      r.secretHash,
+		UserID:    r.userID,
+		Role:      user.Role(r.roleStr.String),
+		Scopes:    optoken.ParseList(r.scopesStr.String),
+		ProjectID: r.projectID.String,
+		ExpiresAt: r.expiresAt,
+	}
+	if r.idleExpiresAt.Valid {
+		v.IdleExpiresAt = r.idleExpiresAt.Time
+	}
+	return v
+}
