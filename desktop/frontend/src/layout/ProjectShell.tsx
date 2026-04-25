@@ -157,9 +157,21 @@ function ShellChrome({
                     currentSlug={currentSlug}
                     onProjectsChanged={() => void refresh()}
                 />
-                <main style={{ flex: 1, minWidth: 0, overflow: "auto" }}>{children}</main>
+                <div
+                    style={{
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                    }}
+                >
+                    <main style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}>
+                        {children}
+                    </main>
+                    <TerminalDrawer />
+                </div>
             </div>
-            <TerminalDrawer />
             <StatusBar />
             <CommandPalette
                 onAddServer={() => setAddOpen(true)}

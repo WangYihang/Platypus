@@ -42,10 +42,10 @@ interface Props {
 }
 
 // CommandPalette is the keyboard-first nav surface (Cmd/Ctrl+K). It
-// lives at the shell level next to TerminalDrawer so it's always
-// reachable. Content is scoped to the current project: page nav,
-// project switch, host navigation, opening a shell on any host,
-// switching between saved servers.
+// lives at the shell level alongside the global terminal provider so
+// it's always reachable. Content is scoped to the current project:
+// page nav, project switch, host navigation, opening a shell on any
+// host, switching between saved servers.
 export default function CommandPalette({ onAddServer, onManageServers }: Props) {
     const navigate = useNavigate();
     const { project, projects } = useShell();

@@ -20,10 +20,10 @@ const HANDLE_HEIGHT = 6;
 const TAB_BAR_HEIGHT = 36;
 
 // TerminalDrawer is the VSCode-style bottom panel mounted once inside
-// ShellChrome, above StatusBar and outside <Routes>. Because the drawer
-// lives at the app shell, the xterm instances it owns survive route
-// changes — operators can switch between Fleet/Activities/Settings
-// without losing scrollback or dropping their shell WebSocket.
+// ShellChrome's content column — it sits beneath <main> and beside
+// (not under) ServerRail/ProjectSidebar, so it spans only the project
+// content area. xterm instances still survive route changes because
+// GlobalTerminalProvider lives at the shell root, above the column.
 export default function TerminalDrawer() {
     const {
         shells,
