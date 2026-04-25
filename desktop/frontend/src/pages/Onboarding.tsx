@@ -39,6 +39,10 @@ export default function Onboarding() {
     const [probing, setProbing] = useState(false);
     const [probeInfo, setProbeInfo] = useState<PublicServerInfo | null>(null);
     const [probeError, setProbeError] = useState<string | null>(null);
+    // URL the last failed probe was attempted with. Continue stays
+    // disabled until the user edits the URL — clicking again with the
+    // same URL would just reproduce the same failure.
+    const [lastFailedURL, setLastFailedURL] = useState<string | null>(null);
 
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -58,12 +62,22 @@ export default function Onboarding() {
         if (step === "probe") {
             setProbeInfo(null);
             setProbeError(null);
+            setLastFailedURL(null);
             setUsername("");
             setPassword("");
             setSecret("");
             setBootstrapPassword("");
         }
     }, [step]);
+
+    // Editing the URL after a failed probe clears the failed state so
+    // the Continue button re-enables.
+    useEffect(() => {
+        if (lastFailedURL !== null && url !== lastFailedURL) {
+            setProbeError(null);
+            setLastFailedURL(null);
+        }
+    }, [url, lastFailedURL]);
 
     async function doProbe() {
         setProbing(true);
@@ -72,9 +86,15 @@ export default function Onboarding() {
         try {
             const info = await probeServer(url);
             setProbeInfo(info);
+            setLastFailedURL(null);
             setStep(info.admin_bootstrapped ? "login" : "bootstrap");
         } catch (err) {
-            setProbeError(String(err));
+            // probeServer throws ProbeError with a humanised message
+            // already; render `.message` directly so the user doesn't
+            // see "TypeError: …" and can act on the advice.
+            const message = err instanceof Error ? err.message : String(err);
+            setProbeError(message);
+            setLastFailedURL(url);
         } finally {
             setProbing(false);
         }
@@ -143,6 +163,7 @@ export default function Onboarding() {
                             probing={probing}
                             probeError={probeError}
                             probeInfo={probeInfo}
+                            blocked={lastFailedURL !== null && lastFailedURL === url}
                             onURL={setUrl}
                             onName={setName}
                             onBack={() => setStep("welcome")}
@@ -252,6 +273,9 @@ interface ProbeStepProps {
     probing: boolean;
     probeError: string | null;
     probeInfo: PublicServerInfo | null;
+    // True when the last probe attempt failed against this exact URL.
+    // Continue stays disabled until the user edits the URL.
+    blocked: boolean;
     onURL: (v: string) => void;
     onName: (v: string) => void;
     onBack: () => void;
@@ -263,6 +287,7 @@ function ProbeStep({
     name,
     probing,
     probeError,
+    blocked,
     onURL,
     onName,
     onBack,
@@ -320,7 +345,7 @@ function ProbeStep({
                 </Button>
                 <Button
                     onClick={onNext}
-                    disabled={!url || probing}
+                    disabled={!url || probing || blocked}
                     style={{ marginLeft: "auto" }}
                     data-testid="onboarding-probe"
                 >

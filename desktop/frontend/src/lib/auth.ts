@@ -449,12 +449,65 @@ export interface PublicServerInfo {
     admin_bootstrapped: boolean;
 }
 
+// ProbeError carries a user-readable reason for why probeServer
+// couldn't talk to the URL. The wizard renders `.message` directly,
+// so anything thrown from probeServer must already be friendly.
+export class ProbeError extends Error {
+    constructor(
+        message: string,
+        public readonly cause?: unknown,
+    ) {
+        super(message);
+        this.name = "ProbeError";
+    }
+}
+
+function friendlyFetchError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    // Browsers report "TypeError: Failed to fetch" / "NetworkError"
+    // for almost any pre-response failure (DNS miss, ECONNREFUSED,
+    // CORS, mixed content). The user can't act on the JS class
+    // name, so collapse all of them into one human sentence.
+    if (/Failed to fetch|NetworkError|ECONNREFUSED|ENOTFOUND/i.test(raw)) {
+        return "Couldn't reach this server. Check the URL and that the server is running.";
+    }
+    return raw;
+}
+
 // probeServer hits the authless /api/v1/auth/info endpoint so the
 // onboarding wizard and AddServerDialog can tell users whether to log
 // in or run the first-time-setup flow before they type a password.
 export async function probeServer(url: string): Promise<PublicServerInfo> {
     const base = normaliseURL(url);
-    const r = await fetch(base + "/api/v1/auth/info");
-    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
-    return (await r.json()) as PublicServerInfo;
+    let r: Response;
+    try {
+        r = await fetch(base + "/api/v1/auth/info");
+    } catch (err) {
+        throw new ProbeError(friendlyFetchError(err), err);
+    }
+    if (r.status === 404) {
+        throw new ProbeError(
+            "This URL responded but doesn't look like a Platypus server. Double-check the address.",
+        );
+    }
+    if (!r.ok) {
+        throw new ProbeError(
+            `Server responded with ${r.status}. Check the URL or try again in a moment.`,
+        );
+    }
+    try {
+        const body = (await r.json()) as PublicServerInfo;
+        if (body.product !== "platypus") {
+            throw new ProbeError(
+                "This URL responded but doesn't look like a Platypus server. Double-check the address.",
+            );
+        }
+        return body;
+    } catch (err) {
+        if (err instanceof ProbeError) throw err;
+        throw new ProbeError(
+            "The server returned an unexpected response. It may not be a Platypus server.",
+            err,
+        );
+    }
 }

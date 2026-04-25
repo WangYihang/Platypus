@@ -24,6 +24,14 @@ const IGNORE_PATTERNS: RegExp[] = [
     // Vite HMR handshake & plugin chatter — only surfaces in dev mode
     // and is not actionable in tests.
     /\[vite\]/i,
+    // Chromium logs every failed network request as a console "error"
+    // (`Failed to load resource: net::ERR_…`). Tests that deliberately
+    // probe an unreachable URL (e.g. the onboarding probe-error spec)
+    // would otherwise trip the watcher even though the app handled
+    // the failure correctly. The matching `(net::|ERR_|Failed to load
+    // resource)` patterns are scoped tightly to chromium's
+    // network-stack logs, not app console output.
+    /Failed to load resource: net::/i,
 ];
 
 function formatMsg(msg: ConsoleMessage): Capture {
