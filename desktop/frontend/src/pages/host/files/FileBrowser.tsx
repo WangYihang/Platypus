@@ -306,7 +306,10 @@ export default function FileBrowser({ sessionHash }: Props) {
                 </div>
 
                 {/* Toolbar */}
-                <div className="flex flex-wrap items-center gap-2">
+                <div
+                    data-testid="files-toolbar"
+                    className="flex flex-wrap items-center gap-2"
+                >
                     <Button type="button" variant="outline" size="sm" onClick={dir.reload} disabled={dir.loading}>
                         {dir.loading ? (
                             <Loader2 className="size-3.5 animate-spin" />
