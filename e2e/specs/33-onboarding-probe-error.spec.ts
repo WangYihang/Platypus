@@ -16,7 +16,7 @@ test.describe("onboarding probe error UX", () => {
 
         // Type a URL that nothing's listening on.
         const url = page.getByTestId("onboarding-url");
-        await url.fill("http://127.0.0.1:9");
+        await url.fill("http://127.0.0.1:31337");
         const probe = page.getByTestId("onboarding-probe");
         await probe.click();
 
@@ -34,7 +34,7 @@ test.describe("onboarding probe error UX", () => {
         await expect(probe).toBeDisabled();
 
         // Typing a new URL re-enables the button.
-        await url.fill("http://127.0.0.1:9999");
+        await url.fill("http://127.0.0.1:31338");
         await expect(probe).toBeEnabled();
     });
 });
