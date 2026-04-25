@@ -34,22 +34,22 @@ func TestClassifyVirt(t *testing.T) {
 
 func TestChassisCategory(t *testing.T) {
 	cases := map[string]string{
-		"":    "unknown",
-		"10":  "laptop",
-		"9":   "laptop",
-		"8":   "laptop",
-		"30":  "laptop",
-		"31":  "laptop",
-		"32":  "laptop",
-		"3":   "desktop",
-		"6":   "desktop",
-		"7":   "desktop",
-		"13":  "desktop",
-		"17":  "bare_metal",
-		"23":  "bare_metal",
-		"25":  "bare_metal",
-		"28":  "bare_metal",
-		"99":  "unknown",
+		"":   "unknown",
+		"10": "laptop",
+		"9":  "laptop",
+		"8":  "laptop",
+		"30": "laptop",
+		"31": "laptop",
+		"32": "laptop",
+		"3":  "desktop",
+		"6":  "desktop",
+		"7":  "desktop",
+		"13": "desktop",
+		"17": "bare_metal",
+		"23": "bare_metal",
+		"25": "bare_metal",
+		"28": "bare_metal",
+		"99": "unknown",
 	}
 	for in, want := range cases {
 		if got := chassisCategory(in); got != want {

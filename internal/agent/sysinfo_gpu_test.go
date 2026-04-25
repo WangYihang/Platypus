@@ -8,11 +8,11 @@ import (
 
 func TestNormalizeNvidiaBusID(t *testing.T) {
 	cases := map[string]string{
-		"":                        "",
-		"0000:65:00.0":            "0:65:00.0",
-		"00000000:65:00.0":        "0:65:00.0",
-		"00000000:AB:CD.0":        "0:ab:cd.0",
-		"bad":                     "bad",
+		"":                 "",
+		"0000:65:00.0":     "0:65:00.0",
+		"00000000:65:00.0": "0:65:00.0",
+		"00000000:AB:CD.0": "0:ab:cd.0",
+		"bad":              "bad",
 	}
 	for in, want := range cases {
 		if got := normalizeNvidiaBusID(in); got != want {

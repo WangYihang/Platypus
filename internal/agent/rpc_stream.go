@@ -21,12 +21,12 @@ import (
 // RPCs they actually support. Adding a new RPC = adding a new
 // field here and a new case in the dispatch switch below.
 type AgentRPCHandlers struct {
-	Exec    func(ctx context.Context, req *v2pb.ExecRequest) *v2pb.ExecResponse
-	ListDir func(ctx context.Context, req *v2pb.ListDirRequest) *v2pb.ListDirResponse
-	Stat    func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse
-	Delete  func(ctx context.Context, req *v2pb.DeleteRequest) *v2pb.DeleteResponse
-	Rename  func(ctx context.Context, req *v2pb.RenameRequest) *v2pb.RenameResponse
-	Mkdir   func(ctx context.Context, req *v2pb.MkdirRequest) *v2pb.MkdirResponse
+	Exec        func(ctx context.Context, req *v2pb.ExecRequest) *v2pb.ExecResponse
+	ListDir     func(ctx context.Context, req *v2pb.ListDirRequest) *v2pb.ListDirResponse
+	Stat        func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse
+	Delete      func(ctx context.Context, req *v2pb.DeleteRequest) *v2pb.DeleteResponse
+	Rename      func(ctx context.Context, req *v2pb.RenameRequest) *v2pb.RenameResponse
+	Mkdir       func(ctx context.Context, req *v2pb.MkdirRequest) *v2pb.MkdirResponse
 	Chmod       func(ctx context.Context, req *v2pb.ChmodRequest) *v2pb.ChmodResponse
 	SysInfo     func(ctx context.Context, req *v2pb.SysInfoRequest) *v2pb.SysInfoResponse
 	ProcessList func(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse
