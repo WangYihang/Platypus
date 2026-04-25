@@ -1,13 +1,13 @@
 // Multi-session auth pool. One Session per saved ServerProfile lives
-// in memory; refresh tokens are cached in localStorage under a single
-// namespaced key so the rail can keep multiple workspaces warm at
-// once. Access tokens stay in RAM (short-lived, rotated by refresh).
+// in memory; the long-lived opaque session_token is cached in
+// localStorage under a single namespaced key so the rail can keep
+// multiple workspaces warm at once.
 //
-// Public surface is kept deliberately close to the old single-session
-// shape — `getSession()`, `authFetch()`, `login()`, `bootstrap()`,
-// `refresh()`, `logout()`, `changePassword()` all still exist and
-// target the *active* server. New helpers (`switchServer`,
-// `forgetServer`, `onActiveChange`) drive the rail.
+// Phase 2 cutover: there is no access/refresh pair anymore. A single
+// pst_<id>.<secret> session token authenticates every request; the
+// server enforces a 24h sliding idle window plus a 30d hard cap and
+// invalidates the row on logout / password-change. Without refresh
+// rotation, this module is a lot simpler than the old one.
 
 import {
     ServerProfile,
@@ -30,23 +30,30 @@ export interface SessionUser {
 export interface Session {
     serverId: string;
     serverURL: string;
-    accessToken: string;
-    refreshToken: string;
+    sessionToken: string;
+    tokenId: string;
     user: SessionUser;
-    accessIssuedAt: number;
+    // Server-supplied deadlines so UI can show "expires in N days"
+    // without polling. expiresAt is the hard cap; idleExpiresAt slides
+    // forward on every authenticated request and is the practical
+    // bound on inactivity.
+    expiresAt: number;
+    idleExpiresAt: number;
 }
 
-// Persisted shape — only the minimum needed to rebuild a Session on
-// boot. We re-fetch the user via /auth/refresh so stale role changes
-// don't stick around.
+// Persisted shape — only the long-lived session token plus enough
+// metadata to render a warm "logged in" state on boot. We avoid
+// caching the full Session here so a stale role (e.g. demoted user)
+// doesn't survive a page reload — the next authFetch hydrates from
+// the server's view.
 interface PersistedEntry {
-    refreshToken: string;
+    sessionToken: string;
+    tokenId?: string;
     user?: SessionUser;
 }
 type PersistedSessions = Record<string, PersistedEntry>;
 
 const LS_SESSIONS = "platypus.sessions";
-const LEGACY_LS_REFRESH = "platypus.refresh_token";
 
 const sessions = new Map<string, Session>();
 const listeners = new Set<() => void>();
@@ -110,8 +117,12 @@ function readPersisted(): PersistedSessions {
         for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
             if (!v || typeof v !== "object") continue;
             const entry = v as Partial<PersistedEntry>;
-            if (typeof entry.refreshToken !== "string") continue;
-            out[k] = { refreshToken: entry.refreshToken, user: entry.user };
+            if (typeof entry.sessionToken !== "string") continue;
+            out[k] = {
+                sessionToken: entry.sessionToken,
+                tokenId: entry.tokenId,
+                user: entry.user,
+            };
         }
         return out;
     } catch {
@@ -133,7 +144,11 @@ function writePersisted(map: PersistedSessions): void {
 
 function persistSession(s: Session): void {
     const map = readPersisted();
-    map[s.serverId] = { refreshToken: s.refreshToken, user: s.user };
+    map[s.serverId] = {
+        sessionToken: s.sessionToken,
+        tokenId: s.tokenId,
+        user: s.user,
+    };
     writePersisted(map);
 }
 
@@ -142,35 +157,6 @@ function dropPersisted(serverId: string): void {
     if (!(serverId in map)) return;
     delete map[serverId];
     writePersisted(map);
-}
-
-// Lift the old single-session localStorage keys into the first pooled
-// entry. We intentionally run this on first reference, not at module
-// load, so tests that clear storage between specs get a fresh slate.
-let migrated = false;
-function migrateLegacy(): void {
-    if (migrated) return;
-    migrated = true;
-    try {
-        const legacyRefresh = localStorage.getItem(LEGACY_LS_REFRESH);
-        if (!legacyRefresh) return;
-        const profile = listServers()[0];
-        if (!profile) {
-            // servers.ts has its own migration that synthesises the
-            // first profile from the legacy server_url; once that
-            // lands we'll pair the refresh token with it on the next
-            // boot. Nothing to do here yet.
-            return;
-        }
-        const map = readPersisted();
-        if (!map[profile.id]) {
-            map[profile.id] = { refreshToken: legacyRefresh };
-            writePersisted(map);
-        }
-        localStorage.removeItem(LEGACY_LS_REFRESH);
-    } catch {
-        // ignore
-    }
 }
 
 // --- HTTP primitives ------------------------------------------------
@@ -185,26 +171,29 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
     return (await r.json()) as T;
 }
 
-interface TokenPairResponse {
-    access_token: string;
-    refresh_token: string;
+interface LoginResponse {
+    session_token: string;
+    token_id: string;
+    expires_at: string;
+    idle_expires_at: string;
     user?: SessionUser;
 }
 
-function storeTokens(
+function storeSession(
     profile: ServerProfile,
-    pair: TokenPairResponse,
+    resp: LoginResponse,
     fallbackUser?: SessionUser,
 ): Session {
-    const user = pair.user ?? fallbackUser;
+    const user = resp.user ?? fallbackUser;
     if (!user) throw new Error("auth response missing user");
     const session: Session = {
         serverId: profile.id,
         serverURL: normaliseURL(profile.url),
-        accessToken: pair.access_token,
-        refreshToken: pair.refresh_token,
+        sessionToken: resp.session_token,
+        tokenId: resp.token_id,
         user,
-        accessIssuedAt: Date.now(),
+        expiresAt: Date.parse(resp.expires_at),
+        idleExpiresAt: Date.parse(resp.idle_expires_at),
     };
     sessions.set(profile.id, session);
     persistSession(session);
@@ -212,13 +201,39 @@ function storeTokens(
     return session;
 }
 
+// hydrateFromPersisted rebuilds an in-memory Session from a persisted
+// entry without contacting the server. The token's per-row expiries
+// aren't persisted so we leave them at 0; the very next authFetch
+// will either succeed (user still logged in) or 401 (session
+// revoked / idle-expired) and the caller routes to /login.
+function hydrateFromPersisted(profile: ServerProfile, entry: PersistedEntry): Session | null {
+    if (!entry.user) return null;
+    const session: Session = {
+        serverId: profile.id,
+        serverURL: normaliseURL(profile.url),
+        sessionToken: entry.sessionToken,
+        tokenId: entry.tokenId ?? "",
+        user: entry.user,
+        expiresAt: 0,
+        idleExpiresAt: 0,
+    };
+    sessions.set(profile.id, session);
+    return session;
+}
+
 // --- Public reads ---------------------------------------------------
 
 export function getSession(serverId?: string): Session | null {
-    migrateLegacy();
     const id = serverId ?? getActiveServerId();
     if (!id) return null;
-    return sessions.get(id) ?? null;
+    if (sessions.has(id)) {
+        return sessions.get(id) ?? null;
+    }
+    // Cold-boot path: rebuild from localStorage if we have a token.
+    const profile = getServer(id);
+    const persisted = readPersisted()[id];
+    if (!profile || !persisted) return null;
+    return hydrateFromPersisted(profile, persisted);
 }
 
 export function getSessionUser(): SessionUser | null {
@@ -235,10 +250,6 @@ export function listLiveSessionIds(): string[] {
 
 // --- Login / bootstrap ---------------------------------------------
 
-// findOrCreateProfile gives the old URL-keyed callers a path into the
-// pool: if a profile already points at this URL, reuse it; otherwise
-// add a fresh one. Callers that care about identity (rail / wizard)
-// should pass an explicit profile instead.
 function findOrCreateProfile(url: string): ServerProfile {
     const norm = normaliseURL(url);
     const existing = listServers().find((s) => s.url === norm);
@@ -247,8 +258,6 @@ function findOrCreateProfile(url: string): ServerProfile {
 }
 
 export interface LoginOpts {
-    // When the caller already registered the profile (wizard, rail
-    // add-server), pass its id so we don't duplicate on reuse.
     profile?: ServerProfile;
 }
 
@@ -261,11 +270,11 @@ export async function login(
         typeof urlOrProfile === "string"
             ? findOrCreateProfile(urlOrProfile)
             : urlOrProfile;
-    const pair = await postJSON<TokenPairResponse>(
+    const resp = await postJSON<LoginResponse>(
         profile.url + "/api/v1/auth/login",
         { username, password },
     );
-    storeTokens(profile, pair);
+    storeSession(profile, resp);
     setActiveServerId(profile.id);
     return profile;
 }
@@ -280,59 +289,33 @@ export async function bootstrap(
         typeof urlOrProfile === "string"
             ? findOrCreateProfile(urlOrProfile)
             : urlOrProfile;
-    const pair = await postJSON<TokenPairResponse>(
+    const resp = await postJSON<LoginResponse>(
         profile.url + "/api/v1/auth/bootstrap",
         { secret, username, password },
     );
-    storeTokens(profile, pair);
+    storeSession(profile, resp);
     setActiveServerId(profile.id);
     return profile;
 }
 
-// refresh tries to swap the cached refresh token for a fresh pair.
-// Returns true when the supplied server (or the active one, if none
-// given) is now logged in.
-export async function refresh(serverId?: string): Promise<boolean> {
-    migrateLegacy();
-    const id = serverId ?? getActiveServerId();
-    if (!id) return false;
-    const profile = getServer(id);
-    if (!profile) return false;
-    const persisted = readPersisted()[id];
-    if (!persisted) return false;
-    try {
-        const pair = await postJSON<TokenPairResponse>(
-            profile.url + "/api/v1/auth/refresh",
-            { refresh_token: persisted.refreshToken },
-        );
-        storeTokens(profile, pair, persisted.user);
-        return true;
-    } catch {
-        // refresh token rejected — drop it so the rail can surface
-        // "expired" state and the user isn't stuck in a retry loop.
-        sessions.delete(id);
-        dropPersisted(id);
-        emit();
-        return false;
-    }
-}
-
-// switchServer flips the active pointer, opportunistically refreshing
-// the target server's session from its cached refresh token. Returns
-// whether the target is now logged in; callers route to /login with
-// serverId state when `loggedIn=false`.
+// switchServer flips the active pointer and reports whether the
+// target has a live session. Cold-boots one from localStorage if
+// possible; otherwise the caller routes to /login.
 export async function switchServer(id: string): Promise<{ loggedIn: boolean }> {
     setActiveServerId(id);
     if (sessions.has(id)) {
         return { loggedIn: true };
     }
-    const ok = await refresh(id);
-    return { loggedIn: ok };
+    const profile = getServer(id);
+    const persisted = readPersisted()[id];
+    if (!profile || !persisted) return { loggedIn: false };
+    const session = hydrateFromPersisted(profile, persisted);
+    return { loggedIn: session !== null };
 }
 
-// forgetServer drops the in-memory session and the persisted refresh
-// token for one server. The ServerProfile itself stays — "Sign out"
-// in Manage Servers uses this; "Remove server" also calls through to
+// forgetServer drops the in-memory session and the persisted token
+// for one server. The ServerProfile itself stays — "Sign out" in
+// Manage Servers uses this; "Remove server" also calls through to
 // servers.removeServer() afterwards.
 export function forgetServer(id: string): void {
     sessions.delete(id);
@@ -341,10 +324,6 @@ export function forgetServer(id: string): void {
 }
 
 export function forgetAndRemoveServer(id: string): void {
-    // Flip the active pointer FIRST (inside removeServer) so
-    // RequireAuth's session check doesn't observe "active=X but
-    // session=null" between the two mutations and bounce the user
-    // to /login. Dropping the stored tokens is the last step.
     removeServer(id);
     forgetServer(id);
 }
@@ -355,16 +334,17 @@ export async function changePassword(
     oldPassword: string,
     newPassword: string,
 ): Promise<void> {
+    // Server preserves the caller's session through the cascade, so
+    // we don't drop local state on success — only on a failure that
+    // bounced us out anyway.
     await authFetch("/api/v1/auth/password", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     });
-    const id = getActiveServerId();
-    if (id) {
-        sessions.delete(id);
-        dropPersisted(id);
-    }
+    // No local rotation needed — the caller's pst_ token is still
+    // valid (the cascade kills only "other" sessions). Re-emit so
+    // any UI subscribed to session changes refreshes.
     emit();
 }
 
@@ -372,12 +352,17 @@ export async function logout(): Promise<void> {
     const s = getSession();
     if (!s) return;
     const url = s.serverURL + "/api/v1/auth/logout";
-    const token = s.refreshToken;
+    const token = s.sessionToken;
     sessions.delete(s.serverId);
     dropPersisted(s.serverId);
     emit();
     try {
-        await postJSON(url, { refresh_token: token });
+        // /logout sits behind RequireAuth — bearer carries the
+        // session id. No body needed.
+        await fetch(url, {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token },
+        });
     } catch {
         // ignore — local state is already cleared
     }
@@ -385,13 +370,16 @@ export async function logout(): Promise<void> {
 
 // --- authFetch ------------------------------------------------------
 
-// StaleServerResponseError is thrown when a fetch resolves after the
-// user has switched to a different server. Pages that subscribe to
-// onActiveChange re-fetch on their own; this error keeps a stray
-// response from contaminating the new view.
 export class StaleServerResponseError extends Error {
     constructor(public serverIdAtCall: string, public activeServerIdNow: string | null) {
         super(`response for server ${serverIdAtCall} arrived after switch to ${activeServerIdNow ?? "none"}`);
+    }
+}
+
+export class SessionExpiredError extends Error {
+    constructor(public serverId: string) {
+        super(`session expired for server ${serverId}`);
+        this.name = "SessionExpiredError";
     }
 }
 
@@ -400,31 +388,30 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
     if (!id) throw new Error("not logged in");
     let session = sessions.get(id);
     if (!session) {
-        // No live access token for the active server — try one
-        // synchronous refresh before giving up.
-        const ok = await refresh(id);
-        if (!ok) throw new Error("not logged in");
-        session = sessions.get(id)!;
+        // Cold path: try the persisted token before failing.
+        const profile = getServer(id);
+        const persisted = readPersisted()[id];
+        if (!profile || !persisted) throw new Error("not logged in");
+        const hydrated = hydrateFromPersisted(profile, persisted);
+        if (!hydrated) throw new Error("not logged in");
+        session = hydrated;
     }
 
-    const doFetch = async (s: Session) => {
-        const headers = new Headers(init.headers);
-        headers.set("Authorization", "Bearer " + s.accessToken);
-        return fetch(s.serverURL + path, { ...init, headers });
-    };
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", "Bearer " + session.sessionToken);
+    const r = await fetch(session.serverURL + path, { ...init, headers });
 
-    let r = await doFetch(session);
     if (r.status === 401) {
-        const ok = await refresh(id);
-        if (!ok) throw new Error("session expired");
-        const next = sessions.get(id);
-        if (!next) throw new Error("session expired");
-        r = await doFetch(next);
+        // Session revoked / idle-expired — there is no refresh dance
+        // anymore. Drop local state so the caller can route to
+        // /login cleanly.
+        forgetServer(id);
+        throw new SessionExpiredError(id);
     }
 
-    // Guard against cross-server races: if the user switched while the
-    // fetch was in flight, reject so the caller doesn't merge the
-    // stale response into the new server's state.
+    // Cross-server race guard: if the user switched while the fetch
+    // was in flight, reject so the caller doesn't merge a stale
+    // response into the new server's state.
     const active = getActiveServerId();
     if (active !== id) {
         throw new StaleServerResponseError(id, active);
@@ -449,9 +436,6 @@ export interface PublicServerInfo {
     admin_bootstrapped: boolean;
 }
 
-// ProbeError carries a user-readable reason for why probeServer
-// couldn't talk to the URL. The wizard renders `.message` directly,
-// so anything thrown from probeServer must already be friendly.
 export class ProbeError extends Error {
     constructor(
         message: string,
@@ -464,19 +448,12 @@ export class ProbeError extends Error {
 
 function friendlyFetchError(err: unknown): string {
     const raw = err instanceof Error ? err.message : String(err);
-    // Browsers report "TypeError: Failed to fetch" / "NetworkError"
-    // for almost any pre-response failure (DNS miss, ECONNREFUSED,
-    // CORS, mixed content). The user can't act on the JS class
-    // name, so collapse all of them into one human sentence.
     if (/Failed to fetch|NetworkError|ECONNREFUSED|ENOTFOUND/i.test(raw)) {
         return "Couldn't reach this server. Check the URL and that the server is running.";
     }
     return raw;
 }
 
-// probeServer hits the authless /api/v1/auth/info endpoint so the
-// onboarding wizard and AddServerDialog can tell users whether to log
-// in or run the first-time-setup flow before they type a password.
 export async function probeServer(url: string): Promise<PublicServerInfo> {
     const base = normaliseURL(url);
     let r: Response;
@@ -510,4 +487,14 @@ export async function probeServer(url: string): Promise<PublicServerInfo> {
             err,
         );
     }
+}
+
+// --- Compat shim ---------------------------------------------------
+
+// refresh() existed in the old JWT pair model. The session model has
+// no refresh — the export is kept as a deprecation no-op so any
+// imports still in flight don't fail at module load. New code should
+// not call this.
+export async function refresh(_serverId?: string): Promise<boolean> {
+    return false;
 }

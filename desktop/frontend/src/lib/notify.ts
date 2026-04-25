@@ -139,7 +139,7 @@ async function connect(conn: Connection): Promise<void> {
                 // cascade unrelated re-renders.
                 const r = await fetch(profile.url + "/api/v1/ws/ticket", {
                     method: "POST",
-                    headers: { Authorization: "Bearer " + session.accessToken },
+                    headers: { Authorization: "Bearer " + session.sessionToken },
                 });
                 if (!r.ok) throw new Error(`ticket: ${r.status}`);
                 const j = (await r.json()) as { ticket: string };

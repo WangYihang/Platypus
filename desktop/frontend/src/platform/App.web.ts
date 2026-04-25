@@ -393,7 +393,7 @@ export async function OpenTerminal(projectID: string, sessionHash: string): Prom
             "/api/v1/projects/" + encodeURIComponent(projectID) +
                 "/agents/" + encodeURIComponent(sessionHash) + "/terminal/ws",
         ),
-        ["tty", "Bearer." + session.accessToken],
+        ["tty", "Bearer." + session.sessionToken],
     );
     ws.binaryType = "arraybuffer";
 
