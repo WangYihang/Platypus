@@ -27,14 +27,14 @@ export default function ProjectsLanding() {
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <PageHeader
                 title="Projects"
-                subtitle="Pick a project to inspect its hosts, listeners, and dispatch"
+                subtitle="Pick a project to inspect its fleet and activity"
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {list.length === 0 ? (
                     <EmptyState
                         icon={<FolderOpen className="size-5" />}
                         title="No projects yet"
-                        description="An admin creates projects from the sidebar. Each project groups its own listeners, hosts, sessions, and dispatches."
+                        description="An admin creates projects from the sidebar. Each project scopes its own hosts, sessions, and access."
                     />
                 ) : (
                     <div
