@@ -352,7 +352,16 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 
 	auth := api.NewAuth()
 	auth.SetJWTFallback(tokens)
-	authH := api.NewAuthHandler(db, tokens, auth.GetSecret())
+
+	// optoken cache + verifier: the hot-path reader for opaque
+	// bearers (AAT + user_session). 4096 entries × 30s TTL bounds
+	// memory and keeps the missed-revoke damage window short.
+	// Constructed early so the AuthHandler can take it for
+	// synchronous cache invalidation on logout / password-change.
+	authTokenCache := optoken.NewCache(4096, 30*time.Second)
+	tokenVerifier := api.NewTokenVerifier(db, authTokenCache)
+
+	authH := api.NewAuthHandler(db, tokenVerifier, auth.GetSecret())
 	usersH := api.NewUsersHandler(db)
 	projectsH := api.NewProjectsHandler(db)
 
@@ -365,14 +374,6 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
-
-	// optoken cache + verifier: the hot-path reader for AAT (and Phase 2
-	// user-session) bearers. 4096 entries × 30s TTL bounds memory and
-	// keeps a missed-revoke damage window short. RBAC's RequireAuth
-	// dispatches opaque-prefix bearers here; JWT bearers stay on
-	// the TokenIssuer path.
-	authTokenCache := optoken.NewCache(4096, 30*time.Second)
-	tokenVerifier := api.NewTokenVerifier(db, authTokenCache)
 	aatH := api.NewAATHandler(db, tokenVerifier)
 
 	// /api/v1/install/<token> and /v1/manifest/* now live on the same

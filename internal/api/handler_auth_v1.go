@@ -9,21 +9,35 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-// AuthHandler wires the login / refresh / logout / bootstrap endpoints. It
-// holds everything it needs as plain fields — no global state — so each test
-// can instantiate an isolated handler against an in-memory DB.
+// SessionHardTTL is the absolute upper bound on a user_session
+// lifetime. The sliding idle window (TokenVerifier.SessionIdleWindow)
+// re-authenticates inactive users far sooner; this just caps the
+// "user has been continuously active for a month" pathological case.
+const SessionHardTTL = 30 * 24 * time.Hour
+
+// AuthHandler wires the bootstrap / login / logout / change-password
+// surface. It mints opaque pst_ session tokens via optoken and
+// persists them through AuthTokens.CreateSession; the verifier is
+// notified on revoke / password-change so cache invalidation lands
+// synchronously and other live tabs lose access without waiting for
+// the cache TTL.
 type AuthHandler struct {
 	db              *storage.DB
-	tokens          *TokenIssuer
+	verifier        *TokenVerifier
 	bootstrapSecret string
 }
 
-func NewAuthHandler(db *storage.DB, tokens *TokenIssuer, bootstrapSecret string) *AuthHandler {
-	return &AuthHandler{db: db, tokens: tokens, bootstrapSecret: bootstrapSecret}
+// NewAuthHandler builds the handler. The verifier is required: every
+// revocation path (Logout, ChangePassword, RevokeSession) needs to
+// invalidate the cache to take effect on the current node within
+// the same request.
+func NewAuthHandler(db *storage.DB, verifier *TokenVerifier, bootstrapSecret string) *AuthHandler {
+	return &AuthHandler{db: db, verifier: verifier, bootstrapSecret: bootstrapSecret}
 }
 
 type bootstrapRequest struct {
@@ -37,17 +51,6 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
-}
-
-// publicInfoResponse is the shape of GET /api/v1/auth/info. Unlike
-// /api/v1/info (which is auth-gated), this endpoint is reachable
-// without a bearer token so the onboarding wizard can probe a URL
-// the user just typed and tell them whether to log in or bootstrap.
-// Keep the payload tiny — no live counters, no build sha that an
-// attacker could correlate against CVEs; just "is this a Platypus
-// server, and is it ready for first-time setup?".
 type publicInfoResponse struct {
 	Product           string `json:"product"`
 	AdminBootstrapped bool   `json:"admin_bootstrapped"`
@@ -59,18 +62,22 @@ type userBody struct {
 	Role     user.Role `json:"role"`
 }
 
-type tokenPair struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	User         *userBody `json:"user,omitempty"`
+// loginResponse is what Login / Bootstrap return. Plaintext is
+// included exactly once — clients persist it. The expiry pair lets
+// browser code show a remaining-lifetime UI without a follow-up
+// roundtrip.
+type loginResponse struct {
+	SessionToken  string    `json:"session_token"`
+	TokenID       string    `json:"token_id"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	IdleExpiresAt time.Time `json:"idle_expires_at"`
+	User          *userBody `json:"user,omitempty"`
 }
 
 // PublicInfo answers GET /api/v1/auth/info without requiring a bearer
 // token. Returns just enough metadata for the desktop onboarding
 // wizard to decide whether to show the Log-in or First-time-setup
-// form. No build sha, no session counts, no endpoint enumeration —
-// callers that are already authenticated can hit /api/v1/info for
-// that.
+// form.
 func (h *AuthHandler) PublicInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 	n, err := h.db.Users().Count(ctx)
@@ -84,10 +91,10 @@ func (h *AuthHandler) PublicInfo(c *gin.Context) {
 	})
 }
 
-// Bootstrap is the one-shot "set up the first admin" flow. It succeeds only
-// when the users table is empty AND the caller presents the server's
-// bootstrap secret. After the first admin exists this endpoint is dead
-// weight; subsequent calls return 409.
+// Bootstrap is the one-shot "set up the first admin" flow. It succeeds
+// only when the users table is empty AND the caller presents the
+// server's bootstrap secret. After the first admin exists this endpoint
+// is dead weight; subsequent calls return 409.
 func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	empty := ""
 	var req bootstrapRequest
@@ -95,7 +102,6 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	ctx := c.Request.Context()
 	n, err := h.db.Users().Count(ctx)
 	if err != nil {
@@ -104,34 +110,24 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	}
 	if n > 0 {
 		RecordActivity(c, ActivityInput{
-			ProjectID: &empty,
-			ActorType: storage.ActorTypeAnonymous,
-			Category:  storage.CategoryAuth,
-			Action:    "user.bootstrap",
-			Outcome:   storage.OutcomeDenied,
-			Error:     "already bootstrapped",
-			Meta:      map[string]any{"username": req.Username},
+			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
+			Category: storage.CategoryAuth, Action: "user.bootstrap",
+			Outcome: storage.OutcomeDenied, Error: "already bootstrapped",
+			Meta: map[string]any{"username": req.Username},
 		})
 		c.JSON(http.StatusConflict, gin.H{"error": "already bootstrapped"})
 		return
 	}
-	// subtle.ConstantTimeCompare keeps the bootstrap window slightly harder
-	// to time-side-channel, though the single-shot nature already limits
-	// exploitation.
 	if subtle.ConstantTimeCompare([]byte(req.Secret), []byte(h.bootstrapSecret)) != 1 {
 		RecordActivity(c, ActivityInput{
-			ProjectID: &empty,
-			ActorType: storage.ActorTypeAnonymous,
-			Category:  storage.CategoryAuth,
-			Action:    "user.bootstrap",
-			Outcome:   storage.OutcomeDenied,
-			Error:     "invalid secret",
-			Meta:      map[string]any{"username": req.Username},
+			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
+			Category: storage.CategoryAuth, Action: "user.bootstrap",
+			Outcome: storage.OutcomeDenied, Error: "invalid secret",
+			Meta: map[string]any{"username": req.Username},
 		})
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid secret"})
 		return
 	}
-
 	hashed, err := user.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -149,34 +145,23 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 	RecordActivity(c, ActivityInput{
-		ProjectID:   &empty,
-		ActorType:   storage.ActorTypeUser,
-		ActorUser:   u.ID,
-		Category:    storage.CategoryAuth,
-		Action:      "user.bootstrap",
-		TargetType:  "user",
-		TargetID:    u.ID,
-		TargetLabel: u.Username,
-		Meta:        map[string]any{"username": u.Username, "role": string(u.Role)},
+		ProjectID: &empty, ActorType: storage.ActorTypeUser, ActorUser: u.ID,
+		Category: storage.CategoryAuth, Action: "user.bootstrap",
+		TargetType: "user", TargetID: u.ID, TargetLabel: u.Username,
+		Meta: map[string]any{"username": u.Username, "role": string(u.Role)},
 	})
-	// Seed a "default" project so the legacy listener flows (which know
-	// nothing about projects) still have somewhere to write. Only attempt
-	// when no project exists yet — idempotent if someone renamed the seed.
 	if _, err := h.db.Projects().GetBySlug(ctx, "default"); errors.Is(err, storage.ErrNotFound) {
 		_ = h.db.Projects().Create(ctx, &storage.Project{
-			ID:        uuid.NewString(),
-			Name:      "Default",
-			Slug:      "default",
-			CreatedAt: time.Now().UTC(),
-			CreatedBy: u.ID,
+			ID: uuid.NewString(), Name: "Default", Slug: "default",
+			CreatedAt: time.Now().UTC(), CreatedBy: u.ID,
 		})
 	}
-	h.issueTokensTo(c, u)
+	h.issueSession(c, u)
 }
 
-// Login authenticates by username + password and returns a fresh token pair.
-// On invalid credentials we always return 401 with the same body so
-// attackers can't distinguish "wrong username" from "wrong password".
+// Login authenticates by username + password and mints a fresh session
+// token. Same-shape 401 on every failure path so timing / body deltas
+// don't reveal which field was wrong.
 func (h *AuthHandler) Login(c *gin.Context) {
 	empty := ""
 	var req loginRequest
@@ -184,18 +169,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	ctx := c.Request.Context()
 	u, err := h.db.Users().GetByUsername(ctx, req.Username)
 	if errors.Is(err, storage.ErrNotFound) {
 		RecordActivity(c, ActivityInput{
-			ProjectID: &empty,
-			ActorType: storage.ActorTypeAnonymous,
-			Category:  storage.CategoryAuth,
-			Action:    "user.login_failed",
-			Outcome:   storage.OutcomeDenied,
-			Error:     "unknown user",
-			Meta:      map[string]any{"username": req.Username, "reason": "unknown_user"},
+			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
+			Category: storage.CategoryAuth, Action: "user.login_failed",
+			Outcome: storage.OutcomeDenied, Error: "unknown user",
+			Meta: map[string]any{"username": req.Username, "reason": "unknown_user"},
 		})
 		unauthorized(c)
 		return
@@ -206,88 +187,88 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	if !user.VerifyPassword(u.PasswordHash, req.Password) {
 		RecordActivity(c, ActivityInput{
-			ProjectID:   &empty,
-			ActorType:   storage.ActorTypeAnonymous,
-			Category:    storage.CategoryAuth,
-			Action:      "user.login_failed",
-			TargetType:  "user",
-			TargetID:    u.ID,
-			TargetLabel: u.Username,
-			Outcome:     storage.OutcomeDenied,
-			Error:       "invalid password",
-			Meta:        map[string]any{"username": req.Username, "reason": "bad_password"},
+			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
+			Category: storage.CategoryAuth, Action: "user.login_failed",
+			TargetType: "user", TargetID: u.ID, TargetLabel: u.Username,
+			Outcome: storage.OutcomeDenied, Error: "invalid password",
+			Meta: map[string]any{"username": req.Username, "reason": "bad_password"},
 		})
 		unauthorized(c)
 		return
 	}
 	if err := h.db.Users().TouchLastLogin(ctx, u.ID); err != nil {
-		// Non-fatal — the login itself still succeeded.
+		// Non-fatal — login still succeeded.
 		_ = err
 	}
 	RecordActivity(c, ActivityInput{
-		ProjectID:   &empty,
-		ActorType:   storage.ActorTypeUser,
-		ActorUser:   u.ID,
-		Category:    storage.CategoryAuth,
-		Action:      "user.login",
-		TargetType:  "user",
-		TargetID:    u.ID,
-		TargetLabel: u.Username,
-		Meta:        map[string]any{"username": u.Username, "method": "password"},
+		ProjectID: &empty, ActorType: storage.ActorTypeUser, ActorUser: u.ID,
+		Category: storage.CategoryAuth, Action: "user.login",
+		TargetType: "user", TargetID: u.ID, TargetLabel: u.Username,
+		Meta: map[string]any{"username": u.Username, "method": "password"},
 	})
-	h.issueTokensTo(c, u)
+	h.issueSession(c, u)
 }
 
-// Refresh exchanges a valid, non-revoked refresh token for a new pair and
-// revokes the old refresh_tokens row. Strict rotation: one refresh token is
-// single-use so a leaked token is only useful for one follow-up refresh.
+// Refresh is intentionally rejected: the session model uses sliding
+// idle windows so there's nothing for the client to refresh
+// proactively. Returning 410 Gone (not 404) signals "this used to
+// exist; stop calling it" so frontends migrating off the old JWT pair
+// can detect the deprecation cleanly.
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	var req refreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	claims, err := h.tokens.ParseRefresh(req.RefreshToken)
-	if err != nil {
-		unauthorized(c)
-		return
-	}
-
-	ctx := c.Request.Context()
-	rt, err := h.db.RefreshTokens().Get(ctx, claims.TokenID)
-	if err != nil || rt.RevokedAt != nil || time.Now().After(rt.ExpiresAt) {
-		unauthorized(c)
-		return
-	}
-	u, err := h.db.Users().GetByID(ctx, rt.UserID)
-	if err != nil {
-		unauthorized(c)
-		return
-	}
-
-	// Rotate: revoke the old row, issue a fresh pair.
-	if err := h.db.RefreshTokens().Revoke(ctx, rt.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "revoke old refresh"})
-		return
-	}
-	h.issueTokensTo(c, u)
+	c.JSON(http.StatusGone, gin.H{
+		"error":   "endpoint deprecated",
+		"message": "session tokens use sliding idle windows; no refresh needed",
+	})
 }
 
-// ChangePassword lets the currently-authenticated user rotate their own
-// password without admin intervention. On success every outstanding
-// refresh token for the user is revoked (matches the admin-reset
-// semantics), forcing other live sessions to re-login.
-//
-// Must be mounted behind RequireAuth; without that the body's
-// old_password check is the only gate and anyone with a dictionary
-// could brute-force via this endpoint.
+// Logout revokes the caller's current session and invalidates it in
+// the verifier cache. Behind RequireAuth so we always have a
+// Principal — the session id comes from there. Idempotent: re-logout
+// of an already-revoked session still returns 204.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	p, ok := PrincipalFromContext(c)
+	if !ok {
+		// Should be unreachable behind RequireAuth.
+		c.Status(http.StatusNoContent)
+		return
+	}
+	tokenID := p.TokenID
+	// JWT principals (legacy) carry no TokenID; treat their logout
+	// as a no-op success — they have nothing to revoke server-side.
+	if tokenID == "" {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	_ = h.db.AuthTokens().Revoke(c.Request.Context(), tokenID, p.UserID, "logout", time.Now().UTC())
+	if h.verifier != nil {
+		h.verifier.Invalidate(tokenID)
+	}
+	empty := ""
+	RecordActivity(c, ActivityInput{
+		ProjectID:    &empty,
+		ActorType:    storage.ActorTypeUser,
+		ActorUser:    p.UserID,
+		ActorTokenID: tokenID,
+		Category:     storage.CategoryAuth,
+		Action:       "user.logout",
+		TargetType:   "user",
+		TargetID:     p.UserID,
+	})
+	c.Status(http.StatusNoContent)
+}
+
+// ChangePassword lets the currently-authenticated user rotate their
+// own password. On success every other live session for the user is
+// revoked + cache-invalidated so a stolen secondary session can't
+// outlive the password change. The caller's current session
+// continues to work — they shouldn't be kicked back to the login
+// screen for changing their own password.
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
-	claims, ok := ClaimsFromContext(c)
+	p, ok := PrincipalFromContext(c)
 	if !ok {
 		unauthorized(c)
 		return
 	}
-
 	var req struct {
 		OldPassword string `json:"old_password" binding:"required"`
 		NewPassword string `json:"new_password" binding:"required"`
@@ -300,13 +281,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "new_password must not be empty"})
 		return
 	}
-
 	ctx := c.Request.Context()
-	u, err := h.db.Users().GetByID(ctx, claims.UserID)
+	u, err := h.db.Users().GetByID(ctx, p.UserID)
 	if err != nil {
-		// User deleted mid-session — their access token is technically
-		// still valid until it expires, but we shouldn't honour it for
-		// state-changing ops.
 		unauthorized(c)
 		return
 	}
@@ -314,7 +291,6 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		unauthorized(c)
 		return
 	}
-
 	hashed, err := user.HashPassword(req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -324,75 +300,124 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update password"})
 		return
 	}
-	// Best-effort — if revocation errors, the password change still
-	// succeeded and the next refresh will fail anyway once the TTL ends.
-	_ = h.db.RefreshTokens().RevokeAllForUser(ctx, u.ID)
+	// Cascade-revoke all OTHER sessions: list active first so we can
+	// invalidate the cache entry per-id, then mass-revoke. Skip the
+	// caller's own session so they aren't kicked out.
+	now := time.Now().UTC()
+	sessions, _ := h.db.AuthTokens().ListSessionsForUser(ctx, u.ID)
+	for _, s := range sessions {
+		if s.TokenID == p.TokenID {
+			continue
+		}
+		_ = h.db.AuthTokens().Revoke(ctx, s.TokenID, u.ID, "password change", now)
+		if h.verifier != nil {
+			h.verifier.Invalidate(s.TokenID)
+		}
+	}
 	c.Status(http.StatusNoContent)
 }
 
-// Logout revokes a single refresh token. Returns 204 even if the token is
-// already revoked or unknown — logging out "harder than necessary" is not
-// an error.
-func (h *AuthHandler) Logout(c *gin.Context) {
-	empty := ""
-	var req refreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// ListSessions returns every active session the caller holds so the
+// browser settings page can render a "logged-in devices" list. Only
+// the caller's own sessions — admins do not get a global view here;
+// their tools should query the activity log instead.
+func (h *AuthHandler) ListSessions(c *gin.Context) {
+	p, ok := PrincipalFromContext(c)
+	if !ok {
+		unauthorized(c)
 		return
 	}
-	claims, err := h.tokens.ParseRefresh(req.RefreshToken)
+	sessions, err := h.db.AuthTokens().ListSessionsForUser(c.Request.Context(), p.UserID)
 	if err != nil {
-		// Unparseable token → nothing to revoke, but a client's "please
-		// invalidate this" request still succeeds semantically.
-		c.Status(http.StatusNoContent)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list sessions"})
 		return
 	}
-	_ = h.db.RefreshTokens().Revoke(c.Request.Context(), claims.TokenID)
-	RecordActivity(c, ActivityInput{
-		ProjectID:  &empty,
-		ActorType:  storage.ActorTypeUser,
-		ActorUser:  claims.UserID,
-		Category:   storage.CategoryAuth,
-		Action:     "user.logout",
-		TargetType: "user",
-		TargetID:   claims.UserID,
-	})
+	type item struct {
+		TokenID       string     `json:"token_id"`
+		UserAgent     string     `json:"user_agent,omitempty"`
+		CreatedAt     time.Time  `json:"created_at"`
+		ExpiresAt     time.Time  `json:"expires_at"`
+		IdleExpiresAt time.Time  `json:"idle_expires_at"`
+		LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+		LastUsedIP    string     `json:"last_used_ip,omitempty"`
+		Current       bool       `json:"current"`
+	}
+	out := make([]item, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, item{
+			TokenID:       s.TokenID,
+			UserAgent:     s.UserAgent,
+			CreatedAt:     s.CreatedAt,
+			ExpiresAt:     s.ExpiresAt,
+			IdleExpiresAt: s.IdleExpiresAt,
+			LastUsedAt:    s.LastUsedAt,
+			LastUsedIP:    s.LastUsedIP,
+			Current:       s.TokenID == p.TokenID,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"sessions": out})
+}
+
+// RevokeSession kills a specific session by id. Caller can revoke
+// only their own sessions; cross-user revocation is admin work
+// performed via direct activity / users tooling, not through this
+// endpoint.
+func (h *AuthHandler) RevokeSession(c *gin.Context) {
+	p, ok := PrincipalFromContext(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	sid := c.Param("sid")
+	s, err := h.db.AuthTokens().GetSession(c.Request.Context(), sid)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup"})
+		return
+	}
+	if s.UserID != p.UserID {
+		// Same 404 as missing — don't leak existence of other-user sessions.
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	_ = h.db.AuthTokens().Revoke(c.Request.Context(), sid, p.UserID, "user revoked", time.Now().UTC())
+	if h.verifier != nil {
+		h.verifier.Invalidate(sid)
+	}
 	c.Status(http.StatusNoContent)
 }
 
-// issueTokensTo is the common tail of Login / Refresh / Bootstrap: mint a
-// new access + refresh pair, persist the refresh row, and return the pair.
-func (h *AuthHandler) issueTokensTo(c *gin.Context, u *user.User) {
-	access, err := h.tokens.IssueAccess(AccessClaims{
-		UserID:   u.ID,
-		Username: u.Username,
-		Role:     u.Role,
-	})
+// issueSession is the common tail of Login / Bootstrap: mint an
+// opaque pst_ token, persist the row, return the plaintext exactly
+// once.
+func (h *AuthHandler) issueSession(c *gin.Context, u *user.User) {
+	id, _, hash, plaintext, err := optoken.Generate(optoken.UserSessionPrefix)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue access"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "generate session"})
 		return
 	}
-	tokenID := uuid.NewString()
-	refresh, err := h.tokens.IssueRefresh(RefreshClaims{
-		UserID:  u.ID,
-		TokenID: tokenID,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue refresh"})
+	now := time.Now().UTC()
+	s := &storage.UserSession{
+		TokenID:       id,
+		SecretHash:    hash,
+		UserID:        u.ID,
+		UserAgent:     c.GetHeader("User-Agent"),
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(SessionHardTTL),
+		IdleExpiresAt: now.Add(SessionIdleWindow),
+	}
+	if err := h.db.AuthTokens().CreateSession(c.Request.Context(), s); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist session"})
 		return
 	}
-	rt := &storage.RefreshToken{
-		ID:        tokenID,
-		UserID:    u.ID,
-		ExpiresAt: time.Now().Add(h.tokens.refreshTTL).UTC(),
-	}
-	if err := h.db.RefreshTokens().Create(c.Request.Context(), rt); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist refresh"})
-		return
-	}
-	c.JSON(http.StatusOK, tokenPair{
-		AccessToken:  access,
-		RefreshToken: refresh,
+	c.JSON(http.StatusOK, loginResponse{
+		SessionToken:  plaintext,
+		TokenID:       id,
+		ExpiresAt:     s.ExpiresAt,
+		IdleExpiresAt: s.IdleExpiresAt,
 		User: &userBody{
 			ID:       u.ID,
 			Username: u.Username,

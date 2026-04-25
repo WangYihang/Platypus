@@ -6,24 +6,28 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
 const bootstrapSecret = "bootstrap-secret"
 
-// authTestSetup brings up a router that only has the auth routes mounted.
-// Returns the router, the storage DB (so tests can seed users directly),
-// and the token issuer (for hand-minted edge-case tokens).
+// authTestSetup brings up a router that mounts the full Phase-2 auth
+// surface. Returns the router, the storage DB (so tests can assert
+// against rows directly), the verifier (so cache can be checked),
+// and the still-constructed TokenIssuer (some legacy tests still
+// expect to drive it for cross-credential setups — the field stays
+// even though /auth no longer issues JWTs).
 func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-
 	db, err := storage.Open(":memory:")
 	if err != nil {
 		t.Fatalf("storage.Open: %v", err)
@@ -34,14 +38,21 @@ func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB, *TokenIssuer) {
 	if err != nil {
 		t.Fatalf("NewTokenIssuer: %v", err)
 	}
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	rbac := NewRBACWithVerifier(issuer, db, verifier)
 
-	h := NewAuthHandler(db, issuer, bootstrapSecret)
+	h := NewAuthHandler(db, verifier, bootstrapSecret)
 	r := gin.New()
-	g := r.Group("/api/v1/auth")
-	g.POST("/bootstrap", h.Bootstrap)
-	g.POST("/login", h.Login)
-	g.POST("/refresh", h.Refresh)
-	g.POST("/logout", h.Logout)
+	pub := r.Group("/api/v1/auth")
+	pub.POST("/bootstrap", h.Bootstrap)
+	pub.POST("/login", h.Login)
+	pub.POST("/refresh", h.Refresh)
+
+	authed := r.Group("/api/v1/auth")
+	authed.Use(rbac.RequireAuth())
+	authed.POST("/logout", h.Logout)
+	authed.GET("/sessions", h.ListSessions)
 	return r, db, issuer
 }
 
@@ -60,10 +71,13 @@ func jsonReq(t *testing.T, r http.Handler, method, path string, body any) *httpt
 	return w
 }
 
-type tokenPairBody struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	User         struct {
+// loginBody is the parsed shape of /login + /bootstrap responses.
+type loginBody struct {
+	SessionToken  string    `json:"session_token"`
+	TokenID       string    `json:"token_id"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	IdleExpiresAt time.Time `json:"idle_expires_at"`
+	User          struct {
 		ID       string    `json:"id"`
 		Username string    `json:"username"`
 		Role     user.Role `json:"role"`
@@ -74,38 +88,43 @@ func TestBootstrap_CreatesFirstAdmin(t *testing.T) {
 	r, db, _ := authTestSetup(t)
 
 	w := jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
-		"secret":   bootstrapSecret,
-		"username": "root",
+		"secret": bootstrapSecret, "username": "root",
 		"password": "correct horse battery staple",
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("Bootstrap status=%d body=%s", w.Code, w.Body.String())
 	}
-
-	var got tokenPairBody
+	var got loginBody
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.AccessToken == "" || got.RefreshToken == "" {
-		t.Fatalf("empty tokens in response: %+v", got)
+	if !strings.HasPrefix(got.SessionToken, optoken.UserSessionPrefix) {
+		t.Errorf("SessionToken %q missing pst_ prefix", got.SessionToken)
+	}
+	if got.TokenID == "" || got.ExpiresAt.Before(time.Now()) {
+		t.Errorf("missing TokenID/ExpiresAt: %+v", got)
 	}
 	if got.User.Username != "root" || got.User.Role != user.RoleAdmin {
-		t.Fatalf("user mismatch: %+v", got.User)
+		t.Errorf("user mismatch: %+v", got.User)
 	}
-
 	n, _ := db.Users().Count(context.Background())
 	if n != 1 {
-		t.Fatalf("user count = %d; want 1", n)
+		t.Errorf("user count = %d; want 1", n)
+	}
+	// Session row exists.
+	s, err := db.AuthTokens().GetSession(context.Background(), got.TokenID)
+	if err != nil {
+		t.Fatalf("session row missing: %v", err)
+	}
+	if s.UserID != got.User.ID {
+		t.Errorf("session UserID = %q, want %q", s.UserID, got.User.ID)
 	}
 }
 
 func TestBootstrap_RejectsWrongSecret(t *testing.T) {
 	r, _, _ := authTestSetup(t)
-
 	w := jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
-		"secret":   "nope",
-		"username": "root",
-		"password": "pw",
+		"secret": "nope", "username": "root", "password": "pw",
 	})
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
@@ -114,11 +133,9 @@ func TestBootstrap_RejectsWrongSecret(t *testing.T) {
 
 func TestBootstrap_RejectsSecondCall(t *testing.T) {
 	r, _, _ := authTestSetup(t)
-
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "root", "password": "pw",
 	})
-	// Second call should be refused — a user already exists.
 	w := jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "root2", "password": "pw2",
 	})
@@ -129,22 +146,22 @@ func TestBootstrap_RejectsSecondCall(t *testing.T) {
 
 func TestLogin_Success(t *testing.T) {
 	r, _, _ := authTestSetup(t)
-	// Use Bootstrap to create the first user so we exercise the real hashing path.
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
-
 	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
-		"username": "alice",
-		"password": "hunter2",
+		"username": "alice", "password": "hunter2",
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("login status=%d body=%s", w.Code, w.Body.String())
 	}
-	var got tokenPairBody
+	var got loginBody
 	_ = json.NewDecoder(w.Body).Decode(&got)
-	if got.AccessToken == "" {
-		t.Fatal("empty access_token on login")
+	if got.SessionToken == "" {
+		t.Fatal("empty session_token on login")
+	}
+	if !strings.HasPrefix(got.SessionToken, optoken.UserSessionPrefix) {
+		t.Errorf("SessionToken missing pst_ prefix: %q", got.SessionToken)
 	}
 }
 
@@ -153,10 +170,8 @@ func TestLogin_WrongPassword(t *testing.T) {
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
-
 	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
-		"username": "alice",
-		"password": "wrong",
+		"username": "alice", "password": "wrong",
 	})
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d; want 401", w.Code)
@@ -166,83 +181,105 @@ func TestLogin_WrongPassword(t *testing.T) {
 func TestLogin_UnknownUser(t *testing.T) {
 	r, _, _ := authTestSetup(t)
 	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
-		"username": "nobody",
-		"password": "x",
+		"username": "nobody", "password": "x",
 	})
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d; want 401 (no username enumeration)", w.Code)
 	}
 }
 
-func TestRefresh_RotatesAndRevokesOld(t *testing.T) {
+func TestRefresh_DeprecationGone(t *testing.T) {
+	r, _, _ := authTestSetup(t)
+	w := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
+		"refresh_token": "anything",
+	})
+	if w.Code != http.StatusGone {
+		t.Errorf("status=%d, want 410 Gone", w.Code)
+	}
+}
+
+func TestLogout_RevokesSession(t *testing.T) {
 	r, db, _ := authTestSetup(t)
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
-	w1 := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
+	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
 		"username": "alice", "password": "hunter2",
 	})
-	var first tokenPairBody
-	_ = json.NewDecoder(w1.Body).Decode(&first)
+	var login loginBody
+	_ = json.NewDecoder(w.Body).Decode(&login)
 
-	w2 := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
-		"refresh_token": first.RefreshToken,
-	})
-	if w2.Code != http.StatusOK {
-		t.Fatalf("refresh status=%d body=%s", w2.Code, w2.Body.String())
-	}
-	var second tokenPairBody
-	_ = json.NewDecoder(w2.Body).Decode(&second)
-	if second.RefreshToken == first.RefreshToken {
-		t.Fatal("refresh returned the same refresh_token — rotation missing")
+	// Logout authenticated as the session it's revoking.
+	req := httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+login.SessionToken)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("logout status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Re-using the first refresh token must fail now (it's revoked).
-	w3 := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
-		"refresh_token": first.RefreshToken,
-	})
-	if w3.Code != http.StatusUnauthorized {
-		t.Fatalf("stale refresh status=%d; want 401", w3.Code)
+	// Session row marked revoked.
+	s, _ := db.AuthTokens().GetSession(context.Background(), login.TokenID)
+	if !s.Revoked {
+		t.Errorf("session not revoked after logout")
 	}
 
-	// And the new one is usable.
-	w4 := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
-		"refresh_token": second.RefreshToken,
-	})
-	if w4.Code != http.StatusOK {
-		t.Fatalf("second refresh status=%d body=%s", w4.Code, w4.Body.String())
-	}
-
-	// Sanity: the DB really has the revocation.
-	n, _ := db.Users().Count(context.Background())
-	if n != 1 {
-		t.Fatalf("user count drift: %d", n)
+	// Re-using the bearer must now fail (cache invalidate is synchronous
+	// and DB has revoked_at set).
+	req2 := httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
+	req2.Header.Set("Authorization", "Bearer "+login.SessionToken)
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusUnauthorized {
+		t.Errorf("post-logout reuse status=%d, want 401", rec2.Code)
 	}
 }
 
-func TestLogout_RevokesRefreshToken(t *testing.T) {
+func TestListSessions_OnlyOwnSessions(t *testing.T) {
 	r, _, _ := authTestSetup(t)
+	// Create two users via bootstrap+login dance: one alice, plus a
+	// second login from alice's account (simulating another device).
 	jsonReq(t, r, "POST", "/api/v1/auth/bootstrap", map[string]string{
 		"secret": bootstrapSecret, "username": "alice", "password": "hunter2",
 	})
-	w1 := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
+	first := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
 		"username": "alice", "password": "hunter2",
 	})
-	var pair tokenPairBody
-	_ = json.NewDecoder(w1.Body).Decode(&pair)
+	var firstBody loginBody
+	_ = json.NewDecoder(first.Body).Decode(&firstBody)
 
-	w2 := jsonReq(t, r, "POST", "/api/v1/auth/logout", map[string]string{
-		"refresh_token": pair.RefreshToken,
+	second := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
+		"username": "alice", "password": "hunter2",
 	})
-	if w2.Code != http.StatusNoContent {
-		t.Fatalf("logout status=%d body=%s", w2.Code, w2.Body.String())
+	var secondBody loginBody
+	_ = json.NewDecoder(second.Body).Decode(&secondBody)
+
+	// Authenticated GET /sessions from the second token must show
+	// both sessions, with the calling one tagged current=true.
+	req := httptest.NewRequest("GET", "/api/v1/auth/sessions", nil)
+	req.Header.Set("Authorization", "Bearer "+secondBody.SessionToken)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sessions status=%d body=%s", rec.Code, rec.Body.String())
 	}
-
-	// Post-logout, the refresh token is dead.
-	w3 := jsonReq(t, r, "POST", "/api/v1/auth/refresh", map[string]string{
-		"refresh_token": pair.RefreshToken,
-	})
-	if w3.Code != http.StatusUnauthorized {
-		t.Fatalf("refresh after logout status=%d; want 401", w3.Code)
+	var resp struct {
+		Sessions []struct {
+			TokenID string `json:"token_id"`
+			Current bool   `json:"current"`
+		} `json:"sessions"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	// 3 sessions total: bootstrap (auto-issued) + 2 explicit logins.
+	if len(resp.Sessions) != 3 {
+		t.Errorf("sessions len=%d, want 3 (bootstrap + 2 logins)", len(resp.Sessions))
+	}
+	for _, s := range resp.Sessions {
+		if s.TokenID == secondBody.TokenID && !s.Current {
+			t.Errorf("calling session not marked current")
+		}
+		if s.TokenID == firstBody.TokenID && s.Current {
+			t.Errorf("other session incorrectly marked current")
+		}
 	}
 }

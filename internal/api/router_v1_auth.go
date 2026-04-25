@@ -6,29 +6,25 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-// RegisterV1AuthRoutes mounts the JWT-based auth and user-management
-// endpoints on the supplied engine. Kept as a sibling to RegisterV1Routes
-// rather than folded into it so that (a) the legacy shared-secret
-// middleware still guards the older protected routes untouched, and
-// (b) tests can mount just the new surface when they don't need the
-// legacy ones.
+// RegisterV1AuthRoutes mounts the auth + user-management endpoints
+// on the supplied engine. Public routes (info / bootstrap / login)
+// are unauthenticated; refresh is a deprecation shim that returns
+// 410. Logout / change-password / sessions all live behind
+// RequireAuth so the handler can read the caller's session id from
+// the principal — no body-token handling needed.
 func RegisterV1AuthRoutes(engine *gin.Engine, auth *AuthHandler, users *UsersHandler, rbac *RBAC) {
-	authGroup := engine.Group("/api/v1/auth")
-	// /info is public so the desktop onboarding wizard can probe a
-	// freshly-typed server URL without asking the user to guess
-	// which form (Log in vs First-time setup) applies to that host.
-	authGroup.GET("/info", auth.PublicInfo)
-	authGroup.POST("/bootstrap", auth.Bootstrap)
-	authGroup.POST("/login", auth.Login)
-	authGroup.POST("/refresh", auth.Refresh)
-	authGroup.POST("/logout", auth.Logout)
+	pub := engine.Group("/api/v1/auth")
+	pub.GET("/info", auth.PublicInfo)
+	pub.POST("/bootstrap", auth.Bootstrap)
+	pub.POST("/login", auth.Login)
+	pub.POST("/refresh", auth.Refresh) // 410 Gone — kept so old clients learn the deprecation
 
-	// Self-service password change requires the caller to already be
-	// authenticated — the handler's old_password check on top is a
-	// second line of defence, not the primary gate.
-	authedGroup := engine.Group("/api/v1/auth")
-	authedGroup.Use(rbac.RequireAuth())
-	authedGroup.PATCH("/password", auth.ChangePassword)
+	authed := engine.Group("/api/v1/auth")
+	authed.Use(rbac.RequireAuth())
+	authed.POST("/logout", auth.Logout)
+	authed.PATCH("/password", auth.ChangePassword)
+	authed.GET("/sessions", auth.ListSessions)
+	authed.DELETE("/sessions/:sid", auth.RevokeSession)
 
 	adminOnly := engine.Group("/api/v1/users")
 	adminOnly.Use(rbac.RequireAuth(), rbac.RequireGlobalRole(user.RoleAdmin))

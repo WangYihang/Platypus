@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
@@ -60,12 +61,14 @@ func TestStartupFlow(t *testing.T) {
 		t.Fatalf("NewTokenIssuer: %v", err)
 	}
 	const bootstrapSecretValue = "startup-integration-secret"
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
 	engine := CreateRESTfulAPIServer()
 	RegisterV1AuthRoutes(
 		engine,
-		NewAuthHandler(db, issuer, bootstrapSecretValue),
+		NewAuthHandler(db, verifier, bootstrapSecretValue),
 		NewUsersHandler(db),
-		NewRBAC(issuer),
+		NewRBACWithVerifier(issuer, db, verifier),
 	)
 
 	pkiSvc := pki.New(db)
@@ -148,12 +151,12 @@ func TestStartupFlow(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("bootstrap: status=%d body=%s", w.Code, w.Body.String())
 		}
-		var pair tokenPairBody
+		var pair loginBody
 		if err := json.NewDecoder(w.Body).Decode(&pair); err != nil {
 			t.Fatalf("decode bootstrap body: %v", err)
 		}
-		if pair.AccessToken == "" {
-			t.Fatalf("bootstrap returned empty access_token")
+		if pair.SessionToken == "" {
+			t.Fatalf("bootstrap returned empty session_token")
 		}
 
 		// 6. Login with the freshly-bootstrapped admin.
@@ -164,13 +167,13 @@ func TestStartupFlow(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("login: status=%d body=%s", w.Code, w.Body.String())
 		}
-		var loginPair tokenPairBody
+		var loginPair loginBody
 		if err := json.NewDecoder(w.Body).Decode(&loginPair); err != nil {
 			t.Fatalf("decode login body: %v", err)
 		}
 
 		// 7. List users — must return only the human admin.
-		w = probeReqWithPath(engine, "GET", "/api/v1/users", loginPair.AccessToken, nil)
+		w = probeReqWithPath(engine, "GET", "/api/v1/users", loginPair.SessionToken, nil)
 		if w.Code != http.StatusOK {
 			t.Fatalf("GET /users: status=%d body=%s", w.Code, w.Body.String())
 		}
