@@ -903,13 +903,24 @@ function IssuedPATDialog({
 
 type EnrollmentStatus = "pending" | "consumed" | "expired" | "revoked";
 
-const STATUS_TONE: Record<EnrollmentStatus, "success" | "info" | "warning" | "danger"> = {
-    pending: "success",
-    consumed: "info",
+// Two parallel maps so the back-end's lifecycle vocabulary
+// ("pending" / "consumed") never reaches the screen as-is. Users read
+// "pending" + green and conclude the action has succeeded; the actual
+// success state is "consumed", which we surface as "Used" in green.
+const STATUS_LABEL: Record<EnrollmentStatus, string> = {
+    pending: "Unused",
+    consumed: "Used",
+    expired: "Expired",
+    revoked: "Revoked",
+};
+
+const STATUS_TONE: Record<EnrollmentStatus, "neutral" | "success" | "warning" | "danger"> = {
+    pending: "neutral",
+    consumed: "success",
     expired: "warning",
     revoked: "danger",
 };
 
 function StatusBadge({ status }: { status: EnrollmentStatus }) {
-    return <StatusPill tone={STATUS_TONE[status]}>{status}</StatusPill>;
+    return <StatusPill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusPill>;
 }
