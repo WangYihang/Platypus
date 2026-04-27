@@ -312,7 +312,7 @@ function ProbeStep({
                 <Input
                     value={url}
                     onChange={(e) => onURL(e.target.value)}
-                    placeholder="http://127.0.0.1:7331"
+                    placeholder="https://localhost:9443"
                     autoFocus
                     data-testid="onboarding-url"
                 />
