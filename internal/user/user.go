@@ -55,14 +55,20 @@ func ParseRole(s string) (Role, error) {
 // always a bug upstream — fail loudly at the boundary.
 var ErrEmptyPassword = errors.New("password must not be empty")
 
-// HashPassword returns a bcrypt hash usable as users.password_hash. Cost is
-// bcrypt.DefaultCost which gives ~60ms per hash on modern hardware — high
-// enough to resist offline brute-force, low enough for interactive login.
+// passwordHashCost is the bcrypt cost we hash with. Pinned (rather
+// than tracking bcrypt.DefaultCost) so future toolchain changes can't
+// silently downgrade us, and so the cost-floor regression test has a
+// stable single source of truth. Cost 12 ≈ 250ms / hash on 2025-2026
+// hardware — interactive-login fast, but 4× the offline-brute-force
+// budget vs. the previous default of 10.
+const passwordHashCost = 12
+
+// HashPassword returns a bcrypt hash usable as users.password_hash.
 func HashPassword(plain string) (string, error) {
 	if plain == "" {
 		return "", ErrEmptyPassword
 	}
-	b, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+	b, err := bcrypt.GenerateFromPassword([]byte(plain), passwordHashCost)
 	if err != nil {
 		return "", err
 	}

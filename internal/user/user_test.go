@@ -3,6 +3,8 @@ package user_test
 import (
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
@@ -42,6 +44,25 @@ func TestHashPassword_RoundTrip(t *testing.T) {
 func TestHashPassword_EmptyRejected(t *testing.T) {
 	if _, err := user.HashPassword(""); err == nil {
 		t.Fatal("HashPassword(\"\") should reject empty password")
+	}
+}
+
+// 2025-2026 era hardware can run bcrypt cost 10 at ~60ms / hash; cost
+// 12 raises that to ~250ms, which keeps interactive logins fine but
+// pushes the offline-cracking budget up by 4x. We pin the cost we
+// hash with so a future "raise the default" change in golang.org/x
+// doesn't silently downgrade anyone's stored hashes either way.
+func TestHashPassword_CostFloor(t *testing.T) {
+	h, err := user.HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	cost, err := bcrypt.Cost([]byte(h))
+	if err != nil {
+		t.Fatalf("bcrypt.Cost: %v", err)
+	}
+	if cost < 12 {
+		t.Fatalf("HashPassword bcrypt cost = %d; expected >= 12", cost)
 	}
 }
 
