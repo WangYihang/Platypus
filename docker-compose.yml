@@ -15,6 +15,13 @@ services:
       # (32 bytes hex; `openssl rand -hex 32`) via a secret. Keeping the
       # KEK on the same volume as the encrypted DB defeats the seal.
       PLATYPUS_DEV: "1"
+      # The bundled config.docker.yml leaves S3/MinIO credentials blank
+      # so the file is safe to copy into other deployments. We inject
+      # the dev MinIO root creds via env vars here; production should
+      # use a docker secret / k8s Secret that points at non-default
+      # MinIO credentials, and update both blocks to match.
+      PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-platypus_admin}"
+      PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-platypus_password}"
     restart: always
     depends_on:
       init-data:
@@ -34,8 +41,10 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: platypus_admin
-      MINIO_ROOT_PASSWORD: platypus_password
+      # Dev defaults; override via shell env (or a .env file) to point
+      # at non-default credentials before `docker compose up`.
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-platypus_admin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-platypus_password}"
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

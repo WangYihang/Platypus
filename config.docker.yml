@@ -50,8 +50,14 @@ distributor:
     region: "us-east-1"
     bucket: "platypus-artifacts"
     prefix: "agent/"
-    access_key_id: "platypus_admin"
-    secret_access_key: "platypus_password"
+    # Object-store credentials. Blank in this file on purpose —
+    # operators must inject them via env vars
+    # (PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID,
+    # PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY) or by overlaying a
+    # site-specific config.yml. The server refuses to start if the
+    # endpoint is set but either credential is empty.
+    access_key_id: ""
+    secret_access_key: ""
     use_ssl: false
 
 # Mesh overlay (optional). Leave psk_file empty to disable. The

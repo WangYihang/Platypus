@@ -1,5 +1,10 @@
 package config
 
+import (
+	"errors"
+	"os"
+)
+
 // IngressConfig binds the unified TLS ingress the server accepts all
 // agent, mesh, and admin HTTPS traffic on. The ALPN dispatcher fans
 // the accepted connections out to the relevant handlers:
@@ -98,4 +103,47 @@ type Config struct {
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
 	Mesh        MeshConfig        `yaml:"mesh"`
+}
+
+// ErrMissingStoreCredentials is returned by Validate when the
+// distributor is enabled (Store.Endpoint set) but either of the S3
+// access-key / secret-access-key fields is empty. Letting the server
+// boot with blank creds and a configured endpoint masks deployment
+// errors — fail loudly at startup instead.
+var ErrMissingStoreCredentials = errors.New(
+	"distributor.store credentials missing: set distributor.store.access_key_id + " +
+		"distributor.store.secret_access_key in config.yml or via " +
+		"PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID / PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY",
+)
+
+// ApplyEnvOverrides fills any blank Store credentials from the
+// matching PLATYPUS_DISTRIBUTOR_STORE_* environment variables. Lets
+// docker-compose / k8s deployments inject MinIO / S3 keys via env
+// without templating the YAML file. Idempotent.
+func (c *Config) ApplyEnvOverrides() error {
+	if c.Distributor.Store.AccessKeyID == "" {
+		c.Distributor.Store.AccessKeyID = os.Getenv("PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID")
+	}
+	if c.Distributor.Store.SecretAccessKey == "" {
+		c.Distributor.Store.SecretAccessKey = os.Getenv("PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY")
+	}
+	return nil
+}
+
+// Validate enforces post-load invariants that mapstructure / YAML
+// parsing don't catch. Currently:
+//
+//   - Distributor enabled (Store.Endpoint != "") requires both store
+//     credentials to be non-empty (see ErrMissingStoreCredentials).
+//
+// Call this AFTER ApplyEnvOverrides so env-injected credentials are
+// already in place.
+func (c *Config) Validate() error {
+	if c.Distributor.Store.Endpoint == "" {
+		return nil
+	}
+	if c.Distributor.Store.AccessKeyID == "" || c.Distributor.Store.SecretAccessKey == "" {
+		return ErrMissingStoreCredentials
+	}
+	return nil
 }

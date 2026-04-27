@@ -67,6 +67,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Pull store credentials from env (docker-compose / k8s inject
+	// PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID + …_SECRET_ACCESS_KEY
+	// rather than templating the YAML), then enforce post-load
+	// invariants — chiefly: distributor enabled requires non-empty
+	// store credentials, so we never silently boot with blank keys.
+	if err := cfg.ApplyEnvOverrides(); err != nil {
+		log.Error("config env overrides: %v", err)
+		os.Exit(1)
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Error("config invalid: %v", err)
+		os.Exit(1)
+	}
+
 	log.L.Info("server_starting", "version", update.Version, "config", configFile)
 
 	core.Ctx = app.New(cfg)
