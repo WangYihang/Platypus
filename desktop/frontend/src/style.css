@@ -74,7 +74,13 @@
     --destructive-foreground: var(--color-text-primary);
     --border: var(--color-border-subtle);
     --input: var(--color-border-subtle);
-    --ring: var(--color-border-strong);
+    /* --ring drives the keyboard focus ring on every shadcn button /
+       toggle / tab. It used to point at --color-border-strong (#525252,
+       a dim gray) which sits at <1.5:1 against dark gray surfaces and
+       is essentially invisible on the near-white primary buttons —
+       WCAG 2.4.7 fails. Use the saturated blue accent instead so
+       focus is unambiguously visible on every variant. */
+    --ring: var(--color-success);
 }
 
 @theme inline {
