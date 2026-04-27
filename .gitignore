@@ -61,11 +61,13 @@ tmp/
 # Playwright
 .playwright-mcp/
 /*.png
-# Playwright e2e
+# Playwright e2e — paths matched anywhere in the tree because a spec
+# accidentally invoked from desktop/frontend/ leaves its artefacts
+# there instead of in e2e/.
+**/test-results/
+**/playwright-report/
+**/.playwright/
 e2e/node_modules/
-e2e/test-results/
-e2e/playwright-report/
-e2e/.playwright/
 
 # Log files
 *.log
