@@ -1,26 +1,29 @@
 import { useSearchParams } from "react-router-dom";
-import { Network, Rows3, Timer } from "lucide-react";
+import { LayoutGrid, Network, Rows3, Timer } from "lucide-react";
 
 import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
 import PageHeader from "../components/PageHeader";
 import { useCurrentProject } from "../layout/ProjectShell";
+import { usePreference } from "../lib/preferences";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
+import HostsCardPanel from "./fleet/HostsCardPanel";
 import HostsPanel from "./fleet/HostsPanel";
 import SessionsPanel from "./fleet/SessionsPanel";
 import TopologyPanel from "./fleet/TopologyPanel";
 
-type FleetView = "table" | "timeline" | "graph";
+type FleetView = "cards" | "table" | "timeline" | "graph";
 
-const VIEWS: readonly FleetView[] = ["table", "timeline", "graph"] as const;
+const VIEWS: readonly FleetView[] = ["cards", "table", "timeline", "graph"] as const;
 
-function parseView(raw: string | null): FleetView {
+function parseView(raw: string | null, fallback: FleetView): FleetView {
     return (VIEWS as readonly string[]).includes(raw ?? "")
         ? (raw as FleetView)
-        : "table";
+        : fallback;
 }
 
 const SUBTITLES: Record<FleetView, string> = {
+    cards: "Hosts · card view",
     table: "Hosts · the inventory view",
     timeline: "Sessions · live and historical connections",
     graph: "Topology · mesh links between agents",
@@ -34,11 +37,12 @@ const SUBTITLES: Record<FleetView, string> = {
 export default function FleetPage() {
     const project = useCurrentProject();
     const [params, setParams] = useSearchParams();
-    const view = parseView(params.get("view"));
+    const [defaultView] = usePreference("ui.fleet.defaultView");
+    const view = parseView(params.get("view"), defaultView);
 
     const setView = (next: FleetView) => {
         const nextParams = new URLSearchParams(params);
-        if (next === "table") {
+        if (next === defaultView) {
             nextParams.delete("view");
         } else {
             nextParams.set("view", next);
@@ -56,6 +60,10 @@ export default function FleetPage() {
                 if (v) setView(v as FleetView);
             }}
         >
+            <ToggleGroupItem value="cards" aria-label="Card view">
+                <LayoutGrid className="size-3.5" />
+                Cards
+            </ToggleGroupItem>
             <ToggleGroupItem value="table" aria-label="Table view">
                 <Rows3 className="size-3.5" />
                 Table
@@ -76,6 +84,17 @@ export default function FleetPage() {
             <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={switcher} />
             <EnrollmentWaitBanner projectID={project.id} projectSlug={project.slug} />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+                <div
+                    data-testid="fleet-panel-cards"
+                    aria-hidden={view !== "cards"}
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: view === "cards" ? "block" : "none",
+                    }}
+                >
+                    <HostsCardPanel />
+                </div>
                 <div
                     data-testid="fleet-panel-table"
                     aria-hidden={view !== "table"}

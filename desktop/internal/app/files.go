@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -37,6 +40,19 @@ func (a *App) PickSaveLocation(title, defaultFilename string) (string, error) {
 	return wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
 		Title:           title,
 		DefaultFilename: defaultFilename,
+	})
+}
+
+// PickDirectoryToSave opens a native directory picker. Returns "" if the
+// user cancelled. Used by multi-file and recursive folder downloads
+// where we'd otherwise hammer the user with one save-as dialog per
+// file.
+func (a *App) PickDirectoryToSave(title string) (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("directory dialog requires running Wails runtime")
+	}
+	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: title,
 	})
 }
 
@@ -275,6 +291,78 @@ func (a *App) Chmod(sessionID, path string, mode uint32) error {
 	uri := "/api/v1/sessions/" + url.PathEscape(sessionID) + "/files/chmod?" + q.Encode()
 	_, err = c.PostRaw(context.Background(), uri, "application/json", nil)
 	return err
+}
+
+// DownloadFolder mirrors a remote directory tree onto the local
+// filesystem. localDir is treated as the parent into which we
+// re-create the remote folder — i.e. DownloadFolder(sid, "/etc/nginx",
+// "/home/me/Downloads") writes files under "/home/me/Downloads/nginx".
+//
+// Symlinks are skipped (the downloaded copy would dangle on the
+// destination machine anyway). Files larger than the per-chunk size
+// stream through DownloadFile's existing chunk loop. Errors abort the
+// walk so a partial mirror surfaces immediately rather than silently.
+func (a *App) DownloadFolder(sessionID, remotePath, localDir string) error {
+	remotePath = path.Clean(remotePath)
+	if remotePath == "" || remotePath == "." {
+		remotePath = "/"
+	}
+	root, err := a.StatFile(sessionID, remotePath)
+	if err != nil {
+		return fmt.Errorf("stat root: %w", err)
+	}
+	if !root.IsDir {
+		return fmt.Errorf("%s is not a directory", remotePath)
+	}
+	rootName := path.Base(remotePath)
+	if rootName == "/" || rootName == "." || rootName == "" {
+		rootName = "root"
+	}
+	localRoot := filepath.Join(localDir, rootName)
+	if err := os.MkdirAll(localRoot, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", localRoot, err)
+	}
+	return a.downloadFolderRecursive(sessionID, remotePath, localRoot)
+}
+
+func (a *App) downloadFolderRecursive(sessionID, remoteDir, localDir string) error {
+	const pageLimit = int64(0) // 0 == agent default page size
+	listing, err := a.ListDir(sessionID, remoteDir, 0, pageLimit)
+	if err != nil {
+		return fmt.Errorf("list %s: %w", remoteDir, err)
+	}
+	for _, e := range listing.Entries {
+		if e.Err != "" {
+			// Surface unreadable children but keep walking — typical
+			// causes are EACCES on /proc or /root and aborting on
+			// the first one would leave most of the tree unwritten.
+			continue
+		}
+		if e.IsSymlink {
+			continue
+		}
+		// Reject path traversal attempts in entry names. The agent
+		// shouldn't be sending us "../" but if it does we'd write
+		// outside localDir.
+		if strings.ContainsAny(e.Name, "/\\") || e.Name == ".." || e.Name == "." {
+			continue
+		}
+		remoteChild := path.Join(remoteDir, e.Name)
+		localChild := filepath.Join(localDir, e.Name)
+		if e.IsDir {
+			if err := os.MkdirAll(localChild, 0o755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", localChild, err)
+			}
+			if err := a.downloadFolderRecursive(sessionID, remoteChild, localChild); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := a.DownloadFile(sessionID, remoteChild, localChild); err != nil {
+			return fmt.Errorf("download %s: %w", remoteChild, err)
+		}
+	}
+	return nil
 }
 
 // UploadFile streams localPath to the remote path, again in 256 KiB chunks.

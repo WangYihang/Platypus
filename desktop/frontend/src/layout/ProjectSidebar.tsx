@@ -63,17 +63,24 @@ interface NavItem {
     minRole?: SessionUser["role"];
 }
 
-// NavGroup splits the per-project nav into three IA buckets so new
+// NavGroup splits the per-project nav into four IA buckets so new
 // users read the relationship at a glance:
 //
-//   work    — daily-use surfaces: Overview / Fleet / Activities
+//   work    — daily-use surfaces: Overview / Fleet
 //   admin   — onboarding & access: Enrollment / Members
+//   audit   — read-only history: Activities (and future audit views)
 //   project — project-level configuration: Settings
+//
+// Activities used to live under Work, but it's read-only audit data
+// rather than something operators *do* — pulling it into its own
+// Audit group makes that distinction visible and leaves room for
+// future audit-flavoured surfaces (sessions log, command log, …)
+// without bloating Work.
 //
 // Group order, labels, and item ordering are pinned by
 // e2e/specs/56-sidebar-nav-grouping.spec.ts so a future "let me
 // reorder these" can't silently put Settings above Fleet.
-type NavGroupKey = "work" | "admin" | "project";
+type NavGroupKey = "work" | "admin" | "audit" | "project";
 
 interface NavGroup {
     key: NavGroupKey;
@@ -112,7 +119,6 @@ export default function ProjectSidebar({
             items: [
                 { to: "overview", label: "Overview", icon: <I.project className="size-4" />, requiresProject: true },
                 { to: "fleet", label: "Fleet", icon: <I.fleet className="size-4" />, requiresProject: true },
-                { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
             ],
         },
         {
@@ -121,6 +127,13 @@ export default function ProjectSidebar({
             items: [
                 { to: "enrollment", label: "Enrollment", icon: <I.enrollment className="size-4" />, requiresProject: true, minRole: "admin" },
                 { to: "members", label: "Members", icon: <I.members className="size-4" />, requiresProject: true, minRole: "operator" },
+            ],
+        },
+        {
+            key: "audit",
+            label: "Audit",
+            items: [
+                { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
             ],
         },
         {

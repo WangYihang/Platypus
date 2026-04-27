@@ -25,6 +25,66 @@ interface NewFolderProps extends BaseProps {
     onConfirm: (folderName: string) => Promise<void>;
 }
 
+interface NewFileProps extends BaseProps {
+    parentPath: string;
+    onConfirm: (fileName: string) => Promise<void>;
+}
+
+export function NewFileDialog({ open, onOpenChange, parentPath, onConfirm }: NewFileProps) {
+    const [name, setName] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (open) setName("");
+    }, [open]);
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setSubmitting(true);
+        try {
+            await onConfirm(name.trim());
+            onOpenChange(false);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <form onSubmit={handleSubmit}>
+                    <DialogHeader>
+                        <DialogTitle>New file</DialogTitle>
+                        <DialogDescription>
+                            Create an empty file inside {parentPath}. You can
+                            edit it after it's created.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="new-file-name">File name</Label>
+                        <Input
+                            id="new-file-name"
+                            autoFocus
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="notes.txt"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={submitting || !name.trim()}>
+                            Create
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export function NewFolderDialog({ open, onOpenChange, parentPath, onConfirm }: NewFolderProps) {
     const [name, setName] = useState("");
     const [submitting, setSubmitting] = useState(false);

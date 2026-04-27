@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, Plus, TerminalSquare, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, TerminalSquare, X } from "lucide-react";
 
 import Terminal from "../pages/Terminal";
 import { palette, radius, space } from "../layout/theme";
@@ -24,6 +24,13 @@ const TAB_BAR_HEIGHT = 36;
 // (not under) ServerRail/ProjectSidebar, so it spans only the project
 // content area. xterm instances still survive route changes because
 // GlobalTerminalProvider lives at the shell root, above the column.
+//
+// Collapse model: as long as there's at least one shell open we keep
+// every <Terminal> mounted (display:none for non-active and for the
+// whole content slab when collapsed). xterm scrollback lives on the
+// xterm instance, so unmounting it would wipe history — collapsing
+// into a slim tab strip preserves it. The "expand" button on the
+// strip and Ctrl+` both reopen the drawer to its previous height.
 export default function TerminalDrawer() {
     const {
         shells,
@@ -32,21 +39,30 @@ export default function TerminalDrawer() {
         drawerHeight,
         closeShell,
         setActive,
+        openDrawer,
         closeDrawer,
         setDrawerHeight,
     } = useGlobalTerminal();
 
-    // When the drawer has nothing to show and isn't open we render
-    // nothing at all so we don't reserve a row in the shell flexbox.
-    if (!drawerOpen || shells.length === 0) {
+    // Nothing to show: don't reserve a row in the shell flexbox.
+    if (shells.length === 0) {
         return null;
     }
 
+    // Collapsed: render only the tab strip so users can see what's
+    // running and click to expand. Terminal content slabs are still
+    // mounted (display:none) below so xterm buffers survive.
+    const containerHeight = drawerOpen
+        ? drawerHeight
+        : TAB_BAR_HEIGHT;
+
     return (
         <div
+            data-testid="terminal-drawer"
+            data-collapsed={drawerOpen ? "false" : "true"}
             style={{
                 position: "relative",
-                height: drawerHeight,
+                height: containerHeight,
                 flexShrink: 0,
                 borderTop: `1px solid ${palette.border}`,
                 background: palette.main,
@@ -54,15 +70,25 @@ export default function TerminalDrawer() {
                 flexDirection: "column",
             }}
         >
-            <ResizeHandle height={drawerHeight} onResize={setDrawerHeight} />
+            {drawerOpen && (
+                <ResizeHandle height={drawerHeight} onResize={setDrawerHeight} />
+            )}
             <TabBar
                 shells={shells}
                 activeId={activeId}
                 onActivate={setActive}
                 onClose={closeShell}
-                onCloseDrawer={closeDrawer}
+                onToggleDrawer={drawerOpen ? closeDrawer : openDrawer}
+                drawerOpen={drawerOpen}
             />
-            <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+            <div
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    position: "relative",
+                    display: drawerOpen ? "block" : "none",
+                }}
+            >
                 {shells.map((s) => (
                     <div
                         key={s.id}
@@ -152,7 +178,8 @@ interface TabBarProps {
     activeId: string | null;
     onActivate: (id: string) => void;
     onClose: (id: string) => void;
-    onCloseDrawer: () => void;
+    onToggleDrawer: () => void;
+    drawerOpen: boolean;
 }
 
 function TabBar({
@@ -160,7 +187,8 @@ function TabBar({
     activeId,
     onActivate,
     onClose,
-    onCloseDrawer,
+    onToggleDrawer,
+    drawerOpen,
 }: TabBarProps) {
     const navigate = useNavigate();
     const activeShell = shells.find((s) => s.id === activeId) ?? null;
@@ -257,9 +285,14 @@ function TabBar({
             </div>
             <NewShellButton activeShell={activeShell} />
             <button
-                onClick={onCloseDrawer}
-                aria-label="Hide terminal panel"
-                title="Hide panel (Ctrl+`)"
+                onClick={onToggleDrawer}
+                aria-label={drawerOpen ? "Hide terminal panel" : "Show terminal panel"}
+                title={
+                    drawerOpen
+                        ? "Hide panel (Ctrl+`)"
+                        : "Show panel (Ctrl+`)"
+                }
+                data-testid="terminal-toggle-drawer"
                 style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -273,7 +306,11 @@ function TabBar({
                     borderRadius: radius.sm,
                 }}
             >
-                <ChevronDown className="size-4" />
+                {drawerOpen ? (
+                    <ChevronDown className="size-4" />
+                ) : (
+                    <ChevronUp className="size-4" />
+                )}
             </button>
         </div>
     );

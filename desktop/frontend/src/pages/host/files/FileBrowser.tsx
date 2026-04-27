@@ -5,6 +5,8 @@ import {
     ChevronUp,
     Download,
     Edit,
+    FilePlus,
+    FolderDown,
     FolderPlus,
     Loader2,
     Lock,
@@ -22,17 +24,26 @@ import {
     Chmod,
     DeleteFile,
     DownloadFile,
+    DownloadFolder,
     Mkdir,
+    PickDirectoryToSave,
     PickFileToUpload,
     PickSaveLocation,
     RenameFile,
     UploadFile,
+    WriteFile,
 } from "@wails/go/app/App";
 import type { FileEntryDTO } from "@wails/go/app/App";
 import { basename } from "../../../lib/format";
 
 import FileTable from "./FileTable";
-import { ChmodDialog, DeleteConfirmDialog, NewFolderDialog, RenameDialog } from "./dialogs";
+import {
+    ChmodDialog,
+    DeleteConfirmDialog,
+    NewFileDialog,
+    NewFolderDialog,
+    RenameDialog,
+} from "./dialogs";
 import { joinPath, parentPath, splitCrumbs } from "./paths";
 import { useDirectory } from "./useDirectory";
 import { useDragDrop } from "./useDragDrop";
@@ -91,9 +102,11 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
     const [openingEntry, setOpeningEntry] = useState<FileEntryDTO | null>(null);
     const [showNewFolder, setShowNewFolder] = useState(false);
+    const [showNewFile, setShowNewFile] = useState(false);
     const [showRename, setShowRename] = useState(false);
     const [showChmod, setShowChmod] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
+    const [bulkDownloading, setBulkDownloading] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -161,18 +174,57 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
     }
 
     async function handleDownloadClick() {
-        if (selectedEntries.length !== 1 || selectedEntries[0].isDir) {
-            toast.error("Select a single file to download");
+        if (selectedEntries.length === 0) {
+            toast.error("Select at least one entry to download");
             return;
         }
-        const entry = selectedEntries[0];
-        const dst = await PickSaveLocation("Save to", entry.name);
-        if (!dst) return;
+        // Single file → single save dialog. The user can choose any
+        // filename so this is the most flexible single-file path.
+        if (selectedEntries.length === 1 && !selectedEntries[0].isDir) {
+            const entry = selectedEntries[0];
+            const dst = await PickSaveLocation("Save to", entry.name);
+            if (!dst) return;
+            try {
+                await DownloadFile(projectID, sessionHash, joinPath(dir.path, entry.name), dst);
+                toast.success(`Downloaded ${entry.name}`);
+            } catch (err) {
+                toast.error(`download: ${humanizeError(err)}`);
+            }
+            return;
+        }
+        // Multi-select OR a single folder → ask for a destination
+        // directory once, then loop. DownloadFolder mirrors the tree;
+        // DownloadFile drops the file directly into the chosen dir.
+        const destDir = await PickDirectoryToSave("Save selection to");
+        if (!destDir) return;
+        setBulkDownloading(true);
         try {
-            await DownloadFile(projectID, sessionHash, joinPath(dir.path, entry.name), dst);
-            toast.success(`Downloaded ${entry.name}`);
+            let fileCount = 0;
+            let folderCount = 0;
+            for (const entry of selectedEntries) {
+                const remote = joinPath(dir.path, entry.name);
+                if (entry.isDir) {
+                    await DownloadFolder(projectID, sessionHash, remote, destDir);
+                    folderCount += 1;
+                } else {
+                    await DownloadFile(
+                        projectID,
+                        sessionHash,
+                        remote,
+                        joinPath(destDir, entry.name),
+                    );
+                    fileCount += 1;
+                }
+            }
+            const parts: string[] = [];
+            if (fileCount > 0) parts.push(`${fileCount} file${fileCount === 1 ? "" : "s"}`);
+            if (folderCount > 0)
+                parts.push(`${folderCount} folder${folderCount === 1 ? "" : "s"}`);
+            toast.success(`Downloaded ${parts.join(" and ")}`);
         } catch (err) {
             toast.error(`download: ${humanizeError(err)}`);
+        } finally {
+            setBulkDownloading(false);
         }
     }
 
@@ -183,6 +235,22 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             dir.reload();
         } catch (err) {
             toast.error(`mkdir: ${humanizeError(err)}`);
+        }
+    }
+
+    async function handleCreateFile(name: string) {
+        // Reject path separators — names with "/" would silently
+        // create the file in a different directory.
+        if (name.includes("/") || name.includes("\\")) {
+            toast.error("File name cannot contain '/' or '\\'");
+            return;
+        }
+        try {
+            await WriteFile(projectID, sessionHash, joinPath(dir.path, name), [], false);
+            toast.success(`Created ${name}`);
+            dir.reload();
+        } catch (err) {
+            toast.error(`new file: ${humanizeError(err)}`);
         }
     }
 
@@ -326,6 +394,15 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
                         type="button"
                         variant="outline"
                         size="sm"
+                        onClick={() => setShowNewFile(true)}
+                    >
+                        <FilePlus className="size-3.5" />
+                        New file
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => setShowNewFolder(true)}
                     >
                         <FolderPlus className="size-3.5" />
@@ -340,11 +417,24 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
                         variant="outline"
                         size="sm"
                         onClick={handleDownloadClick}
-                        disabled={selectedEntries.length !== 1 || selectedEntries[0]?.isDir}
-                        title="Drag-out to OS not supported; use this button instead."
+                        disabled={selectedEntries.length === 0 || bulkDownloading}
+                        title={
+                            selectedEntries.length === 0
+                                ? "Select files or folders to download"
+                                : selectedEntries.length === 1 && !selectedEntries[0]?.isDir
+                                  ? "Download to a chosen location"
+                                  : "Download all selected entries (folders are mirrored recursively)"
+                        }
                     >
-                        <Download className="size-3.5" />
+                        {bulkDownloading ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                        ) : selectedEntries.some((e) => e.isDir) ? (
+                            <FolderDown className="size-3.5" />
+                        ) : (
+                            <Download className="size-3.5" />
+                        )}
                         Download
+                        {selectedEntries.length > 1 && ` (${selectedEntries.length})`}
                     </Button>
                     <Button
                         type="button"
@@ -442,6 +532,12 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
                 </div>
             </div>
 
+            <NewFileDialog
+                open={showNewFile}
+                onOpenChange={setShowNewFile}
+                parentPath={dir.path}
+                onConfirm={handleCreateFile}
+            />
             <NewFolderDialog
                 open={showNewFolder}
                 onOpenChange={setShowNewFolder}

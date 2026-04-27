@@ -11,6 +11,7 @@ import {
 } from "@wails/go/app/App";
 import { EventsOff, EventsOn } from "@wails/runtime/runtime";
 import { palette } from "../layout/theme";
+import { readPreference } from "../lib/preferences";
 
 interface Props {
     projectID: string;
@@ -64,13 +65,29 @@ export default function Terminal({ projectID, sessionHash, onClose }: Props) {
     useEffect(() => {
         if (!containerRef.current) return;
 
+        // Pull terminal-shaped prefs from localStorage at construction
+        // time so user changes in Settings → Terminal are reflected on
+        // the next opened shell (re-mount of this component).
+        const fontSize = readPreference("terminal.fontSize");
+        const cursorBlink = readPreference("terminal.cursorBlink");
+        const scrollback = readPreference("terminal.scrollback");
+
         const xterm = new Xterm({
+            // Geist Mono lacks CJK / emoji glyphs, so the fallback
+            // chain explicitly names the platform-default CJK
+            // monospaces (PingFang on macOS, MS YaHei on Windows,
+            // WenQuanYi / Noto on Linux). Without these the WebView
+            // would draw tofu boxes for non-Latin terminal output.
             fontFamily:
-                'var(--font-geist-mono), Menlo, Consolas, "Liberation Mono", monospace',
-            fontSize: 13,
+                'var(--font-geist-mono), Menlo, Consolas, "Liberation Mono", ' +
+                '"PingFang SC", "Microsoft YaHei", "Noto Sans Mono CJK SC", ' +
+                '"WenQuanYi Micro Hei Mono", monospace',
+            fontSize,
             lineHeight: 1.2,
             theme: xtermTheme,
-            cursorBlink: true,
+            cursorBlink,
+            scrollback,
+            allowProposedApi: true,
         });
         const fit = new FitAddon();
         xterm.loadAddon(fit);
@@ -138,7 +155,18 @@ export default function Terminal({ projectID, sessionHash, onClose }: Props) {
 
                 EventsOn(`terminal:output:${id}`, (b64: string) => {
                     try {
-                        xterm.write(atob(b64));
+                        // Decode base64 → Uint8Array and hand the raw bytes
+                        // to xterm. atob() returns a Latin-1 string where
+                        // every byte becomes one codepoint, which mangles
+                        // UTF-8 multi-byte sequences (CJK, emoji, line
+                        // box-drawing) into mojibake. xterm.write accepts
+                        // Uint8Array and runs its own UTF-8 decoder.
+                        const binary = atob(b64);
+                        const bytes = new Uint8Array(binary.length);
+                        for (let i = 0; i < binary.length; i++) {
+                            bytes[i] = binary.charCodeAt(i);
+                        }
+                        xterm.write(bytes);
                     } catch (e) {
                         xterm.write(`\r\n[decode err: ${String(e)}]\r\n`);
                     }
