@@ -163,7 +163,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                         }}
                     >
                         {pinnedProfile
-                            ? `Sign back in to ${pinnedProfile.url}, or finish first-time setup if no admin exists yet.`
+                            ? `Sign back in to ${pinnedProfile.url}, or bootstrap the first admin if none exists yet.`
                             : "Log in to your server, or bootstrap the first admin from the startup secret."}
                     </p>
                 </div>
@@ -172,7 +172,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                     <Tabs defaultValue="login" className="w-full">
                         <TabsList className="mb-4 grid w-full grid-cols-2">
                             <TabsTrigger value="login">Log in</TabsTrigger>
-                            <TabsTrigger value="bootstrap">First-time setup</TabsTrigger>
+                            <TabsTrigger value="bootstrap">Bootstrap admin</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="login">

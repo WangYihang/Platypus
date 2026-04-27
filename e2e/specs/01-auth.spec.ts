@@ -10,7 +10,7 @@ test.describe("auth", () => {
             page.getByRole("heading", { name: "Platypus" }),
         ).toBeVisible();
         await expect(page.getByText("Log in", { exact: true }).first()).toBeVisible();
-        await expect(page.getByText("First-time setup")).toBeVisible();
+        await expect(page.getByText("Bootstrap admin")).toBeVisible();
         await page.screenshot({ path: shotPath("01-login.png"), fullPage: false });
     });
 

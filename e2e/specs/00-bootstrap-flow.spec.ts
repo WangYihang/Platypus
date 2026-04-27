@@ -3,7 +3,7 @@ import { expect, test } from "../fixtures/test";
 import { backendURL, baseURL } from "../fixtures/env";
 
 // 00-bootstrap-flow covers the user-visible path on a fresh install:
-// the First-time setup tab exists, accepts the bootstrap_secret the
+// the Bootstrap admin tab exists, accepts the bootstrap_secret the
 // server printed on startup, creates the first admin, and lands them
 // on /projects. This is the surface that regressed twice recently —
 // once because the KEK couldn't initialise the project CA, once
@@ -16,18 +16,18 @@ import { backendURL, baseURL } from "../fixtures/env";
 // executes. We exercise the path nonetheless by opening a fresh
 // incognito page (nothing persists between the two).
 test.describe("bootstrap", () => {
-    test("First-time setup tab is visible on /login", async ({ page }) => {
+    test("Bootstrap admin tab is visible on /login", async ({ page }) => {
         await page.goto(`${baseURL}/login`);
         // Matches desktop/frontend/src/pages/login/LoginRoute.tsx: Tabs
-        // render "Log in" + "First-time setup" via shadcn/ui Tabs.
+        // render "Log in" + "Bootstrap admin" via shadcn/ui Tabs.
         await expect(page.getByRole("heading", { name: "Platypus" })).toBeVisible();
         await expect(page.getByText("Log in", { exact: true }).first()).toBeVisible();
-        await expect(page.getByText("First-time setup", { exact: true })).toBeVisible();
+        await expect(page.getByText("Bootstrap admin", { exact: true })).toBeVisible();
     });
 
     test("bootstrap form mentions the server secret", async ({ page }) => {
         await page.goto(`${baseURL}/login`);
-        await page.getByText("First-time setup", { exact: true }).click();
+        await page.getByText("Bootstrap admin", { exact: true }).click();
         // The form surface for bootstrap — field labels and the
         // Server URL default should all be visible.
         await expect(page.getByLabel("Server URL", { exact: true })).toBeVisible();

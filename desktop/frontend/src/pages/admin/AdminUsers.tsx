@@ -9,6 +9,7 @@ import { z } from "zod";
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import PageHeader from "../../components/PageHeader";
+import RoleHelpIcon from "../../components/RoleHelpIcon";
 import StatusPill from "../../components/StatusPill";
 import { palette, space } from "../../layout/theme";
 import { UserRow, createUser, deleteUser, listUsers, updateUser } from "../../lib/api";
@@ -220,7 +221,10 @@ export default function AdminUsers() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Username</TableHead>
-                                    <TableHead className="w-[180px]">Role</TableHead>
+                                    <TableHead className="w-[180px]">
+                                        Role
+                                        <RoleHelpIcon />
+                                    </TableHead>
                                     <TableHead className="w-[260px] text-right" />
                                 </TableRow>
                             </TableHeader>

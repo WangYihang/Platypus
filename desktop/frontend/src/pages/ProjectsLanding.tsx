@@ -9,6 +9,7 @@ import PageHeader from "../components/PageHeader";
 import { useShell } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import { Project } from "../lib/api";
+import { getSessionUser } from "../lib/auth";
 import { fromNow } from "../lib/time";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -18,11 +19,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function ProjectsLanding() {
     const { projects, loading } = useShell();
     const navigate = useNavigate();
+    const user = getSessionUser();
 
     const list = useMemo(
         () => [...projects].sort((a, b) => a.name.localeCompare(b.name)),
         [projects],
     );
+
+    // Empty-state copy varies by role: admins get an action prompt
+    // (they can create one), everyone else gets a "talk to your
+    // admin" message — operators/viewers don't see the New project
+    // button at all, so the original "An admin creates projects
+    // from the sidebar" sent them looking for a button that didn't
+    // exist for them.
+    const emptyDescription =
+        user?.role === "admin"
+            ? "Use 'New project' in the sidebar to create projects from the sidebar. Each project scopes its own hosts, sessions, and access."
+            : "Ask your admin to create a project or invite you to an existing one. Projects scope hosts, sessions, and access — you'll see them here once you have access.";
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -37,7 +50,7 @@ export default function ProjectsLanding() {
                     <EmptyState
                         icon={<FolderOpen className="size-5" />}
                         title="No projects yet"
-                        description="An admin creates projects from the sidebar. Each project scopes its own hosts, sessions, and access."
+                        description={emptyDescription}
                     />
                 ) : (
                     <div

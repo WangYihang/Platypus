@@ -31,6 +31,11 @@ import {
 } from "../lib/api";
 import { formatSeconds, fromNow } from "../lib/time";
 import { humanizeError } from "../lib/humanizeError";
+import {
+    EnrollmentStatus,
+    STATUS_LABEL,
+    STATUS_TONE,
+} from "./enrollment/status";
 
 import {
     AlertDialog,
@@ -1103,27 +1108,9 @@ function IssuedPATDialog({
 }
 
 // --- Shared bits -----------------------------------------------------
-
-type EnrollmentStatus = "pending" | "consumed" | "expired" | "revoked";
-
-// Two parallel maps so the back-end's lifecycle vocabulary
-// ("pending" / "consumed") never reaches the screen as-is. Users read
-// "pending" + green and conclude the action has succeeded; the actual
-// success state is "consumed", which we surface as "Used" in green.
-const STATUS_LABEL: Record<EnrollmentStatus, string> = {
-    pending: "Unused",
-    consumed: "Used",
-    expired: "Expired",
-    revoked: "Revoked",
-};
-
-const STATUS_TONE: Record<EnrollmentStatus, "neutral" | "success" | "warning" | "danger"> = {
-    pending: "neutral",
-    consumed: "success",
-    expired: "warning",
-    revoked: "danger",
-};
-
+// STATUS_LABEL / STATUS_TONE / EnrollmentStatus live in
+// ./enrollment/status so they're testable in isolation; this page is
+// just a consumer.
 function StatusBadge({ status }: { status: EnrollmentStatus }) {
     return <StatusPill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusPill>;
 }

@@ -469,7 +469,7 @@ function BootstrapStep({
         <div style={{ display: "flex", flexDirection: "column", gap: space[4] }}>
             <ConfirmedBanner
                 url={url}
-                hint="First-time setup"
+                hint="Bootstrap admin"
             />
             <div>
                 <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
