@@ -15,6 +15,18 @@
 //     constructor throws at module-load time.
 
 import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+// RTL's auto-cleanup hook only registers if a global `afterEach` is in
+// scope. Vitest only injects globals when `globals: true` is set in
+// the config — we run with `globals: false` so the imports stay
+// explicit, which means the auto-cleanup never fires and successive
+// renders inside the same file accumulate in the DOM. Run cleanup
+// manually so each test starts from an empty document.
+afterEach(() => {
+    cleanup();
+});
 
 if (typeof window !== "undefined") {
     if (!window.matchMedia) {

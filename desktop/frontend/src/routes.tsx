@@ -20,6 +20,8 @@ const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
 const ProjectSettings = lazy(() => import("./pages/ProjectSettings"));
+const Preferences = lazy(() => import("./pages/Preferences"));
+const Account = lazy(() => import("./pages/Account"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 
@@ -141,6 +143,8 @@ export const router = createBrowserRouter([
                     { path: "/projects", element: withSuspense(<ProjectsLanding />) },
                     { path: "/admin/users", element: withSuspense(<AdminUsers />) },
                     { path: "/admin/settings", element: withSuspense(<AdminSettings />) },
+                    { path: "/account", element: withSuspense(<Account />) },
+                    { path: "/preferences", element: withSuspense(<Preferences />) },
                 ],
             },
             {

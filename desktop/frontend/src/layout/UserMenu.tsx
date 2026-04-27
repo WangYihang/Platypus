@@ -1,50 +1,11 @@
 import { useState } from "react";
-import { Key, Loader2, LogOut, MoreHorizontal, Settings } from "lucide-react";
-import { toast } from "sonner";
-import { humanizeError } from "../lib/humanizeError";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useNavigate } from "react-router-dom";
+import { LogOut, MoreHorizontal, Settings, SlidersHorizontal, User } from "lucide-react";
+import { useNavigate, NavLink } from "react-router-dom";
 
-import { SessionUser, changePassword, logout } from "../lib/auth";
+import { SessionUser, logout } from "../lib/auth";
 import { palette, space } from "./theme";
 
-import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import {
-    Form,
-    FormControl,
-    FormDescription,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-
-// Zod refinement to check confirm matches new_password. Runs after the
-// individual-field validation, so we see match errors only once both
-// fields look otherwise valid.
-const passwordSchema = z
-    .object({
-        old_password: z.string().min(1, "current password is required"),
-        new_password: z.string().min(8, "Min 8 chars"),
-        confirm: z.string().min(1, "required"),
-    })
-    .refine((v) => v.confirm === v.new_password, {
-        path: ["confirm"],
-        message: "passwords do not match",
-    });
-type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 interface Props {
     user: SessionUser;
@@ -52,35 +13,27 @@ interface Props {
 }
 
 // UserMenu sits at the bottom of the sidebar: avatar + username + role,
-// with a more-menu (...) opening a popover with admin/password/logout
-// actions.
+// with a more-menu (...) opening a popover with admin / account /
+// preferences / logout actions.
+//
+// Account vs Preferences:
+//   · Account → /account → user-self, server-side state (password,
+//     identity). Bookmarkable, deep-linkable, distinct from project
+//     pages.
+//   · Preferences → /preferences → browser-local state (UI density,
+//     terminal font, default Fleet view). Lives in localStorage and
+//     doesn't sync across devices.
+// Surfacing both as separate links makes the scope difference obvious
+// instead of conflating them under a single "Settings" entry.
 export default function UserMenu({ user, serverURL }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
-    const [pwOpen, setPwOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const navigate = useNavigate();
-
-    const pwForm = useForm<PasswordFormValues>({
-        resolver: zodResolver(passwordSchema),
-        defaultValues: { old_password: "", new_password: "", confirm: "" },
-    });
 
     async function handleLogout() {
         setMenuOpen(false);
         await logout();
         navigate("/login", { replace: true });
-    }
-
-    async function handlePasswordChange(v: PasswordFormValues) {
-        try {
-            await changePassword(v.old_password, v.new_password);
-            toast.success("Password updated — please log in again");
-            setPwOpen(false);
-            pwForm.reset({ old_password: "", new_password: "", confirm: "" });
-            navigate("/login", { replace: true });
-        } catch (e) {
-            toast.error(`change password: ${humanizeError(e)}`);
-        }
     }
 
     return (
@@ -161,105 +114,28 @@ export default function UserMenu({ user, serverURL }: Props) {
                             </button>
                         </>
                     )}
-                    <button
-                        type="button"
+                    <NavLink
+                        to="/account"
                         className="pl-popover-btn"
-                        onClick={() => {
-                            setMenuOpen(false);
-                            setPwOpen(true);
-                        }}
+                        onClick={() => setMenuOpen(false)}
                     >
-                        <Key className="size-3.5" />
-                        <span>Change password</span>
-                    </button>
+                        <User className="size-3.5" />
+                        <span>Account</span>
+                    </NavLink>
+                    <NavLink
+                        to="/preferences"
+                        className="pl-popover-btn"
+                        onClick={() => setMenuOpen(false)}
+                    >
+                        <SlidersHorizontal className="size-3.5" />
+                        <span>Preferences</span>
+                    </NavLink>
                     <button type="button" className="pl-popover-btn" onClick={handleLogout}>
                         <LogOut className="size-3.5" />
                         <span>Log out</span>
                     </button>
                 </PopoverContent>
             </Popover>
-
-            <Dialog
-                open={pwOpen}
-                onOpenChange={(o) => {
-                    setPwOpen(o);
-                    if (!o) pwForm.reset({ old_password: "", new_password: "", confirm: "" });
-                }}
-            >
-                <DialogContent className="sm:max-w-[420px]">
-                    <DialogHeader>
-                        <DialogTitle>Change password</DialogTitle>
-                        <DialogDescription>
-                            Changing your password will sign you out of all other sessions.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Form {...pwForm}>
-                        <form
-                            onSubmit={pwForm.handleSubmit(handlePasswordChange)}
-                            className="space-y-4"
-                        >
-                            <FormField
-                                control={pwForm.control}
-                                name="old_password"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Current password</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" autoFocus {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={pwForm.control}
-                                name="new_password"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>New password</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" {...field} />
-                                        </FormControl>
-                                        <FormDescription>Min 8 characters.</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={pwForm.control}
-                                name="confirm"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Confirm new password</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <DialogFooter>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setPwOpen(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    disabled={pwForm.formState.isSubmitting}
-                                >
-                                    {pwForm.formState.isSubmitting && (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                    )}
-                                    Update password
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
