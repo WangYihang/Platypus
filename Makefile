@@ -74,7 +74,10 @@ build: proto
 	done
 
 test:
-	$(GO) test -race -count=1 -timeout=120s ./...
+	# 300s per test binary covers slow packages (mesh / storage /
+	# auth) under -race overhead. Individual packages stay well
+	# below this; the timeout is a safety net, not a target.
+	$(GO) test -race -count=1 -timeout=300s ./...
 
 lint:
 	golangci-lint run ./...

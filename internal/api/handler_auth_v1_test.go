@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -24,6 +25,16 @@ const bootstrapSecret = "bootstrap-secret"
 // HTTP path and assert against the underlying rows.
 func authTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	t.Helper()
+	// bcrypt at production cost 12 takes ~250ms / hash on 2025 hardware,
+	// or ~1.5-2s under -race overhead. The auth tests run several
+	// hashes per case (bootstrap, dummy-bcrypt timing flatten on
+	// every wrong-password attempt, plus rate-limit isolation that
+	// fires 5 wrong-password attempts in a row). At cost 12 the
+	// `internal/api` package alone exceeds the Makefile's
+	// per-binary timeout. Drop to bcrypt minimum for tests; the
+	// resulting hash still verifies, so the test path is end-to-end.
+	user.SetPasswordHashCostForTest(t, bcrypt.MinCost)
+
 	gin.SetMode(gin.TestMode)
 	db, err := storage.Open(":memory:")
 	if err != nil {

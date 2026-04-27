@@ -5,6 +5,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/WangYihang/Platypus/internal/optoken"
+	"github.com/WangYihang/Platypus/internal/storage"
+	"github.com/WangYihang/Platypus/internal/user"
 )
 
 // M1 part 1 — rate limit. After loginRateMaxFailures wrong password
@@ -70,8 +76,31 @@ func TestLogin_RateLimitIsolatesUsernames(t *testing.T) {
 // path takes at least 30ms — well above the no-bcrypt baseline (DB
 // lookup + JSON parse < 5ms) and well below the cost-12 bcrypt time
 // (~250ms) so a slow CI box can't flake it the wrong way.
+//
+// authTestSetup defaults bcrypt to MinCost (4) so the rest of the
+// auth tests fit inside the per-package timeout under -race. For
+// THIS test specifically we need the dummy bcrypt at production
+// cost 12 — the 30ms threshold means nothing if bcrypt itself takes
+// 1-3ms — and the dummy is computed AT HANDLER-CONSTRUCTION TIME,
+// so bumping cost after authTestSetup wouldn't help: the cached
+// dummy hash is already cost-4. Build the handler from scratch
+// here with cost 12 set first.
 func TestLogin_UnknownUser_TimingFlat(t *testing.T) {
-	r, _ := authTestSetup(t)
+	user.SetPasswordHashCostForTest(t, 12)
+
+	gin.SetMode(gin.TestMode)
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("storage.Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	cache := optoken.NewCache(64, 30*time.Second)
+	verifier := NewTokenVerifier(db, cache)
+	h := NewAuthHandler(db, verifier, bootstrapSecret)
+	r := gin.New()
+	r.POST("/api/v1/auth/login", h.Login)
+
 	// No bootstrap — users table is empty; every username is unknown.
 	start := time.Now()
 	w := jsonReq(t, r, "POST", "/api/v1/auth/login", map[string]string{
