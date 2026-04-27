@@ -132,7 +132,7 @@ func claimsForPrincipal(p *Principal) *AccessClaims {
 
 // RequireAuthWS is RequireAuth's WebSocket-friendly cousin. Browsers
 // can't set Authorization: Bearer on the WebSocket upgrade, so this
-// middleware accepts three credential carriers (in order):
+// middleware accepts two credential carriers:
 //
 //  1. Authorization: Bearer <token>          — native clients.
 //  2. Sec-WebSocket-Protocol: ..., Bearer.<token>
@@ -141,9 +141,13 @@ func claimsForPrincipal(p *Principal) *AccessClaims {
 //     handler negotiates only its real subprotocol via
 //     websocket.Accept's Subprotocols list, so the auth sentinel is
 //     dropped and never reaches the live connection.
-//  3. ?access_token=<token>                  — last-resort fallback
-//     for tools that can't set custom subprotocols. Use sparingly;
-//     query strings are easier to leak via referer / logs.
+//
+// A third option (?access_token=<token>) used to exist as a fallback
+// for tools that couldn't set custom subprotocols, but security
+// audit M3 retired it: query strings end up in nginx / cloudflare
+// access logs and HTTP referer headers, and a 30-day session token
+// in either is a long-lived credential leak. Tools that can't set
+// subprotocols must add Authorization headers instead.
 func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if h := c.GetHeader("Authorization"); h != "" {
@@ -165,12 +169,7 @@ func (r *RBAC) RequireAuthWS() gin.HandlerFunc {
 				}
 			}
 		}
-		if t := c.Query("access_token"); t != "" {
-			if r.tryAuthenticateWS(c, t) {
-				return
-			}
-		}
-		abortUnauthorized(c, "missing or invalid websocket auth (Bearer header, Sec-WebSocket-Protocol, or ?access_token=)")
+		abortUnauthorized(c, "missing or invalid websocket auth (Bearer header or Sec-WebSocket-Protocol)")
 	}
 }
 
