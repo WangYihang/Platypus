@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { humanizeError } from "../lib/humanizeError";
 
 import Card from "../components/Card";
+import CopyButton from "../components/CopyButton";
 import { palette, radius, space } from "../layout/theme";
 import {
     ServerProfile,
@@ -490,12 +491,38 @@ function BootstrapStep({
                 helper={
                     <>
                         Look for <code>bootstrap.secret</code> in the server's data
-                        directory (mode 0600, written on first boot). On Docker compose:
-                        {" "}
-                        <code>
-                            docker compose exec platypus-server cat /app/data/bootstrap.secret
-                        </code>
-                        . You can delete the file once the first admin is created.
+                        directory (mode 0600, written on first boot). On Docker compose,
+                        run the command below — copy it to clipboard with the button on
+                        the right. You can delete the file once the first admin is created.
+                        <div
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: space[2],
+                                marginTop: space[2],
+                            }}
+                        >
+                            <code
+                                style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    overflow: "auto",
+                                    whiteSpace: "nowrap",
+                                    background: palette.surface,
+                                    border: `1px solid ${palette.border}`,
+                                    borderRadius: radius.sm,
+                                    padding: `4px ${space[2]}px`,
+                                    fontSize: 12,
+                                }}
+                            >
+                                docker compose exec platypus-server cat /app/data/bootstrap.secret
+                            </code>
+                            <CopyButton
+                                text="docker compose exec platypus-server cat /app/data/bootstrap.secret"
+                                label=""
+                                successMessage="Command copied"
+                            />
+                        </div>
                     </>
                 }
             >

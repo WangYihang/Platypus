@@ -51,32 +51,37 @@ export default function FleetPage() {
     };
 
     const switcher = (
-        <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            value={view}
-            onValueChange={(v) => {
-                if (v) setView(v as FleetView);
-            }}
+        <span
+            data-testid="fleet-view-toggle"
+            title={`Default view: ${defaultView}. Change the default in Preferences (browser-local).`}
         >
-            <ToggleGroupItem value="cards" aria-label="Card view">
-                <LayoutGrid className="size-3.5" />
-                Cards
-            </ToggleGroupItem>
-            <ToggleGroupItem value="table" aria-label="Table view">
-                <Rows3 className="size-3.5" />
-                Table
-            </ToggleGroupItem>
-            <ToggleGroupItem value="timeline" aria-label="Timeline view">
-                <Timer className="size-3.5" />
-                Timeline
-            </ToggleGroupItem>
-            <ToggleGroupItem value="graph" aria-label="Graph view">
-                <Network className="size-3.5" />
-                Graph
-            </ToggleGroupItem>
-        </ToggleGroup>
+            <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={view}
+                onValueChange={(v) => {
+                    if (v) setView(v as FleetView);
+                }}
+            >
+                <ToggleGroupItem value="cards" aria-label="Card view">
+                    <LayoutGrid className="size-3.5" />
+                    Cards
+                </ToggleGroupItem>
+                <ToggleGroupItem value="table" aria-label="Table view">
+                    <Rows3 className="size-3.5" />
+                    Table
+                </ToggleGroupItem>
+                <ToggleGroupItem value="timeline" aria-label="Timeline view">
+                    <Timer className="size-3.5" />
+                    Timeline
+                </ToggleGroupItem>
+                <ToggleGroupItem value="graph" aria-label="Graph view">
+                    <Network className="size-3.5" />
+                    Graph
+                </ToggleGroupItem>
+            </ToggleGroup>
+        </span>
     );
 
     return (

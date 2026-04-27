@@ -523,6 +523,12 @@ function IssueInstallDialog({
 }) {
     const form = useForm<InstallFormValues>({
         resolver: zodResolver(installSchema),
+        // onBlur revalidation surfaces "must be a positive integer"
+        // immediately after the user leaves the TTL field instead of
+        // waiting for submit — matters most for the numeric inputs
+        // (ttl_seconds, max_uses) where a typo is silently accepted
+        // until the dialog is dismissed.
+        mode: "onBlur",
         defaultValues: { server_endpoint: "", target_os: "", target_arch: "" },
     });
 
@@ -592,7 +598,11 @@ function IssueInstallDialog({
                                 <FormItem>
                                     <FormLabel>Agent should dial</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="203.0.113.5:13337" {...field} />
+                                        <Input
+                                            autoFocus
+                                            placeholder="203.0.113.5:13337"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormDescription>
                                         host:port agents dial; defaults to this server's unified
@@ -920,6 +930,9 @@ function IssuePATDialog({
 }) {
     const form = useForm<PATFormValues>({
         resolver: zodResolver(patSchema),
+        // Same rationale as IssueInstallDialog — flag bad numeric
+        // values on blur instead of waiting for submit.
+        mode: "onBlur",
         defaultValues: { description: "", binding_machine_id: "" },
     });
 
@@ -951,7 +964,11 @@ function IssuePATDialog({
                                 <FormItem>
                                     <FormLabel>Description</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Deploy for web-01" {...field} />
+                                        <Input
+                                            autoFocus
+                                            placeholder="Deploy for web-01"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormDescription>
                                         Free-form note shown in the list.

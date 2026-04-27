@@ -28,13 +28,14 @@ export default defineConfig({
         globals: false,
         setupFiles: ["./src/test/setup.ts"],
         include: ["src/**/*.{test,spec}.{ts,tsx}"],
-        // Build-time globals that production code reads via vite's
-        // `define`. Without these the bundle would crash with
-        // "ReferenceError: __APP_VERSION__ is not defined" when a
-        // component under test references the StatusBar.
-        define: {
-            __APP_VERSION__: JSON.stringify("test"),
-            __APP_COMMIT__: JSON.stringify("test"),
-        },
+    },
+    // Build-time globals that production code reads via vite's
+    // `define`. Without these tests crash with
+    // "ReferenceError: __APP_VERSION__ is not defined" the moment
+    // they touch StatusBar (or any component that reads them).
+    // Lives at the top level — `test.define` is silently ignored.
+    define: {
+        __APP_VERSION__: JSON.stringify("test"),
+        __APP_COMMIT__: JSON.stringify("test"),
     },
 });

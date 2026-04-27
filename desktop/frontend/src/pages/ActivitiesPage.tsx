@@ -172,6 +172,11 @@ export default function ActivitiesPage() {
                 a.download = `activities-${project.slug}.${format}`;
                 a.click();
                 URL.revokeObjectURL(url);
+                // Confirm-on-success toast: large exports can take a
+                // few seconds and the download UI lives in the
+                // browser chrome, not the page — without a toast the
+                // operator can't tell whether the click did anything.
+                toast.success(`Exported activities as ${format.toUpperCase()}`);
             } catch (e) {
                 toast.error(`export: ${humanizeError(e)}`);
             }

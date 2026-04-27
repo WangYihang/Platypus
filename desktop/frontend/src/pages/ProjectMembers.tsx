@@ -22,6 +22,7 @@ import {
     removeProjectMember,
 } from "../lib/api";
 import { getSessionUser } from "../lib/auth";
+import { memberRemovalWarning } from "./members/warnings";
 
 import {
     AlertDialog,
@@ -98,6 +99,11 @@ export default function ProjectMembers({ project }: Props) {
 
     const me = getSessionUser();
     const canAdd = me?.role === "admin";
+    // Whether the next successful submit closes the dialog.
+    // "Add" → true (close); "Add another" → false (keep open and
+    // reset form). Tracked as state rather than a closure variable
+    // because the value has to live across the async submit.
+    const [closeAfterAdd, setCloseAfterAdd] = useState(true);
 
     const addForm = useForm<AddMemberValues>({
         resolver: zodResolver(addMemberSchema),
@@ -135,8 +141,12 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await addProjectMember(project.id, v.user_id, v.role);
             toast.success("Member added");
-            setAddOpen(false);
+            // Reset the form either way; only close when the user
+            // hit the "Add" button (closeAfterAdd=true). "Add
+            // another" leaves the dialog up so admins can chain
+            // adds without re-opening.
             addForm.reset({ user_id: "", role: "operator" });
+            if (closeAfterAdd) setAddOpen(false);
             refresh();
         } catch (e) {
             toast.error(`add: ${humanizeError(e)}`);
@@ -384,7 +394,23 @@ export default function ProjectMembers({ project }: Props) {
                                 >
                                     Cancel
                                 </Button>
-                                <Button type="submit" disabled={addForm.formState.isSubmitting}>
+                                <Button
+                                    type="submit"
+                                    variant="outline"
+                                    disabled={addForm.formState.isSubmitting}
+                                    onClick={() => setCloseAfterAdd(false)}
+                                    title="Add this member and keep the dialog open"
+                                >
+                                    {addForm.formState.isSubmitting && (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    )}
+                                    Add another
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={addForm.formState.isSubmitting}
+                                    onClick={() => setCloseAfterAdd(true)}
+                                >
                                     {addForm.formState.isSubmitting && (
                                         <Loader2 className="size-3.5 animate-spin" />
                                     )}
@@ -410,6 +436,28 @@ export default function ProjectMembers({ project }: Props) {
                             They lose access to this project. Other projects and their global
                             account are untouched.
                         </AlertDialogDescription>
+                        {pendingRemove && (() => {
+                            const warning = memberRemovalWarning({
+                                memberCount: members?.length ?? 0,
+                                isProjectAdmin: pendingRemove.role === "admin",
+                            });
+                            return warning ? (
+                                <div
+                                    data-testid="member-remove-warning"
+                                    style={{
+                                        marginTop: space[2],
+                                        padding: `${space[2]}px ${space[3]}px`,
+                                        border: `1px solid ${palette.warning}`,
+                                        borderRadius: 6,
+                                        color: palette.warning,
+                                        fontSize: 12,
+                                        lineHeight: 1.5,
+                                    }}
+                                >
+                                    {warning}
+                                </div>
+                            ) : null;
+                        })()}
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>

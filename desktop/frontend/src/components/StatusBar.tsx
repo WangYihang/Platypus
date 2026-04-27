@@ -131,7 +131,15 @@ export default function StatusBar() {
                 </Mono>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: space[2],
+                    minWidth: 0,
+                    flex: "0 1 auto",
+                }}
+            >
                 <StatusDot
                     status={online === "error" ? "error" : online}
                     title={
@@ -144,27 +152,70 @@ export default function StatusBar() {
                 />
                 {activeName && (
                     <>
-                        <span style={{ color: palette.textSecondary, fontWeight: 500 }}>
+                        <span
+                            style={{
+                                color: palette.textSecondary,
+                                fontWeight: 500,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                            }}
+                            title={activeName}
+                        >
                             {activeName}
                         </span>
-                        <span style={{ color: palette.border }}>·</span>
+                        <span style={{ color: palette.border, flexShrink: 0 }}>·</span>
                     </>
                 )}
-                <Mono size={11} color={palette.textMuted}>
-                    {serverHost}
-                </Mono>
+                <span
+                    style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        minWidth: 0,
+                    }}
+                    title={serverHost}
+                >
+                    <Mono size={11} color={palette.textMuted}>
+                        {serverHost}
+                    </Mono>
+                </span>
                 {session?.user && (
                     <>
-                        <span style={{ color: palette.border }}>·</span>
-                        <Mono size={11} color={palette.textMuted}>
-                            {session.user.username}
-                        </Mono>
+                        <span style={{ color: palette.border, flexShrink: 0 }}>·</span>
+                        <span
+                            data-testid="status-bar-user"
+                            style={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                            }}
+                            title={session.user.username}
+                        >
+                            <Mono size={11} color={palette.textMuted}>
+                                {session.user.username}
+                            </Mono>
+                        </span>
                     </>
                 )}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span
+                    data-testid="status-bar-ingress"
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        minWidth: 0,
+                    }}
+                    title={info?.public_addr || ""}
+                >
                     <Router className="size-3" />
                     <span>Ingress</span>
                     <Mono size={11} color={palette.textPrimary}>
