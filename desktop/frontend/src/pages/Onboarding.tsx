@@ -255,8 +255,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
                 >
                     Let's connect you to a server. It takes about thirty seconds.
                     You'll need the server's URL, and either a username/password
-                    or the first-time-setup secret the server printed at
-                    startup.
+                    or, on a fresh install, the first-admin secret from
+                    <code> &lt;data-dir&gt;/bootstrap.secret</code> on the server.
                 </p>
             </div>
             <Button onClick={onNext} size="lg" data-testid="onboarding-get-started">
@@ -472,11 +472,23 @@ function BootstrapStep({
                         fontSize: 13,
                     }}
                 >
-                    Paste the bootstrap secret printed on server startup and pick
-                    admin credentials.
+                    Paste the first-admin secret from the server and pick admin credentials.
                 </p>
             </div>
-            <Field label="Server secret">
+            <Field
+                label="Server secret"
+                helper={
+                    <>
+                        Look for <code>bootstrap.secret</code> in the server's data
+                        directory (mode 0600, written on first boot). On Docker compose:
+                        {" "}
+                        <code>
+                            docker compose exec platypus-server cat /app/data/bootstrap.secret
+                        </code>
+                        . You can delete the file once the first admin is created.
+                    </>
+                }
+            >
                 <Input
                     autoFocus
                     type="password"
@@ -586,9 +598,15 @@ function ProgressPill({ step, total }: { step: number; total: number }) {
 
 function Field({
     label,
+    helper,
     children,
 }: {
     label: string;
+    // Optional one-line / one-paragraph guidance rendered below the
+    // input. Used by the bootstrap-secret field to point operators at
+    // <data-dir>/bootstrap.secret since the secret no longer appears
+    // in stdout (see security audit M2).
+    helper?: React.ReactNode;
     children: React.ReactNode;
 }) {
     return (
@@ -604,6 +622,18 @@ function Field({
                 {label}
             </Label>
             {children}
+            {helper && (
+                <div
+                    style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        color: palette.textMuted,
+                        lineHeight: 1.5,
+                    }}
+                >
+                    {helper}
+                </div>
+            )}
         </div>
     );
 }
