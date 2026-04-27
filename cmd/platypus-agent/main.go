@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -39,17 +40,25 @@ func main() {
 	meshPSKFile := opts.MeshPSKFile
 	meshPeers := append([]string(nil), opts.MeshPeers...)
 	meshProjectID := opts.MeshProjectID
-	if persisted, err := agent.LoadPersistedMeshBootstrap(identityDir); err != nil {
-		logger.Warn("load persisted mesh bootstrap", slog.String("error", err.Error()))
-	} else if persisted != nil {
-		if meshPSKFile == "" {
-			meshPSKFile = persisted.PSKFile
-		}
-		if meshProjectID == "" {
-			meshProjectID = persisted.ProjectID
-		}
-		if len(meshPeers) == 0 {
-			meshPeers = append(meshPeers, persisted.Peers...)
+	// Mesh state lives under the active enrollment's per-CA subdir.
+	// Migrate any pre-multi-CA flat layout so the active pointer
+	// becomes meaningful before we read it.
+	if err := agent.MigrateLegacyIdentity(identityDir); err != nil {
+		logger.Warn("migrate legacy identity", slog.String("error", err.Error()))
+	}
+	if activeFP, err := agent.ReadActive(identityDir); err == nil && activeFP != "" {
+		if persisted, err := agent.LoadPersistedMeshBootstrap(identityDir, activeFP); err != nil {
+			logger.Warn("load persisted mesh bootstrap", slog.String("error", err.Error()))
+		} else if persisted != nil {
+			if meshPSKFile == "" {
+				meshPSKFile = persisted.PSKFile
+			}
+			if meshProjectID == "" {
+				meshProjectID = persisted.ProjectID
+			}
+			if len(meshPeers) == 0 {
+				meshPeers = append(meshPeers, persisted.Peers...)
+			}
 		}
 	}
 	endpoint := fmt.Sprintf("%s:%d", opts.RemoteHost, opts.RemotePort)
@@ -86,10 +95,23 @@ func main() {
 	// touches it yet.
 	_ = meshProjectID
 
-	caPool, err := agent.LoadProjectCA(os.Getenv(agent.ProjectCAEnvVar))
+	caEnv := os.Getenv(agent.ProjectCAEnvVar)
+	caPool, err := agent.LoadProjectCA(caEnv)
 	if err != nil {
 		logger.Error("parse project CA env var", slog.String("error", err.Error()))
 		os.Exit(1)
+	}
+	// Decode the env value once so both BootstrapV2 (raw PEM, for
+	// per-CA layout dispatch) and the enroll TLS pool (parsed pool)
+	// see the same bytes.
+	var caPEM []byte
+	if caEnv != "" {
+		decoded, decodeErr := base64.StdEncoding.DecodeString(caEnv)
+		if decodeErr != nil {
+			logger.Error("decode project CA env var", slog.String("error", decodeErr.Error()))
+			os.Exit(1)
+		}
+		caPEM = decoded
 	}
 
 	hostname, _ := os.Hostname()
@@ -111,6 +133,7 @@ func main() {
 			ServerURL:    fmt.Sprintf("wss://%s/api/v1/agent/link", endpoint),
 			EnrollURL:    fmt.Sprintf("https://%s", endpoint),
 			PAT:          opts.Token,
+			ProjectCAPEM: caPEM,
 			ProjectCA:    caPool,
 			Hostname:     hostname,
 			AgentVersion: "v2",
