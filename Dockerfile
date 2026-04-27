@@ -53,6 +53,13 @@ RUN apt-get update \
         -o /usr/local/bin/mc \
     && chmod +x /usr/local/bin/mc \
     && rm -rf /var/lib/apt/lists/*
+# Bind-mounted /workspace is owned by the host user (uid != 0) but the
+# container runs as root, so git refuses to read .git under its
+# "safe.directory" rule and `go build` then fails on VCS stamping with
+# `error obtaining VCS status: exit status 128`. Whitelisting any path
+# is fine here — the publisher only ever sees source we ourselves
+# bind-mount in.
+RUN git config --system --add safe.directory '*'
 COPY scripts/dev-publish-entrypoint.sh /usr/local/bin/dev-publish-entrypoint.sh
 RUN chmod +x /usr/local/bin/dev-publish-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/dev-publish-entrypoint.sh"]
