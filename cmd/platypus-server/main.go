@@ -86,12 +86,27 @@ func main() {
 	core.Ctx.Storage = db
 	log.Success("Storage: %s", dbFile)
 
-	// Enable the dev-friendly KEK fallback: if PLATYPUS_CA_KEK is unset,
-	// pki.readKEK will read / generate the key at <data-dir>/ca.kek so
-	// `docker compose up` bootstraps cleanly. Setting the env var takes
-	// precedence and keeps the key off disk, which is what production
-	// should do.
-	pki.KEKPath = filepath.Join(filepath.Dir(dbFile), "ca.kek")
+	// KEK source policy:
+	//   1. PLATYPUS_CA_KEK env var (production path — key never touches disk).
+	//   2. PLATYPUS_DEV=1 enables a dev-only fallback at <data-dir>/ca.kek so
+	//      `docker compose up` bootstraps cleanly without operator action.
+	//   3. Otherwise: refuse to start. Falling back to a co-located key file
+	//      in production defeats AES-GCM-sealing the CA private key — a
+	//      compromise of the data volume yields both ciphertext and key.
+	if os.Getenv(pki.KEKEnvVar) == "" {
+		if os.Getenv("PLATYPUS_DEV") == "1" {
+			pki.KEKPath = filepath.Join(filepath.Dir(dbFile), "ca.kek")
+			log.L.Warn("dev_mode_kek_fallback_enabled",
+				"path", pki.KEKPath,
+				"hint", "set "+pki.KEKEnvVar+" to keep the CA key out of the data volume",
+			)
+		} else {
+			log.Error("CA key-encryption-key missing: set %s to a 32-byte hex value, "+
+				"or set PLATYPUS_DEV=1 to enable the on-disk dev fallback at <data-dir>/ca.kek. "+
+				"Generate one with: openssl rand -hex 32", pki.KEKEnvVar)
+			os.Exit(1)
+		}
+	}
 
 	// Seed the "system" pseudo-user and the "default" project before
 	// anything touches FKs that point at them. Mesh's server-self-issue

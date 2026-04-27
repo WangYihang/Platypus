@@ -8,10 +8,13 @@ services:
     volumes:
       - platypus_data:/app/data
       - ./config.docker.yml:/app/config.yml
-    # PLATYPUS_CA_KEK is intentionally unset: the server auto-generates
-    # and persists the KEK at /app/data/ca.kek on first boot, so fresh
-    # `docker compose up` Just Works. For production, inject a real KEK
-    # here (e.g. via a secret) to keep the key off the data volume.
+    environment:
+      # PLATYPUS_DEV=1 opts into the dev-only on-disk KEK fallback at
+      # /app/data/ca.kek so a fresh `docker compose up` Just Works. For
+      # production, REMOVE this line and inject a real PLATYPUS_CA_KEK
+      # (32 bytes hex; `openssl rand -hex 32`) via a secret. Keeping the
+      # KEK on the same volume as the encrypted DB defeats the seal.
+      PLATYPUS_DEV: "1"
     restart: always
     depends_on:
       init-data:
