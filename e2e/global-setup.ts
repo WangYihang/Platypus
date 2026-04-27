@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import * as YAML from "yaml";
 
@@ -120,10 +120,14 @@ export default async function globalSetup() {
     // platypus-server reads config.yml from cwd (no --config flag), so
     // spawn with the tmpdir as cwd. Any artefact files the server writes
     // (logs etc) end up in tmpdir too and get cleaned up by teardown.
+    //
+    // PLATYPUS_DEV=1 opts the e2e backend into the dev-only on-disk KEK
+    // fallback at <data-dir>/ca.kek. Without it the server refuses to
+    // start when PLATYPUS_CA_KEK is unset (which it is in e2e).
     const backend = spawn(SERVER_BINARY, [], {
         cwd: tmpdir,
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env },
+        env: { ...process.env, PLATYPUS_DEV: "1" },
     });
     process.env.PLATYPUS_E2E_PID = String(backend.pid);
 
@@ -177,18 +181,29 @@ export default async function globalSetup() {
     // takes a beat longer. Wait for both.
     await waitForBackend(backendURL, 30_000);
 
-    // After /auth/login starts answering, the secret line should already
-    // be in our buffer. Poll briefly to be safe.
+    // After /auth/login starts answering, the secret should be readable.
+    // Preferred path: <data-dir>/bootstrap.secret, written 0600 on first
+    // boot when the users table is empty (cmd/platypus-server/main.go).
+    // Fallback: scan stdout for a legacy "bootstrap_secret":"<hex>" line
+    // in case we're running against an older binary.
+    const bootstrapSecretFile = path.join(tmpdir, "bootstrap.secret");
     const secretDeadline = Date.now() + 5_000;
     while (!bootstrapSecret && Date.now() < secretDeadline) {
+        if (existsSync(bootstrapSecretFile)) {
+            bootstrapSecret = readFileSync(bootstrapSecretFile, "utf8").trim();
+            break;
+        }
         const m = backendBuf.match(secretRegex);
-        if (m) bootstrapSecret = m[1];
-        else await new Promise((r) => setTimeout(r, 100));
+        if (m) {
+            bootstrapSecret = m[1];
+            break;
+        }
+        await new Promise((r) => setTimeout(r, 100));
     }
     if (!bootstrapSecret) {
         throw new Error(
-            "could not extract bootstrap secret from backend stdout. " +
-                "Set E2E_VERBOSE_BACKEND=1 and re-run to inspect output.",
+            `could not read bootstrap secret from ${bootstrapSecretFile} ` +
+                "or backend stdout. Set E2E_VERBOSE_BACKEND=1 and re-run to inspect output.",
         );
     }
 
