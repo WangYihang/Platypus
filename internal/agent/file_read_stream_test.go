@@ -95,7 +95,12 @@ func TestHandleFileReadStream_MissingFile(t *testing.T) {
 	var ch v2pb.FileChunk
 	err := link.ReadFrame(client, &ch)
 	if err == nil {
-		t.Fatalf("expected error reading after close; got chunk %+v", ch)
+		// Pass &ch (not ch) so we don't copy the protoimpl.MessageState
+		// inside FileChunk — it carries a sync.Mutex that go vet
+		// rightly forbids us from copying. The %+v formatter walks
+		// pointer fields the same way as a value, so the diagnostic
+		// stays useful.
+		t.Fatalf("expected error reading after close; got chunk %+v", &ch)
 	}
 	if err != io.EOF && err != io.ErrClosedPipe && err != io.ErrUnexpectedEOF {
 		// Any EOF-shaped error is fine.
