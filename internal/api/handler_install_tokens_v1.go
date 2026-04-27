@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
@@ -272,4 +274,55 @@ func RegisterV1InstallTokenRoutes(engine *gin.Engine, h *InstallTokensHandler, r
 		grp.GET("/:did", h.Get)
 		grp.DELETE("/:did", h.Revoke)
 	}
+
+	// /api/v1/install/platforms drives the OS/arch picker on the issue
+	// dialog. It's project-agnostic — the manifest is global server
+	// state — so it sits outside the /projects/:pid group and only
+	// requires authentication, not project admin.
+	engine.GET("/api/v1/install/platforms",
+		rbac.RequireAuth(),
+		h.Platforms,
+	)
+}
+
+// installPlatform is the slimmed-down (os, arch) shape the install
+// dialog consumes — no SHA256, size, or storage key, since those are
+// server-side concerns the UI doesn't need.
+type installPlatform struct {
+	OS   string `json:"os"`
+	Arch string `json:"arch"`
+}
+
+// installPlatformsResponse mirrors the Manifest envelope but exposes
+// only what the dialog needs: the active channel, the version it pins,
+// and the supported (os, arch) pairs. Empty Platforms is a valid
+// response shape — it means no manifest has been published yet, and
+// the UI renders a "publish first" hint.
+type installPlatformsResponse struct {
+	Channel   string            `json:"channel"`
+	Version   string            `json:"version"`
+	Platforms []installPlatform `json:"platforms"`
+}
+
+// Platforms handles GET /api/v1/install/platforms. Returns the (os, arch)
+// pairs the active channel's manifest pins. When no distributor is
+// configured (cfg.Distributor.Store.Endpoint blank) or no manifest has
+// been published yet, returns 200 with an empty Platforms slice so the
+// dialog can render a clear empty-state hint.
+func (h *InstallTokensHandler) Platforms(c *gin.Context) {
+	resp := installPlatformsResponse{Platforms: []installPlatform{}}
+	d, ok := core.Ctx.Distributor.(*core.Distributor)
+	if !ok || d == nil {
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	channel, version, artifacts := d.LivePlatforms(ctx)
+	resp.Channel = channel
+	resp.Version = version
+	for _, a := range artifacts {
+		resp.Platforms = append(resp.Platforms, installPlatform{OS: a.OS, Arch: a.Arch})
+	}
+	c.JSON(http.StatusOK, resp)
 }

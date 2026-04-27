@@ -546,6 +546,26 @@ export async function revokeInstallArtifact(pid: string, downloadID: string, rea
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
 }
 
+// InstallPlatform is one (os, arch) pair the active channel's manifest
+// pins. The Issue Install dialog uses the list to populate its picker
+// so admins can only choose targets the distributor can actually serve.
+export interface InstallPlatform {
+    os: string;
+    arch: string;
+}
+
+export interface InstallPlatformsResponse {
+    channel: string;
+    // Empty when no manifest has been published yet — the response is
+    // still 200 so the dialog can render a clear "publish first" hint.
+    version: string;
+    platforms: InstallPlatform[];
+}
+
+export async function listInstallPlatforms(): Promise<InstallPlatformsResponse> {
+    return authJSON<InstallPlatformsResponse>("/api/v1/install/platforms");
+}
+
 // --- Activities / audit timeline ------------------------------------
 //
 // A single append-only `activities` table on the server backs both the

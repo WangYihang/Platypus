@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, Loader2, Plus, RotateCw, Trash2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useForm } from "react-hook-form";
+import { UseFormReturn, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -16,6 +16,7 @@ import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
     InstallArtifactListItem,
+    InstallPlatform,
     IssueInstallResponse,
     IssuePATResponse,
     PATTokenListItem,
@@ -23,6 +24,7 @@ import {
     issueInstallArtifact,
     issuePAT,
     listInstallArtifacts,
+    listInstallPlatforms,
     listPATTokens,
     revokeInstallArtifact,
     revokePAT,
@@ -60,6 +62,16 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectSeparator,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
     Table,
     TableBody,
     TableCell,
@@ -69,6 +81,37 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+// PlatformsState tracks the install-target picker's lifecycle so the UI
+// can disable the dropdown while loading and surface the right empty /
+// error hint without conflating "no manifest published" with "request
+// failed".
+type PlatformsState =
+    | { status: "loading" }
+    | { status: "ready"; platforms: InstallPlatform[]; channel: string }
+    | { status: "empty"; channel: string }
+    | { status: "error"; message: string };
+
+// Display order for the install-target picker. OSes a deployer is most
+// likely to pick come first; within an OS the common 64-bit archs lead
+// and the long tail (mips, riscv, …) trails. Anything not in the list
+// gets sorted alphabetically and appended — keeps us forward-compatible
+// with future GOOS/GOARCH additions without code changes.
+const OS_ORDER = ["linux", "darwin", "windows", "freebsd", "openbsd", "netbsd"];
+const ARCH_ORDER = [
+    "amd64",
+    "arm64",
+    "arm",
+    "386",
+    "riscv64",
+    "ppc64le",
+    "s390x",
+    "loong64",
+    "mips64le",
+    "mips64",
+    "mipsle",
+    "mips",
+];
 
 // Schema for Issue Install. All optional fields stay optional; the
 // backend fills in defaults. Numeric fields coerce empty strings to
@@ -347,6 +390,113 @@ function InstallPanel({
     );
 }
 
+// PlatformPickerField is the "Target platform" form control. It's a
+// meta-field over `target_os` and `target_arch` — the underlying schema
+// keeps them as separate optional strings so the wire shape doesn't
+// need to change, but admins only see one grouped Select and can't
+// hand-type a typo. The synthetic value is `<os>/<arch>` for picked
+// items or `""` for auto-detect.
+function PlatformPickerField({
+    form,
+    platforms,
+}: {
+    form: UseFormReturn<InstallFormValues>;
+    platforms: PlatformsState;
+}) {
+    const targetOS = form.watch("target_os") ?? "";
+    const targetArch = form.watch("target_arch") ?? "";
+    const value = targetOS && targetArch ? `${targetOS}/${targetArch}` : "";
+
+    function setValue(next: string) {
+        if (!next) {
+            form.setValue("target_os", "");
+            form.setValue("target_arch", "");
+            return;
+        }
+        const [os, arch] = next.split("/");
+        form.setValue("target_os", os);
+        form.setValue("target_arch", arch);
+    }
+
+    // Group the live list by OS, ordering both groups and items by the
+    // OS_ORDER / ARCH_ORDER preferences so the densest-used options
+    // bubble to the top of the dropdown. Anything outside the curated
+    // ordering trails alphabetically.
+    const grouped: { os: string; archs: string[] }[] = [];
+    if (platforms.status === "ready") {
+        const byOS = new Map<string, Set<string>>();
+        for (const p of platforms.platforms) {
+            if (!byOS.has(p.os)) byOS.set(p.os, new Set());
+            byOS.get(p.os)!.add(p.arch);
+        }
+        const osCmp = (a: string, b: string) => {
+            const ia = OS_ORDER.indexOf(a);
+            const ib = OS_ORDER.indexOf(b);
+            if (ia === -1 && ib === -1) return a.localeCompare(b);
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+        };
+        const archCmp = (a: string, b: string) => {
+            const ia = ARCH_ORDER.indexOf(a);
+            const ib = ARCH_ORDER.indexOf(b);
+            if (ia === -1 && ib === -1) return a.localeCompare(b);
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+        };
+        for (const os of [...byOS.keys()].sort(osCmp)) {
+            const archs = [...byOS.get(os)!].sort(archCmp);
+            grouped.push({ os, archs });
+        }
+    }
+
+    const description =
+        platforms.status === "loading"
+            ? "Loading platforms…"
+            : platforms.status === "empty"
+              ? `No agent binaries on channel "${platforms.channel}" yet — run the agent-publisher sidecar (or seed MinIO) to populate the picker. Auto-detect still works.`
+              : platforms.status === "error"
+                ? `Couldn't load platforms: ${platforms.message}. Auto-detect still works.`
+                : "Pick the target the agent will run on, or leave Auto-detect for the install one-liner to choose at runtime.";
+
+    return (
+        <FormItem>
+            <FormLabel>Target platform</FormLabel>
+            <FormControl>
+                <Select
+                    value={value}
+                    onValueChange={setValue}
+                    disabled={platforms.status === "loading"}
+                >
+                    <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Auto-detect (no platform pin)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="">Auto-detect (no platform pin)</SelectItem>
+                        {grouped.length > 0 && <SelectSeparator />}
+                        {grouped.map((g) => (
+                            <SelectGroup key={g.os}>
+                                <SelectLabel>{g.os}</SelectLabel>
+                                {g.archs.map((arch) => (
+                                    <SelectItem
+                                        key={`${g.os}/${arch}`}
+                                        value={`${g.os}/${arch}`}
+                                    >
+                                        {arch}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </FormControl>
+            <FormDescription>{description}</FormDescription>
+            <FormMessage />
+        </FormItem>
+    );
+}
+
 function IssueInstallDialog({
     open,
     onOpenChange,
@@ -363,9 +513,15 @@ function IssueInstallDialog({
         defaultValues: { server_endpoint: "", target_os: "", target_arch: "" },
     });
 
-    // Pre-fill server_endpoint with the server's public_addr whenever
-    // the dialog opens. Admins can still override; the common case
-    // (LAN dev, single prod server) is that they accept the default.
+    // Live (os, arch) list from the active channel's manifest. Drives
+    // the platform picker — admins can only choose targets the
+    // distributor can actually serve, and the empty-state hint points
+    // them at the publisher when the channel hasn't been seeded yet.
+    const [platforms, setPlatforms] = useState<PlatformsState>({ status: "loading" });
+
+    // Pre-fill server_endpoint with the server's public_addr and load
+    // the platform list whenever the dialog opens. Both are best-effort
+    // — failures fall back to a usable empty state.
     useEffect(() => {
         if (!open) return;
         getServerInfo()
@@ -376,6 +532,22 @@ function IssueInstallDialog({
             })
             .catch(() => {
                 /* best-effort — the field stays blank if /info fails */
+            });
+        setPlatforms({ status: "loading" });
+        listInstallPlatforms()
+            .then((r) => {
+                if (r.platforms.length === 0) {
+                    setPlatforms({ status: "empty", channel: r.channel });
+                } else {
+                    setPlatforms({
+                        status: "ready",
+                        platforms: r.platforms,
+                        channel: r.channel,
+                    });
+                }
+            })
+            .catch((e) => {
+                setPlatforms({ status: "error", message: humanizeError(e) });
             });
     }, [open, form]);
 
@@ -417,32 +589,7 @@ function IssueInstallDialog({
                                 </FormItem>
                             )}
                         />
-                        <FormField
-                            control={form.control}
-                            name="target_os"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Target OS</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="linux (optional)" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="target_arch"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Target arch</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="amd64 (optional)" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        <PlatformPickerField form={form} platforms={platforms} />
                         <FormField
                             control={form.control}
                             name="ttl_seconds"

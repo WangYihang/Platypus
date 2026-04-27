@@ -215,6 +215,23 @@ func (d *Distributor) handleArtifact(c *gin.Context) {
 	c.Redirect(http.StatusFound, url)
 }
 
+// LivePlatforms loads the active channel's manifest and returns the
+// (os, arch) pairs it pins, alongside the channel name and version.
+// A missing or unreadable manifest yields an empty Artifacts slice and
+// nil error so the install dialog can render an explicit "publish first"
+// hint instead of failing the request — matches the rest of the
+// distributor's "best-effort, never block the UI" stance. The
+// underlying error is still logged for operator visibility.
+func (d *Distributor) LivePlatforms(ctx context.Context) (channel, version string, artifacts []ManifestArtifact) {
+	channel = d.currentChannel()
+	m, err := d.loadManifest(ctx, channel)
+	if err != nil {
+		log.Warn("distributor: live platforms: %s", err)
+		return channel, "", nil
+	}
+	return channel, m.Version, m.Artifacts
+}
+
 // loadManifest fetches the channel's manifest and parses it. The
 // signature is not verified here — the agent is the party that needs
 // to trust it, so it fetches and verifies the signature independently.
