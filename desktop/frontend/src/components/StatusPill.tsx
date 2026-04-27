@@ -11,10 +11,10 @@ interface Props {
 
 const toneColor: Record<Tone, string> = {
     neutral: palette.textSecondary,
-    success: palette.successDot,
+    success: palette.success,
     warning: palette.warning,
     danger: palette.danger,
-    info: palette.success,
+    info: palette.info,
 };
 
 // StatusPill is a rounded-full status badge: 1px coloured border, same

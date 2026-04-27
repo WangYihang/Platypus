@@ -517,7 +517,7 @@ function dotColorForState(state: ConnectionState, loggedIn: boolean): string {
     if (!loggedIn) return palette.textMuted;
     switch (state) {
         case "connected":
-            return palette.successDot;
+            return palette.info;
         case "connecting":
             return palette.warning;
         case "errored":

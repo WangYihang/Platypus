@@ -41,8 +41,16 @@
     --color-text-muted: #737373;
     --color-accent: #fafafa;
     --color-accent-fg: #0a0a0a;
-    --color-success: #0070f3;
-    --color-success-dot: #3ECF8E;
+    /* Status / intent colours. Names follow what the user sees:
+       success = green (the operation succeeded), info = blue
+       (informational accent / focus rings / "this finished" pills),
+       warning = amber, danger = red. The previous tokens
+       --color-success (blue) / --color-success-dot (green) had the
+       names backwards — surfaces showed a blue "Pending" pill that
+       read as success while the actual success colour hid behind
+       a "-dot" suffix. */
+    --color-success: #3ECF8E;
+    --color-info: #0070f3;
     --color-danger: #ee0000;
     --color-warning: #f5a623;
 
@@ -82,9 +90,9 @@
        toggle / tab. It used to point at --color-border-strong (#525252,
        a dim gray) which sits at <1.5:1 against dark gray surfaces and
        is essentially invisible on the near-white primary buttons —
-       WCAG 2.4.7 fails. Use the saturated blue accent instead so
+       WCAG 2.4.7 fails. Use the saturated blue --color-info accent so
        focus is unambiguously visible on every variant. */
-    --ring: var(--color-success);
+    --ring: var(--color-info);
 }
 
 @theme inline {
@@ -114,7 +122,7 @@
     --color-brand: #fafafa;
     --color-brand-fg: #0a0a0a;
     --color-success: var(--color-success);
-    --color-success-dot: var(--color-success-dot);
+    --color-info: var(--color-info);
     --color-danger: var(--color-danger);
     --color-warning: var(--color-warning);
 

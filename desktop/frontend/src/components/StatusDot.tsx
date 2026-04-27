@@ -9,7 +9,7 @@ interface Props {
 }
 
 const colors: Record<Status, string> = {
-    online: palette.successDot,
+    online: palette.info,
     offline: palette.textMuted,
     warning: palette.warning,
     error: palette.danger,

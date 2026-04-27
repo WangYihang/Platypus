@@ -45,9 +45,17 @@ export const palette = {
     accent: "#fafafa",
     accentFg: "#0a0a0a",
 
-    // Status.
-    success: "#0070f3",
-    successDot: "#3ECF8E",
+    // Status / intent.
+    //
+    // Names follow what the user reads: success = green (operation
+    // succeeded), info = blue (informational accent / focus rings /
+    // "this finished" pills), warning = amber, danger = red. The
+    // previous tokens success (blue) / successDot (green) had it
+    // backwards — surfaces showed a blue "Pending" pill that read
+    // as success while the actual success colour hid behind a
+    // -dot suffix.
+    success: "#3ECF8E",
+    info: "#0070f3",
     danger: "#ee0000",
     warning: "#f5a623",
 

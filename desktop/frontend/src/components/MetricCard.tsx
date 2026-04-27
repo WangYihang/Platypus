@@ -16,7 +16,7 @@ interface Props {
 export default function MetricCard({ label, value, hint, accent = "default" }: Props) {
     const valueColor =
         accent === "success"
-            ? palette.successDot
+            ? palette.info
             : accent === "warning"
             ? palette.warning
             : accent === "danger"

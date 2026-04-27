@@ -35,7 +35,7 @@ export default function LineChartCard({
     title,
     hint,
     data,
-    color = palette.successDot,
+    color = palette.info,
     height = 220,
     formatY,
 }: Props) {

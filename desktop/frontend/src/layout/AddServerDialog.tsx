@@ -184,7 +184,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                             display: "flex",
                             alignItems: "center",
                             gap: space[2],
-                            color: palette.successDot,
+                            color: palette.info,
                             fontSize: 12,
                             marginBottom: space[2],
                         }}

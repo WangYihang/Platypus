@@ -181,7 +181,13 @@ function ShellChrome({
                             style={{
                                 maxWidth: 1280,
                                 margin: "0 auto",
-                                minHeight: "100%",
+                                // height (not minHeight) so child pages
+                                // that rely on `height: 100%` for
+                                // absolute-positioned regions (e.g.
+                                // FleetPage's three swap-via-display
+                                // panels) keep a defined parent
+                                // height to compute against.
+                                height: "100%",
                                 display: "flex",
                                 flexDirection: "column",
                             }}

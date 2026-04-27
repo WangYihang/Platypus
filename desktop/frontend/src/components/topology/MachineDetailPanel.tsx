@@ -46,7 +46,7 @@ export default function MachineDetailPanel({
                                     className="size-2.5 rounded-full"
                                     style={{
                                         background: isUp
-                                            ? palette.successDot
+                                            ? palette.info
                                             : palette.textMuted,
                                     }}
                                 />

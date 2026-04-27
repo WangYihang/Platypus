@@ -543,7 +543,7 @@ function ConfirmedBanner({ url, hint }: { url: string; hint: string }) {
                 fontSize: 12,
             }}
         >
-            <CheckCircle2 className="size-4" style={{ color: palette.successDot }} />
+            <CheckCircle2 className="size-4" style={{ color: palette.info }} />
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                     style={{
