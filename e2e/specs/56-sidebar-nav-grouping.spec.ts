@@ -7,15 +7,21 @@ import { loginAsAdmin } from "../fixtures/auth";
 // New users had to learn six labels with no hint at the relationship
 // between them — "is Activities the audit log? does it overlap with
 // Members? where do I add a host?". Plan section 5 split them into
-// three labelled groups so the IA reads at a glance:
+// labelled groups so the IA reads at a glance.
+//
+// Activities was originally bucketed under WORK, but it's read-only
+// history — operators don't *do* anything there. It now lives in its
+// own AUDIT group, leaving room for future audit-only surfaces
+// (sessions log, command log, …) without expanding Work.
 //
 //   WORK
 //     · Overview      (dashboard)
 //     · Fleet         (hosts + sessions + topology)
-//     · Activities    (audit log)
 //   ADMIN
 //     · Enrollment    (how new agents join)
 //     · Members       (who can see this project)
+//   AUDIT
+//     · Activities    (audit log)
 //   PROJECT
 //     · Settings      (project-level config)
 //
@@ -23,7 +29,7 @@ import { loginAsAdmin } from "../fixtures/auth";
 // and the order (so a future "let me reorder these" doesn't sneak
 // Settings above Fleet without anyone noticing).
 test.describe("project sidebar nav grouping", () => {
-    test("renders WORK / ADMIN / PROJECT groups with correct items in order", async ({
+    test("renders WORK / ADMIN / AUDIT / PROJECT groups with correct items in order", async ({
         page,
     }) => {
         await loginAsAdmin(page);
@@ -34,15 +40,18 @@ test.describe("project sidebar nav grouping", () => {
         // spec doesn't depend on letter-case styling.
         const groupWork = page.getByTestId("nav-group-work");
         const groupAdmin = page.getByTestId("nav-group-admin");
+        const groupAudit = page.getByTestId("nav-group-audit");
         const groupProject = page.getByTestId("nav-group-project");
 
         await expect(groupWork).toBeVisible({ timeout: 10_000 });
         await expect(groupAdmin).toBeVisible();
+        await expect(groupAudit).toBeVisible();
         await expect(groupProject).toBeVisible();
 
         // Check the labels are recognisable.
         expect((await groupWork.textContent())?.trim().toLowerCase()).toContain("work");
         expect((await groupAdmin.textContent())?.trim().toLowerCase()).toContain("admin");
+        expect((await groupAudit.textContent())?.trim().toLowerCase()).toContain("audit");
         expect((await groupProject.textContent())?.trim().toLowerCase()).toContain(
             "project",
         );
@@ -50,7 +59,9 @@ test.describe("project sidebar nav grouping", () => {
         // Each group's data-testid="nav-group-items-<key>" holds the
         // ordered list of NavLinks underneath it. Walk them and
         // assert the labels appear in the documented order.
-        async function itemsOf(key: "work" | "admin" | "project"): Promise<string[]> {
+        async function itemsOf(
+            key: "work" | "admin" | "audit" | "project",
+        ): Promise<string[]> {
             const list = page.getByTestId(`nav-group-items-${key}`);
             await expect(list).toBeVisible();
             const links = list.locator(".pl-nav-link");
@@ -62,8 +73,9 @@ test.describe("project sidebar nav grouping", () => {
             return out;
         }
 
-        expect(await itemsOf("work")).toEqual(["Overview", "Fleet", "Activities"]);
+        expect(await itemsOf("work")).toEqual(["Overview", "Fleet"]);
         expect(await itemsOf("admin")).toEqual(["Enrollment", "Members"]);
+        expect(await itemsOf("audit")).toEqual(["Activities"]);
         expect(await itemsOf("project")).toEqual(["Settings"]);
     });
 });

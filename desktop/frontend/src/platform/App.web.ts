@@ -77,6 +77,17 @@ export async function PickSaveLocation(_title: string, defaultName: string): Pro
     return id;
 }
 
+// PickDirectoryToSave is the desktop directory picker; in web mode we
+// have no native equivalent that's available across browsers (the File
+// System Access API is gated behind a user gesture and unsupported in
+// Firefox/Safari). The shim returns a sentinel "browser-dl-dir://"
+// path; Download* helpers downstream see the prefix and fall back to
+// per-file <a download> triggers, letting the browser write each file
+// into the user's default Downloads folder.
+export async function PickDirectoryToSave(_title?: string): Promise<string> {
+    return "browser-dl-dir://default";
+}
+
 // All file operations target the v2 agent RPC surface. `sessionHash` is
 // carried as the legacy parameter name but its value is actually the v2
 // agent_id (which is also the session id — see internal/core.AgentLinkService).
@@ -166,6 +177,39 @@ export async function DownloadFile(
     document.body.removeChild(a);
     // Revoke lazily — some browsers fire the download after the click handler returns.
     setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+// DownloadFolder walks the remote tree and triggers a browser <a
+// download> per file. localDir is ignored in web mode — each file
+// lands in the browser's default Downloads folder. The flat output is
+// fine for small folders but unwieldy for huge trees; a future "build
+// a ZIP in the browser" path can replace this without touching call
+// sites.
+export async function DownloadFolder(
+    projectID: string,
+    sessionHash: string,
+    remotePath: string,
+    _localDir: string,
+): Promise<void> {
+    const root = remotePath.replace(/\/+$/, "") || "/";
+    const stack: string[] = [root];
+    while (stack.length > 0) {
+        const dir = stack.pop() as string;
+        const list = await ListDir(projectID, sessionHash, dir, 0, 0);
+        for (const entry of list.entries) {
+            if (entry.error) continue;
+            if (entry.isSymlink) continue;
+            const child = dir.endsWith("/") ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
+            if (entry.isDir) {
+                stack.push(child);
+                continue;
+            }
+            // Trigger a browser download with the file's leaf name.
+            const id = `web-dl://${++uploadCounter}`;
+            pendingDownloadNames.set(id, entry.name);
+            await DownloadFile(projectID, sessionHash, child, id);
+        }
+    }
 }
 
 export async function UploadFile(
