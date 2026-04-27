@@ -50,6 +50,7 @@ import {
     RenameDialog,
 } from "./dialogs";
 import { joinPath, parentPath, splitCrumbs } from "./paths";
+import { shouldSkipBrowserShortcut } from "./keymap";
 import { useDirectory } from "./useDirectory";
 import { useDragDrop } from "./useDragDrop";
 
@@ -330,7 +331,13 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
     // container level so arrow keys etc. don't need the table focused.
     useEffect(() => {
         function onKey(ev: KeyboardEvent) {
-            if ((ev.target as HTMLElement)?.matches?.("input, textarea")) return;
+            // Skip every shortcut when the file editor is mounted —
+            // CodeMirror renders into a contenteditable, so Backspace
+            // and friends would otherwise close the editor and pop
+            // the directory back up. Also skip when typing in any
+            // input/contenteditable/role=textbox elsewhere on the
+            // page (rename, breadcrumb, search …).
+            if (shouldSkipBrowserShortcut(ev.target, openingEntry !== null)) return;
             if (ev.key === "Backspace") {
                 ev.preventDefault();
                 goUp();
@@ -351,7 +358,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path]);
+    }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path, openingEntry]);
 
     const crumbs = splitCrumbs(dir.path);
 
