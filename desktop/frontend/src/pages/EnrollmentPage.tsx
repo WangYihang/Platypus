@@ -106,7 +106,7 @@ export default function EnrollmentPage() {
         <>
             <PageHeader
                 title="Enrollment"
-                subtitle="Distribute agents with one-shot install commands or raw PATs"
+                subtitle="Generate one-shot install commands (recommended) or raw access tokens for CI / automation"
             />
             <Tabs
                 value={tab}
@@ -118,7 +118,7 @@ export default function EnrollmentPage() {
                         <Zap className="size-3.5" />
                         Install commands
                     </TabsTrigger>
-                    <TabsTrigger value="tokens">PAT tokens</TabsTrigger>
+                    <TabsTrigger value="tokens">Access tokens (PAT)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="install" className="mt-4">
                     <InstallPanel projectID={project.id} />
@@ -383,7 +383,7 @@ function IssueInstallDialog({
                 <DialogHeader>
                     <DialogTitle>Generate install command</DialogTitle>
                     <DialogDescription>
-                        One-shot `curl ... | sh` bootstrap that mints a PAT on first fetch.
+                        One-shot `curl ... | sh` bootstrap that issues a single-use access token on first fetch.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -556,7 +556,7 @@ function PATPanel({ projectID }: { projectID: string }) {
         setPendingRevoke(null);
         try {
             await revokePAT(projectID, r.token_id);
-            toast.success("PAT revoked");
+            toast.success("Access token revoked");
             refresh();
         } catch (e) {
             toast.error(`revoke: ${String(e)}`);
@@ -592,7 +592,7 @@ function PATPanel({ projectID }: { projectID: string }) {
                         </Button>
                         <Button size="sm" onClick={() => setIssueOpen(true)}>
                             <Plus className="size-3.5" />
-                            Issue PAT
+                            Issue access token
                         </Button>
                     </>
                 }
@@ -618,8 +618,8 @@ function PATPanel({ projectID }: { projectID: string }) {
                     </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
-                        title="No PATs issued yet"
-                        description="Prefer the install command tab unless you need raw tokens for a CI pipeline."
+                        title="No access tokens issued yet"
+                        description="Prefer the install command tab unless you need raw access tokens (PATs) for a CI pipeline."
                     />
                 ) : (
                     <Table>
@@ -691,7 +691,7 @@ function PATPanel({ projectID }: { projectID: string }) {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Revoke PAT?</AlertDialogTitle>
+                        <AlertDialogTitle>Revoke access token?</AlertDialogTitle>
                         <AlertDialogDescription>
                             The token will be rejected on any subsequent enrollment attempt.
                         </AlertDialogDescription>
@@ -741,9 +741,9 @@ function IssuePATDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
-                    <DialogTitle>Issue PAT</DialogTitle>
+                    <DialogTitle>Issue an access token</DialogTitle>
                     <DialogDescription>
-                        Raw token for scripted enrollment flows.
+                        Raw access token (PAT) for scripted enrollment flows.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -832,8 +832,8 @@ function IssuePATDialog({
                                         <Input placeholder="(optional)" {...field} />
                                     </FormControl>
                                     <FormDescription>
-                                        If set, the PAT is only accepted from a machine whose
-                                        /etc/machine-id matches.
+                                        If set, the access token is only accepted from a machine
+                                        whose /etc/machine-id matches.
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
@@ -878,7 +878,7 @@ function IssuedPATDialog({
         <Dialog open={result !== null} onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="sm:max-w-[640px]">
                 <DialogHeader>
-                    <DialogTitle>PAT issued</DialogTitle>
+                    <DialogTitle>Access token issued</DialogTitle>
                     <DialogDescription>
                         This is the only time the token is shown. Copy it now — the server cannot
                         show it again.
