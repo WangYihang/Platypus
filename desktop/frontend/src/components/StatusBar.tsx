@@ -8,6 +8,7 @@ import { getActiveServer, onServersChange } from "../lib/servers";
 import { ServerInfo, getServerInfo } from "../lib/api";
 import Mono from "./Mono";
 import StatusDot from "./StatusDot";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Refresh cadence: 10s is enough for a status bar — listener/session
 // churn isn't so hot that a tighter interval would noticeably help.
@@ -24,6 +25,9 @@ export default function StatusBar() {
     const [activeName, setActiveName] = useState(() => getActiveServer()?.name ?? null);
     const [info, setInfo] = useState<ServerInfo | null>(null);
     const [online, setOnline] = useState<"online" | "offline" | "error">("offline");
+    const [lastPollAt, setLastPollAt] = useState<number | null>(null);
+    const [lastPollMs, setLastPollMs] = useState<number | null>(null);
+    const [lastError, setLastError] = useState<string | null>(null);
     const timerRef = useRef<number | null>(null);
 
     // Keep local session / active-profile state in sync with login,
@@ -50,14 +54,21 @@ export default function StatusBar() {
 
         let cancelled = false;
         const tick = async () => {
+            const start = Date.now();
             try {
                 const fresh = await getServerInfo();
                 if (cancelled) return;
                 setInfo(fresh);
                 setOnline("online");
-            } catch {
+                setLastError(null);
+                setLastPollAt(Date.now());
+                setLastPollMs(Date.now() - start);
+            } catch (err) {
                 if (cancelled) return;
                 setOnline("error");
+                setLastError(err instanceof Error ? err.message : String(err));
+                setLastPollAt(Date.now());
+                setLastPollMs(Date.now() - start);
             }
         };
 
@@ -140,16 +151,72 @@ export default function StatusBar() {
                     flex: "0 1 auto",
                 }}
             >
-                <StatusDot
-                    status={online === "error" ? "error" : online}
-                    title={
-                        online === "online"
-                            ? "server reachable"
-                            : online === "error"
-                              ? "server unreachable"
-                              : "not connected"
-                    }
-                />
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <button
+                            type="button"
+                            data-testid="status-bar-status-trigger"
+                            aria-label="Server status detail"
+                            style={{
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                margin: 0,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            <StatusDot
+                                status={online === "error" ? "error" : online}
+                                title={
+                                    online === "online"
+                                        ? "server reachable"
+                                        : online === "error"
+                                          ? "server unreachable"
+                                          : "not connected"
+                                }
+                            />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" className="w-[280px] text-xs">
+                        <div className="space-y-1">
+                            <div>
+                                <span className="text-text-muted">Status: </span>
+                                <span className="text-text-primary">
+                                    {online === "online"
+                                        ? "Reachable"
+                                        : online === "error"
+                                          ? "Unreachable"
+                                          : "Not connected"}
+                                </span>
+                            </div>
+                            {lastPollAt && (
+                                <div>
+                                    <span className="text-text-muted">Last poll: </span>
+                                    <span className="text-text-primary">
+                                        {new Date(lastPollAt).toLocaleTimeString()}
+                                    </span>
+                                    {lastPollMs !== null && (
+                                        <span className="text-text-muted">
+                                            {" "}({lastPollMs} ms)
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                            {lastError && (
+                                <div className="break-words text-danger">
+                                    <span className="text-text-muted">Last error: </span>
+                                    {lastError}
+                                </div>
+                            )}
+                            <div>
+                                <span className="text-text-muted">Server: </span>
+                                <span className="text-text-primary">{serverHost}</span>
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
                 {activeName && (
                     <>
                         <span

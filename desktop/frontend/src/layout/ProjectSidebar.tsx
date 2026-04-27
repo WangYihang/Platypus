@@ -13,6 +13,7 @@ import Brand from "../components/Brand";
 import { Project, createProject } from "../lib/api";
 import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
+import CmdKHint from "./CmdKHint";
 import ProjectSwitcher from "./ProjectSwitcher";
 import UserMenu from "./UserMenu";
 
@@ -200,10 +201,12 @@ export default function ProjectSidebar({
                         color: palette.textPrimary,
                         fontSize: 14,
                         letterSpacing: -0.2,
+                        flex: 1,
                     }}
                 >
                     Platypus
                 </span>
+                <CmdKHint />
             </div>
 
             <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
