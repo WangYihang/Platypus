@@ -90,7 +90,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
     async function doBootstrap(v: BootstrapFormValues) {
         setBusy(true);
         try {
-            await bootstrap(v.url, v.secret, v.username, v.password);
+            await bootstrap(pinnedProfile ?? v.url, v.secret, v.username, v.password);
             toast.success("Admin created — welcome to Platypus");
             onLoggedIn();
         } catch (err) {
@@ -116,7 +116,14 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                 <div style={{ marginBottom: space[6], textAlign: "left" }}>
                     {hasSavedServers && (
                         <button
-                            onClick={() => navigate("/projects")}
+                            onClick={() =>
+                                // /projects is gated by RequireAuth, so without a
+                                // session it just bounces back here pinned to the
+                                // active server. Route through /onboarding instead
+                                // — that page is unauthenticated and lets the user
+                                // probe a different URL or finish first-time setup.
+                                navigate(pinnedProfile ? "/onboarding" : "/projects")
+                            }
                             style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -156,19 +163,17 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                         }}
                     >
                         {pinnedProfile
-                            ? `Sign back in to ${pinnedProfile.url}.`
+                            ? `Sign back in to ${pinnedProfile.url}, or finish first-time setup if no admin exists yet.`
                             : "Log in to your server, or bootstrap the first admin from the startup secret."}
                     </p>
                 </div>
 
                 <Card padding={6}>
                     <Tabs defaultValue="login" className="w-full">
-                        {!pinnedProfile && (
-                            <TabsList className="mb-4 grid w-full grid-cols-2">
-                                <TabsTrigger value="login">Log in</TabsTrigger>
-                                <TabsTrigger value="bootstrap">First-time setup</TabsTrigger>
-                            </TabsList>
-                        )}
+                        <TabsList className="mb-4 grid w-full grid-cols-2">
+                            <TabsTrigger value="login">Log in</TabsTrigger>
+                            <TabsTrigger value="bootstrap">First-time setup</TabsTrigger>
+                        </TabsList>
 
                         <TabsContent value="login">
                             <Form {...loginForm}>
@@ -249,31 +254,45 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                     lineHeight: 1.5,
                                 }}
                             >
-                                Use the{" "}
+                                Paste the secret from{" "}
                                 <span style={{ fontFamily: font.mono, fontSize: 12 }}>
-                                    API bootstrap secret
+                                    &lt;data-dir&gt;/bootstrap.secret
                                 </span>{" "}
-                                printed on server startup. After the first admin exists this tab
-                                stops working.
+                                on the server (mode 0600, written on first boot).
+                                After the first admin exists this tab stops working.
                             </p>
                             <Form {...bootstrapForm}>
                                 <form
                                     onSubmit={bootstrapForm.handleSubmit(doBootstrap)}
                                     className="space-y-4"
                                 >
-                                    <FormField
-                                        control={bootstrapForm.control}
-                                        name="url"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Server URL</FormLabel>
-                                                <FormControl>
-                                                    <Input {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
+                                    {!pinnedProfile && (
+                                        <FormField
+                                            control={bootstrapForm.control}
+                                            name="url"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Server URL</FormLabel>
+                                                    <FormControl>
+                                                        <Input {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    )}
+                                    {pinnedProfile && (
+                                        <div
+                                            style={{
+                                                fontFamily: font.mono,
+                                                fontSize: 12,
+                                                color: palette.textMuted,
+                                                marginBottom: space[2],
+                                            }}
+                                        >
+                                            {pinnedProfile.url}
+                                        </div>
+                                    )}
                                     <FormField
                                         control={bootstrapForm.control}
                                         name="secret"
