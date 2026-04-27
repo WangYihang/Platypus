@@ -17,12 +17,16 @@ root.render(
             Toaster renders the sonner portal for toast.* calls. */}
         <TooltipProvider delayDuration={200}>
             <RouterProvider router={router} />
-            {/* offset=44 keeps toasts above the 28px StatusBar with
-                a visible gap so the two regions read as separate
-                elements instead of a stacked block. (The default
-                offset of 32 plus a 56-ish-px toast still overlapped
-                the bar in practice.) */}
-            <Toaster position="bottom-right" offset={44} richColors closeButton />
+            {/* Sonner v2 measures `offset` from the viewport edge to the
+                toast container, but the rendered <li> picks up an
+                additional ~13px of internal viewport padding/transforms
+                that the spec accounts for via boundingBox. To leave a
+                visible >=8px gap above the 28px StatusBar we need the
+                effective offset (offset - StatusBar height) to clear
+                that ~13px overhead too: 60 - 28 = 32, minus ~13 internal
+                = ~19px gap, comfortably above the 8px floor without
+                pushing the toast away from the corner. */}
+            <Toaster position="bottom-right" offset={60} richColors closeButton />
         </TooltipProvider>
     </React.StrictMode>,
 );
