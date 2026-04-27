@@ -26,7 +26,7 @@ import {
     revokeInstallArtifact,
     revokePAT,
 } from "../lib/api";
-import { fromNow } from "../lib/time";
+import { formatSeconds, fromNow } from "../lib/time";
 import { humanizeError } from "../lib/humanizeError";
 
 import {
@@ -437,12 +437,12 @@ function IssueInstallDialog({
                             name="ttl_seconds"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Download link TTL (seconds)</FormLabel>
+                                    <FormLabel>Expires in (seconds)</FormLabel>
                                     <FormControl>
                                         <Input
                                             type="number"
                                             inputMode="numeric"
-                                            placeholder="300"
+                                            placeholder="300 (= 5m)"
                                             value={field.value ?? ""}
                                             onChange={(e) =>
                                                 field.onChange(
@@ -456,7 +456,12 @@ function IssueInstallDialog({
                                             ref={field.ref}
                                         />
                                     </FormControl>
-                                    <FormDescription>Default 300 (5 min)</FormDescription>
+                                    <FormDescription>
+                                        How long the install URL stays valid.{" "}
+                                        {typeof field.value === "number" && field.value > 0
+                                            ? `= ${formatSeconds(field.value)}`
+                                            : "Default 300 (= 5m)."}
+                                    </FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -770,12 +775,12 @@ function IssuePATDialog({
                             name="ttl_seconds"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>TTL (seconds)</FormLabel>
+                                    <FormLabel>Expires in (seconds)</FormLabel>
                                     <FormControl>
                                         <Input
                                             type="number"
                                             inputMode="numeric"
-                                            placeholder="3600"
+                                            placeholder="3600 (= 1h)"
                                             value={field.value ?? ""}
                                             onChange={(e) =>
                                                 field.onChange(
@@ -789,7 +794,12 @@ function IssuePATDialog({
                                             ref={field.ref}
                                         />
                                     </FormControl>
-                                    <FormDescription>Default 3600 (1h).</FormDescription>
+                                    <FormDescription>
+                                        How long the access token stays valid.{" "}
+                                        {typeof field.value === "number" && field.value > 0
+                                            ? `= ${formatSeconds(field.value)}`
+                                            : "Default 3600 (= 1h)."}
+                                    </FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -828,13 +838,20 @@ function IssuePATDialog({
                             name="binding_machine_id"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Binding machine ID</FormLabel>
+                                    <FormLabel>Restrict to machine</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="(optional)" {...field} />
+                                        <Input
+                                            placeholder="machine-id (optional)"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormDescription>
-                                        If set, the access token is only accepted from a machine
-                                        whose /etc/machine-id matches.
+                                        Optional. Paste the host's
+                                        <code> /etc/machine-id</code> contents to lock this
+                                        access token to that one host — useful for long-lived
+                                        tokens, since a stolen token cannot be replayed
+                                        elsewhere. Leave empty for short-lived tokens you don't
+                                        plan to reuse.
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
