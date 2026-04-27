@@ -194,15 +194,24 @@ func (r *RBAC) tryAuthenticateWS(c *gin.Context, bearer string) bool {
 // ordering is admin > operator > viewer; higher roles implicitly
 // satisfy lower requirements. Must run downstream of RequireAuth.
 //
-// AAT principals carry the role their issuer set on the row; project-
-// bound AATs are NOT lowered here (the project gate, not the global
-// gate, enforces binding). A global-admin AAT therefore passes a
-// RequireGlobalRole(admin) gate exactly as a human admin would.
+// AAT principals carry the role their issuer set on the row. A global
+// (unbound) AAT with role >= min passes the gate exactly as a human
+// would. A project-bound AAT NEVER passes — the issuer scoped the
+// token out of any global resource by binding it, regardless of the
+// role they stamped on it. Without this check a project-bound
+// role=admin AAT would have satisfied RequireGlobalRole(admin), since
+// roleAtLeast reads p.Role directly and the legacy claims downgrade
+// in claimsForPrincipal only protects handlers that read AccessClaims.
 func (r *RBAC) RequireGlobalRole(min user.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p, ok := PrincipalFromContext(c)
 		if !ok {
 			abortUnauthorized(c, "no principal on context — RequireAuth missing?")
+			return
+		}
+		if p.Kind == PrincipalAATKind && p.ProjectID != "" {
+			c.AbortWithStatusJSON(http.StatusForbidden,
+				gin.H{"error": "project-bound token cannot access global resources"})
 			return
 		}
 		if !roleAtLeast(p.Role, min) {
