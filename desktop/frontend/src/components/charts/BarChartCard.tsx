@@ -11,7 +11,7 @@ import {
 import Card from "../Card";
 import EmptyState from "../EmptyState";
 import ChartContainer from "./ChartContainer";
-import { font, palette } from "../../layout/theme";
+import { font, palette, space } from "../../layout/theme";
 
 export interface BarPoint {
     label: string;
@@ -20,6 +20,7 @@ export interface BarPoint {
 
 interface Props {
     title: ReactNode;
+    seriesLabel?: ReactNode;
     data: BarPoint[];
     color?: string;
     height?: number;
@@ -27,15 +28,42 @@ interface Props {
 
 // BarChartCard renders a horizontal bar chart inside our Card primitive.
 // Used on ProjectOverview for "top hosts by session count" and similar
-// rank views.
+// rank views. Pass `seriesLabel` to render an inline coloured-dot
+// legend above the bars — mirrors LineChartCard's contract.
 export default function BarChartCard({
     title,
+    seriesLabel,
     data,
     color = palette.textPrimary,
     height = 220,
 }: Props) {
     return (
         <Card header={title}>
+            {seriesLabel && (
+                <div
+                    data-testid="chart-legend"
+                    style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: space[2],
+                        color: palette.textSecondary,
+                        fontSize: 12,
+                    }}
+                >
+                    <span
+                        aria-hidden
+                        style={{
+                            display: "inline-block",
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background: color,
+                        }}
+                    />
+                    <span>{seriesLabel}</span>
+                </div>
+            )}
             {data.length === 0 ? (
                 <div style={{ height }}>
                     <EmptyState title="No data" description="Nothing to rank yet." />

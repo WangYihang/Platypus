@@ -17,7 +17,12 @@ import PageHeader from "../components/PageHeader";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
-import { palette, space } from "../layout/theme";
+import { getSessionUser } from "../lib/auth";
+import {
+    QuickFilterPreset,
+    applyQuickFilter,
+} from "./activities/quickFilters";
+import { palette, radius, space } from "../layout/theme";
 import {
     ActivityItem,
     ActivityOutcome,
@@ -107,6 +112,22 @@ export default function ActivitiesPage() {
     const [query, setQuery] = useState("");
     const [includeGlobal, setIncludeGlobal] = useState(false);
     const [selected, setSelected] = useState<ActivityItem | null>(null);
+
+    const me = getSessionUser();
+
+    const onQuickFilter = useCallback(
+        (preset: QuickFilterPreset) => {
+            const patch = applyQuickFilter(preset, {
+                username: me?.username ?? "",
+            });
+            if (patch.actor !== undefined) setActor(patch.actor);
+            if (patch.outcome !== undefined) setOutcome(patch.outcome);
+            if (patch.query !== undefined) setQuery(patch.query);
+            if (patch.range !== undefined) setRange(patch.range);
+            if (patch.categories !== undefined) setCategories(patch.categories);
+        },
+        [me?.username],
+    );
 
     const fromDate = useMemo(() => rangeToFrom(range), [range]);
 
@@ -229,6 +250,38 @@ export default function ActivitiesPage() {
                     </>
                 }
             />
+            <div
+                data-testid="activities-quick-filters"
+                style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: space[2],
+                    padding: `${space[2]}px ${space[8]}px 0`,
+                }}
+            >
+                <QuickFilterChip
+                    label="My actions"
+                    title="Filter to your actions over the last 24h"
+                    disabled={!me?.username}
+                    onClick={() => onQuickFilter("my")}
+                />
+                <QuickFilterChip
+                    label="Failures"
+                    title="Show only events with outcome = error"
+                    onClick={() => onQuickFilter("failures")}
+                />
+                <QuickFilterChip
+                    label="Last 24h"
+                    title="Narrow the time window to the last 24 hours"
+                    onClick={() => onQuickFilter("24h")}
+                />
+                <QuickFilterChip
+                    label="Clear"
+                    title="Reset every filter"
+                    variant="ghost"
+                    onClick={() => onQuickFilter("clear")}
+                />
+            </div>
             <Toolbar
                 left={
                     <>
@@ -671,4 +724,45 @@ function formatDuration(ms: number): string {
     const mins = Math.floor(ms / 60_000);
     const secs = Math.floor((ms % 60_000) / 1000);
     return `${mins}m ${secs}s`;
+}
+
+// QuickFilterChip is a small pill-styled button. Lives inline because
+// no other surface needs the same shape — the chips are only here.
+// Uses StatusPill-like styling so the row reads as a coherent group
+// instead of generic Buttons stacked next to each other.
+interface ChipProps {
+    label: string;
+    title?: string;
+    onClick: () => void;
+    disabled?: boolean;
+    variant?: "outline" | "ghost";
+}
+
+function QuickFilterChip({ label, title, onClick, disabled, variant = "outline" }: ChipProps) {
+    const ghost = variant === "ghost";
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title}
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: `2px ${space[3]}px`,
+                fontSize: 12,
+                fontWeight: 500,
+                lineHeight: 1.6,
+                color: ghost ? palette.textMuted : palette.textSecondary,
+                border: ghost ? "1px solid transparent" : `1px solid ${palette.border}`,
+                background: "transparent",
+                borderRadius: radius.pill,
+                cursor: disabled ? "not-allowed" : "pointer",
+                opacity: disabled ? 0.5 : 1,
+                whiteSpace: "nowrap",
+            }}
+        >
+            {label}
+        </button>
+    );
 }

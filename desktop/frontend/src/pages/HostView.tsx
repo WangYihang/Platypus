@@ -1,5 +1,7 @@
 import * as React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { computeScrollSwap } from "./host/scrollPreservation";
 import {
     Boxes,
     HelpCircle,
@@ -89,6 +91,31 @@ export default function HostView({ projectID, hostID }: Props) {
         : "info";
     const setActiveTab = (key: string) =>
         navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
+
+    // Per-tab scroll preservation. Each tab panel shares one scroll
+    // container; without help every tab change resets scrollTop to
+    // 0. computeScrollSwap is the pure brain — we read scrollTop off
+    // the container before the tab swap, hand it the leaving tab,
+    // and write back the restored value for the new tab.
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const scrollMapRef = useRef(new Map<string, number>());
+    const prevTabRef = useRef<string | null>(null);
+    useLayoutEffect(() => {
+        const el = scrollRef.current;
+        if (!el) {
+            prevTabRef.current = activeTab;
+            return;
+        }
+        const result = computeScrollSwap(
+            scrollMapRef.current,
+            prevTabRef.current,
+            el.scrollTop,
+            activeTab,
+        );
+        scrollMapRef.current = result.map;
+        el.scrollTop = result.scrollTop;
+        prevTabRef.current = activeTab;
+    }, [activeTab]);
 
     const refreshSysInfo = useCallback(async () => {
         setSysInfoLoading(true);
@@ -268,6 +295,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 tabs={tabBar}
             />
             <div
+                ref={scrollRef}
                 style={{
                     flex: 1,
                     overflow: "auto",

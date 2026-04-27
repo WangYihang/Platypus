@@ -22,6 +22,7 @@ export interface LinePoint {
 interface Props {
     title: ReactNode;
     hint?: ReactNode;
+    seriesLabel?: ReactNode;
     data: LinePoint[];
     color?: string;
     height?: number;
@@ -31,9 +32,16 @@ interface Props {
 // LineChartCard wraps Recharts <LineChart> in our Card primitive with
 // dashboard-friendly axis styling. Used for the "sessions over 24h"
 // time series on ProjectOverview.
+//
+// `seriesLabel` (optional) renders an inline coloured-dot legend
+// directly above the chart area. Recharts' built-in <Legend> looks
+// heavy on a single-series chart, but readers still benefit from a
+// tiny "Sessions per hour" label that explains the dimension. Pass
+// the same dimension noun the consumer wants on the y axis.
 export default function LineChartCard({
     title,
     hint,
+    seriesLabel,
     data,
     color = palette.info,
     height = 220,
@@ -51,6 +59,31 @@ export default function LineChartCard({
                     }}
                 >
                     {hint}
+                </div>
+            )}
+            {seriesLabel && (
+                <div
+                    data-testid="chart-legend"
+                    style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: space[2],
+                        color: palette.textSecondary,
+                        fontSize: 12,
+                    }}
+                >
+                    <span
+                        aria-hidden
+                        style={{
+                            display: "inline-block",
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background: color,
+                        }}
+                    />
+                    <span>{seriesLabel}</span>
                 </div>
             )}
             {data.length === 0 ? (

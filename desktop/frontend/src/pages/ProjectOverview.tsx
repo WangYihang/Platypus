@@ -215,9 +215,14 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                     <LineChartCard
                         title="Sessions (last 24h)"
                         hint="New sessions per hour, across every host."
+                        seriesLabel="Sessions per hour"
                         data={linePoints}
                     />
-                    <BarChartCard title="Top hosts (24h)" data={barPoints} />
+                    <BarChartCard
+                        title="Top hosts (24h)"
+                        seriesLabel="Sessions per host"
+                        data={barPoints}
+                    />
                 </div>
 
                 <div
