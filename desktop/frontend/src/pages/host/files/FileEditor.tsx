@@ -5,6 +5,7 @@ import { EditorState, Extension } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
 import { ReadFile, WriteFile } from "../../../../wailsjs/go/app/App";
@@ -164,7 +165,7 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
             toast.success(`Saved ${path}`);
             onSaved?.();
         } catch (err) {
-            toast.error(`save: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`save: ${humanizeError(err)}`);
         } finally {
             setSaving(false);
         }

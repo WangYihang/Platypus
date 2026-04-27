@@ -10,6 +10,7 @@ import {
     Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -115,7 +116,7 @@ export default function ProjectSidebar({
             // "now enrol your first agent" surface.
             navigate(`/projects/${v.slug}/fleet`);
         } catch (e) {
-            toast.error(`create: ${String(e)}`);
+            toast.error(`create: ${humanizeError(e)}`);
         }
     }
 

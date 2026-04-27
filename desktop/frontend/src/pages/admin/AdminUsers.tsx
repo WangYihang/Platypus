@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -122,7 +123,7 @@ export default function AdminUsers() {
             createForm.reset({ username: "", password: "", role: "operator" });
             refresh();
         } catch (e) {
-            toast.error(`create: ${String(e)}`);
+            toast.error(`create: ${humanizeError(e)}`);
         }
     }
 
@@ -135,7 +136,7 @@ export default function AdminUsers() {
             toast.success(`Deleted ${u.username}`);
             refresh();
         } catch (e) {
-            toast.error(`delete: ${String(e)}`);
+            toast.error(`delete: ${humanizeError(e)}`);
         }
     }
 
@@ -145,7 +146,7 @@ export default function AdminUsers() {
             toast.success(`Updated ${u.username} role`);
             refresh();
         } catch (e) {
-            toast.error(`role: ${String(e)}`);
+            toast.error(`role: ${humanizeError(e)}`);
         }
     }
 
@@ -157,7 +158,7 @@ export default function AdminUsers() {
             setPwOpen(null);
             pwForm.reset({ password: "" });
         } catch (e) {
-            toast.error(`reset: ${String(e)}`);
+            toast.error(`reset: ${humanizeError(e)}`);
         }
     }
 

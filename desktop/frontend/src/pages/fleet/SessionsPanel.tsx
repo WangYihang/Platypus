@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../lib/humanizeError";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../../components/Card";
@@ -60,7 +61,7 @@ export default function SessionsPanel() {
             setError(null);
         } catch (e) {
             setError(String(e));
-            toast.error(`load sessions: ${String(e)}`);
+            toast.error(`load sessions: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }

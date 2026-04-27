@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 
 import {
     Dialog,
@@ -109,7 +110,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
             await login(profile, username, password);
             await finish(profile);
         } catch (err) {
-            toast.error(`login: ${String(err)}`);
+            toast.error(`login: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);
         } finally {
             setBusy(false);
@@ -123,7 +124,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
             await finish(profile);
         } catch (err) {
-            toast.error(`bootstrap: ${String(err)}`);
+            toast.error(`bootstrap: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);
         } finally {
             setBusy(false);

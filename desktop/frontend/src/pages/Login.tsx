@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -80,7 +81,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
             await login(pinnedProfile ?? v.url, v.username, v.password);
             onLoggedIn();
         } catch (err) {
-            toast.error(`login: ${String(err)}`);
+            toast.error(`login: ${humanizeError(err)}`);
         } finally {
             setBusy(false);
         }
@@ -93,7 +94,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
             toast.success("Admin created — welcome to Platypus");
             onLoggedIn();
         } catch (err) {
-            toast.error(`bootstrap: ${String(err)}`);
+            toast.error(`bootstrap: ${humanizeError(err)}`);
         } finally {
             setBusy(false);
         }

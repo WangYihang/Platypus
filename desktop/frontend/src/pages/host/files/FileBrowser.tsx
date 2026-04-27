@@ -13,6 +13,7 @@ import {
     Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -155,7 +156,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             toast.success(`Uploaded ${name}`);
             dir.reload();
         } catch (err) {
-            toast.error(`upload: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`upload: ${humanizeError(err)}`);
         }
     }
 
@@ -171,7 +172,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             await DownloadFile(projectID, sessionHash, joinPath(dir.path, entry.name), dst);
             toast.success(`Downloaded ${entry.name}`);
         } catch (err) {
-            toast.error(`download: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`download: ${humanizeError(err)}`);
         }
     }
 
@@ -181,7 +182,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             toast.success(`Created ${name}`);
             dir.reload();
         } catch (err) {
-            toast.error(`mkdir: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`mkdir: ${humanizeError(err)}`);
         }
     }
 
@@ -198,7 +199,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             toast.success(`Renamed to ${newName}`);
             dir.reload();
         } catch (err) {
-            toast.error(`rename: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`rename: ${humanizeError(err)}`);
         }
     }
 
@@ -210,7 +211,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             toast.success(`chmod ${mode.toString(8)} ${entry.name}`);
             dir.reload();
         } catch (err) {
-            toast.error(`chmod: ${String(err instanceof Error ? err.message : err)}`);
+            toast.error(`chmod: ${humanizeError(err)}`);
         }
     }
 
@@ -219,7 +220,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             try {
                 await DeleteFile(projectID, sessionHash, joinPath(dir.path, entry.name), entry.isDir);
             } catch (err) {
-                toast.error(`delete ${entry.name}: ${String(err instanceof Error ? err.message : err)}`);
+                toast.error(`delete ${entry.name}: ${humanizeError(err)}`);
                 dir.reload();
                 return;
             }
@@ -246,7 +247,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
                 toast.success(`Moved ${from.name} → ${destDir}`);
                 dir.reload();
             } catch (err) {
-                toast.error(`move: ${String(err instanceof Error ? err.message : err)}`);
+                toast.error(`move: ${humanizeError(err)}`);
             }
         })();
     }

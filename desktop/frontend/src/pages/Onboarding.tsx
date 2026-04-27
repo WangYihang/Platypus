@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 
 import Card from "../components/Card";
 import { palette, radius, space } from "../layout/theme";
@@ -112,7 +113,7 @@ export default function Onboarding() {
             await login(profile, username, password);
             await finish(profile);
         } catch (err) {
-            toast.error(`login: ${String(err)}`);
+            toast.error(`login: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);
         } finally {
             setBusy(false);
@@ -126,7 +127,7 @@ export default function Onboarding() {
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
             await finish(profile);
         } catch (err) {
-            toast.error(`bootstrap: ${String(err)}`);
+            toast.error(`bootstrap: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);
         } finally {
             setBusy(false);

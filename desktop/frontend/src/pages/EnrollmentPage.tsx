@@ -27,6 +27,7 @@ import {
     revokePAT,
 } from "../lib/api";
 import { fromNow } from "../lib/time";
+import { humanizeError } from "../lib/humanizeError";
 
 import {
     AlertDialog,
@@ -150,7 +151,7 @@ function InstallPanel({ projectID }: { projectID: string }) {
             setError(null);
         } catch (e) {
             setError(String(e));
-            toast.error(`list install artifacts: ${String(e)}`);
+            toast.error(`Couldn't load install commands: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }
@@ -169,7 +170,7 @@ function InstallPanel({ projectID }: { projectID: string }) {
             toast.success("Install link revoked");
             refresh();
         } catch (e) {
-            toast.error(`revoke: ${String(e)}`);
+            toast.error(`Couldn't revoke: ${humanizeError(e)}`);
         }
     }
 
@@ -373,7 +374,7 @@ function IssueInstallDialog({
             onIssued(r);
             form.reset({ server_endpoint: "", target_os: "", target_arch: "" });
         } catch (e) {
-            toast.error(`issue: ${String(e)}`);
+            toast.error(`Couldn't generate install command: ${humanizeError(e)}`);
         }
     }
 
@@ -539,8 +540,8 @@ function PATPanel({ projectID }: { projectID: string }) {
             setRows(data);
             setError(null);
         } catch (e) {
-            setError(String(e));
-            toast.error(`list tokens: ${String(e)}`);
+            setError(humanizeError(e));
+            toast.error(`Couldn't load access tokens: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }
@@ -559,7 +560,7 @@ function PATPanel({ projectID }: { projectID: string }) {
             toast.success("Access token revoked");
             refresh();
         } catch (e) {
-            toast.error(`revoke: ${String(e)}`);
+            toast.error(`Couldn't revoke: ${humanizeError(e)}`);
         }
     }
 
@@ -733,7 +734,7 @@ function IssuePATDialog({
             onIssued(r);
             form.reset({ description: "", binding_machine_id: "" });
         } catch (e) {
-            toast.error(`issue: ${String(e)}`);
+            toast.error(`Couldn't issue access token: ${humanizeError(e)}`);
         }
     }
 

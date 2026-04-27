@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Key, Loader2, LogOut, MoreHorizontal, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -78,7 +79,7 @@ export default function UserMenu({ user, serverURL }: Props) {
             pwForm.reset({ old_password: "", new_password: "", confirm: "" });
             navigate("/login", { replace: true });
         } catch (e) {
-            toast.error(`change password: ${String(e)}`);
+            toast.error(`change password: ${humanizeError(e)}`);
         }
     }
 

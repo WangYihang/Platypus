@@ -8,6 +8,7 @@ import {
     Search,
 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
@@ -134,7 +135,7 @@ export default function ActivitiesPage() {
             setError(null);
         } catch (e) {
             setError(String(e));
-            toast.error(`load activities: ${String(e)}`);
+            toast.error(`load activities: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }
@@ -152,7 +153,7 @@ export default function ActivitiesPage() {
             setItems((prev) => [...(prev ?? []), ...resp.items]);
             setNextCursor(resp.next_cursor ?? null);
         } catch (e) {
-            toast.error(`load more: ${String(e)}`);
+            toast.error(`load more: ${humanizeError(e)}`);
         } finally {
             setLoadingMore(false);
         }
@@ -172,7 +173,7 @@ export default function ActivitiesPage() {
                 a.click();
                 URL.revokeObjectURL(url);
             } catch (e) {
-                toast.error(`export: ${String(e)}`);
+                toast.error(`export: ${humanizeError(e)}`);
             }
         },
         [project.id, project.slug, buildOpts],

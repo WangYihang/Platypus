@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 
 import Card from "../components/Card";
 import DataList from "../components/DataList";
@@ -43,7 +44,7 @@ export default function ProjectSettings() {
             await refresh();
             navigate("/projects", { replace: true });
         } catch (e) {
-            toast.error(`delete: ${String(e)}`);
+            toast.error(`delete: ${humanizeError(e)}`);
             setDeleting(false);
             setConfirmOpen(false);
         }

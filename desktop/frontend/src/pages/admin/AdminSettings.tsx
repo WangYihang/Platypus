@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../lib/humanizeError";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
@@ -153,7 +154,7 @@ export default function AdminSettings() {
                 try {
                     await updateSetting(d.key, parsed.value);
                 } catch (e) {
-                    errors.push(`${d.label}: ${String(e)}`);
+                    errors.push(`${d.label}: ${humanizeError(e)}`);
                 }
             }
             if (errors.length > 0) {
@@ -173,7 +174,7 @@ export default function AdminSettings() {
             toast.success(`Reset ${d.label}`);
             await refresh();
         } catch (e) {
-            toast.error(`reset: ${String(e)}`);
+            toast.error(`reset: ${humanizeError(e)}`);
         }
     }
 

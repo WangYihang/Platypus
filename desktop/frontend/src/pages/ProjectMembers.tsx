@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -124,7 +125,7 @@ export default function ProjectMembers({ project }: Props) {
             try {
                 setCandidates(await listUsers());
             } catch (e) {
-                toast.error(`load users: ${String(e)}`);
+                toast.error(`load users: ${humanizeError(e)}`);
             }
         }
     }
@@ -137,7 +138,7 @@ export default function ProjectMembers({ project }: Props) {
             addForm.reset({ user_id: "", role: "operator" });
             refresh();
         } catch (e) {
-            toast.error(`add: ${String(e)}`);
+            toast.error(`add: ${humanizeError(e)}`);
         }
     }
 
@@ -147,7 +148,7 @@ export default function ProjectMembers({ project }: Props) {
             toast.success(`${m.username} → ${role}`);
             refresh();
         } catch (e) {
-            toast.error(`role: ${String(e)}`);
+            toast.error(`role: ${humanizeError(e)}`);
         }
     }
 
@@ -160,7 +161,7 @@ export default function ProjectMembers({ project }: Props) {
             toast.success(`${m.username} removed`);
             refresh();
         } catch (e) {
-            toast.error(`remove: ${String(e)}`);
+            toast.error(`remove: ${humanizeError(e)}`);
         }
     }
 

@@ -10,6 +10,7 @@ import {
     Server,
 } from "lucide-react";
 import { toast } from "sonner";
+import { humanizeError } from "../../lib/humanizeError";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../../components/Card";
@@ -53,7 +54,7 @@ export default function HostsPanel() {
             setError(null);
         } catch (e) {
             setError(String(e));
-            toast.error(`load hosts: ${String(e)}`);
+            toast.error(`load hosts: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }
