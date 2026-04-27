@@ -61,9 +61,18 @@ cd Platypus
 docker-compose up -d
 ```
 
-*   **Web UI**: Open `http://localhost:7331` in your browser.
-*   **Login**: Use the `bootstrap_secret` printed in the server logs (`docker-compose logs platypus-server`).
-*   **Add Agents**: Click "Add Agent" in the UI to get a one-line `curl` command to deploy agents to your fleet.
+*   **Web UI**: Open `https://localhost:9443` in your browser (the
+    container ships with a self-signed cert; your browser will prompt
+    you to accept it on first visit).
+*   **Login**: The `bootstrap_secret` is written to
+    `/app/data/bootstrap.secret` inside the container on first boot
+    (mode 0600). Read it with
+    `docker compose exec platypus-server cat /app/data/bootstrap.secret`,
+    use it once to create the first admin, then delete the file. After
+    bootstrap completes the secret is no longer accepted.
+*   **Add Agents**: Click "Add Agent" in the UI to get a one-line
+    `curl ... | sh` command, signed and pinned to the project CA, to
+    deploy agents to your fleet.
 
 ### Build from source
 
@@ -119,8 +128,17 @@ Download the appropriate archive for your OS/arch from the [Releases page](https
 
 ```bash
 docker build -t platypus-server .
-docker run --rm -p 7331:7331 -p 13337:13337 -v $(pwd)/config.yml:/config.yml platypus-server
+docker run --rm -p 9443:9443 \
+  -e PLATYPUS_DEV=1 \
+  -v $(pwd)/config.yml:/config.yml \
+  platypus-server
 ```
+
+`PLATYPUS_DEV=1` enables the on-disk KEK fallback so a fresh start
+"Just Works"; for production, drop that env var and set
+`PLATYPUS_CA_KEK` (32 bytes hex; `openssl rand -hex 32`) instead so
+the CA private-key encryption key is never written next to the
+encrypted database.
 
 ### Run
 
@@ -135,48 +153,40 @@ For production, run the server under `systemd` rather than backgrounding it manu
 ### Topology
 
 * Server: `192.168.88.129`
-  * Agent ingress (TLS): `0.0.0.0:13337`
-  * Distributor (agent binary downloads): `0.0.0.0:13339`
-  * REST API: `127.0.0.1:7331`
+  * Unified TLS ingress (REST API + agent link + installer): `0.0.0.0:9443`
 * Managed host: `192.168.88.130` (runs `platypus-agent`)
 
 ### Quick tour
 
 First, run `./platypus-server`. A `config.yml` is generated from
-`assets/config.example.yml` if none exists. Defaults are sensible:
+`assets/config.example.yml` if none exists. Defaults are sensible.
 
-```yaml
-listeners:
-  - host: "0.0.0.0"
-    port: 13337
-    hashFormat: "%i %u %m %o %t"
-    disable_history: true
-    public_ip: ""
-    shell_path: "/bin/bash"
-restful:
-  host: "0.0.0.0"
-  port: 7331
-  enable: true
-distributor:
-  host: "0.0.0.0"
-  port: 13339
-  url: "http://127.0.0.1:13339"
-openBrowser: false
-```
+To enrol a new managed host:
 
-On startup the server prints, for every interface it's binding, the
-`curl` command an admin can run on a managed host to fetch and launch
-the agent:
+1. Open the Web UI / desktop app, navigate to the project, click
+   **Add Agent**.
+2. Pick the target OS / arch and TTL, click **Generate**.
+3. Copy the one-liner the UI displays and run it on the managed host.
+
+The server-rendered one-liner looks like:
 
 ```bash
-curl -fsSL http://<server>:13339/agent/<server>:13337 -o /tmp/platypus-agent \
-  && chmod +x /tmp/platypus-agent && /tmp/platypus-agent
+curl -fsSL https://<server>:9443/api/v1/install/<one-shot-token> | sh
 ```
 
-The distributor patches the connect-back target into the prebuilt agent
-binary in-place, so the same build serves every ingress. Once the agent
-starts, it dials `server:13337`, the TLS handshake completes, and the
-session appears in the server's session list.
+The single-use install token expires shortly after issuance and is
+burnt on the first successful hit. The script the server returns:
+
+* embeds the project CA so the agent binary download is verified with
+  `curl --cacert` (no `-k`, no TOFU);
+* injects a single-use PAT so the agent can complete enrolment and
+  obtain its mTLS client certificate;
+* refuses to run if the server has no project CA configured, unless
+  the operator explicitly sets `PLATYPUS_INSECURE_DOWNLOAD=1`.
+
+> **Do not** hand-write `curl http://...` URLs against the legacy
+> `/agent/<host>:<port>` path — that flow is removed. Always render
+> the install command via the UI so it carries the trust anchor.
 
 ### Desktop / Web
 
