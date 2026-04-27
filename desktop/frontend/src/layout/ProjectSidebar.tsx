@@ -1,14 +1,8 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import {
-    Clock,
-    CloudDownload,
-    LayoutGrid,
-    Loader2,
-    Monitor,
-    Settings2,
-    Users,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
+
+import { icons } from "../lib/icons";
 import { toast } from "sonner";
 import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
@@ -88,13 +82,18 @@ export default function ProjectSidebar({
         defaultValues: { name: "", slug: "" },
     });
 
+    // Every nav item's icon comes from lib/icons.ts so the same
+    // domain noun always renders with the same glyph everywhere it
+    // appears (sidebar, page header, empty-state, etc.). Don't reach
+    // into lucide-react directly here — extend the registry instead.
+    const I = icons;
     const items: NavItem[] = [
-        { to: "overview", label: "Overview", icon: <LayoutGrid className="size-4" />, requiresProject: true },
-        { to: "fleet", label: "Fleet", icon: <Monitor className="size-4" />, requiresProject: true },
-        { to: "activities", label: "Activities", icon: <Clock className="size-4" />, requiresProject: true },
-        { to: "enrollment", label: "Enrollment", icon: <CloudDownload className="size-4" />, requiresProject: true, minRole: "admin" },
-        { to: "members", label: "Members", icon: <Users className="size-4" />, requiresProject: true, minRole: "operator" },
-        { to: "settings", label: "Settings", icon: <Settings2 className="size-4" />, requiresProject: true, minRole: "admin" },
+        { to: "overview", label: "Overview", icon: <I.project className="size-4" />, requiresProject: true },
+        { to: "fleet", label: "Fleet", icon: <I.fleet className="size-4" />, requiresProject: true },
+        { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
+        { to: "enrollment", label: "Enrollment", icon: <I.enrollment className="size-4" />, requiresProject: true, minRole: "admin" },
+        { to: "members", label: "Members", icon: <I.members className="size-4" />, requiresProject: true, minRole: "operator" },
+        { to: "settings", label: "Settings", icon: <I.settings className="size-4" />, requiresProject: true, minRole: "admin" },
     ];
 
     const visible = items.filter((it) => meetsRole(user.role, it.minRole));
