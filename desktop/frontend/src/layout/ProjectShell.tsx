@@ -167,7 +167,27 @@ function ShellChrome({
                     }}
                 >
                     <main style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}>
-                        {children}
+                        {/* P3: cap the rendered content width on wide
+                            displays. Without the cap, KPI cards, tables
+                            and member lists stretched 1500+ px wide on
+                            1920px monitors — long lines are readable
+                            but tiring to scan. 1280px keeps text rows
+                            in roughly the 80-100 character sweet spot
+                            without leaving big black voids on either
+                            side at narrower widths (the cap is a
+                            max, not a fixed value). */}
+                        <div
+                            data-testid="shell-content-frame"
+                            style={{
+                                maxWidth: 1280,
+                                margin: "0 auto",
+                                minHeight: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                            }}
+                        >
+                            {children}
+                        </div>
                     </main>
                     <TerminalDrawer />
                 </div>
