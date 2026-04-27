@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Loader2, Plus, RotateCw, Trash2, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -122,7 +123,7 @@ export default function EnrollmentPage() {
                     <TabsTrigger value="tokens">Access tokens (PAT)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="install" className="mt-4">
-                    <InstallPanel projectID={project.id} />
+                    <InstallPanel projectID={project.id} projectSlug={project.slug} />
                 </TabsContent>
                 <TabsContent value="tokens" className="mt-4">
                     <PATPanel projectID={project.id} />
@@ -134,7 +135,13 @@ export default function EnrollmentPage() {
 
 // --- Install commands tab ---------------------------------------------
 
-function InstallPanel({ projectID }: { projectID: string }) {
+function InstallPanel({
+    projectID,
+    projectSlug,
+}: {
+    projectID: string;
+    projectSlug: string;
+}) {
     const [rows, setRows] = useState<InstallArtifactListItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -308,7 +315,11 @@ function InstallPanel({ projectID }: { projectID: string }) {
                 projectID={projectID}
             />
 
-            <IssuedInstallDialog result={lastIssued} onClose={() => setLastIssued(null)} />
+            <IssuedInstallDialog
+                result={lastIssued}
+                projectSlug={projectSlug}
+                onClose={() => setLastIssued(null)}
+            />
 
             <AlertDialog
                 open={pendingRevoke !== null}
@@ -490,15 +501,30 @@ function IssueInstallDialog({
 
 function IssuedInstallDialog({
     result,
+    projectSlug,
     onClose,
 }: {
     result: IssueInstallResponse | null;
+    projectSlug: string;
     onClose: () => void;
 }) {
+    const navigate = useNavigate();
+
     async function copy() {
         if (!result) return;
         await navigator.clipboard.writeText(result.install_command);
         toast.success("Copied to clipboard");
+    }
+
+    function done() {
+        // After Done, drop the user on /fleet with await=enroll so
+        // the EnrollmentWaitBanner mounts: it polls listHosts every
+        // 3s and switches into a green "agent enrolled" state once
+        // the new host dials back. Without this navigation the user
+        // copied the command and then sat on a static page wondering
+        // if anything was happening.
+        onClose();
+        navigate(`/projects/${projectSlug}/fleet?await=enroll`);
     }
 
     return (
@@ -515,12 +541,16 @@ function IssuedInstallDialog({
                 <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
                     {result?.install_command}
                 </pre>
+                <div className="text-xs text-text-muted">
+                    After running it on the host, return to Fleet — new agents appear there
+                    automatically within a few seconds.
+                </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={copy}>
                         <Copy className="size-3.5" />
                         Copy command
                     </Button>
-                    <Button onClick={onClose}>Done</Button>
+                    <Button onClick={done}>I'll run this — show me Fleet</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

@@ -1,7 +1,9 @@
 import { useSearchParams } from "react-router-dom";
 import { Network, Rows3, Timer } from "lucide-react";
 
+import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
 import PageHeader from "../components/PageHeader";
+import { useCurrentProject } from "../layout/ProjectShell";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import HostsPanel from "./fleet/HostsPanel";
@@ -30,6 +32,7 @@ const SUBTITLES: Record<FleetView, string> = {
 // panels so each view's local state (Cytoscape layout, search query,
 // live/all filter) survives toggles.
 export default function FleetPage() {
+    const project = useCurrentProject();
     const [params, setParams] = useSearchParams();
     const view = parseView(params.get("view"));
 
@@ -71,6 +74,7 @@ export default function FleetPage() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={switcher} />
+            <EnrollmentWaitBanner projectID={project.id} projectSlug={project.slug} />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                 <div
                     data-testid="fleet-panel-table"
