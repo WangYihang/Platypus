@@ -180,11 +180,9 @@ export async function DownloadFile(
 }
 
 // DownloadFolder walks the remote tree and triggers a browser <a
-// download> per file. localDir is ignored in web mode — each file
-// lands in the browser's default Downloads folder. The flat output is
-// fine for small folders but unwieldy for huge trees; a future "build
-// a ZIP in the browser" path can replace this without touching call
-// sites.
+// download> per file. Kept for backwards compatibility with the few
+// callers that still want one-file-per-download — the new archive
+// path (DownloadArchive) is preferred for any folder selection.
 export async function DownloadFolder(
     projectID: string,
     sessionHash: string,
@@ -210,6 +208,167 @@ export async function DownloadFolder(
             await DownloadFile(projectID, sessionHash, child, id);
         }
     }
+}
+
+// DownloadArchive packages remote paths into a single archive and
+// hands it off as a browser download. The format param matches the
+// desktop App.go binding so call sites are mode-agnostic.
+//
+// Web-mode caveat: the browser doesn't ship a streaming tar/gzip/zip
+// encoder we can rely on without a dependency, so this shim builds a
+// plain (uncompressed) tar regardless of the requested format. Reads
+// stay chunked at CHUNK_SIZE so the per-call payload matches every
+// other endpoint and the agent never gets asked for the whole file
+// at once. The full archive does end up in browser memory before
+// download — a future replacement can stream via StreamSaver or the
+// File System Access API once we want web mode to handle multi-GB
+// archives.
+export async function DownloadArchive(
+    projectID: string,
+    sessionHash: string,
+    remotePaths: string[],
+    localPath: string,
+    _format: string,
+): Promise<void> {
+    if (remotePaths.length === 0) {
+        throw new Error("DownloadArchive: empty selection");
+    }
+    const filename = pendingDownloadNames.get(localPath) || "archive.tar";
+    pendingDownloadNames.delete(localPath);
+
+    // chunks accumulates the tar bytes as separate Uint8Arrays so we
+    // never realloc a single growing buffer.
+    const chunks: Uint8Array[] = [];
+    for (const root of remotePaths) {
+        const stat = await StatFile(projectID, sessionHash, root);
+        const base = baseName(root) || "root";
+        await streamTarEntry(projectID, sessionHash, root, base, stat, chunks);
+    }
+    // tar end-of-archive marker: two zero blocks.
+    chunks.push(new Uint8Array(TAR_BLOCK * 2));
+
+    // Cast through BlobPart[] — TS's strict ArrayBuffer / SharedArrayBuffer
+    // distinction in lib.dom.d.ts isn't worth fighting for a runtime
+    // value Blob accepts trivially.
+    const blob = new Blob(chunks as unknown as BlobPart[], {
+        type: "application/x-tar",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename.endsWith(".tar") ? filename : `${filename}.tar`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+// --- minimal tar encoder (uncompressed, ustar). ---------------------
+// Used only by the web-mode DownloadArchive above; the desktop path
+// uses Go's archive/tar. Kept intentionally tiny — no symlinks, no
+// PAX, no UID/GID/UNAME — the archive is meant for "download these
+// files", not "preserve every Unix detail".
+
+const TAR_BLOCK = 512;
+
+async function streamTarEntry(
+    projectID: string,
+    sessionHash: string,
+    remotePath: string,
+    archivePath: string,
+    stat: FileEntryDTO,
+    out: Uint8Array[],
+): Promise<void> {
+    if (stat.isDir) {
+        out.push(tarHeader(archivePath + "/", 0, stat.mode, stat.modTimeUnix, true));
+        const list = await ListDir(projectID, sessionHash, remotePath, 0, 0);
+        for (const e of list.entries) {
+            if (e.error || e.isSymlink) continue;
+            if (!safeChildName(e.name)) continue;
+            const child = remotePath.endsWith("/")
+                ? `${remotePath}${e.name}`
+                : `${remotePath}/${e.name}`;
+            await streamTarEntry(
+                projectID,
+                sessionHash,
+                child,
+                `${archivePath}/${e.name}`,
+                e,
+                out,
+            );
+        }
+        return;
+    }
+    out.push(tarHeader(archivePath, stat.size, stat.mode, stat.modTimeUnix, false));
+    let off = 0;
+    while (off < stat.size) {
+        const want = Math.min(CHUNK_SIZE, stat.size - off);
+        const chunkArr = await ReadFile(projectID, sessionHash, remotePath, off, want);
+        if (!chunkArr || chunkArr.length === 0) {
+            throw new Error(`DownloadArchive: empty chunk for ${remotePath} @${off}`);
+        }
+        const chunk = new Uint8Array(chunkArr);
+        out.push(chunk);
+        off += chunk.length;
+    }
+    // Pad to 512-byte boundary.
+    const pad = (TAR_BLOCK - (stat.size % TAR_BLOCK)) % TAR_BLOCK;
+    if (pad > 0) out.push(new Uint8Array(pad));
+}
+
+function tarHeader(
+    name: string,
+    size: number,
+    mode: number,
+    mtimeUnix: number,
+    isDir: boolean,
+): Uint8Array {
+    const h = new Uint8Array(TAR_BLOCK);
+    writeASCII(h, 0, name, 100);
+    writeOctal(h, 100, mode & 0o7777, 8);
+    writeOctal(h, 108, 0, 8); // uid
+    writeOctal(h, 116, 0, 8); // gid
+    writeOctal(h, 124, isDir ? 0 : size, 12);
+    writeOctal(h, 136, mtimeUnix > 0 ? Math.floor(mtimeUnix) : Math.floor(Date.now() / 1000), 12);
+    // Checksum: pre-fill the field with 8 spaces, sum every byte,
+    // then write the octal sum back.
+    for (let i = 148; i < 156; i++) h[i] = 0x20;
+    h[156] = isDir ? 0x35 /* '5' */ : 0x30 /* '0' */;
+    writeASCII(h, 257, "ustar\0", 6);
+    writeASCII(h, 263, "00", 2);
+    let sum = 0;
+    for (let i = 0; i < TAR_BLOCK; i++) sum += h[i];
+    const cs = sum.toString(8).padStart(6, "0") + "\0 ";
+    writeASCII(h, 148, cs, 8);
+    return h;
+}
+
+function writeASCII(buf: Uint8Array, off: number, s: string, len: number) {
+    const enc = new TextEncoder().encode(s);
+    for (let i = 0; i < len; i++) {
+        buf[off + i] = i < enc.length ? enc[i] : 0;
+    }
+}
+
+function writeOctal(buf: Uint8Array, off: number, n: number, len: number) {
+    // POSIX tar: null-terminated octal ASCII, left-padded with zeros.
+    const s = n.toString(8);
+    const pad = len - 1 - s.length;
+    for (let i = 0; i < pad; i++) buf[off + i] = 0x30; // '0'
+    for (let i = 0; i < s.length; i++) buf[off + pad + i] = s.charCodeAt(i);
+    buf[off + len - 1] = 0;
+}
+
+function baseName(p: string): string {
+    const trimmed = p.replace(/\/+$/, "");
+    const slash = trimmed.lastIndexOf("/");
+    return slash === -1 ? trimmed : trimmed.slice(slash + 1);
+}
+
+function safeChildName(n: string): boolean {
+    if (n === "" || n === "." || n === "..") return false;
+    if (n.includes("/") || n.includes("\\")) return false;
+    return true;
 }
 
 export async function UploadFile(

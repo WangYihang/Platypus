@@ -23,10 +23,9 @@ import { cn } from "@/lib/cn";
 import {
     Chmod,
     DeleteFile,
+    DownloadArchive,
     DownloadFile,
-    DownloadFolder,
     Mkdir,
-    PickDirectoryToSave,
     PickFileToUpload,
     PickSaveLocation,
     RenameFile,
@@ -37,6 +36,12 @@ import type { FileEntryDTO } from "@wails/go/app/App";
 import { basename } from "../../../lib/format";
 
 import FileTable from "./FileTable";
+import {
+    ArchiveFormat,
+    archiveExtension,
+    suggestedArchiveFilename,
+} from "./archive";
+import FolderArchiveDialog from "./FolderArchiveDialog";
 import {
     ChmodDialog,
     DeleteConfirmDialog,
@@ -107,6 +112,7 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
     const [showChmod, setShowChmod] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
     const [bulkDownloading, setBulkDownloading] = useState(false);
+    const [showArchive, setShowArchive] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -192,37 +198,37 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
             }
             return;
         }
-        // Multi-select OR a single folder → ask for a destination
-        // directory once, then loop. DownloadFolder mirrors the tree;
-        // DownloadFile drops the file directly into the chosen dir.
-        const destDir = await PickDirectoryToSave("Save selection to");
-        if (!destDir) return;
+        // Anything that includes a folder, or any multi-selection,
+        // packages into a single archive — folders can't ride the
+        // OS save-as dialog as a tree, and forcing operators into
+        // many save dialogs / a hidden "save to dir" picker reads
+        // worse than a clear "pick the format" prompt. The dialog
+        // keeps the format choice visible and lets the operator
+        // confirm what's being packaged. The archive itself is
+        // built server-side in chunks so a huge tree never holds
+        // anything in memory.
+        setShowArchive(true);
+    }
+
+    async function handleArchiveConfirm(format: ArchiveFormat) {
+        const names = selectedEntries.map((e) => e.name);
+        const single = names.length === 1 ? names[0] : names;
+        const filename = suggestedArchiveFilename(single, format);
+        const dst = await PickSaveLocation("Save archive as", filename);
+        if (!dst) {
+            setShowArchive(false);
+            return;
+        }
+        setShowArchive(false);
         setBulkDownloading(true);
         try {
-            let fileCount = 0;
-            let folderCount = 0;
-            for (const entry of selectedEntries) {
-                const remote = joinPath(dir.path, entry.name);
-                if (entry.isDir) {
-                    await DownloadFolder(projectID, sessionHash, remote, destDir);
-                    folderCount += 1;
-                } else {
-                    await DownloadFile(
-                        projectID,
-                        sessionHash,
-                        remote,
-                        joinPath(destDir, entry.name),
-                    );
-                    fileCount += 1;
-                }
-            }
-            const parts: string[] = [];
-            if (fileCount > 0) parts.push(`${fileCount} file${fileCount === 1 ? "" : "s"}`);
-            if (folderCount > 0)
-                parts.push(`${folderCount} folder${folderCount === 1 ? "" : "s"}`);
-            toast.success(`Downloaded ${parts.join(" and ")}`);
+            const remotePaths = selectedEntries.map((e) => joinPath(dir.path, e.name));
+            await DownloadArchive(projectID, sessionHash, remotePaths, dst, format);
+            toast.success(
+                `Downloaded ${names.length} item${names.length === 1 ? "" : "s"} as ${archiveExtension(format).slice(1)}`,
+            );
         } catch (err) {
-            toast.error(`download: ${humanizeError(err)}`);
+            toast.error(`archive: ${humanizeError(err)}`);
         } finally {
             setBulkDownloading(false);
         }
@@ -532,6 +538,12 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
                 </div>
             </div>
 
+            <FolderArchiveDialog
+                open={showArchive}
+                onOpenChange={setShowArchive}
+                names={selectedEntries.map((e) => e.name)}
+                onConfirm={handleArchiveConfirm}
+            />
             <NewFileDialog
                 open={showNewFile}
                 onOpenChange={setShowNewFile}
