@@ -63,6 +63,24 @@ interface NavItem {
     minRole?: SessionUser["role"];
 }
 
+// NavGroup splits the per-project nav into three IA buckets so new
+// users read the relationship at a glance:
+//
+//   work    — daily-use surfaces: Overview / Fleet / Activities
+//   admin   — onboarding & access: Enrollment / Members
+//   project — project-level configuration: Settings
+//
+// Group order, labels, and item ordering are pinned by
+// e2e/specs/56-sidebar-nav-grouping.spec.ts so a future "let me
+// reorder these" can't silently put Settings above Fleet.
+type NavGroupKey = "work" | "admin" | "project";
+
+interface NavGroup {
+    key: NavGroupKey;
+    label: string;
+    items: NavItem[];
+}
+
 // ProjectSidebar is the left rail. Linear/Resend-style: brand at top,
 // project switcher dropdown, flat per-project nav, user menu pinned at
 // the bottom.
@@ -87,16 +105,39 @@ export default function ProjectSidebar({
     // appears (sidebar, page header, empty-state, etc.). Don't reach
     // into lucide-react directly here — extend the registry instead.
     const I = icons;
-    const items: NavItem[] = [
-        { to: "overview", label: "Overview", icon: <I.project className="size-4" />, requiresProject: true },
-        { to: "fleet", label: "Fleet", icon: <I.fleet className="size-4" />, requiresProject: true },
-        { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
-        { to: "enrollment", label: "Enrollment", icon: <I.enrollment className="size-4" />, requiresProject: true, minRole: "admin" },
-        { to: "members", label: "Members", icon: <I.members className="size-4" />, requiresProject: true, minRole: "operator" },
-        { to: "settings", label: "Settings", icon: <I.settings className="size-4" />, requiresProject: true, minRole: "admin" },
+    const groups: NavGroup[] = [
+        {
+            key: "work",
+            label: "Work",
+            items: [
+                { to: "overview", label: "Overview", icon: <I.project className="size-4" />, requiresProject: true },
+                { to: "fleet", label: "Fleet", icon: <I.fleet className="size-4" />, requiresProject: true },
+                { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
+            ],
+        },
+        {
+            key: "admin",
+            label: "Admin",
+            items: [
+                { to: "enrollment", label: "Enrollment", icon: <I.enrollment className="size-4" />, requiresProject: true, minRole: "admin" },
+                { to: "members", label: "Members", icon: <I.members className="size-4" />, requiresProject: true, minRole: "operator" },
+            ],
+        },
+        {
+            key: "project",
+            label: "Project",
+            items: [
+                { to: "settings", label: "Settings", icon: <I.settings className="size-4" />, requiresProject: true, minRole: "admin" },
+            ],
+        },
     ];
 
-    const visible = items.filter((it) => meetsRole(user.role, it.minRole));
+    const visibleGroups = groups
+        .map((g) => ({
+            ...g,
+            items: g.items.filter((it) => meetsRole(user.role, it.minRole)),
+        }))
+        .filter((g) => g.items.length > 0);
 
     async function handleCreateProject(v: ProjectFormValues) {
         try {
@@ -163,32 +204,67 @@ export default function ProjectSidebar({
 
             <nav style={{ flex: 1, padding: `${space[2]}px ${space[2]}px`, overflow: "auto" }}>
                 {currentSlug ? (
-                    visible.map((it) => (
-                        <NavLink
-                            key={it.to}
-                            to={`/projects/${currentSlug}/${it.to}`}
-                            className={({ isActive }) => {
-                                // Host detail pages live at /hosts/:id/:tab
-                                // but conceptually belong under Fleet, so
-                                // highlight Fleet there too.
-                                const forced =
-                                    it.to === "fleet" &&
-                                    pathname.startsWith(`/projects/${currentSlug}/hosts/`);
-                                const active = isActive || forced;
-                                return "pl-nav-link" + (active ? " pl-nav-link--active" : "");
+                    visibleGroups.map((g, gi) => (
+                        <div
+                            key={g.key}
+                            style={{
+                                // First group sits flush; subsequent
+                                // groups get extra top space so the
+                                // section break reads as a break, not
+                                // an accidental gap.
+                                marginTop: gi === 0 ? 0 : space[3],
                             }}
                         >
-                            <span
+                            <div
+                                data-testid={`nav-group-${g.key}`}
                                 style={{
-                                    width: 16,
-                                    display: "inline-flex",
-                                    justifyContent: "center",
+                                    padding: `${space[1]}px ${space[3]}px ${space[1]}px`,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    letterSpacing: 0.6,
+                                    textTransform: "uppercase",
+                                    color: palette.textMuted,
                                 }}
                             >
-                                {it.icon}
-                            </span>
-                            <span>{it.label}</span>
-                        </NavLink>
+                                {g.label}
+                            </div>
+                            <div data-testid={`nav-group-items-${g.key}`}>
+                                {g.items.map((it) => (
+                                    <NavLink
+                                        key={it.to}
+                                        to={`/projects/${currentSlug}/${it.to}`}
+                                        className={({ isActive }) => {
+                                            // Host detail pages live at
+                                            // /hosts/:id/:tab but
+                                            // conceptually belong under
+                                            // Fleet, so highlight Fleet
+                                            // there too.
+                                            const forced =
+                                                it.to === "fleet" &&
+                                                pathname.startsWith(
+                                                    `/projects/${currentSlug}/hosts/`,
+                                                );
+                                            const active = isActive || forced;
+                                            return (
+                                                "pl-nav-link" +
+                                                (active ? " pl-nav-link--active" : "")
+                                            );
+                                        }}
+                                    >
+                                        <span
+                                            style={{
+                                                width: 16,
+                                                display: "inline-flex",
+                                                justifyContent: "center",
+                                            }}
+                                        >
+                                            {it.icon}
+                                        </span>
+                                        <span>{it.label}</span>
+                                    </NavLink>
+                                ))}
+                            </div>
+                        </div>
                     ))
                 ) : (
                     <div
