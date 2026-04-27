@@ -403,12 +403,17 @@ function PlatformPickerField({
     form: UseFormReturn<InstallFormValues>;
     platforms: PlatformsState;
 }) {
+    // Radix Select reserves "" for clear-selection, so the auto-detect
+    // option needs a non-empty sentinel value. The wire shape stays the
+    // same — target_os and target_arch are still empty strings on
+    // submit when the user picks auto-detect.
+    const AUTO = "__auto__";
     const targetOS = form.watch("target_os") ?? "";
     const targetArch = form.watch("target_arch") ?? "";
-    const value = targetOS && targetArch ? `${targetOS}/${targetArch}` : "";
+    const value = targetOS && targetArch ? `${targetOS}/${targetArch}` : AUTO;
 
     function setValue(next: string) {
-        if (!next) {
+        if (next === AUTO) {
             form.setValue("target_os", "");
             form.setValue("target_arch", "");
             return;
@@ -473,7 +478,7 @@ function PlatformPickerField({
                         <SelectValue placeholder="Auto-detect (no platform pin)" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Auto-detect (no platform pin)</SelectItem>
+                        <SelectItem value={AUTO}>Auto-detect (no platform pin)</SelectItem>
                         {grouped.length > 0 && <SelectSeparator />}
                         {grouped.map((g) => (
                             <SelectGroup key={g.os}>
