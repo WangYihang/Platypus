@@ -448,8 +448,48 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// /api/v1/info's session_count reflects actual v2 connections.
 	api.LiveAgentCounter = func() int { return len(agentLinkSvc.All()) }
 
+	// Bootstrap-secret handling. The secret is only useful while the
+	// users table is empty (Bootstrap is the one-shot first-admin flow);
+	// after that it's dead weight. Two failure modes the previous code
+	// had:
+	//   1. Logging the value at INFO meant any reader of the server log
+	//      (centralised logging, journalctl, docker logs) could replay
+	//      it on a re-bootstrap window.
+	//   2. The value persisted in scrollback long after first admin
+	//      existed, even though it had no operational use anymore.
+	// Mitigation: when no admin exists, write the secret to
+	// <data-dir>/bootstrap.secret with mode 0600 and log only the path.
+	// When an admin exists, log a redacted marker so operators can see
+	// the server is up without leaking anything.
+	dataDir := filepath.Dir(cfg.RESTful.DBFileOrDefault())
+	bootstrapPath := filepath.Join(dataDir, "bootstrap.secret")
+	adminCount, _ := db.Users().Count(ctx)
+	if adminCount == 0 {
+		_ = os.MkdirAll(dataDir, 0o700)
+		if err := os.WriteFile(bootstrapPath, []byte(auth.GetSecret()+"\n"), 0o600); err != nil {
+			log.L.Warn("bootstrap_secret_write_failed",
+				"path", bootstrapPath,
+				"error", err.Error(),
+				"hint", "first-run admin bootstrap will be unreachable until this is resolved",
+			)
+		} else {
+			log.L.Info("bootstrap_secret_written",
+				"path", bootstrapPath,
+				"hint", "use this once to create the first admin, then delete it",
+			)
+		}
+	} else {
+		// Tidy up any leftover bootstrap.secret from an earlier first-run.
+		// Best-effort: ignore not-exist; surface anything else as a warn.
+		if err := os.Remove(bootstrapPath); err != nil && !os.IsNotExist(err) {
+			log.L.Warn("bootstrap_secret_cleanup_failed",
+				"path", bootstrapPath,
+				"error", err.Error(),
+			)
+		}
+	}
 	log.L.Info("api_ready",
-		"bootstrap_secret", auth.GetSecret(),
+		"bootstrap_secret", "<redacted; see bootstrap.secret in data dir on first run>",
 		"public_base", "https://"+api.PublicAddr,
 	)
 
