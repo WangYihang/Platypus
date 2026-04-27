@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ReadFile } from "../../../../wailsjs/go/app/App";
+import { ReadFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
 
 // Read-only paged viewer for files that are too big to load into a

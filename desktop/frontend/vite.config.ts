@@ -5,41 +5,49 @@ import path from "path";
 
 // Two build modes share one source tree:
 //
-//  - default (Wails)          → imports resolve to wailsjs/go/app/App,
-//                                wailsjs/runtime/runtime, wailsjs/go/models.
-//                                Output: dist/ (consumed by `wails build`).
-//  - --mode web (standalone)  → same imports get aliased to hand-written
+//  - default (Wails)          → @wails/* resolves to the bindings
+//                                `wails generate module` writes under
+//                                desktop/frontend/wailsjs/. Output:
+//                                dist/ (consumed by `wails build`).
+//  - --mode web (standalone)  → @wails/* resolves to hand-written
 //                                REST/WebSocket shims under src/platform/.
 //                                Output: dist-web/ (static bundle the user
 //                                serves wherever they want).
 //
-// No page-level code branches on the mode — every page keeps importing
-// from "../../wailsjs/go/app/App" etc. The alias below is the whole trick.
+// No page-level code branches on the mode — every page imports from
+// "@wails/go/app/App" / "@wails/runtime/runtime" and the alias below
+// picks the right backend. tsconfig.json paths point @wails/* at the
+// platform shims unconditionally so `tsc` type-checks both modes
+// without the wailsjs/ tree having to exist on disk.
 export default defineConfig(({ mode }) => {
     const isWeb = mode === "web";
-    // wailsjs/go/models is committed (it's pure type definitions auto-
-    // generated from the Go structs), so both build modes resolve to the
-    // same file. Only App and runtime need a web-mode swap.
-    //
-    // Use regex aliases to match the Wails paths at any import depth.
     const platformAliases = isWeb
         ? [
               {
-                  find: /.*wailsjs\/go\/app\/App$/,
+                  find: "@wails/go/app/App",
                   replacement: path.resolve(__dirname, "src/platform/App.web.ts"),
               },
               {
-                  find: /.*wailsjs\/runtime\/runtime$/,
+                  find: "@wails/runtime/runtime",
                   replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
               },
           ]
-        : [];
+        : [
+              {
+                  find: "@wails/go/app/App",
+                  replacement: path.resolve(__dirname, "wailsjs/go/app/App"),
+              },
+              {
+                  find: "@wails/runtime/runtime",
+                  replacement: path.resolve(__dirname, "wailsjs/runtime/runtime"),
+              },
+          ];
 
     return {
         plugins: [react(), tailwindcss()],
         resolve: {
             alias: [
-                ...(Array.isArray(platformAliases) ? platformAliases : []),
+                ...platformAliases,
                 { find: "@", replacement: path.resolve(__dirname, "src") },
             ],
         },

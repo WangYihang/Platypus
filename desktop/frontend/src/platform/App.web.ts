@@ -1,6 +1,8 @@
-// Web-mode drop-in for wailsjs/go/app/App. Every name the pages import
-// from that path is re-exported here with a REST/WebSocket implementation
-// that talks to platypus-server directly. The server's CORS config is `*`
+// Web-mode backend for the @wails/go/app/App alias. Every name the pages
+// import from that alias is re-exported here with a REST/WebSocket
+// implementation that talks to platypus-server directly. tsconfig.json
+// also points the alias here unconditionally so `tsc` type-checks both
+// modes against this signature surface. The server's CORS config is `*`
 // (see internal/api/rest.go) so cross-origin fetch + WebSocket work.
 //
 // Auth comes from lib/auth — the JWT session set up by Login.tsx. The

@@ -16,7 +16,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@wails/go/app/App": ["./src/platform/App.web"],
+      "@wails/runtime/runtime": ["./src/platform/runtime.web"]
     }
   },
   "include": ["src"],

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { EventsOff, EventsOn } from "../../../../wailsjs/runtime/runtime";
-import { UploadFile } from "../../../../wailsjs/go/app/App";
-import { UploadBrowserFile } from "../../../platform/App.web";
+import { EventsOff, EventsOn } from "@wails/runtime/runtime";
+import { UploadFile } from "@wails/go/app/App";
+import { UploadBrowserFile } from "@/platform/App.web";
 import { joinPath } from "./paths";
 
 // UploadProgress is a lightweight event the browser UI can subscribe to

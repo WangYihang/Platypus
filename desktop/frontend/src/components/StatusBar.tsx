@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Router, Zap } from "lucide-react";
 
-import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
+import { EventsOff, EventsOn } from "@wails/runtime/runtime";
 import { palette, radius, space } from "../layout/theme";
 import { getSession, onActiveChange, onSessionChange } from "../lib/auth";
 import { getActiveServer, onServersChange } from "../lib/servers";

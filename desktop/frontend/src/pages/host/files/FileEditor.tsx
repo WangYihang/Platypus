@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
-import { ReadFile, WriteFile } from "../../../../wailsjs/go/app/App";
+import { ReadFile, WriteFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
 import { inferLanguage } from "./paths";
 

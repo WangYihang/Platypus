@@ -27,8 +27,8 @@ import {
     PickSaveLocation,
     RenameFile,
     UploadFile,
-} from "../../../../wailsjs/go/app/App";
-import type { FileEntryDTO } from "../../../platform/App.web";
+} from "@wails/go/app/App";
+import type { FileEntryDTO } from "@wails/go/app/App";
 import { basename } from "../../../lib/format";
 
 import FileTable from "./FileTable";

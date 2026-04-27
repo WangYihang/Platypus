@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { ListDir } from "../../../../wailsjs/go/app/App";
-import type { FileEntryDTO } from "../../../platform/App.web";
+import { ListDir } from "@wails/go/app/App";
+import type { FileEntryDTO } from "@wails/go/app/App";
 
 // useDirectory manages the current directory listing for a session.
 // Remembers the last visited path in localStorage so reopening the tab

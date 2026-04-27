@@ -1,8 +1,10 @@
-// Web-mode drop-in for wailsjs/runtime/runtime. Pages import EventsOn /
-// EventsOff to subscribe to server-pushed events (notify:* + terminal:*).
-// This shim backs them with a browser EventTarget so any producer — the
-// REST shim in App.web.ts (for terminal:* during W3) or a /notify
-// WebSocket (deferred to Phase 2) — can emit by calling emitEvent.
+// Web-mode backend for the @wails/runtime/runtime alias. Pages import
+// EventsOn / EventsOff to subscribe to server-pushed events
+// (notify:* + terminal:*). This shim backs them with a browser
+// EventTarget so any producer — the REST shim in App.web.ts (for
+// terminal:* during W3) or a /notify WebSocket (deferred to Phase 2) —
+// can emit by calling emitEvent. tsconfig.json points the alias here
+// unconditionally so `tsc` type-checks both modes against this surface.
 
 type Handler = (...args: any[]) => void;
 

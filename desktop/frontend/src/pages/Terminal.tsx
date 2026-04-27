@@ -8,8 +8,8 @@ import {
     OpenTerminal,
     ResizeTerminal,
     SendTerminalInput,
-} from "../../wailsjs/go/app/App";
-import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
+} from "@wails/go/app/App";
+import { EventsOff, EventsOn } from "@wails/runtime/runtime";
 import { palette } from "../layout/theme";
 
 interface Props {
