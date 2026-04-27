@@ -62,16 +62,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectSeparator,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import {
     Table,
     TableBody,
     TableCell,
@@ -390,12 +380,31 @@ function InstallPanel({
     );
 }
 
-// PlatformPickerField is the "Target platform" form control. It's a
-// meta-field over `target_os` and `target_arch` — the underlying schema
-// keeps them as separate optional strings so the wire shape doesn't
-// need to change, but admins only see one grouped Select and can't
-// hand-type a typo. The synthetic value is `<os>/<arch>` for picked
-// items or `""` for auto-detect.
+// preferredOrder returns a comparator that ranks `priority` items first
+// (in their declared order) and trails everything else alphabetically.
+// Used to bubble the densest-used OSes / archs to the front of the
+// pickers without dropping forward compatibility for new GOOS/GOARCH
+// values that ship in future manifests.
+function preferredOrder(priority: string[]): (a: string, b: string) => number {
+    return (a, b) => {
+        const ia = priority.indexOf(a);
+        const ib = priority.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+    };
+}
+
+// PlatformPickerField is the "Target platform" form control. Two
+// cascading ToggleGroups: pick an OS, then the matching archs unfold;
+// leaving both unselected means "auto-detect at runtime", which keeps
+// today's "blank target_os + blank target_arch → install one-liner
+// self-detects" wire contract. This shape avoids Radix Select's
+// no-empty-value rule (no sentinel needed — ToggleGroup type="single"
+// represents the unselected state with an empty string natively) and
+// matches how an admin actually thinks: first decide the OS, then pick
+// the architecture from the options that platform supports.
 function PlatformPickerField({
     form,
     platforms,
@@ -403,99 +412,93 @@ function PlatformPickerField({
     form: UseFormReturn<InstallFormValues>;
     platforms: PlatformsState;
 }) {
-    // Radix Select reserves "" for clear-selection, so the auto-detect
-    // option needs a non-empty sentinel value. The wire shape stays the
-    // same — target_os and target_arch are still empty strings on
-    // submit when the user picks auto-detect.
-    const AUTO = "__auto__";
     const targetOS = form.watch("target_os") ?? "";
     const targetArch = form.watch("target_arch") ?? "";
-    const value = targetOS && targetArch ? `${targetOS}/${targetArch}` : AUTO;
 
-    function setValue(next: string) {
-        if (next === AUTO) {
-            form.setValue("target_os", "");
-            form.setValue("target_arch", "");
-            return;
-        }
-        const [os, arch] = next.split("/");
-        form.setValue("target_os", os);
-        form.setValue("target_arch", arch);
-    }
-
-    // Group the live list by OS, ordering both groups and items by the
-    // OS_ORDER / ARCH_ORDER preferences so the densest-used options
-    // bubble to the top of the dropdown. Anything outside the curated
-    // ordering trails alphabetically.
-    const grouped: { os: string; archs: string[] }[] = [];
+    // Index live platforms by OS so the arch row only shows architectures
+    // that actually have a published binary on the selected OS.
+    const archsByOS = new Map<string, string[]>();
     if (platforms.status === "ready") {
-        const byOS = new Map<string, Set<string>>();
+        const tmp = new Map<string, Set<string>>();
         for (const p of platforms.platforms) {
-            if (!byOS.has(p.os)) byOS.set(p.os, new Set());
-            byOS.get(p.os)!.add(p.arch);
+            if (!tmp.has(p.os)) tmp.set(p.os, new Set());
+            tmp.get(p.os)!.add(p.arch);
         }
-        const osCmp = (a: string, b: string) => {
-            const ia = OS_ORDER.indexOf(a);
-            const ib = OS_ORDER.indexOf(b);
-            if (ia === -1 && ib === -1) return a.localeCompare(b);
-            if (ia === -1) return 1;
-            if (ib === -1) return -1;
-            return ia - ib;
-        };
-        const archCmp = (a: string, b: string) => {
-            const ia = ARCH_ORDER.indexOf(a);
-            const ib = ARCH_ORDER.indexOf(b);
-            if (ia === -1 && ib === -1) return a.localeCompare(b);
-            if (ia === -1) return 1;
-            if (ib === -1) return -1;
-            return ia - ib;
-        };
-        for (const os of [...byOS.keys()].sort(osCmp)) {
-            const archs = [...byOS.get(os)!].sort(archCmp);
-            grouped.push({ os, archs });
+        for (const [os, set] of tmp) {
+            archsByOS.set(os, [...set].sort(preferredOrder(ARCH_ORDER)));
         }
     }
+    const osList = [...archsByOS.keys()].sort(preferredOrder(OS_ORDER));
+    const archList = targetOS ? (archsByOS.get(targetOS) ?? []) : [];
 
-    const description =
-        platforms.status === "loading"
-            ? "Loading platforms…"
-            : platforms.status === "empty"
-              ? `No agent binaries on channel "${platforms.channel}" yet — run the agent-publisher sidecar (or seed MinIO) to populate the picker. Auto-detect still works.`
-              : platforms.status === "error"
-                ? `Couldn't load platforms: ${platforms.message}. Auto-detect still works.`
-                : "Pick the target the agent will run on, or leave Auto-detect for the install one-liner to choose at runtime.";
+    function pickOS(next: string) {
+        // Radix emits "" when the user deselects the active item by
+        // clicking it again — let that propagate as "back to
+        // auto-detect" rather than an "OS but no arch" half state.
+        form.setValue("target_os", next);
+        // Switching OS invalidates whatever arch was picked — even if
+        // the new OS happens to have the same arch name, forcing a
+        // re-pick keeps the cascade honest.
+        form.setValue("target_arch", "");
+    }
+
+    function pickArch(next: string) {
+        form.setValue("target_arch", next);
+    }
+
+    const description = (() => {
+        if (platforms.status === "loading") return "Loading platforms…";
+        if (platforms.status === "empty") {
+            return `No agent binaries on channel "${platforms.channel}" yet — run the agent-publisher sidecar (or seed MinIO) to populate this picker. The install command still works (auto-detect at runtime).`;
+        }
+        if (platforms.status === "error") {
+            return `Couldn't load platforms: ${platforms.message}. The install command still works (auto-detect at runtime).`;
+        }
+        if (targetOS && targetArch) {
+            return `Pinned to ${targetOS}/${targetArch}.`;
+        }
+        if (targetOS) {
+            return `Pick an architecture, or leave the OS unselected to auto-detect at runtime.`;
+        }
+        return "Leave both unselected for the install one-liner to auto-detect, or pick an OS to start narrowing.";
+    })();
 
     return (
         <FormItem>
             <FormLabel>Target platform</FormLabel>
-            <FormControl>
-                <Select
-                    value={value}
-                    onValueChange={setValue}
-                    disabled={platforms.status === "loading"}
+            <div className="space-y-3">
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={targetOS}
+                    onValueChange={pickOS}
+                    disabled={platforms.status !== "ready"}
+                    className="flex-wrap justify-start"
                 >
-                    <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Auto-detect (no platform pin)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value={AUTO}>Auto-detect (no platform pin)</SelectItem>
-                        {grouped.length > 0 && <SelectSeparator />}
-                        {grouped.map((g) => (
-                            <SelectGroup key={g.os}>
-                                <SelectLabel>{g.os}</SelectLabel>
-                                {g.archs.map((arch) => (
-                                    <SelectItem
-                                        key={`${g.os}/${arch}`}
-                                        value={`${g.os}/${arch}`}
-                                    >
-                                        {arch}
-                                    </SelectItem>
-                                ))}
-                            </SelectGroup>
+                    {osList.map((os) => (
+                        <ToggleGroupItem key={os} value={os}>
+                            {os}
+                        </ToggleGroupItem>
+                    ))}
+                </ToggleGroup>
+                {targetOS && archList.length > 0 && (
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        size="sm"
+                        value={targetArch}
+                        onValueChange={pickArch}
+                        className="flex-wrap justify-start"
+                    >
+                        {archList.map((arch) => (
+                            <ToggleGroupItem key={arch} value={arch}>
+                                {arch}
+                            </ToggleGroupItem>
                         ))}
-                    </SelectContent>
-                </Select>
-            </FormControl>
+                    </ToggleGroup>
+                )}
+            </div>
             <FormDescription>{description}</FormDescription>
             <FormMessage />
         </FormItem>
