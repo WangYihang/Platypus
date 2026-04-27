@@ -45,12 +45,15 @@ test.describe("enrollment status — unused / used vocabulary", () => {
         await dialog.getByLabel(/agent should dial/i).fill("127.0.0.1:7332");
         await dialog.getByRole("button", { name: /^generate$/i }).click();
 
-        // The "command issued" dialog opens; close it.
+        // The "command issued" dialog opens. We dismiss via the X
+        // close button (the primary "I'll run this — show me Fleet"
+        // button navigates to /fleet, which would lose the enrollment
+        // table this spec needs to inspect).
         const issuedDialog = page.getByRole("dialog").filter({
             hasText: /this is the only time/i,
         });
         await expect(issuedDialog).toBeVisible({ timeout: 10_000 });
-        await issuedDialog.getByRole("button", { name: /^done$/i }).click();
+        await issuedDialog.getByRole("button", { name: /^close$/i }).click();
 
         // The new row should appear in the table with status "Unused".
         // Look for a status pill on the page.
