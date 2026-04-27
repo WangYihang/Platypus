@@ -125,6 +125,15 @@ export default function Onboarding() {
         const profile = addServer({ name: displayName, url });
         try {
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
+            // The server cleans up <data-dir>/bootstrap.secret
+            // automatically on the next start once a user exists, but
+            // until then the operator can delete it explicitly. Prompt
+            // them — keeps the secret out of backups / volume
+            // snapshots taken before the next restart.
+            toast.info(
+                "Admin created. Delete <data-dir>/bootstrap.secret on the server to keep the secret out of backups.",
+                { duration: 8000 },
+            );
             await finish(profile);
         } catch (err) {
             toast.error(`bootstrap: ${humanizeError(err)}`);

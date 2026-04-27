@@ -165,6 +165,13 @@ For production, run the server under `systemd` rather than backgrounding it manu
   (which enables a dev-only on-disk fallback at `<data-dir>/ca.kek` —
   unsafe for production because the ciphertext and key end up on the
   same volume).
+* **Desktop-class viewport, no mobile layout (yet).** The Web UI
+  targets ≥ 1280px viewports; the rail / sidebar / status-bar chrome
+  takes ~300px, leaving the content body in the 80–100 character
+  reading sweet spot. There is no responsive collapse for narrow
+  windows today — sub-1024px viewports will show horizontal scrollers
+  on tables. Tablet / phone support is on the backlog (P4 in the UX
+  audit) but not blocking; admin work is desk work.
 * **Object-store credentials.** When the distributor is enabled
   (`distributor.store.endpoint` set), set
   `PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID` and
