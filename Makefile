@@ -169,13 +169,8 @@ e2e: build e2e-deps
 screenshots: e2e
 
 # Tiny preview so you can `make web-ui-serve` and browse
-# http://localhost:7777 without needing nginx/caddy. Uses scripts/spa-serve.py
-# so React Router routes (e.g. /projects/<slug>/enrollment) survive a refresh
-# instead of returning 404 — plain `python -m http.server` can't do that.
+# http://localhost:7777. Vite's preview server has SPA history fallback baked
+# in, so React Router routes (e.g. /projects/<slug>/enrollment) survive a
+# refresh — `python -m http.server` can't do that.
 web-ui-serve:
-	@echo "Serving desktop/frontend/dist-web/ at http://localhost:7777 (Ctrl-C to stop)"
-	@( \
-		command -v python3 >/dev/null && python3 scripts/spa-serve.py 7777 desktop/frontend/dist-web || \
-		command -v python  >/dev/null && python  scripts/spa-serve.py 7777 desktop/frontend/dist-web || \
-		(echo "No python available — install python3, or use any static host with SPA fallback." && exit 1) \
-	)
+	@cd desktop/frontend && pnpm preview:web --port 7777

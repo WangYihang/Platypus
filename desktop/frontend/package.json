@@ -8,7 +8,8 @@
     "dev:desktop": "vite",
     "build:web": "tsc && vite build --mode web",
     "build:desktop": "tsc && vite build",
-    "preview": "vite preview"
+    "preview:web": "vite preview --mode web",
+    "preview:desktop": "vite preview"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",
