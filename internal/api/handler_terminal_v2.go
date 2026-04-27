@@ -58,11 +58,11 @@ func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
 			return
 		}
 
-		ws, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
-			Subprotocols: []string{"tty"},
-			// Permissive since the REST origin is already authenticated.
-			InsecureSkipVerify: true, //nolint:gosec // WebSocket Origin policy, not TLS
-		})
+		// Origin policy lives in wsAcceptOptions: strict same-origin in
+		// production, InsecureSkipVerify only when PLATYPUS_DEV=1
+		// (e.g. Vite-dev backend / SPA on different ports). See L1 in
+		// the security audit and ws_origin_test.go for the contract.
+		ws, err := websocket.Accept(c.Writer, c.Request, wsAcceptOptions("tty"))
 		if err != nil {
 			log.Warn("v2 terminal: ws upgrade for %s: %v", agentID, err)
 			return
