@@ -305,11 +305,15 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 	endpoint := r.ServerEndpoint
 	host, port := splitHostPort(endpoint)
 	// The distributor base URL (scheme://host[:port]) the agent will
-	// hit for the artifact. Unified ingress always terminates TLS, so
-	// the generated one-liner always uses https. The `-k` on curl
-	// tolerates the default self-signed cert operators typically ship
-	// with; ship a real cert and the operator can drop the -k flag
-	// from this template.
+	// hit for the artifact. Unified ingress always terminates TLS.
+	//
+	// TLS verification policy: when the project has a CA initialised the
+	// server stamps it into the script via PLATYPUS_PROJECT_CA and the
+	// downloader pins on it (--cacert). When no CA is available we refuse
+	// to download by default — the operator must opt in explicitly with
+	// PLATYPUS_INSECURE_DOWNLOAD=1, with a loud warning. This prevents a
+	// network attacker from replacing the agent binary on a default
+	// install (CVE-class: MITM → remote code execution as root).
 	base := "https://" + shellQuoteHostInline(distributorHost)
 	lines := []string{
 		"#!/bin/sh",
@@ -323,8 +327,8 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 	}
 	if r.ProjectCAPEM != "" {
 		// base64 so the PEM's literal newlines survive the shell
-		// round trip; agent-side code will base64-decode on first
-		// use (see internal/agent/trust.go in Phase II).
+		// round trip; the downloader below decodes this into a
+		// temp file fed to curl --cacert.
 		lines = append(lines,
 			"PLATYPUS_PROJECT_CA="+shellQuote(base64.StdEncoding.EncodeToString([]byte(r.ProjectCAPEM))),
 			"export PLATYPUS_PROJECT_CA",
@@ -337,8 +341,27 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		"  aarch64|arm64) ARCH=arm64 ;;",
 		"  *) echo \"unsupported arch: $(uname -m)\" >&2; exit 1 ;;",
 		"esac",
+		"CA_FILE=\"\"",
+		"trap 'if [ -n \"$CA_FILE\" ] && [ -f \"$CA_FILE\" ]; then rm -f \"$CA_FILE\"; fi' EXIT",
+		"CURL_TLS=\"\"",
+		"if [ -n \"${PLATYPUS_PROJECT_CA-}\" ]; then",
+		"  CA_FILE=$(mktemp /tmp/platypus-ca-XXXXXX.pem)",
+		"  printf '%s' \"$PLATYPUS_PROJECT_CA\" | base64 -d > \"$CA_FILE\"",
+		"  CURL_TLS=\"--cacert $CA_FILE\"",
+		"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}" + "\" = \"1\" ]; then",
+		"  echo 'warning: PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download' >&2",
+		"  CURL_TLS=\"-k\"",
+		"else",
+		"  echo 'platypus: server has no project CA in this install script and PLATYPUS_INSECURE_DOWNLOAD is not set' >&2",
+		"  echo 'platypus: refusing to download agent binary without TLS trust anchor (MITM risk)' >&2",
+		"  echo 'platypus: ask the server admin to initialise a project CA, or re-run with PLATYPUS_INSECURE_DOWNLOAD=1 if you accept the risk' >&2",
+		"  exit 1",
+		"fi",
 		"BIN=$(mktemp /tmp/platypus-agent-XXXXXX)",
-		"curl -fsSLk "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest -o \"$BIN\"",
+		// CURL_TLS is intentionally unquoted so it word-splits into the
+		// flag pair (--cacert PATH or -k); the values it can hold are
+		// fully server-controlled, never user input.
+		"curl -fsSL $CURL_TLS "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest -o \"$BIN\"",
 		"chmod +x \"$BIN\"",
 		"exec \"$BIN\" --host \"$AGENT_HOST\" --port \"$AGENT_PORT\" --token \"$AGENT_TOKEN\"",
 	)
