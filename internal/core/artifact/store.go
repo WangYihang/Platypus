@@ -6,7 +6,7 @@ package artifact
 
 import (
 	"context"
-	"time"
+	"io"
 )
 
 // Manifest layout in the bucket.
@@ -27,10 +27,10 @@ type Store interface {
 	// are small and need to be inspected before serving.
 	GetObject(ctx context.Context, key string) ([]byte, error)
 
-	// PresignGet issues a time-limited download URL for key. The agent
-	// downloads artifact bytes directly from the object store via this
-	// URL; the Distributor never sees the binary.
-	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error)
+	// GetObjectReader returns a streaming reader for key, plus size and
+	// content type. The caller must close the returned ReadCloser.
+	// Used by the Distributor to proxy agent binary downloads.
+	GetObjectReader(ctx context.Context, key string) (io.ReadCloser, int64, string, error)
 
 	// Prefix returns the bucket-local prefix under which ManifestKeyFmt /
 	// artifact keys are rooted. Handy for building full keys without

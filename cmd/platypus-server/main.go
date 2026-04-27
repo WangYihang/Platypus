@@ -17,7 +17,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -344,17 +343,6 @@ func formatValidationError(err error) error {
 		msg += fmt.Sprintf("\n  - %s: %s (got %v)", fe.Namespace(), fe.Tag(), fe.Value())
 	}
 	return errors.New(msg)
-}
-
-// mustRandomHex generates a random hex string of the given byte length.
-// Panics if the OS entropy source fails — at that point the server can't
-// safely do any crypto at all, so a loud crash is the right response.
-func mustRandomHex(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Errorf("crypto/rand: %w", err))
-	}
-	return hex.EncodeToString(b)
 }
 
 func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) http.Handler {

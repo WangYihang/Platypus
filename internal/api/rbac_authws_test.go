@@ -14,8 +14,8 @@ import (
 // RequireAuthWS is the WebSocket-friendly auth middleware. Browsers
 // can't set Authorization on a WS upgrade, so it accepts:
 //
-//   1. Authorization: Bearer <token>            — native clients
-//   2. Sec-WebSocket-Protocol: ..., Bearer.<tok> — browser-friendly
+//  1. Authorization: Bearer <token>            — native clients
+//  2. Sec-WebSocket-Protocol: ..., Bearer.<tok> — browser-friendly
 //
 // A previously-supported third path (?access_token=<tok>) is rejected
 // since security audit M3: query strings end up in nginx / cloudflare

@@ -123,12 +123,12 @@ func TestAATHandler_IssueGlobal_RoleEscalationRejected(t *testing.T) {
 	// Even bypassing the global-admin gate (op isn't admin so it 403s
 	// at the gate), this test pins the handler-level guard. Use the
 	// project-scoped endpoint so op can reach the handler.
-	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
+	_ = probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
 	// op was added as admin on the project in setup; allow this op
 	// to reach handler. But we want a fresh op who is project admin
 	// but only operator globally.
 	_ = f.db.Projects().AddMember(context.Background(), f.project.ID, op.ID, user.RoleAdmin)
-	w = probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
+	w := probeReqWithPath(f.router, "POST", "/api/v1/projects/"+f.project.ID+"/aat", f.tokenFor(t, op), body)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("operator issuing admin AAT: status=%d body=%s; want 403", w.Code, w.Body.String())
 	}

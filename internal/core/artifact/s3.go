@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -84,13 +82,19 @@ func (s *S3Store) GetObject(ctx context.Context, key string) ([]byte, error) {
 	return data, nil
 }
 
-// PresignGet returns a time-limited download URL. The Distributor
-// forwards this URL (as a 302) to the agent, which downloads the
-// binary directly from the object store.
-func (s *S3Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error) {
-	u, err := s.client.PresignedGetObject(ctx, s.bucket, s.fullKey(key), ttl, url.Values{})
+// GetObjectReader returns a streaming reader for key, plus size and
+// content type from the object stat. The caller must close the returned
+// ReadCloser. Used by the Distributor to proxy agent binary downloads
+// through the server instead of issuing presigned redirect URLs.
+func (s *S3Store) GetObjectReader(ctx context.Context, key string) (io.ReadCloser, int64, string, error) {
+	obj, err := s.client.GetObject(ctx, s.bucket, s.fullKey(key), minio.GetObjectOptions{})
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("artifact: presign %s: %w", key, err)
+		return nil, 0, "", fmt.Errorf("artifact: get reader %s: %w", key, err)
 	}
-	return u.String(), time.Now().Add(ttl), nil
+	info, err := obj.Stat()
+	if err != nil {
+		obj.Close()
+		return nil, 0, "", fmt.Errorf("artifact: stat %s: %w", key, err)
+	}
+	return obj, info.Size, info.ContentType, nil
 }

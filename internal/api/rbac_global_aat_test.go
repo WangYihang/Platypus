@@ -15,14 +15,14 @@ import (
 // out of any global resource, regardless of the role they stamped on
 // it. Two pieces of context that make this non-obvious:
 //
-//   · Principal.IsGlobalAdmin() already does the right thing for
-//     global-admin bypasses inside RequireProjectRole — but
-//     RequireGlobalRole reads p.Role directly via roleAtLeast, so a
-//     project-bound role=admin AAT used to satisfy a global admin gate.
-//   · claimsForPrincipal() in rbac.go floors the legacy AccessClaims
-//     role to viewer for project-bound AATs, but that only protects
-//     handlers that read claims (legacy path); handlers that read
-//     Principal directly were exposed.
+//	· Principal.IsGlobalAdmin() already does the right thing for
+//	  global-admin bypasses inside RequireProjectRole — but
+//	  RequireGlobalRole reads p.Role directly via roleAtLeast, so a
+//	  project-bound role=admin AAT used to satisfy a global admin gate.
+//	· claimsForPrincipal() in rbac.go floors the legacy AccessClaims
+//	  role to viewer for project-bound AATs, but that only protects
+//	  handlers that read claims (legacy path); handlers that read
+//	  Principal directly were exposed.
 //
 // Test mounts a synthetic /admin route guarded by RequireAuth +
 // RequireGlobalRole(admin) so the assertion is exactly "global gate

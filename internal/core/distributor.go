@@ -206,13 +206,17 @@ func (d *Distributor) handleArtifact(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no artifact for %s/%s", osName, archName)})
 		return
 	}
-	url, _, err := d.Store.PresignGet(ctx, art.Key, d.currentPresignedTTL())
+	reader, size, contentType, err := d.Store.GetObjectReader(ctx, art.Key)
 	if err != nil {
-		log.Error("distributor: presign %s: %s", art.Key, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "presign failed"})
+		log.Error("distributor: open artifact %s: %s", art.Key, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "artifact unavailable"})
 		return
 	}
-	c.Redirect(http.StatusFound, url)
+	defer reader.Close()
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	c.DataFromReader(http.StatusOK, size, contentType, reader, nil)
 }
 
 // LivePlatforms loads the active channel's manifest and returns the
@@ -365,7 +369,7 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		"  CA_FILE=$(mktemp /tmp/platypus-ca-XXXXXX.pem)",
 		"  printf '%s' \"$PLATYPUS_PROJECT_CA\" | base64 -d > \"$CA_FILE\"",
 		"  CURL_TLS=\"--cacert $CA_FILE\"",
-		"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}" + "\" = \"1\" ]; then",
+		"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}"+"\" = \"1\" ]; then",
 		"  echo 'warning: PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download' >&2",
 		"  CURL_TLS=\"-k\"",
 		"else",

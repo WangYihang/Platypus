@@ -50,9 +50,9 @@ func TestDesktopGoModHasToolchainPin(t *testing.T) {
 	m := tcPat.FindStringSubmatch(string(body))
 	if m == nil {
 		t.Fatalf(
-			"desktop/go.mod has no `toolchain go1.X.Y` line; without it " +
-				"the build pins to the language-version stdlib and inherits " +
-				"the patch-level stdlib vulnerabilities govulncheck reports. " +
+			"desktop/go.mod has no `toolchain go1.X.Y` line; without it "+
+				"the build pins to the language-version stdlib and inherits "+
+				"the patch-level stdlib vulnerabilities govulncheck reports. "+
 				"Add `toolchain go1.25.%d` (or newer) immediately under the `go` line.",
 			minDesktopToolchainPatch,
 		)
@@ -94,8 +94,8 @@ func TestFrontendPostcssOverride(t *testing.T) {
 	rangeRe := regexp.MustCompile(`"postcss"\s*:\s*"[^"]*8\.5\.(1\d|[2-9]\d?)\d*"|"postcss"\s*:\s*">=\s*8\.5\.(1\d|[2-9])"`)
 	if !rangeRe.MatchString(text) {
 		t.Fatalf(
-			`desktop/frontend/package.json does mention postcss but the version ` +
-				`range doesn't pin >= 8.5.10. The override must force at least ` +
+			`desktop/frontend/package.json does mention postcss but the version `+
+				`range doesn't pin >= 8.5.10. The override must force at least `+
 				`8.5.10 to dodge GHSA-qx2v-qp2m-jg93. Current package.json text: %s`,
 			snippetAround(text, `"postcss"`),
 		)
