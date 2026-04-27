@@ -111,7 +111,7 @@ export default function SessionsPanel() {
                         <div className="relative max-w-[360px] w-full">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
                             <Input
-                                placeholder="Search session, host, user, listener"
+                                placeholder="Search session, host, user"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 className="h-8 pl-8"
@@ -160,7 +160,7 @@ export default function SessionsPanel() {
                         description={
                             filter === "live"
                                 ? "Switch to All to see closed sessions, or wait for an agent to connect."
-                                : "Sessions appear here when an agent connects to one of your listeners."
+                                : "Sessions appear here when an enrolled agent opens a connection."
                         }
                     />
                 )}
