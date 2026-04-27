@@ -148,6 +148,30 @@ encrypted database.
 
 For production, run the server under `systemd` rather than backgrounding it manually.
 
+### Production caveats
+
+* **Single-instance only.** The opaque-token verifier caches verified
+  tokens in a per-process LRU. Revocation (logout, password change,
+  AAT revoke, user delete) drops the entry on the same process
+  synchronously — but a multi-replica deployment has no cross-process
+  invalidation channel today, so a revoked token can keep working on
+  other replicas for up to the cache TTL (30s). Don't run more than
+  one `platypus-server` against the same DB until cross-process
+  revocation lands. Vertical scale + an HA stand-by is the supported
+  shape; horizontal load-balanced replicas are not.
+* **PLATYPUS_CA_KEK in the environment.** The CA private key is sealed
+  with AES-256-GCM against this 32-byte hex value. Without it set, the
+  server refuses to start unless `PLATYPUS_DEV=1` is also present
+  (which enables a dev-only on-disk fallback at `<data-dir>/ca.kek` —
+  unsafe for production because the ciphertext and key end up on the
+  same volume).
+* **Object-store credentials.** When the distributor is enabled
+  (`distributor.store.endpoint` set), set
+  `PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID` and
+  `PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY` rather than baking
+  them into `config.yml`. The bundled `config.docker.yml` ships with
+  the YAML fields blank for that reason.
+
 ## Usage
 
 ### Topology
