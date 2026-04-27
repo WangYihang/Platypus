@@ -23,6 +23,11 @@ interface ShellState {
     projects: Project[];
     project: Project | null;
     refresh: () => Promise<void>;
+    // loading is true while the initial /projects fetch is in flight.
+    // Surfaced so routes that render at a loading state (today:
+    // ProjectsLanding) can show their own skeleton instead of the
+    // shell-level Loader2 spinner.
+    loading: boolean;
 }
 
 const ProjectShellContext = createContext<ShellState | null>(null);
@@ -79,7 +84,7 @@ export default function ProjectShell({ requireProject = false }: Props) {
 
     return (
         <ProjectShellContext.Provider
-            value={{ projects: projectList, project, refresh }}
+            value={{ projects: projectList, project, refresh, loading }}
         >
             <GlobalTerminalProvider>
                 <ShellChrome
@@ -89,7 +94,15 @@ export default function ProjectShell({ requireProject = false }: Props) {
                     currentSlug={params.projectSlug}
                     refresh={refresh}
                 >
-                    {loading ? (
+                    {loading && requireProject ? (
+                        // For project-scoped routes (Fleet, Members,
+                        // Settings, …) the slug must resolve to a real
+                        // project before the page can render anything
+                        // useful, so we still hold them with the
+                        // shell-level spinner. Non-project routes
+                        // (today: ProjectsLanding at /projects) get
+                        // the Outlet during loading and render their
+                        // own skeleton via useShell().loading.
                         <Centered>
                             <Loader2 className="size-5 animate-spin text-text-muted" />
                         </Centered>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import ActivityFeed, { ActivityItem } from "../components/ActivityFeed";
 import BarChartCard, { BarPoint } from "../components/charts/BarChartCard";
 import Card from "../components/Card";
+import { Skeleton } from "@/components/ui/skeleton";
 import LineChartCard, { LinePoint } from "../components/charts/LineChartCard";
 import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
@@ -169,6 +170,10 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                     </div>
                 )}
 
+                {hosts === null || sessions24h === null ? (
+                    <ProjectOverviewSkeleton />
+                ) : (
+                <>
                 <div
                     style={{
                         display: "grid",
@@ -274,8 +279,87 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                         )}
                     </div>
                 </Card>
+                </>
+                )}
             </div>
         </div>
+    );
+}
+
+// ProjectOverviewSkeleton matches the populated layout: a 3-tile KPI
+// grid, a 2:1 chart row, a 1:1 ingress / activity row. Same column
+// shapes as the loaded view so the loaded ↔ loading transition is a
+// content swap with no layout pop. Tagged
+// data-testid="overview-skeleton" so the spec can detect the
+// loading state without depending on Tailwind class names.
+function ProjectOverviewSkeleton() {
+    return (
+        <>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: space[3],
+                    marginBottom: space[6],
+                }}
+            >
+                {Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i} padding={5} data-testid="overview-skeleton">
+                        <div style={{ display: "flex", flexDirection: "column", gap: space[2] }}>
+                            <Skeleton className="h-3 w-16" />
+                            <Skeleton className="h-7 w-20" />
+                            <Skeleton className="h-3 w-32" />
+                        </div>
+                    </Card>
+                ))}
+            </div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+                    gap: space[3],
+                    marginBottom: space[6],
+                }}
+            >
+                <Card padding={5} data-testid="overview-skeleton">
+                    <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-56" />
+                        <Skeleton className="h-40 w-full" />
+                    </div>
+                </Card>
+                <Card padding={5} data-testid="overview-skeleton">
+                    <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-40 w-full" />
+                    </div>
+                </Card>
+            </div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                    gap: space[3],
+                    marginBottom: space[6],
+                }}
+            >
+                <Card padding={5} data-testid="overview-skeleton">
+                    <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                    </div>
+                </Card>
+                <Card padding={5} data-testid="overview-skeleton">
+                    <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-5/6" />
+                        <Skeleton className="h-3 w-2/3" />
+                    </div>
+                </Card>
+            </div>
+        </>
     );
 }
 
