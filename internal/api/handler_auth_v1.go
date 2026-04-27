@@ -30,6 +30,16 @@ type AuthHandler struct {
 	db              *storage.DB
 	verifier        *TokenVerifier
 	bootstrapSecret string
+
+	// loginThrottle gates /api/v1/auth/login by per-(ip, username)
+	// rolling-window failure count: 5 wrong attempts in 60s and the
+	// caller gets 429 until the window slides past. See login_rate.go.
+	loginThrottle *loginThrottle
+	// loginDummyHash is a bcrypt hash of an unguessable password, used
+	// to keep the unknown-user code path's CPU work in the same bucket
+	// as the bad-password path. Without it the response-time delta
+	// (~250ms with cost 12 vs <5ms) leaks a username-existence oracle.
+	loginDummyHash []byte
 }
 
 // NewAuthHandler builds the handler. The verifier is required: every
@@ -37,7 +47,29 @@ type AuthHandler struct {
 // invalidate the cache to take effect on the current node within
 // the same request.
 func NewAuthHandler(db *storage.DB, verifier *TokenVerifier, bootstrapSecret string) *AuthHandler {
-	return &AuthHandler{db: db, verifier: verifier, bootstrapSecret: bootstrapSecret}
+	// dummyHash is only used to flatten timing on the unknown-user
+	// path; if generation fails we fall back to skipping the dummy
+	// compare. The error is essentially unreachable (bcrypt failures
+	// in 2025 mean the OS RNG is dead) but we keep the no-panic path
+	// so a misconfigured test environment doesn't block startup.
+	dummy, _ := user.HashPassword(unguessableDummyPassword())
+	return &AuthHandler{
+		db:              db,
+		verifier:        verifier,
+		bootstrapSecret: bootstrapSecret,
+		loginThrottle:   newLoginThrottle(),
+		loginDummyHash:  []byte(dummy),
+	}
+}
+
+// unguessableDummyPassword returns the input the dummy hash was
+// generated from. Any 32+ char string of mixed entropy works; we use
+// a stable literal so all callers see the same hash and bcrypt's
+// unique-salt-per-hash plus unknown plaintext make the result still
+// uncrackable in practice. (The stored value is the *hash*, never
+// the plaintext below.)
+func unguessableDummyPassword() string {
+	return "platypus-login-timing-flat-dummy-do-not-use"
 }
 
 type bootstrapRequest struct {
@@ -161,7 +193,8 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 
 // Login authenticates by username + password and mints a fresh session
 // token. Same-shape 401 on every failure path so timing / body deltas
-// don't reveal which field was wrong.
+// don't reveal which field was wrong, and per-(ip, username)
+// rate-limited to keep dictionary attacks slow.
 func (h *AuthHandler) Login(c *gin.Context) {
 	empty := ""
 	var req loginRequest
@@ -169,9 +202,36 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Per-(ip, username) rolling-window failure throttle. Refused
+	// attempts return 429 immediately, BEFORE any DB lookup or
+	// bcrypt — so a flooder can't drive load on the server even when
+	// the responses are denials.
+	clientIP := c.ClientIP()
+	if !h.loginThrottle.Allow(clientIP, req.Username) {
+		RecordActivity(c, ActivityInput{
+			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
+			Category: storage.CategoryAuth, Action: "user.login_blocked",
+			Outcome: storage.OutcomeDenied, Error: "rate limit exceeded",
+			Meta: map[string]any{"username": req.Username, "client_ip": clientIP},
+		})
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error": "too many login attempts — wait a moment and try again",
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 	u, err := h.db.Users().GetByUsername(ctx, req.Username)
 	if errors.Is(err, storage.ErrNotFound) {
+		// Timing-flat unknown-user path: run a bcrypt compare against
+		// the dummy hash so this branch's CPU cost matches the
+		// bad-password path below. The result is intentionally
+		// discarded.
+		if len(h.loginDummyHash) > 0 {
+			user.VerifyPassword(string(h.loginDummyHash), req.Password)
+		}
+		h.loginThrottle.Record(clientIP, req.Username, false)
 		RecordActivity(c, ActivityInput{
 			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
 			Category: storage.CategoryAuth, Action: "user.login_failed",
@@ -186,6 +246,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	if !user.VerifyPassword(u.PasswordHash, req.Password) {
+		h.loginThrottle.Record(clientIP, req.Username, false)
 		RecordActivity(c, ActivityInput{
 			ProjectID: &empty, ActorType: storage.ActorTypeAnonymous,
 			Category: storage.CategoryAuth, Action: "user.login_failed",
@@ -196,6 +257,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		unauthorized(c)
 		return
 	}
+	h.loginThrottle.Record(clientIP, req.Username, true)
 	if err := h.db.Users().TouchLastLogin(ctx, u.ID); err != nil {
 		// Non-fatal — login still succeeded.
 		_ = err
