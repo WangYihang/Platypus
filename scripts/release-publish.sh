@@ -51,8 +51,14 @@ for pair in $PLATFORMS; do
   mkdir -p "$(dirname "$out")"
 
   echo "→ building $GOOS/$GOARCH"
+  # -buildvcs=false: the dev compose sidecar bind-mounts the source
+  # tree as root inside the container, but the host .git is owned by
+  # uid 1000, which makes git's safe.directory check refuse and Go
+  # then surfaces it as "error obtaining VCS status: exit status 128".
+  # The release artifact's identity already comes from VERSION + the
+  # signed manifest; embedded git metadata is redundant.
   GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 \
-    go build -trimpath \
+    go build -trimpath -buildvcs=false \
     -ldflags="-s -w -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=${AGENT_SIGNING_PUBKEY_B64}" \
     -o "$out" ./cmd/platypus-agent
 
