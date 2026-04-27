@@ -2,6 +2,15 @@ module github.com/WangYihang/Platypus/desktop
 
 go 1.25.0
 
+// toolchain pin matches the root module so the desktop build picks
+// up patch-level stdlib fixes. govulncheck flagged 16 stdlib vulns
+// when this submodule was building against the bare 1.25.0 stdlib
+// (crypto/x509, crypto/tls, net/url, net/http, encoding/asn1,
+// encoding/pem, os — all fixed by 1.25.9). Bump in lockstep with
+// root go.mod when raising the floor; the regression test in
+// cmd/platypus-server/dependencies_test.go pins the floor.
+toolchain go1.25.9
+
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/google/uuid v1.6.0
