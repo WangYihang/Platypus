@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
     Clock,
     CloudDownload,
@@ -80,6 +80,7 @@ export default function ProjectSidebar({
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const { pathname } = useLocation();
+    const navigate = useNavigate();
 
     const createForm = useForm<ProjectFormValues>({
         resolver: zodResolver(projectSchema),
@@ -103,7 +104,16 @@ export default function ProjectSidebar({
             toast.success(`Created project ${v.slug}`);
             setCreateOpen(false);
             createForm.reset({ name: "", slug: "" });
+            // Refresh the projects list first so the freshly-created
+            // project is in the shell context the next route renders
+            // against — otherwise navigating to /fleet immediately
+            // would hit the "select a project" empty path.
             onProjectsChanged();
+            // Drop the user inside the project they just made, on
+            // Fleet (not Overview): with zero hosts the Overview is a
+            // KPI dashboard of zeros, while Fleet is the canonical
+            // "now enrol your first agent" surface.
+            navigate(`/projects/${v.slug}/fleet`);
         } catch (e) {
             toast.error(`create: ${String(e)}`);
         }
