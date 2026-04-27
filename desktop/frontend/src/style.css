@@ -26,9 +26,13 @@
     /* Palette (mirrors palette in layout/theme.ts). */
     --color-rail: #0a0a0a;
     --color-sidebar: #0a0a0a;
-    --color-main: #111111;
+    --color-main: #0d0d0d;
     --color-detail-rail: #0a0a0a;
-    --color-surface: #1a1a1a;
+    /* main / surface used to be #111 vs #1a1a1a — only 9 RGB units
+       apart, indistinguishable on most monitors in dark mode. The
+       wider gap below makes cards read as elevated above the content
+       background without breaking the dark-monochrome aesthetic. */
+    --color-surface: #1f1f1f;
     --color-surface-hover: #262626;
     --color-border-subtle: #2e2e2e;
     --color-border-strong: #525252;

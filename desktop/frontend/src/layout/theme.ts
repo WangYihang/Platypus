@@ -22,11 +22,16 @@ export const palette = {
     // Region backgrounds.
     rail: "#0a0a0a",
     sidebar: "#0a0a0a",
-    main: "#111111",
+    main: "#0d0d0d",
     detailRail: "#0a0a0a",
 
-    // Surfaces & borders.
-    surface: "#1a1a1a",
+    // Surfaces & borders. main / surface used to be #111 vs #1a1a1a,
+    // only 9 RGB units apart and effectively indistinguishable in
+    // dark mode. Keep these in sync with --color-main / --color-surface
+    // in style.css; the spec at e2e/specs/50-surface-vs-main-contrast
+    // pins the channel delta at >= 12 so the regression can't sneak
+    // back in.
+    surface: "#1f1f1f",
     surfaceHover: "#262626",
     border: "#2e2e2e",
     borderStrong: "#525252",
