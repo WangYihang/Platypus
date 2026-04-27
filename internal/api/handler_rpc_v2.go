@@ -53,6 +53,12 @@ func RegisterV2AgentRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService, rb
 	operator.Use(
 		rbac.RequireProjectRole("pid", user.RoleOperator),
 		rbac.RequireAgentInProject("pid", "agent_id"),
+		// Per-principal token-bucket rate limit. A compromised AAT or
+		// session can't drive unbounded shell-exec / file-mutation
+		// churn against every host in the project. Default budget
+		// (30 burst, 10/s refill) is set in rpc_rate.go and lets
+		// normal interactive use through.
+		rbac.RequireRPCRateLimit(),
 	)
 	operator.DELETE("/fs/remove", logRPCHandler("delete", v2RPCDelete(svc)))
 	operator.POST("/fs/rename", logRPCHandler("rename", v2RPCRename(svc)))

@@ -19,6 +19,11 @@ import (
 type RBAC struct {
 	storage  *storage.DB
 	verifier *TokenVerifier
+	// rpcThrottle is the per-principal token-bucket rate limiter for
+	// the high-impact agent RPC surface. Lazily allocated by
+	// RPCThrottle() so RBAC zero-value still works in tests that
+	// don't exercise rate-limited routes.
+	rpcThrottle *rpcThrottle
 }
 
 // NewRBAC wires the full middleware: opaque-token verifier for both
