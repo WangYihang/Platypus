@@ -112,6 +112,66 @@ func TestAdoptLinkPreservesBootstrapMetadata(t *testing.T) {
 	}
 }
 
+// handleClose must always tear the stream down, even when the
+// inbound queue is full. Old behaviour silently dropped the close
+// frame in that case; combined with a peer that subsequently went
+// silent (no further data frames), pumpInbound stayed blocked on
+// st.conn.Write forever, leaking one goroutine per partition. The
+// data-frame side already had a queue-overflow safety net via
+// handleData, but handleClose didn't.
+func TestMeshStreamHandleCloseTearsDownEvenWhenQueueFull(t *testing.T) {
+	id := mustIdentity(t)
+	node, err := NewNode(Config{
+		Identity:   id,
+		TrustedCAs: testCAPool,
+		PSK:        randomPSK(t),
+		Role:       "agent",
+		ProjectID:  "proj",
+	}, slog.Default())
+	if err != nil {
+		t.Fatalf("NewNode: %v", err)
+	}
+
+	// streamConn's peer never reads, so the very first Write blocks.
+	streamConn, blockedPeer := net.Pipe()
+	defer blockedPeer.Close()
+	st := node.streams.newState(streamKey{initiator: "peer", id: 42}, "peer", streamConn, false)
+
+	// Fill the inbound queue. The first frame is taken by pumpInbound
+	// and blocks in Write; the rest sit in the channel buffer.
+	for i := 0; i <= meshStreamInboundQueue; i++ {
+		_ = node.streams.enqueueInbound(st, inboundFrame{chunk: []byte("x")})
+	}
+
+	// Now deliver a close from the peer. The queue is full, so the
+	// usual enqueueInbound path drops the frame — handleClose must
+	// fall through to closeStream so pumpInbound's blocked Write
+	// gets unblocked by closeConn.
+	done := make(chan struct{})
+	go func() {
+		node.streams.handleClose(&v2pb.MeshEnvelope{
+			Payload: &v2pb.MeshEnvelope_StreamClose{StreamClose: &v2pb.MeshStreamClose{
+				InitiatorNodeId: "peer",
+				StreamId:        42,
+				Reason:          "peer hung up",
+			}},
+		})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClose blocked on full inbound queue")
+	}
+
+	select {
+	case <-st.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClose did not tear stream down; pumpInbound would leak")
+	}
+}
+
 func TestMeshStreamHandleDataDoesNotBlockLinkLoop(t *testing.T) {
 	id := mustIdentity(t)
 	node, err := NewNode(Config{
