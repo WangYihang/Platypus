@@ -35,10 +35,41 @@ func TestAgentLinkService_GetMissing(t *testing.T) {
 
 func TestAgentLinkService_Unregister(t *testing.T) {
 	s := NewAgentLinkService()
-	s.Register("a-1", &link.Session{})
-	s.Unregister("a-1")
+	sess := &link.Session{}
+	s.Register("a-1", sess)
+	s.Unregister("a-1", sess)
 	if _, ok := s.Get("a-1"); ok {
 		t.Fatal("Get after Unregister returned ok=true")
+	}
+}
+
+// Reconnect-displacement race: the displaced session's defer calls
+// Unregister after Register has already replaced the entry with the
+// new session. The old code keyed Unregister by agent_id alone, so
+// the late call removed the live new-session entry — handlers
+// looking up the agent then saw "not connected" even though the
+// link was healthy. Fix: Unregister compares the session pointer
+// and only deletes if it still matches.
+func TestAgentLinkService_UnregisterDisplacedDoesNotRemoveLive(t *testing.T) {
+	s := NewAgentLinkService()
+	first := &link.Session{}
+	second := &link.Session{}
+
+	s.Register("a-1", first)
+	if _, prev := s.Register("a-1", second); prev != first {
+		t.Fatalf("second Register returned prev=%v; want first", prev)
+	}
+
+	// The displaced first session's deferred Unregister fires now.
+	// It must NOT remove the live second session.
+	s.Unregister("a-1", first)
+
+	got, ok := s.Get("a-1")
+	if !ok {
+		t.Fatal("Get(a-1) ok=false after stale Unregister; live session was wrongly removed")
+	}
+	if got != second {
+		t.Fatalf("Get returned %p; want %p (the live second session)", got, second)
 	}
 }
 
@@ -126,10 +157,11 @@ func TestAgentLinkService_ConcurrentSafe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			id := string(rune('A' + (i % 8)))
-			s.Register(id, &link.Session{})
+			sess := &link.Session{}
+			s.Register(id, sess)
 			_, _ = s.Get(id)
 			if i%4 == 0 {
-				s.Unregister(id)
+				s.Unregister(id, sess)
 			}
 		}()
 	}

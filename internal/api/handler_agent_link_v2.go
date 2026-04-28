@@ -148,7 +148,7 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		)
 	}
 	defer func() {
-		h.svc.Unregister(agentID)
+		h.svc.Unregister(agentID, sess)
 		log.L.Info("link.unregistered",
 			"agent_id", agentID,
 			"project_id", projectID,

@@ -64,12 +64,17 @@ func (s *AgentLinkService) Register(agentID string, sess *link.Session) (session
 	return rec.sessionID, displaced
 }
 
-// Unregister removes agentID. Safe to call on an id that isn't in
-// the registry. Does NOT Close the session — the caller owns its
-// lifecycle.
-func (s *AgentLinkService) Unregister(agentID string) {
+// Unregister removes agentID, but only if the currently registered
+// session is `sess`. Compare-and-delete avoids a reconnect-displacement
+// race: when a second Register replaces the entry and the displaced
+// session's deferred Unregister fires later, we must not remove the
+// new live entry. Safe to call on an id that isn't in the registry.
+// Does NOT Close the session — the caller owns its lifecycle.
+func (s *AgentLinkService) Unregister(agentID string, sess *link.Session) {
 	s.mu.Lock()
-	delete(s.links, agentID)
+	if rec, ok := s.links[agentID]; ok && rec.sess == sess {
+		delete(s.links, agentID)
+	}
 	s.mu.Unlock()
 }
 
