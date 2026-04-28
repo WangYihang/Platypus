@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("../lib/auth", () => ({
@@ -50,7 +50,7 @@ function makeRow(over: Partial<TransferItem>): TransferItem {
 }
 
 // queueResponses wires up authJSON to return the supplied transfers
-// list AND a host roster so the Host column can resolve aliases
+// list AND a host roster so the Host detail can resolve aliases
 // without each test having to spell that out. Tests pass the rows
 // they care about; hosts default to a single seed under id "h1"
 // with primary_alias "host-one" so an assertion can pin the alias
@@ -159,19 +159,170 @@ describe("TransferTaskList", () => {
         expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
     });
 
-    // G — richer columns: Host alias, Elapsed, Error.
-    it("resolves host_id to the host's primary alias", async () => {
+    // ----- Phase 1: slim table + expandable rows -------------------
+
+    it("renders exactly the slim column set (Phase 1)", async () => {
+        queueResponses([makeRow({ id: "ft-cols" })]);
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() => expect(screen.getByText("/etc/hosts")).toBeInTheDocument());
+
+        const headers = screen
+            .getAllByRole("columnheader")
+            .map((h) => h.textContent?.trim() || "");
+        // 7 visible columns total: chevron (no label), Path, Progress,
+        // Size, Time, Status, Actions. Exactly that count + the chevron
+        // — no Direction, Format, Speed, Compression, Started, Error.
+        expect(headers.length).toBe(7);
+
+        // Spot-check that the dropped headers are gone.
+        expect(
+            screen.queryByRole("columnheader", { name: /direction/i }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("columnheader", { name: /format/i }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("columnheader", { name: /^speed$/i }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("columnheader", { name: /compression/i }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("columnheader", { name: /started/i }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("columnheader", { name: /^error$/i }),
+        ).toBeNull();
+    });
+
+    it("tags the leading icon with a direction tone (success/info)", async () => {
+        queueResponses([
+            makeRow({ id: "ft-dn", direction: "download" }),
+            makeRow({ id: "ft-up", direction: "upload" }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() =>
+            expect(screen.getAllByText(/\/etc\/hosts/).length).toBe(2),
+        );
+        const tones = screen
+            .getAllByTestId("transfer-direction-icon")
+            .map((el) => el.getAttribute("data-direction-tone"));
+        expect(tones).toContain("success"); // download → green
+        expect(tones).toContain("info"); // upload → blue
+    });
+
+    it("renders a relative time cell with the absolute timestamp on title", async () => {
+        // started_at 7 s before tickNow — the existing component
+        // initialises tickNow to `new Date()`, so we pin the row's
+        // started_at to ~7 s earlier than test wall-clock.
+        const sevenSecAgo = new Date(Date.now() - 7000).toISOString();
+        queueResponses([
+            makeRow({ id: "ft-time", started_at: sevenSecAgo, status: "running" }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        const cell = await screen.findByTestId("transfer-time-cell");
+        // transferElapsed renders sub-minute durations as "Xs".
+        expect(cell.textContent).toMatch(/\b[0-9]{1,2}s\b/);
+        // title attribute carries the absolute timestamp so hover
+        // recovers the precision the column hides.
+        expect(cell.getAttribute("title")).toBeTruthy();
+        expect(cell.getAttribute("title")).toContain(sevenSecAgo.slice(0, 10));
+    });
+
+    it("stacks size, speed and compression in one cell for compressed archives", async () => {
+        // bytes_transferred (source) = 1000, wire_bytes (compressed)
+        // = 320 → ratio = 32%. started_at long enough ago that the
+        // average speed helper returns a non-null value.
+        queueResponses([
+            makeRow({
+                id: "ft-stk",
+                kind: "archive",
+                format: "tar.gz",
+                bytes_transferred: 1000,
+                wire_bytes: 320,
+                total_bytes: 4000,
+                status: "running",
+                started_at: new Date(Date.now() - 5000).toISOString(),
+            }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        const cell = await screen.findByTestId("transfer-size-cell");
+        // Top line: "X / Y" rendered by transferDisplaySize.
+        expect(cell.textContent).toMatch(/\//);
+        // Sub-line: bytes/sec.
+        expect(cell.textContent).toMatch(/B\/s/);
+        // Sub-line: compression ratio token.
+        expect(cell.textContent).toMatch(/32\s*%/);
+    });
+
+    it("hides the compression token when wire_bytes equals bytes_transferred", async () => {
+        queueResponses([
+            makeRow({
+                id: "ft-plain",
+                kind: "file",
+                format: "",
+                bytes_transferred: 1024,
+                wire_bytes: 1024,
+                total_bytes: 1024,
+                status: "done",
+                started_at: new Date(Date.now() - 5000).toISOString(),
+                finished_at: new Date(Date.now() - 1000).toISOString(),
+            }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        const cell = await screen.findByTestId("transfer-size-cell");
+        // Compression-ratio formatting is "<n>%". transferDisplaySize
+        // never renders a "%" token, so the absence of "%" in the cell
+        // proves the compression line is hidden for plain transfers.
+        expect(cell.textContent).not.toMatch(/%/);
+    });
+
+    it("expands a row to show host alias + raw bytes + full timestamp on click", async () => {
+        const startedAt = "2025-01-01T12:34:56.000Z";
         queueResponses(
-            [makeRow({ host_id: "h1" })],
+            [
+                makeRow({
+                    id: "ft-expand",
+                    host_id: "h1",
+                    bytes_transferred: 4096,
+                    wire_bytes: 1024,
+                    total_bytes: 4096,
+                    status: "done",
+                    started_at: startedAt,
+                    finished_at: "2025-01-01T12:35:30.000Z",
+                }),
+            ],
             [{ id: "h1", primary_alias: "production-shell" }],
         );
         render(<TransferTaskList projectId="p1" />);
+        const row = await screen.findByTestId("transfer-row");
+
+        // Initially: detail row not present.
+        expect(screen.queryByTestId("transfer-detail-row")).toBeNull();
+
+        await userEvent.click(row);
+
+        const detail = await screen.findByTestId("transfer-detail-row");
+        // Host alias resolved from the host roster.
+        expect(detail.textContent).toMatch(/production-shell/);
+        // Raw byte counts visible at full precision.
+        expect(detail.textContent).toMatch(/4096/);
+        expect(detail.textContent).toMatch(/1024/);
+        // Full started_at ISO surfaced at full precision.
+        expect(detail.textContent).toMatch(/12:34:56/);
+
+        // aria-expanded reflects state.
+        expect(row.getAttribute("aria-expanded")).toBe("true");
+
+        // Click again → detail row gone, aria-expanded flips back.
+        await userEvent.click(row);
         await waitFor(() =>
-            expect(screen.getByTestId("transfer-host-cell").textContent).toMatch(/production-shell/),
+            expect(screen.queryByTestId("transfer-detail-row")).toBeNull(),
         );
+        expect(row.getAttribute("aria-expanded")).toBe("false");
     });
 
-    it("renders the error_message in its own column when present", async () => {
+    it("surfaces the error message inline below the row when present", async () => {
         queueResponses([
             makeRow({
                 id: "ft-err",
@@ -180,14 +331,35 @@ describe("TransferTaskList", () => {
             }),
         ]);
         render(<TransferTaskList projectId="p1" />);
-        await waitFor(() =>
-            expect(screen.getByTestId("transfer-error-cell").textContent).toMatch(
-                /permission denied/,
-            ),
-        );
+        // Inline error doesn't require expansion — operators need to
+        // see what failed at a glance.
+        const inline = await screen.findByTestId("transfer-error-inline");
+        expect(inline.textContent).toMatch(/permission denied/);
     });
 
-    it("renders an Elapsed cell that formats the wall-clock duration", async () => {
+    it("clicking the cancel button does not expand the row", async () => {
+        queueResponses([makeRow({ id: "ft-no-toggle", status: "running" })]);
+        authFetchMock.mockResolvedValueOnce(new Response("", { status: 202 }));
+        render(<TransferTaskList projectId="p1" />);
+        const row = await screen.findByTestId("transfer-row");
+
+        const btn = within(row).getByRole("button", { name: /cancel/i });
+        await userEvent.click(btn);
+
+        // Cancel posted; expand state did not flip.
+        await waitFor(() =>
+            expect(authFetchMock).toHaveBeenCalledWith(
+                expect.stringMatching(/cancel$/),
+                expect.objectContaining({ method: "POST" }),
+            ),
+        );
+        expect(screen.queryByTestId("transfer-detail-row")).toBeNull();
+        expect(row.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("renders an Elapsed-style time cell (running rows tick relative)", async () => {
+        // Pin started_at so transferElapsed returns a stable string;
+        // for a 90-second-old finished row the helper renders "1m 30s".
         queueResponses([
             makeRow({
                 id: "ft-el",
@@ -198,7 +370,9 @@ describe("TransferTaskList", () => {
         ]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() =>
-            expect(screen.getByTestId("transfer-elapsed-cell").textContent).toMatch(/1m 30s/),
+            expect(screen.getByTestId("transfer-time-cell").textContent).toMatch(
+                /1m 30s/,
+            ),
         );
     });
 });
