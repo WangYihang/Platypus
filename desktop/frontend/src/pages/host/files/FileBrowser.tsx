@@ -2,13 +2,8 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { SortingState } from "@tanstack/react-table";
 import {
-    ChevronDown,
     ChevronUp,
-    Download,
     Eye,
-    FilePlus,
-    FolderDown,
-    FolderPlus,
     LayoutGrid,
     LayoutList,
     Loader2,
@@ -16,19 +11,12 @@ import {
     RefreshCw,
     Rows2,
     Rows3,
-    Upload,
     X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import FileContextMenu from "./FileContextMenu";
 
@@ -149,7 +137,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [showRename, setShowRename] = useState(false);
     const [showChmod, setShowChmod] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
-    const [bulkDownloading, setBulkDownloading] = useState(false);
     const [showArchive, setShowArchive] = useState(false);
     const [viewMode, setViewMode] = useViewMode();
     const [density, setDensity] = useDensity();
@@ -389,7 +376,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             return;
         }
         setShowArchive(false);
-        setBulkDownloading(true);
         setTransfersDrawerOpen(true);
         try {
             const remotePaths = selectedEntries.map((e) => joinPath(dir.path, e.name));
@@ -399,8 +385,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             );
         } catch (err) {
             toast.error(`archive: ${humanizeError(err)}`);
-        } finally {
-            setBulkDownloading(false);
         }
     }
 
@@ -544,17 +528,17 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     return (
         <DndContext sensors={sensors}>
             <div className="flex h-full min-h-[520px] flex-col gap-1.5">
-                {/* Single chrome row collapses the previous breadcrumb +
-                    toolbar stack: ↑ + crumb path on the left, then the
-                    primary file actions (Refresh / New / Upload /
-                    Download), then the QuickPaths chips. The "More"
-                    dropdown was removed — its actions (Rename, Chmod,
-                    Delete) live exclusively in the right-click context
-                    menu now that operators reported the toolbar dropdown
-                    duplicated work the menu already covers. Single-
-                    target actions stay one keystroke away (F2, Del). */}
+                {/* Single chrome row: ↑ + ⟳ + breadcrumb on the left,
+                    QuickPaths chips on the right. Every other action
+                    (New file / folder, Upload, Download, Rename, Chmod,
+                    Delete) lives in the right-click context menu —
+                    operators reported the previous toolbar duplicated
+                    work the menu already covers. Refresh stays as a
+                    one-click icon because re-fetching is the highest-
+                    frequency action and a context-menu round-trip read
+                    as friction in profiling. */}
                 <div
-                    data-testid="files-toolbar"
+                    data-testid="files-chrome"
                     className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
                 >
                     <div
@@ -570,6 +554,22 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             title="Up"
                         >
                             <ChevronUp className="size-3.5" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={dir.reload}
+                            disabled={dir.loading}
+                            aria-label="Refresh"
+                            title="Refresh"
+                            data-testid="files-refresh"
+                        >
+                            {dir.loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RefreshCw className="size-3.5" />
+                            )}
                         </Button>
                         {crumbs.map((c, idx) => {
                             // splitCrumbs always emits the root segment
@@ -594,67 +594,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             );
                         })}
                     </div>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={dir.reload}
-                        disabled={dir.loading}
-                    >
-                        {dir.loading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                            <RefreshCw className="size-3.5" />
-                        )}
-                        Refresh
-                    </Button>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="outline" size="sm">
-                                <FilePlus className="size-3.5" />
-                                New
-                                <ChevronDown className="size-3" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            <DropdownMenuItem onSelect={() => setShowNewFile(true)}>
-                                <FilePlus className="size-3.5" />
-                                New file
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setShowNewFolder(true)}>
-                                <FolderPlus className="size-3.5" />
-                                New folder
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button type="button" variant="outline" size="sm" onClick={handleUploadClick}>
-                        <Upload className="size-3.5" />
-                        Upload
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleDownloadClick}
-                        disabled={selectedEntries.length === 0 || bulkDownloading}
-                        title={
-                            selectedEntries.length === 0
-                                ? "Select files or folders to download"
-                                : selectedEntries.length === 1 && !selectedEntries[0]?.isDir
-                                  ? "Download to a chosen location"
-                                  : "Download all selected entries (folders are mirrored recursively)"
-                        }
-                    >
-                        {bulkDownloading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : selectedEntries.some((e) => e.isDir) ? (
-                            <FolderDown className="size-3.5" />
-                        ) : (
-                            <Download className="size-3.5" />
-                        )}
-                        Download
-                        {selectedEntries.length > 1 && ` (${selectedEntries.length})`}
-                    </Button>
                     <QuickPaths host={host} onSelect={dir.cd} />
                 </div>
 

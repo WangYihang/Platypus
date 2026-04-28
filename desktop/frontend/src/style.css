@@ -271,34 +271,36 @@ main {
     animation: pl-fade-in 140ms ease-out;
 }
 
-/* Scrollbars on the dark theme. The previous palette (#2e2e2e thumb on
- * a 10px track with a 2px transparent border) collapsed to a 6px sliver
- * that vanished against #1f1f1f surfaces — operators reported the file
- * browser and preview pane "had no scrollbar". Bumped the visible bar
- * width and pinned the thumb at the bright `--color-border-strong` so
- * it reads on every surface; Firefox gets the matching `scrollbar-color`
- * declaration. */
+/* Scrollbars on the dark theme. Two earlier attempts kept the thumb
+ * effectively invisible:
+ *   1. A #2e2e2e thumb sat at <1.4:1 against the #1f1f1f surface.
+ *   2. Bumping the thumb to --color-border-strong helped, but the
+ *      `border: 3px solid transparent; background-clip: padding-box`
+ *      pattern collapsed the visible thumb to a 6 px sliver that
+ *      operators still couldn't spot.
+ * Drop the transparent border entirely and let the thumb fill the
+ * track. The default colour is the bright `--color-border-strong`
+ * (#525252, ~3.1:1 against #1f1f1f) and the hover colour is the even
+ * brighter `--color-text-secondary` (#a1a1a1) for clear grab feedback.
+ * Firefox gets the matching `scrollbar-color` + an `auto` width so it
+ * uses the platform-default thickness instead of a thin sliver. */
 ::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
 }
 ::-webkit-scrollbar-track {
     background: transparent;
 }
 ::-webkit-scrollbar-thumb {
     background: var(--color-border-strong);
-    border-radius: 6px;
-    border: 3px solid transparent;
-    background-clip: padding-box;
+    border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-text-muted);
-    background-clip: padding-box;
-    border: 3px solid transparent;
+    background: var(--color-text-secondary);
 }
 * {
     scrollbar-color: var(--color-border-strong) transparent;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
 }
 
 /* Command palette (cmdk) -------------------------------------------------- */
