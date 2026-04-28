@@ -417,35 +417,40 @@ export async function Chmod(projectID: string, sessionHash: string, path: string
 // indirection), matching the signature the Wails binding produces for
 // OS-drop callbacks. The React drop zone iterates dataTransfer.files and
 // calls this per file.
+//
+// As of the upload-tracking rollout this is a thin wrapper around
+// lib/file-upload, which PUTs once to /fs/upload (single fetch with
+// the File as body — browser streams it without loading into memory)
+// and creates a file_transfers row server-side so the upload shows
+// in the transfers tab with progress + cancel.
+import { uploadFile as streamingUploadFile } from "../lib/file-upload";
+
+function splitDirAndName(p: string): { dir: string; name: string } {
+    const i = p.lastIndexOf("/");
+    if (i < 0) return { dir: "/", name: p };
+    return { dir: p.slice(0, i) || "/", name: p.slice(i + 1) };
+}
+
 export async function UploadBrowserFile(
     projectID: string,
     sessionHash: string,
     remotePath: string,
     file: File,
 ): Promise<void> {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.length === 0) {
-        // Empty file: truncate the destination with an empty payload.
-        const q = new URLSearchParams({ path: remotePath, append: "false" });
-        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
-            method: "PUT",
-            headers: { "Content-Type": "application/octet-stream" },
-            body: new Uint8Array(0),
-        });
-        return;
-    }
-    for (let off = 0; off < bytes.length; off += CHUNK_SIZE) {
-        const slice = bytes.subarray(off, Math.min(off + CHUNK_SIZE, bytes.length));
-        const q = new URLSearchParams({
-            path: remotePath,
-            append: String(off > 0),
-        });
-        await apiFetch(fsURL(projectID, sessionHash, `write?${q}`), {
-            method: "PUT",
-            headers: { "Content-Type": "application/octet-stream" },
-            body: slice,
-        });
-    }
+    const { dir, name } = splitDirAndName(remotePath);
+    // Reuse the supplied filename even when it differs from
+    // file.name — the caller may have rewritten the destination
+    // (e.g. drop-into-subdir flows). Wrap into a fresh File so the
+    // streaming upload's joinPath uses the right leaf name.
+    const renamed = file.name === name
+        ? file
+        : new File([file], name, { type: file.type, lastModified: file.lastModified });
+    await streamingUploadFile({
+        projectId: projectID,
+        agentId: sessionHash,
+        remoteDir: dir,
+        file: renamed,
+    });
 }
 
 // ---------- Terminal (project-scoped /api/v1/projects/:pid/agents/:id/terminal/ws)
