@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +24,7 @@ import {
     removeProjectMember,
 } from "../lib/api";
 import { getSessionUser } from "../lib/auth";
+import { qk } from "../lib/queryKeys";
 import { memberRemovalWarning } from "./members/warnings";
 
 import {
@@ -91,9 +93,7 @@ interface Props {
 // anyone; project-admins can change roles and remove members but not
 // add new ones — the backend's /users list is admin-only.
 export default function ProjectMembers({ project }: Props) {
-    const [members, setMembers] = useState<ProjectMember[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [addOpen, setAddOpen] = useState(false);
     const [candidates, setCandidates] = useState<UserRow[] | null>(null);
     const [pendingRemove, setPendingRemove] = useState<ProjectMember | null>(null);
@@ -111,21 +111,19 @@ export default function ProjectMembers({ project }: Props) {
         defaultValues: { user_id: "", role: "operator" },
     });
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            setMembers(await listProjectMembers(project.id));
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }, [project.id]);
+    const {
+        data: members,
+        error,
+        isFetching: loading,
+        refetch,
+    } = useQuery({
+        queryKey: qk.members(project.id),
+        queryFn: () => listProjectMembers(project.id),
+    });
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    function invalidateMembers() {
+        return queryClient.invalidateQueries({ queryKey: qk.members(project.id) });
+    }
 
     async function openAddDialog() {
         setAddOpen(true);
@@ -142,13 +140,9 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await addProjectMember(project.id, v.user_id, v.role);
             toast.success("Member added");
-            // Reset the form either way; only close when the user
-            // hit the "Add" button (closeAfterAdd=true). "Add
-            // another" leaves the dialog up so admins can chain
-            // adds without re-opening.
             addForm.reset({ user_id: "", role: "operator" });
             if (closeAfterAdd) setAddOpen(false);
-            refresh();
+            invalidateMembers();
         } catch (e) {
             toast.error(`add: ${humanizeError(e)}`);
         }
@@ -158,7 +152,7 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await addProjectMember(project.id, m.user_id, role);
             toast.success(`${m.username} → ${role}`);
-            refresh();
+            invalidateMembers();
         } catch (e) {
             toast.error(`role: ${humanizeError(e)}`);
         }
@@ -171,7 +165,7 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await removeProjectMember(project.id, m.user_id);
             toast.success(`${m.username} removed`);
-            refresh();
+            invalidateMembers();
         } catch (e) {
             toast.error(`remove: ${humanizeError(e)}`);
         }
@@ -187,7 +181,7 @@ export default function ProjectMembers({ project }: Props) {
             subtitle={`${members?.length ?? 0} member(s)`}
             actions={
                 <>
-                    <RefreshButton loading={loading} onClick={refresh} />
+                    <RefreshButton loading={loading} onClick={() => void refetch()} />
                     {canAdd && (
                         <Button size="sm" onClick={openAddDialog}>
                             <Plus className="size-3.5" />
@@ -209,7 +203,7 @@ export default function ProjectMembers({ project }: Props) {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {!canAdd && (

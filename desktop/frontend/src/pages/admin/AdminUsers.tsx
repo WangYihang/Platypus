@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { humanizeError } from "../../lib/humanizeError";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +23,7 @@ import {
     listUsers,
     updateUser,
 } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 
 import {
     AlertDialog,
@@ -97,16 +99,10 @@ type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 // change-password / delete. Single-table view so admins can scan the
 // whole roster without scrolling through cards.
 export default function AdminUsers() {
-    const [users, setUsers] = useState<UserRow[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [createOpen, setCreateOpen] = useState(false);
     const [pwOpen, setPwOpen] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
-    // Dynamic role catalogue. Falls back to the three builtins until
-    // /admin/roles?is_global=true resolves so the dropdown is always
-    // populated.
-    const [roleOptions, setRoleOptions] = useState<RBACRoleSummary[]>([]);
 
     const createForm = useForm<CreateUserValues>({
         resolver: zodResolver(createUserSchema),
@@ -117,31 +113,30 @@ export default function AdminUsers() {
         defaultValues: { password: "" },
     });
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            setUsers(await listUsers());
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const {
+        data: users,
+        error,
+        isFetching: loading,
+        refetch,
+    } = useQuery({
+        queryKey: qk.adminUsers(),
+        queryFn: () => listUsers(),
+    });
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    // Dynamic role catalogue. Falls back to the three builtins until
+    // /admin/roles?is_global=true resolves so the dropdown is always
+    // populated. A failure stays silent — admins shouldn't see noise on
+    // a transient hiccup; the user list itself surfaces the same
+    // errors.
+    const { data: roleOptionsData } = useQuery({
+        queryKey: qk.adminRoles(),
+        queryFn: () => listRBACRoles({ isGlobal: true }),
+    });
+    const roleOptions: RBACRoleSummary[] = roleOptionsData ?? [];
 
-    useEffect(() => {
-        listRBACRoles({ isGlobal: true })
-            .then(setRoleOptions)
-            .catch(() => {
-                // Network failure → keep DEFAULT_ROLES rendering. No
-                // toast — admins shouldn't see noise on a transient
-                // hiccup; the user list itself surfaces the same errors.
-            });
-    }, []);
+    function invalidateUsers() {
+        return queryClient.invalidateQueries({ queryKey: qk.adminUsers() });
+    }
 
     const roleSlugs =
         roleOptions.length > 0
@@ -154,7 +149,7 @@ export default function AdminUsers() {
             toast.success(`Created ${v.username}`);
             setCreateOpen(false);
             createForm.reset({ username: "", password: "", role: "operator" });
-            refresh();
+            invalidateUsers();
         } catch (e) {
             toast.error(`create: ${humanizeError(e)}`);
         }
@@ -167,7 +162,7 @@ export default function AdminUsers() {
         try {
             await deleteUser(u.id);
             toast.success(`Deleted ${u.username}`);
-            refresh();
+            invalidateUsers();
         } catch (e) {
             toast.error(`delete: ${humanizeError(e)}`);
         }
@@ -177,7 +172,7 @@ export default function AdminUsers() {
         try {
             await updateUser(u.id, { role });
             toast.success(`Updated ${u.username} role`);
-            refresh();
+            invalidateUsers();
         } catch (e) {
             toast.error(`role: ${humanizeError(e)}`);
         }
@@ -202,7 +197,7 @@ export default function AdminUsers() {
             subtitle="Manage who can log in and what they can do"
             actions={
                 <>
-                    <RefreshButton loading={loading} onClick={refresh} />
+                    <RefreshButton loading={loading} onClick={() => void refetch()} />
                     <Button size="sm" onClick={() => setCreateOpen(true)}>
                         <Plus className="size-3.5" />
                         New user
@@ -222,7 +217,7 @@ export default function AdminUsers() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {users && users.length === 0 ? (

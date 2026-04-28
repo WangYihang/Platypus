@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+
+import { renderWithQueryClient } from "../../testing/renderWithQueryClient";
 
 vi.mock("../../lib/auth", () => ({
     getSessionUser: () => ({
@@ -30,7 +32,7 @@ vi.mock("../../lib/api", () => ({
 import AdminAccessControl from "./AdminAccessControl";
 
 function renderInRouter(ui: React.ReactElement) {
-    return render(<MemoryRouter>{ui}</MemoryRouter>);
+    return renderWithQueryClient(<MemoryRouter>{ui}</MemoryRouter>);
 }
 
 describe("<AdminAccessControl>", () => {
@@ -58,8 +60,9 @@ describe("<AdminAccessControl>", () => {
         ]);
         listRBACPermissions.mockResolvedValue([]);
         renderInRouter(<AdminAccessControl />);
-        await waitFor(() => expect(listRBACRoles).toHaveBeenCalled());
-        expect(screen.getByText(/^Viewer$/)).toBeInTheDocument();
+        // useQuery resolves asynchronously even after the queryFn
+        // returns; assert via findByText so we await the rerender.
+        expect(await screen.findByText(/^Viewer$/)).toBeInTheDocument();
         expect(screen.getByText(/^Operator$/)).toBeInTheDocument();
     });
 
@@ -72,8 +75,7 @@ describe("<AdminAccessControl>", () => {
         ]);
         renderInRouter(<AdminAccessControl />);
         await user.click(screen.getByRole("tab", { name: /permissions/i }));
-        await waitFor(() => expect(listRBACPermissions).toHaveBeenCalled());
-        expect(screen.getByText("hosts:read")).toBeInTheDocument();
+        expect(await screen.findByText("hosts:read")).toBeInTheDocument();
         expect(screen.getByText("hosts:exec")).toBeInTheDocument();
     });
 

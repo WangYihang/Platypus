@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Monitor, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,7 @@ import {
     listHosts,
     listProjectSessions,
 } from "../lib/api";
+import { qk } from "../lib/queryKeys";
 import { fromNow, isOnline } from "../lib/time";
 
 interface Props {
@@ -38,36 +40,45 @@ interface Props {
 // been retired.
 export default function ProjectOverview({ project, onOpenMembers }: Props) {
     const navigate = useNavigate();
-    const [publicAddr, setPublicAddr] = useState<string>("");
-    const [hosts, setHosts] = useState<Host[] | null>(null);
-    const [sessions24h, setSessions24h] = useState<SessionRow[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
 
-    async function refresh() {
-        setLoading(true);
-        try {
+    const serverInfoQuery = useQuery({
+        queryKey: qk.serverInfo(),
+        queryFn: () => getServerInfo(),
+    });
+    const hostsQuery = useQuery({
+        queryKey: qk.hosts(project.id),
+        queryFn: () => listHosts(project.id),
+    });
+    // 24h sessions feed for the chart + activity list. The cache key
+    // pins `since=24h` symbolically so a refetch always resolves the
+    // same window even though the timestamp moves; an exact-second
+    // key would defeat caching across the page's three readers.
+    const sessions24hQuery = useQuery({
+        queryKey: ["projectSessions", project.id, "since-24h"] as const,
+        queryFn: () => {
             const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const [info, h, s] = await Promise.all([
-                getServerInfo(),
-                listHosts(project.id),
-                listProjectSessions(project.id, { since, limit: 1000 }),
-            ]);
-            setPublicAddr(info.public_addr || "");
-            setHosts(h);
-            setSessions24h(s);
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }
+            return listProjectSessions(project.id, { since, limit: 1000 });
+        },
+    });
 
-    useEffect(() => {
-        void refresh();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [project.id]);
+    const publicAddr = serverInfoQuery.data?.public_addr || "";
+    const hosts: Host[] | null = hostsQuery.data ?? null;
+    const sessions24h: SessionRow[] | null = sessions24hQuery.data ?? null;
+    const loading =
+        serverInfoQuery.isFetching ||
+        hostsQuery.isFetching ||
+        sessions24hQuery.isFetching;
+    const error =
+        serverInfoQuery.error ?? hostsQuery.error ?? sessions24hQuery.error ?? null;
+
+    function refresh() {
+        queryClient.invalidateQueries({ queryKey: qk.serverInfo() });
+        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+        queryClient.invalidateQueries({
+            queryKey: ["projectSessions", project.id, "since-24h"],
+        });
+    }
 
     const onlineCount = hosts?.filter((h) => isOnline(h.last_seen_at)).length ?? 0;
     const liveSessionsCount = sessions24h?.filter((s) => !s.disconnected_at).length ?? 0;
@@ -155,7 +166,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
 

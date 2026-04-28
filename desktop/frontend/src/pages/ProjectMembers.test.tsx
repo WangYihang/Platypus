@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
 vi.mock("../lib/api", () => ({
     listProjectMembers: vi.fn().mockResolvedValue([
@@ -39,7 +41,7 @@ const project = {
 describe("<ProjectMembers> add-member dialog", () => {
     it("exposes both 'Add' and 'Add another' submit buttons", async () => {
         const user = userEvent.setup();
-        render(<ProjectMembers project={project as never} />);
+        renderWithQueryClient(<ProjectMembers project={project as never} />);
 
         // Wait for the initial load and click the "Add member"
         // trigger; jsdom resolves the async members fetch in a

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
@@ -23,6 +24,7 @@ import {
     listRBACRoles,
     updateRBACRole,
 } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 
 import {
     AlertDialog,
@@ -94,33 +96,28 @@ export default function AdminAccessControl() {
 }
 
 function RolesTab() {
-    const [rows, setRows] = useState<RBACRoleSummary[] | null>(null);
-    const [permissions, setPermissions] = useState<RBACPermission[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
+    const queryClient = useQueryClient();
     const [createOpen, setCreateOpen] = useState(false);
     const [editing, setEditing] = useState<RBACRole | null>(null);
     const [pendingDelete, setPendingDelete] = useState<RBACRoleSummary | null>(null);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [r, p] = await Promise.all([listRBACRoles(), listRBACPermissions()]);
-            setRows(r);
-            setPermissions(p);
-            setError(null);
-        } catch (e) {
-            setError(humanizeError(e));
-            toast.error(`Couldn't load roles: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const rolesQuery = useQuery({
+        queryKey: qk.adminRoles(),
+        queryFn: () => listRBACRoles(),
+    });
+    const permissionsQuery = useQuery({
+        queryKey: qk.adminPermissions(),
+        queryFn: () => listRBACPermissions(),
+    });
+    const rows: RBACRoleSummary[] | null = rolesQuery.data ?? null;
+    const permissions: RBACPermission[] = permissionsQuery.data ?? [];
+    const loading = rolesQuery.isFetching || permissionsQuery.isFetching;
+    const error = rolesQuery.error ?? permissionsQuery.error ?? null;
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    function refresh() {
+        queryClient.invalidateQueries({ queryKey: qk.adminRoles() });
+        queryClient.invalidateQueries({ queryKey: qk.adminPermissions() });
+    }
 
     async function openEdit(slug: string) {
         try {
@@ -149,7 +146,7 @@ function RolesTab() {
             <Toolbar
                 right={
                     <>
-                        <RefreshButton loading={loading} onClick={refresh} />
+                        <RefreshButton loading={loading} onClick={() => refresh()} />
                         <Button size="sm" onClick={() => setCreateOpen(true)}>
                             <Plus className="size-3.5" />
                             New role
@@ -158,7 +155,7 @@ function RolesTab() {
                 }
             />
             {error && (
-                <ErrorBox text={error} />
+                <ErrorBox text={String(error)} />
             )}
             <Card padding={0}>
                 {rows === null ? (
@@ -291,17 +288,10 @@ function RolesTab() {
 }
 
 function PermissionsTab() {
-    const [rows, setRows] = useState<RBACPermission[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        listRBACPermissions()
-            .then(setRows)
-            .catch((e) => {
-                setError(humanizeError(e));
-                toast.error(`Couldn't load permissions: ${humanizeError(e)}`);
-            });
-    }, []);
+    const { data: rows = null, error } = useQuery({
+        queryKey: qk.adminPermissions(),
+        queryFn: () => listRBACPermissions(),
+    });
 
     const grouped = useMemo(() => {
         if (!rows) return null;
@@ -324,7 +314,7 @@ function PermissionsTab() {
         );
     }
     if (error) {
-        return <ErrorBox text={error} />;
+        return <ErrorBox text={String(error)} />;
     }
     return (
         <div className="space-y-4">
