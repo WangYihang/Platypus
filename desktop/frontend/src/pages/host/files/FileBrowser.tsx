@@ -17,6 +17,7 @@ import {
     RefreshCw,
     Trash2,
     Upload,
+    X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../../lib/humanizeError";
@@ -70,6 +71,7 @@ import { joinPath, parentPath, splitCrumbs } from "./paths";
 import { shouldSkipBrowserShortcut } from "./keymap";
 import { useDirectory } from "./useDirectory";
 import { useDragDrop } from "./useDragDrop";
+import { usePreviewPane } from "./usePreviewPane";
 
 // Lazy-load the editors so CodeMirror's ~300 KiB payload doesn't land
 // unless the user actually opens a file to view or edit.
@@ -137,7 +139,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const { setOpen: setTransfersDrawerOpen } = useTransfersDrawer();
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
-    const [openingEntry, setOpeningEntry] = useState<FileEntryDTO | null>(null);
+    // Preview pane state: open/closed + persisted width. The pane's
+    // contents are derived from the current selection (single-file
+    // selection → viewer; otherwise placeholder, but the pane stays
+    // open so toggling between rows feels stable).
+    const preview = usePreviewPane();
     const [showNewFolder, setShowNewFolder] = useState(false);
     const [showNewFile, setShowNewFile] = useState(false);
     const [showRename, setShowRename] = useState(false);
@@ -152,16 +158,30 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     );
 
     // Reset selection whenever we navigate — avoids stale selections
-    // carrying across directories.
+    // carrying across directories. Preview-open / width state is
+    // intentionally preserved: the user's layout preference shouldn't
+    // collapse on every cd.
     useEffect(() => {
         setSelected(new Set());
-        setOpeningEntry(null);
     }, [dir.path]);
 
     const selectedEntries = useMemo(
         () => dir.entries.filter((e) => selected.has(e.name)),
         [dir.entries, selected],
     );
+
+    // The previewable entry — null when the pane is closed, the
+    // selection is empty / multi, or the single selection is a
+    // directory or symlink. The pane itself still renders when
+    // preview.open is true; previewEntry==null just means "show
+    // placeholder, not viewer".
+    const previewEntry = useMemo<FileEntryDTO | null>(() => {
+        if (!preview.open) return null;
+        if (selectedEntries.length !== 1) return null;
+        const e = selectedEntries[0];
+        if (e.isDir || e.isSymlink) return null;
+        return e;
+    }, [preview.open, selectedEntries]);
 
     // Right-click on a row: build a FileContextMenu wired to the same
     // toolbar handlers. Selection is reconciled on open so a
@@ -255,7 +275,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             toast.message(`${entry.name} → ${entry.symlinkTarget || "(unreadable)"}`);
             return;
         }
-        setOpeningEntry(entry);
+        // File: select + open the preview pane. Selection drives which
+        // viewer renders, so the same path handles both
+        // double-click and Enter from the keyboard handler below.
+        setSelected(new Set([entry.name]));
+        preview.setOpen(true);
     }
 
     async function handleUploadClick() {
@@ -434,7 +458,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             // the directory back up. Also skip when typing in any
             // input/contenteditable/role=textbox elsewhere on the
             // page (rename, breadcrumb, search …).
-            if (shouldSkipBrowserShortcut(ev.target, openingEntry !== null)) return;
+            if (shouldSkipBrowserShortcut(ev.target, preview.open)) return;
             if (ev.key === "Backspace") {
                 ev.preventDefault();
                 goUp();
@@ -447,6 +471,16 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "n") {
                 ev.preventDefault();
                 setShowNewFolder(true);
+            } else if (ev.key === " " && selectedEntries.length === 1) {
+                // Quick-Look style toggle: Space on a single selection
+                // opens the preview pane; pressing again closes it.
+                // The native browser Space-scroll is suppressed so
+                // toggling doesn't also page-down the file list.
+                ev.preventDefault();
+                preview.toggle();
+            } else if (ev.key === "Escape" && preview.open) {
+                ev.preventDefault();
+                preview.close();
             } else if (ev.key === "Enter" && selectedEntries.length === 1) {
                 ev.preventDefault();
                 openEntry(selectedEntries[0]);
@@ -455,7 +489,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path, openingEntry]);
+    }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path, preview.open]);
 
     const crumbs = splitCrumbs(dir.path);
 
@@ -677,84 +711,110 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             )}
                         </div>
                     </FileContextMenu>
-                    {openingEntry && (
-                        <div className="flex-1 overflow-hidden rounded-md border">
-                            <Suspense
-                                fallback={
-                                    <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2 className="size-4 animate-spin" />
-                                        Loading editor…
+                    {preview.open && (
+                        <div
+                            className="flex flex-col overflow-hidden rounded-md border"
+                            style={{ width: preview.width, flexShrink: 0 }}
+                            data-testid="preview-pane"
+                        >
+                            <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-sm">
+                                <span className="truncate font-mono">
+                                    {previewEntry?.name ?? "Preview"}
+                                </span>
+                                <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    aria-label="Close preview"
+                                    onClick={preview.close}
+                                >
+                                    <X className="size-3.5" />
+                                </Button>
+                            </div>
+                            <div className="flex-1 overflow-hidden">
+                                {previewEntry ? (
+                                    <Suspense
+                                        fallback={
+                                            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                                                <Loader2 className="size-4 animate-spin" />
+                                                Loading editor…
+                                            </div>
+                                        }
+                                    >
+                                        {(() => {
+                                            const fullPath = joinPath(dir.path, previewEntry.name);
+                                            const kind = pickViewerKind(previewEntry.mime, previewEntry.name);
+                                            if (kind === "image") {
+                                                return (
+                                                    <ImageViewer
+                                                        projectID={projectID}
+                                                        sessionHash={sessionHash}
+                                                        path={fullPath}
+                                                        size={previewEntry.size}
+                                                        mime={previewEntry.mime}
+                                                    />
+                                                );
+                                            }
+                                            if (kind === "pdf") {
+                                                return (
+                                                    <PdfViewer
+                                                        projectID={projectID}
+                                                        sessionHash={sessionHash}
+                                                        path={fullPath}
+                                                        size={previewEntry.size}
+                                                    />
+                                                );
+                                            }
+                                            if (kind === "video" || kind === "audio") {
+                                                return (
+                                                    <MediaViewer
+                                                        projectID={projectID}
+                                                        sessionHash={sessionHash}
+                                                        path={fullPath}
+                                                        size={previewEntry.size}
+                                                        kind={kind}
+                                                        mime={previewEntry.mime}
+                                                    />
+                                                );
+                                            }
+                                            if (kind === "markdown" && previewEntry.size <= SMALL_FILE_LIMIT) {
+                                                return (
+                                                    <MarkdownViewer
+                                                        projectID={projectID}
+                                                        sessionHash={sessionHash}
+                                                        path={fullPath}
+                                                        size={previewEntry.size}
+                                                    />
+                                                );
+                                            }
+                                            if (previewEntry.size > SMALL_FILE_LIMIT) {
+                                                return (
+                                                    <FileViewerPaged
+                                                        projectID={projectID}
+                                                        sessionHash={sessionHash}
+                                                        path={fullPath}
+                                                        size={previewEntry.size}
+                                                        onDownload={handleDownloadClick}
+                                                    />
+                                                );
+                                            }
+                                            return (
+                                                <FileEditor
+                                                    projectID={projectID}
+                                                    sessionHash={sessionHash}
+                                                    path={fullPath}
+                                                    size={previewEntry.size}
+                                                    onSaved={dir.reload}
+                                                />
+                                            );
+                                        })()}
+                                    </Suspense>
+                                ) : (
+                                    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                                        Select a single file to preview.
                                     </div>
-                                }
-                            >
-                                {(() => {
-                                    const fullPath = joinPath(dir.path, openingEntry.name);
-                                    const kind = pickViewerKind(openingEntry.mime, openingEntry.name);
-                                    if (kind === "image") {
-                                        return (
-                                            <ImageViewer
-                                                projectID={projectID}
-                                                sessionHash={sessionHash}
-                                                path={fullPath}
-                                                size={openingEntry.size}
-                                                mime={openingEntry.mime}
-                                            />
-                                        );
-                                    }
-                                    if (kind === "pdf") {
-                                        return (
-                                            <PdfViewer
-                                                projectID={projectID}
-                                                sessionHash={sessionHash}
-                                                path={fullPath}
-                                                size={openingEntry.size}
-                                            />
-                                        );
-                                    }
-                                    if (kind === "video" || kind === "audio") {
-                                        return (
-                                            <MediaViewer
-                                                projectID={projectID}
-                                                sessionHash={sessionHash}
-                                                path={fullPath}
-                                                size={openingEntry.size}
-                                                kind={kind}
-                                                mime={openingEntry.mime}
-                                            />
-                                        );
-                                    }
-                                    if (kind === "markdown" && openingEntry.size <= SMALL_FILE_LIMIT) {
-                                        return (
-                                            <MarkdownViewer
-                                                projectID={projectID}
-                                                sessionHash={sessionHash}
-                                                path={fullPath}
-                                                size={openingEntry.size}
-                                            />
-                                        );
-                                    }
-                                    if (openingEntry.size > SMALL_FILE_LIMIT) {
-                                        return (
-                                            <FileViewerPaged
-                                                projectID={projectID}
-                                                sessionHash={sessionHash}
-                                                path={fullPath}
-                                                size={openingEntry.size}
-                                                onDownload={handleDownloadClick}
-                                            />
-                                        );
-                                    }
-                                    return (
-                                        <FileEditor
-                                            projectID={projectID}
-                                            sessionHash={sessionHash}
-                                            path={fullPath}
-                                            size={openingEntry.size}
-                                            onSaved={dir.reload}
-                                        />
-                                    );
-                                })()}
-                            </Suspense>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
