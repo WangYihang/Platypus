@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { ArrowDownToLine, ArrowUpFromLine, ChevronRight } from "lucide-react";
 
 import { palette, radius, space } from "../layout/theme";
 import { humanizeError } from "../lib/humanizeError";
@@ -46,6 +47,10 @@ const TERMINAL: ReadonlySet<TransferStatus> = new Set([
     "canceled",
 ]);
 
+// Number of visible columns in <thead>. Detail / inline-error rows
+// span all of them via colSpan so the layout stays aligned.
+const VISIBLE_COLUMNS = 7;
+
 function formatPaths(paths: string[]): string {
     if (paths.length === 0) return "";
     if (paths.length === 1) return paths[0];
@@ -59,15 +64,19 @@ function formatPaths(paths: string[]): string {
  * always-on TransfersDrawer. Subscribes to /notify so the table
  * re-renders as transfers progress + finish + get cancelled.
  *
- * Columns: Host (alias) · Paths · Direction · Format · Progress ·
- * Size · Speed · Compression · Elapsed · Status · Error · Started ·
- * Actions.
+ * Columns: chevron · Path (with direction icon) · Progress · Size
+ * (stacked: size / speed / compression) · Time (relative duration,
+ * absolute timestamp on title=) · Status · Actions.
  *
- * Speed is `bytes_transferred / elapsed` (source throughput); the
- * compression cell is `wire_bytes / bytes_transferred` and only
- * shows for archive transfers where the encoder actually shrinks
- * (or, rarely, inflates) the body — plain transfers render an
- * em-dash so the column doesn't add noise.
+ * Click a row to expand a detail panel with host alias, raw byte
+ * counts (source + wire), full ISO timestamps, format, full path
+ * list, and the error message in full. The data is the same shape
+ * the drawer surfaces; the table is the audit-log view, the drawer
+ * is the live "what's happening *now*" view.
+ *
+ * Operators see a row's error_message on a dedicated red sub-line
+ * underneath the row without having to expand — failed transfers
+ * shouldn't need an extra click to diagnose.
  */
 export default function TransferTaskList({ projectId, hostId }: Props) {
     const store = useMemo(
@@ -78,6 +87,8 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
     const [loaded, setLoaded] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [hostsByID, setHostsByID] = useState<Record<string, Host>>({});
+    // Set of transfer ids currently expanded into the detail row.
+    const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
     useEffect(() => {
         let cancelled = false;
@@ -97,10 +108,10 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
         };
     }, [store]);
 
-    // Resolve host_id → primary alias / hostname so the Host column
-    // is human-readable. Cached at mount; the project's host list
-    // changes slowly enough that a one-shot fetch is fine. Failures
-    // fall back silently to the raw id.
+    // Resolve host_id → primary alias / hostname so the expanded
+    // row + the path tooltip stay human-readable. Cached at mount;
+    // the project's host list changes slowly enough that a one-shot
+    // fetch is fine. Failures fall back silently to the raw id.
     useEffect(() => {
         if (!projectId) return;
         let cancelled = false;
@@ -117,9 +128,9 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
         };
     }, [projectId]);
 
-    // Tick once a second so the Elapsed column for in-flight rows
-    // updates live. We re-render the whole table — fine for the
-    // dozens-of-rows case the page surfaces.
+    // Tick once a second so the Time cell for in-flight rows updates
+    // live. We re-render the whole table — fine for the dozens-of-rows
+    // case the page surfaces.
     const [tickNow, setTickNow] = useState(() => new Date());
     useEffect(() => {
         const id = window.setInterval(() => setTickNow(new Date()), 1000);
@@ -146,6 +157,15 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
         }
     }
 
+    function toggleExpanded(id: string) {
+        setExpanded((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }
+
     if (loadError) {
         return (
             <EmptyState
@@ -168,81 +188,222 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
             <table style={tableStyle}>
                 <thead>
                     <tr>
-                        <th style={thStyle}>Host</th>
-                        <th style={thStyle}>Paths</th>
-                        <th style={thStyle}>Direction</th>
-                        <th style={thStyle}>Format</th>
+                        <th style={thChevronStyle} aria-label="" />
+                        <th style={thStyle}>Path</th>
                         <th style={thStyle}>Progress</th>
                         <th style={thNumStyle}>Size</th>
-                        <th style={thNumStyle}>Speed</th>
-                        <th style={thNumStyle}>Compression</th>
-                        <th style={thNumStyle}>Elapsed</th>
+                        <th style={thNumStyle}>Time</th>
                         <th style={thStyle}>Status</th>
-                        <th style={thStyle}>Error</th>
-                        <th style={thStyle}>Started</th>
                         <th style={thStyle}>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map((it) => (
-                        <tr key={it.id} style={trStyle} data-testid="transfer-row">
-                            <td style={tdStyle} data-testid="transfer-host-cell" title={it.host_id}>
-                                {hostLabel(it)}
-                            </td>
-                            <td style={tdMonoStyle} title={it.paths.join("\n")}>
-                                {formatPaths(it.paths)}
-                            </td>
-                            <td style={tdStyle}>
-                                <span style={{ textTransform: "capitalize" }}>{it.direction}</span>
-                            </td>
-                            <td style={tdStyle}>{it.format || "—"}</td>
-                            <td style={tdStyle}>
-                                <ProgressBar pct={transferProgressPct(it)} status={it.status} />
-                            </td>
-                            <td style={tdNumStyle}>{transferDisplaySize(it)}</td>
-                            <td style={tdNumStyle} data-testid="transfer-speed-cell">
-                                {formatBytesPerSec(transferAverageSpeed(it, tickNow))}
-                            </td>
-                            <td style={tdNumStyle} data-testid="transfer-compression-cell">
-                                {formatCompressionRatio(transferCompressionRatio(it))}
-                            </td>
-                            <td style={tdNumStyle} data-testid="transfer-elapsed-cell">
-                                {transferElapsed(it, tickNow)}
-                            </td>
-                            <td style={tdStyle}>
-                                <StatusPill tone={STATUS_TONES[it.status]}>
-                                    {it.status}
-                                </StatusPill>
-                            </td>
-                            <td
-                                style={tdStyle}
-                                data-testid="transfer-error-cell"
-                                title={it.error_message || undefined}
-                            >
-                                {it.error_message ? (
-                                    <span style={errorTextStyle}>{it.error_message}</span>
-                                ) : (
-                                    "—"
-                                )}
-                            </td>
-                            <td style={tdStyle}>
-                                {new Date(it.started_at).toLocaleString()}
-                            </td>
-                            <td style={tdStyle}>
-                                {!TERMINAL.has(it.status) ? (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => onCancel(it)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                ) : null}
-                            </td>
-                        </tr>
+                        <Fragment key={it.id}>
+                            <Row
+                                it={it}
+                                expanded={expanded.has(it.id)}
+                                tickNow={tickNow}
+                                onToggle={() => toggleExpanded(it.id)}
+                                onCancel={() => onCancel(it)}
+                            />
+                            {it.error_message ? (
+                                <tr
+                                    style={inlineErrorRowStyle}
+                                    data-testid="transfer-error-inline"
+                                >
+                                    <td colSpan={VISIBLE_COLUMNS} style={inlineErrorCellStyle}>
+                                        {it.error_message}
+                                    </td>
+                                </tr>
+                            ) : null}
+                            {expanded.has(it.id) ? (
+                                <DetailRow it={it} hostLabel={hostLabel(it)} />
+                            ) : null}
+                        </Fragment>
                     ))}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+interface RowProps {
+    it: TransferItem;
+    expanded: boolean;
+    tickNow: Date;
+    onToggle: () => void;
+    onCancel: () => void;
+}
+
+function Row({ it, expanded, tickNow, onToggle, onCancel }: RowProps) {
+    const directionTone = it.direction === "upload" ? "info" : "success";
+    const directionColor =
+        it.direction === "upload" ? palette.info : palette.success;
+    const DirectionIcon =
+        it.direction === "upload" ? ArrowUpFromLine : ArrowDownToLine;
+    const isCompressed =
+        it.wire_bytes > 0 && it.wire_bytes !== it.bytes_transferred;
+    const speedText = formatBytesPerSec(transferAverageSpeed(it, tickNow));
+    const ratioText = formatCompressionRatio(transferCompressionRatio(it));
+    const subParts: string[] = [];
+    if (speedText !== "—") subParts.push(speedText);
+    if (isCompressed && ratioText !== "—") subParts.push(ratioText);
+    const startedAbs = new Date(it.started_at).toISOString();
+
+    return (
+        <tr
+            style={expanded ? trExpandedStyle : trStyle}
+            data-testid="transfer-row"
+            aria-expanded={expanded}
+            onClick={onToggle}
+        >
+            <td style={tdChevronStyle} aria-hidden>
+                <ChevronRight
+                    className="size-3.5"
+                    style={{
+                        transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+                        transition: "transform 120ms ease-out",
+                        color: palette.textMuted,
+                    }}
+                />
+            </td>
+            <td style={tdPathStyle} title={it.paths.join("\n")}>
+                <span style={pathInnerStyle}>
+                    <DirectionIcon
+                        className="size-3.5"
+                        data-testid="transfer-direction-icon"
+                        data-direction-tone={directionTone}
+                        style={{ color: directionColor, flexShrink: 0 }}
+                    />
+                    <span style={pathTextStyle}>{formatPaths(it.paths)}</span>
+                </span>
+            </td>
+            <td style={tdStyle}>
+                <ProgressBar pct={transferProgressPct(it)} status={it.status} />
+            </td>
+            <td
+                style={tdNumStyle}
+                data-testid="transfer-size-cell"
+            >
+                <div style={sizeMainStyle}>{transferDisplaySize(it)}</div>
+                {subParts.length > 0 ? (
+                    <div style={sizeSubStyle}>{subParts.join(" · ")}</div>
+                ) : null}
+            </td>
+            <td
+                style={tdNumStyle}
+                data-testid="transfer-time-cell"
+                title={startedAbs}
+            >
+                {transferElapsed(it, tickNow)}
+            </td>
+            <td style={tdStyle}>
+                <StatusPill tone={STATUS_TONES[it.status]}>{it.status}</StatusPill>
+            </td>
+            <td style={tdStyle}>
+                {!TERMINAL.has(it.status) ? (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                            // Stop the row's onClick from also toggling the
+                            // detail row — Cancel and expand are separate
+                            // affordances on the same surface.
+                            e.stopPropagation();
+                            onCancel();
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                ) : null}
+            </td>
+        </tr>
+    );
+}
+
+function DetailRow({
+    it,
+    hostLabel,
+}: {
+    it: TransferItem;
+    hostLabel: string;
+}) {
+    const finishedAbs = it.finished_at
+        ? new Date(it.finished_at).toISOString()
+        : "—";
+    return (
+        <tr style={detailRowStyle} data-testid="transfer-detail-row">
+            <td colSpan={VISIBLE_COLUMNS} style={detailCellStyle}>
+                <dl style={detailGridStyle}>
+                    <DetailKV k="Host" v={`${hostLabel} · ${it.host_id}`} />
+                    <DetailKV k="Format" v={it.format || "—"} />
+                    <DetailKV k="Direction" v={it.direction} />
+                    <DetailKV k="Kind" v={it.kind} />
+                    <DetailKV k="Started" v={new Date(it.started_at).toISOString()} />
+                    <DetailKV k="Finished" v={finishedAbs} />
+                    <DetailKV
+                        k="Source bytes"
+                        v={String(it.bytes_transferred)}
+                    />
+                    <DetailKV k="Wire bytes" v={String(it.wire_bytes)} />
+                    <DetailKV
+                        k="Total bytes"
+                        v={it.total_bytes > 0 ? String(it.total_bytes) : "unknown"}
+                    />
+                    {it.paths.length > 1 ? (
+                        <DetailKV
+                            k="Paths"
+                            v={it.paths.join("\n")}
+                            wide
+                        />
+                    ) : null}
+                    {it.error_message ? (
+                        <DetailKV
+                            k="Error"
+                            v={it.error_message}
+                            wide
+                            tone="danger"
+                        />
+                    ) : null}
+                </dl>
+            </td>
+        </tr>
+    );
+}
+
+function DetailKV({
+    k,
+    v,
+    wide,
+    tone,
+}: {
+    k: string;
+    v: string;
+    wide?: boolean;
+    tone?: "danger";
+}) {
+    return (
+        <div
+            style={{
+                gridColumn: wide ? "span 2" : "span 1",
+                display: "flex",
+                gap: space[2],
+            }}
+        >
+            <dt style={detailKeyStyle}>{k}</dt>
+            <dd
+                style={{
+                    ...detailValueStyle,
+                    color: tone === "danger" ? palette.danger : palette.textPrimary,
+                    whiteSpace: wide ? "pre-wrap" : "nowrap",
+                    overflow: wide ? "visible" : "hidden",
+                    textOverflow: wide ? "clip" : "ellipsis",
+                    margin: 0,
+                }}
+            >
+                {v}
+            </dd>
         </div>
     );
 }
@@ -327,14 +488,35 @@ const thNumStyle: React.CSSProperties = {
     textAlign: "right",
 };
 
+// Chevron column is a fixed-width gutter — empty header label so the
+// affordance is purely the chevron itself.
+const thChevronStyle: React.CSSProperties = {
+    ...thStyle,
+    width: 24,
+    padding: `${space[2]}px ${space[1]}px`,
+};
+
 const trStyle: React.CSSProperties = {
     borderBottom: `1px solid ${palette.border}`,
+    cursor: "pointer",
+};
+
+const trExpandedStyle: React.CSSProperties = {
+    ...trStyle,
+    background: palette.surfaceHover,
 };
 
 const tdStyle: React.CSSProperties = {
     padding: `${space[2]}px ${space[3]}px`,
     color: palette.textPrimary,
     verticalAlign: "middle",
+};
+
+const tdChevronStyle: React.CSSProperties = {
+    ...tdStyle,
+    padding: `${space[2]}px ${space[1]}px`,
+    width: 24,
+    color: palette.textMuted,
 };
 
 // Numeric cells: right-aligned so the operator can scan a column of
@@ -349,20 +531,85 @@ const tdNumStyle: React.CSSProperties = {
     fontVariantNumeric: "tabular-nums",
 };
 
-const tdMonoStyle: React.CSSProperties = {
+const tdPathStyle: React.CSSProperties = {
     ...tdStyle,
     fontFamily: "var(--font-mono, ui-monospace, monospace)",
     color: palette.textSecondary,
-    maxWidth: 320,
+    maxWidth: 360,
+    overflow: "hidden",
+};
+
+const pathInnerStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: space[2],
+    minWidth: 0,
+};
+
+const pathTextStyle: React.CSSProperties = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
 };
 
-const errorTextStyle: React.CSSProperties = {
-    color: palette.danger,
+// Stacked size cell: the canonical "X / Y" display on top, smaller
+// muted "B/s · ratio" sub-line beneath. Both lines right-aligned via
+// the parent <td>'s textAlign.
+const sizeMainStyle: React.CSSProperties = {
+    fontVariantNumeric: "tabular-nums",
+};
+
+const sizeSubStyle: React.CSSProperties = {
     fontSize: 11,
-    marginLeft: space[1],
+    color: palette.textMuted,
+    fontVariantNumeric: "tabular-nums",
+    marginTop: 1,
+};
+
+// Inline error sub-row is a single full-width red strip immediately
+// under the row so the operator sees what failed without expanding.
+const inlineErrorRowStyle: React.CSSProperties = {
+    borderBottom: `1px solid ${palette.border}`,
+};
+
+const inlineErrorCellStyle: React.CSSProperties = {
+    padding: `${space[1]}px ${space[3]}px ${space[2]}px ${space[3]}px`,
+    color: palette.danger,
+    fontSize: 12,
+    background: palette.surface,
+};
+
+// Expanded detail row: a single full-width cell containing a
+// two-column key-value grid. Same border treatment as the rest of
+// the table so the visual rhythm doesn't break.
+const detailRowStyle: React.CSSProperties = {
+    borderBottom: `1px solid ${palette.border}`,
+    background: palette.surfaceHover,
+};
+
+const detailCellStyle: React.CSSProperties = {
+    padding: `${space[3]}px ${space[5]}px`,
+};
+
+const detailGridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: `${space[2]}px ${space[5]}px`,
+    margin: 0,
+    fontSize: 12,
+};
+
+const detailKeyStyle: React.CSSProperties = {
+    color: palette.textMuted,
+    minWidth: 100,
+    whiteSpace: "nowrap",
+    fontWeight: 500,
+};
+
+const detailValueStyle: React.CSSProperties = {
+    color: palette.textPrimary,
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    fontVariantNumeric: "tabular-nums",
 };
 
 // The track + label sit side-by-side inside the cell so the label
