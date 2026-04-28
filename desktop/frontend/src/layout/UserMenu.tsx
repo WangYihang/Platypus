@@ -106,6 +106,17 @@ export default function UserMenu({ user, serverURL }: Props) {
                                 className="pl-popover-btn"
                                 onClick={() => {
                                     setMenuOpen(false);
+                                    navigate("/admin/access-control");
+                                }}
+                            >
+                                <Settings className="size-3.5" />
+                                <span>Access control</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="pl-popover-btn"
+                                onClick={() => {
+                                    setMenuOpen(false);
                                     navigate("/admin/settings");
                                 }}
                             >

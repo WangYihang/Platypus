@@ -12,7 +12,15 @@ import PageHeader from "../../components/PageHeader";
 import RoleHelpIcon from "../../components/RoleHelpIcon";
 import StatusPill from "../../components/StatusPill";
 import { palette, space } from "../../layout/theme";
-import { UserRow, createUser, deleteUser, listUsers, updateUser } from "../../lib/api";
+import {
+    type RBACRoleSummary,
+    UserRow,
+    createUser,
+    deleteUser,
+    listRBACRoles,
+    listUsers,
+    updateUser,
+} from "../../lib/api";
 
 import {
     AlertDialog,
@@ -59,10 +67,14 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-const ROLES = ["admin", "operator", "viewer"] as const;
-type Role = (typeof ROLES)[number];
+// Fallback role list used before the dynamic /admin/roles fetch
+// resolves, and as the dropdown contents on a network failure. Always
+// includes the three builtins so the page never renders an empty
+// Select. A custom role added via /admin/access-control surfaces in
+// the dropdown on the next page mount.
+const DEFAULT_ROLES = ["admin", "operator", "viewer"] as const;
 
-const ROLE_TONE: Record<Role, "danger" | "info" | "neutral"> = {
+const BUILTIN_ROLE_TONE: Record<string, "danger" | "info" | "neutral"> = {
     admin: "danger",
     operator: "info",
     viewer: "neutral",
@@ -71,7 +83,7 @@ const ROLE_TONE: Record<Role, "danger" | "info" | "neutral"> = {
 const createUserSchema = z.object({
     username: z.string().min(1, "username is required"),
     password: z.string().min(8, "Min 8 chars"),
-    role: z.enum(ROLES),
+    role: z.string().min(1, "role is required"),
 });
 type CreateUserValues = z.infer<typeof createUserSchema>;
 
@@ -90,6 +102,10 @@ export default function AdminUsers() {
     const [createOpen, setCreateOpen] = useState(false);
     const [pwOpen, setPwOpen] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
+    // Dynamic role catalogue. Falls back to the three builtins until
+    // /admin/roles?is_global=true resolves so the dropdown is always
+    // populated.
+    const [roleOptions, setRoleOptions] = useState<RBACRoleSummary[]>([]);
 
     const createForm = useForm<CreateUserValues>({
         resolver: zodResolver(createUserSchema),
@@ -116,6 +132,21 @@ export default function AdminUsers() {
         refresh();
     }, [refresh]);
 
+    useEffect(() => {
+        listRBACRoles({ isGlobal: true })
+            .then(setRoleOptions)
+            .catch(() => {
+                // Network failure → keep DEFAULT_ROLES rendering. No
+                // toast — admins shouldn't see noise on a transient
+                // hiccup; the user list itself surfaces the same errors.
+            });
+    }, []);
+
+    const roleSlugs =
+        roleOptions.length > 0
+            ? roleOptions.map((r) => r.slug)
+            : (DEFAULT_ROLES as readonly string[]);
+
     async function handleCreate(v: CreateUserValues) {
         try {
             await createUser(v.username, v.password, v.role);
@@ -141,7 +172,7 @@ export default function AdminUsers() {
         }
     }
 
-    async function handleRoleChange(u: UserRow, role: Role) {
+    async function handleRoleChange(u: UserRow, role: string) {
         try {
             await updateUser(u.id, { role });
             toast.success(`Updated ${u.username} role`);
@@ -236,16 +267,21 @@ export default function AdminUsers() {
                                             <Select
                                                 value={u.role}
                                                 onValueChange={(v) =>
-                                                    handleRoleChange(u, v as Role)
+                                                    handleRoleChange(u, v)
                                                 }
                                             >
                                                 <SelectTrigger size="sm" className="min-w-[130px]">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {ROLES.map((r) => (
+                                                    {roleSlugs.map((r) => (
                                                         <SelectItem key={r} value={r}>
-                                                            <StatusPill tone={ROLE_TONE[r]}>
+                                                            <StatusPill
+                                                                tone={
+                                                                    BUILTIN_ROLE_TONE[r] ??
+                                                                    "neutral"
+                                                                }
+                                                            >
                                                                 {r}
                                                             </StatusPill>
                                                         </SelectItem>
@@ -338,9 +374,14 @@ export default function AdminUsers() {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {ROLES.map((r) => (
+                                                {roleSlugs.map((r) => (
                                                     <SelectItem key={r} value={r}>
-                                                        <StatusPill tone={ROLE_TONE[r]}>
+                                                        <StatusPill
+                                                            tone={
+                                                                BUILTIN_ROLE_TONE[r] ??
+                                                                "neutral"
+                                                            }
+                                                        >
                                                             {r}
                                                         </StatusPill>
                                                     </SelectItem>

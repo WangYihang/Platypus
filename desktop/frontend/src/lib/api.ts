@@ -309,7 +309,10 @@ export async function listProjectSessions(
 export interface UserRow {
     id: string;
     username: string;
-    role: "admin" | "operator" | "viewer";
+    // role is a free-form slug after RBAC: builtin slugs (admin /
+    // operator / viewer) plus any custom role created via /admin/
+    // access-control.
+    role: string;
 }
 
 export async function listUsers(): Promise<UserRow[]> {
@@ -320,7 +323,7 @@ export async function listUsers(): Promise<UserRow[]> {
 export async function createUser(
     username: string,
     password: string,
-    role: UserRow["role"],
+    role: string,
 ): Promise<UserRow> {
     return authJSON<UserRow>("/api/v1/users", {
         method: "POST",
@@ -331,7 +334,7 @@ export async function createUser(
 
 export async function updateUser(
     id: string,
-    patch: { role?: UserRow["role"]; password?: string },
+    patch: { role?: string; password?: string },
 ): Promise<UserRow> {
     return authJSON<UserRow>(`/api/v1/users/${id}`, {
         method: "PATCH",
@@ -567,6 +570,96 @@ export async function issueAccountPAT(req: IssueAccountPATRequest): Promise<Issu
 
 export async function revokeAccountPAT(tokenID: string): Promise<void> {
     const r = await authFetch(`/api/v1/account/pat/${tokenID}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
+}
+
+// --- RBAC (admin: permission catalogue + role CRUD) -----------------
+//
+// Wired off /api/v1/admin/{permissions,roles}. Every route is gated
+// server-side by RequireGlobalRole(admin), so a non-admin caller will
+// get 403; the UI hides the page from them via getSessionUser().role.
+
+export interface RBACPermission {
+    slug: string;
+    resource: string;
+    description: string;
+}
+
+export interface RBACRoleSummary {
+    slug: string;
+    name: string;
+    description?: string;
+    is_builtin: boolean;
+    is_global: boolean;
+    is_project: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface RBACRole extends RBACRoleSummary {
+    permissions: string[];
+}
+
+export interface CreateRBACRoleRequest {
+    slug: string;
+    name: string;
+    description?: string;
+    is_global: boolean;
+    is_project: boolean;
+    permissions: string[];
+}
+
+export interface UpdateRBACRoleRequest {
+    name?: string;
+    description?: string;
+    is_global?: boolean;
+    is_project?: boolean;
+    permissions?: string[];
+}
+
+export async function listRBACPermissions(): Promise<RBACPermission[]> {
+    const j = await authJSON<{ permissions: RBACPermission[] }>(`/api/v1/admin/permissions`);
+    return j.permissions ?? [];
+}
+
+export async function listRBACRoles(opts?: {
+    isGlobal?: boolean;
+    isProject?: boolean;
+}): Promise<RBACRoleSummary[]> {
+    const params = new URLSearchParams();
+    if (opts?.isGlobal !== undefined) params.set("is_global", String(opts.isGlobal));
+    if (opts?.isProject !== undefined) params.set("is_project", String(opts.isProject));
+    const q = params.toString();
+    const j = await authJSON<{ roles: RBACRoleSummary[] }>(
+        `/api/v1/admin/roles${q ? `?${q}` : ""}`,
+    );
+    return j.roles ?? [];
+}
+
+export async function getRBACRole(slug: string): Promise<RBACRole> {
+    return authJSON<RBACRole>(`/api/v1/admin/roles/${encodeURIComponent(slug)}`);
+}
+
+export async function createRBACRole(req: CreateRBACRoleRequest): Promise<RBACRole> {
+    return authJSON<RBACRole>(`/api/v1/admin/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+    });
+}
+
+export async function updateRBACRole(slug: string, req: UpdateRBACRoleRequest): Promise<RBACRole> {
+    return authJSON<RBACRole>(`/api/v1/admin/roles/${encodeURIComponent(slug)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+    });
+}
+
+export async function deleteRBACRole(slug: string): Promise<void> {
+    const r = await authFetch(`/api/v1/admin/roles/${encodeURIComponent(slug)}`, {
+        method: "DELETE",
+    });
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
 }
 

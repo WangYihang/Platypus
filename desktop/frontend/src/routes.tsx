@@ -30,6 +30,7 @@ const Preferences = lazy(() => import("./pages/Preferences"));
 const Account = lazy(() => import("./pages/Account"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminAccessControl = lazy(() => import("./pages/admin/AdminAccessControl"));
 
 // routeFallback is the placeholder each lazy route renders while its
 // chunk is fetched. Centred spinner over the main surface so it doesn't
@@ -153,6 +154,7 @@ export const routeTree: RouteObject[] = [
                     { path: "/projects", element: withSuspense(<ProjectsLanding />) },
                     { path: "/admin/users", element: withSuspense(<AdminUsers />) },
                     { path: "/admin/settings", element: withSuspense(<AdminSettings />) },
+                    { path: "/admin/access-control", element: withSuspense(<AdminAccessControl />) },
                     { path: "/account", element: withSuspense(<Account />) },
                     { path: "/preferences", element: withSuspense(<Preferences />) },
                 ],
