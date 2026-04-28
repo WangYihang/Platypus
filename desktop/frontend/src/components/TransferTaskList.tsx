@@ -173,10 +173,10 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
                         <th style={thStyle}>Direction</th>
                         <th style={thStyle}>Format</th>
                         <th style={thStyle}>Progress</th>
-                        <th style={thStyle}>Size</th>
-                        <th style={thStyle}>Speed</th>
-                        <th style={thStyle}>Compression</th>
-                        <th style={thStyle}>Elapsed</th>
+                        <th style={thNumStyle}>Size</th>
+                        <th style={thNumStyle}>Speed</th>
+                        <th style={thNumStyle}>Compression</th>
+                        <th style={thNumStyle}>Elapsed</th>
                         <th style={thStyle}>Status</th>
                         <th style={thStyle}>Error</th>
                         <th style={thStyle}>Started</th>
@@ -199,14 +199,14 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
                             <td style={tdStyle}>
                                 <ProgressBar pct={transferProgressPct(it)} status={it.status} />
                             </td>
-                            <td style={tdStyle}>{transferDisplaySize(it)}</td>
-                            <td style={tdStyle} data-testid="transfer-speed-cell">
+                            <td style={tdNumStyle}>{transferDisplaySize(it)}</td>
+                            <td style={tdNumStyle} data-testid="transfer-speed-cell">
                                 {formatBytesPerSec(transferAverageSpeed(it, tickNow))}
                             </td>
-                            <td style={tdStyle} data-testid="transfer-compression-cell">
+                            <td style={tdNumStyle} data-testid="transfer-compression-cell">
                                 {formatCompressionRatio(transferCompressionRatio(it))}
                             </td>
-                            <td style={tdStyle} data-testid="transfer-elapsed-cell">
+                            <td style={tdNumStyle} data-testid="transfer-elapsed-cell">
                                 {transferElapsed(it, tickNow)}
                             </td>
                             <td style={tdStyle}>
@@ -264,33 +264,35 @@ function ProgressBar({ pct, status }: ProgressBarProps) {
     const indeterminate = pct === null;
     return (
         <div
-            style={progressTrackStyle}
+            style={progressWrapperStyle}
             data-testid="transfer-progress-bar"
             data-progress={indeterminate ? "indeterminate" : String(pct)}
         >
-            {indeterminate ? (
-                <div
-                    className="transfers-indeterminate"
-                    style={{
-                        position: "absolute",
-                        top: 0,
-                        bottom: 0,
-                        width: "30%",
-                        background: fill,
-                        borderRadius: radius.pill,
-                    }}
-                />
-            ) : (
-                <div
-                    style={{
-                        width: `${pct}%`,
-                        height: "100%",
-                        background: fill,
-                        borderRadius: radius.pill,
-                        transition: "width 200ms ease-out",
-                    }}
-                />
-            )}
+            <div style={progressTrackStyle}>
+                {indeterminate ? (
+                    <div
+                        className="transfers-indeterminate"
+                        style={{
+                            position: "absolute",
+                            top: 0,
+                            bottom: 0,
+                            width: "30%",
+                            background: fill,
+                            borderRadius: radius.pill,
+                        }}
+                    />
+                ) : (
+                    <div
+                        style={{
+                            width: `${pct}%`,
+                            height: "100%",
+                            background: fill,
+                            borderRadius: radius.pill,
+                            transition: "width 200ms ease-out",
+                        }}
+                    />
+                )}
+            </div>
             <span style={progressLabelStyle}>{indeterminate ? "…" : `${pct}%`}</span>
         </div>
     );
@@ -302,15 +304,27 @@ const tableStyle: React.CSSProperties = {
     fontSize: 13,
 };
 
+// Padding values must carry their `px` unit because the template
+// literal turns `space[2]` (the number 8) into the unitless string
+// "8 12" — invalid CSS, silently dropped by the browser, leaving
+// the table headers running together with no horizontal breathing
+// room. Use the same explicit-unit pattern the rest of the
+// codebase uses (Card.tsx, EmptyState.tsx, …).
 const thStyle: React.CSSProperties = {
     textAlign: "left",
-    padding: `${space[2]} ${space[3]}`,
+    padding: `${space[2]}px ${space[3]}px`,
     fontSize: 11,
     fontWeight: 600,
     color: palette.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     borderBottom: `1px solid ${palette.border}`,
+    whiteSpace: "nowrap",
+};
+
+const thNumStyle: React.CSSProperties = {
+    ...thStyle,
+    textAlign: "right",
 };
 
 const trStyle: React.CSSProperties = {
@@ -318,9 +332,21 @@ const trStyle: React.CSSProperties = {
 };
 
 const tdStyle: React.CSSProperties = {
-    padding: `${space[2]} ${space[3]}`,
+    padding: `${space[2]}px ${space[3]}px`,
     color: palette.textPrimary,
     verticalAlign: "middle",
+};
+
+// Numeric cells: right-aligned so the operator can scan a column of
+// sizes/speeds/percentages without their eye jumping. nowrap stops
+// "38.7 MB / 38.7 MB" from breaking across two lines when the
+// viewport gets tight. tabular-nums keeps digits the same width so
+// adjacent rows line up vertically.
+const tdNumStyle: React.CSSProperties = {
+    ...tdStyle,
+    textAlign: "right",
+    whiteSpace: "nowrap",
+    fontVariantNumeric: "tabular-nums",
 };
 
 const tdMonoStyle: React.CSSProperties = {
@@ -339,6 +365,17 @@ const errorTextStyle: React.CSSProperties = {
     marginLeft: space[1],
 };
 
+// The track + label sit side-by-side inside the cell so the label
+// can't overflow into the next column the way `position: absolute;
+// right: -34px` did. Fixed track width + min-width on the wrapper
+// stops the column from collapsing when the table fights for space.
+const progressWrapperStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: space[2],
+    minWidth: 180,
+};
+
 const progressTrackStyle: React.CSSProperties = {
     position: "relative",
     width: 140,
@@ -346,13 +383,13 @@ const progressTrackStyle: React.CSSProperties = {
     background: palette.border,
     borderRadius: radius.pill,
     overflow: "hidden",
+    flexShrink: 0,
 };
 
 const progressLabelStyle: React.CSSProperties = {
-    position: "absolute",
-    right: -34,
-    top: -7,
     fontSize: 11,
     color: palette.textMuted,
-    minWidth: 30,
+    fontVariantNumeric: "tabular-nums",
+    minWidth: 32,
+    textAlign: "right",
 };
