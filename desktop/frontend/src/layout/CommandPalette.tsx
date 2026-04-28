@@ -186,9 +186,9 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                         />
                         <PaletteItem
                             icon={<CloudDownload className="size-4" />}
-                            label="Enrollment"
-                            shortcut="pat install artifacts"
-                            onSelect={() => go("enrollment")}
+                            label="Enroll agent"
+                            shortcut="enrollment pat install artifacts tokens"
+                            onSelect={() => go("fleet/enroll")}
                         />
                         <PaletteItem
                             icon={<Users className="size-4" />}

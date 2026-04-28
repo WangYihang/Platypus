@@ -18,8 +18,15 @@ test.describe("empty project", () => {
         await expect(page).toHaveURL(/\/projects\/staging\/fleet(?:\?.*)?$/);
 
         await expect(page.getByText("No hosts yet")).toBeVisible();
+        // Step 1 of the settings reorg renamed the empty-state CTA from
+        // "Manage enrollment" to "Enroll agent". The page header on
+        // Fleet now also surfaces an "Enroll agent" link, so the empty
+        // state may match more than one element — scope to the empty
+        // state's own action button.
         await expect(
-            page.getByRole("button", { name: /Manage enrollment/ }),
+            page
+                .getByRole("button", { name: /Enroll agent/i })
+                .first(),
         ).toBeVisible();
 
         await page.screenshot({

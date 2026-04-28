@@ -14,11 +14,17 @@ import { loginAsAdmin } from "../fixtures/auth";
 // own AUDIT group, leaving room for future audit-only surfaces
 // (sessions log, command log, …) without expanding Work.
 //
+// Step 1 of the settings reorg: ENROLLMENT no longer lives under
+// ADMIN as a peer of Members. The "PAT" tokens it issues are not
+// account-level credentials — they're one-shot agent-bootstrap
+// secrets. So the surface moved INSIDE Fleet (it's how you grow the
+// fleet), reachable from FleetPage's header. ADMIN now contains
+// only Members.
+//
 //   WORK
 //     · Overview      (dashboard)
-//     · Fleet         (hosts + sessions + topology)
+//     · Fleet         (hosts + sessions + topology + enroll)
 //   ADMIN
-//     · Enrollment    (how new agents join)
 //     · Members       (who can see this project)
 //   AUDIT
 //     · Activities    (audit log)
@@ -74,7 +80,7 @@ test.describe("project sidebar nav grouping", () => {
         }
 
         expect(await itemsOf("work")).toEqual(["Overview", "Fleet"]);
-        expect(await itemsOf("admin")).toEqual(["Enrollment", "Members"]);
+        expect(await itemsOf("admin")).toEqual(["Members"]);
         expect(await itemsOf("audit")).toEqual(["Activities"]);
         expect(await itemsOf("project")).toEqual(["Settings"]);
     });

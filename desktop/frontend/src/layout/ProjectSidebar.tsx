@@ -67,16 +67,16 @@ interface NavItem {
 // NavGroup splits the per-project nav into four IA buckets so new
 // users read the relationship at a glance:
 //
-//   work    — daily-use surfaces: Overview / Fleet
-//   admin   — onboarding & access: Enrollment / Members
+//   work    — daily-use surfaces: Overview / Fleet (Enroll lives inside)
+//   admin   — access control: Members
 //   audit   — read-only history: Activities (and future audit views)
 //   project — project-level configuration: Settings
 //
-// Activities used to live under Work, but it's read-only audit data
-// rather than something operators *do* — pulling it into its own
-// Audit group makes that distinction visible and leaves room for
-// future audit-flavoured surfaces (sessions log, command log, …)
-// without bloating Work.
+// Enrollment used to be a top-level Admin item, but the tokens it
+// issues are one-shot agent-bootstrap secrets, not account-level
+// credentials. Conceptually it's "how you grow the fleet" — so the
+// surface lives inside FleetPage and is reached via an "Enroll
+// agent" entry point in the Fleet header.
 //
 // Group order, labels, and item ordering are pinned by
 // e2e/specs/56-sidebar-nav-grouping.spec.ts so a future "let me
@@ -126,7 +126,6 @@ export default function ProjectSidebar({
             key: "admin",
             label: "Admin",
             items: [
-                { to: "enrollment", label: "Enrollment", icon: <I.enrollment className="size-4" />, requiresProject: true, minRole: "admin" },
                 { to: "members", label: "Members", icon: <I.members className="size-4" />, requiresProject: true, minRole: "operator" },
             ],
         },

@@ -1,5 +1,10 @@
 import { ReactNode, Suspense, lazy } from "react";
-import { Navigate, createBrowserRouter, useRouteError } from "react-router-dom";
+import {
+    Navigate,
+    RouteObject,
+    createBrowserRouter,
+    useRouteError,
+} from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 import { font, palette, radius } from "./layout/theme";
@@ -121,7 +126,11 @@ function RootErrorBoundary() {
 // under /projects/:projectSlug/<page>, with shared sidebar chrome
 // rendered by <ProjectShell>. Page components are lazy-loaded so the
 // initial bundle only pulls in the shell + shadcn/ui primitives.
-export const router = createBrowserRouter([
+//
+// Exported as data so tests (src/routes/enrollmentRoute.test.tsx) can
+// mount a memory router from the same source production uses, instead
+// of duplicating the topology.
+export const routeTree: RouteObject[] = [
     {
         path: "/login",
         element: withSuspense(<LoginRoute />),
@@ -154,13 +163,22 @@ export const router = createBrowserRouter([
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
                     { path: "fleet", element: withSuspense(<FleetPage />) },
+                    // Enrollment is a sub-surface of Fleet — it's how
+                    // you grow the fleet, not a peer admin verb. The
+                    // canonical URL is /fleet/enroll; the legacy
+                    // /enrollment path below redirects here so old
+                    // bookmarks / docs / e2e specs keep working.
+                    { path: "fleet/enroll", element: withSuspense(<EnrollmentPage />) },
                     {
                         path: "hosts/:hostId",
                         element: <Navigate to="info" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
                     { path: "activities", element: withSuspense(<ActivitiesPage />) },
-                    { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
+                    {
+                        path: "enrollment",
+                        element: <Navigate to="../fleet/enroll" replace />,
+                    },
                     { path: "members", element: withSuspense(<MembersRoute />) },
                     { path: "settings", element: withSuspense(<ProjectSettings />) },
                 ],
@@ -169,4 +187,6 @@ export const router = createBrowserRouter([
             { path: "*", element: <Navigate to="/projects" replace /> },
         ],
     },
-]);
+];
+
+export const router = createBrowserRouter(routeTree);

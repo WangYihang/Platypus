@@ -49,14 +49,14 @@ test.describe("enrollment dialogs — friendlier TTL + machine-id labels", () =>
         expect(live2).toMatch(/=\s*1m\s*30s/);
     });
 
-    test("access-token dialog: 'Expires in' + 'Restrict to machine' wording", async ({
+    test("enrollment-token dialog: 'Expires in' + 'Restrict to machine' wording", async ({
         page,
     }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects/default/enrollment");
-        await page.getByRole("tab", { name: /access tokens/i }).click();
+        await page.goto("/projects/default/fleet/enroll");
+        await page.getByRole("tab", { name: /enrollment tokens/i }).click();
         await page
-            .getByRole("button", { name: /issue (an? )?access token/i })
+            .getByRole("button", { name: /issue (an? )?enrollment token/i })
             .click();
 
         const dialog = page.getByRole("dialog");

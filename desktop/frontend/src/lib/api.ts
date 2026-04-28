@@ -445,9 +445,16 @@ export async function getServerInfo(): Promise<ServerInfo> {
 
 // --- PAT tokens -----------------------------------------------------
 //
-// Admin-only surface for provisioning access tokens. The plaintext
-// token (`plt_*`) only ever comes back in the response to POST; every
-// subsequent list / get strips it and returns just metadata.
+// Admin-only surface for provisioning enrollment tokens. The historical
+// "PAT" name survives in tables, code paths, and URL segments because
+// renaming the wire surface would be a bigger change; the user-facing
+// UI calls them enrollment tokens (see EnrollmentPage). They are NOT
+// account-scoped API tokens — they're one-shot agent-bootstrap secrets
+// that burn on first /enroll and are replaced by an mTLS cert.
+//
+// The plaintext token (`plt_*`) only ever comes back in the response
+// to POST; every subsequent list / get strips it and returns just
+// metadata.
 
 export interface PATTokenListItem {
     token_id: string;

@@ -125,12 +125,12 @@ export default function HostsPanel() {
                     <EmptyState
                         icon={<Monitor className="size-5" />}
                         title="No hosts yet"
-                        description="Hosts appear here once an agent enrolls into this project. Issue an install command (or PAT) from Enrollment, then run the agent on the target machine."
+                        description="Hosts appear here once an agent enrolls into this project. Generate an install command or enrollment token, then run the agent on the target machine."
                         action={
                             <Button
-                                onClick={() => navigate(`/projects/${project.slug}/enrollment`)}
+                                onClick={() => navigate(`/projects/${project.slug}/fleet/enroll`)}
                             >
-                                Manage enrollment
+                                Enroll agent
                             </Button>
                         }
                     />

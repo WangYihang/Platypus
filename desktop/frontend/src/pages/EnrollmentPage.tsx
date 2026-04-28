@@ -127,14 +127,21 @@ const patSchema = z.object({
 });
 type PATFormValues = z.infer<typeof patSchema>;
 
-// EnrollmentPage bundles three related admin surfaces onto one page
+// EnrollmentPage bundles two related admin surfaces onto one page
 // because they share the same mental model — "hand an agent something
-// short-lived so it can join the mesh":
+// short-lived so it can join the fleet":
 //
 //  1. Install commands: one-shot `curl ... | sh` bootstraps that
-//     atomically mint a PAT the first time they're fetched.
-//  2. Raw PAT tokens: for scripted / CI flows that can't use the
-//     install-command shape.
+//     atomically issue an enrollment token the first time they're
+//     fetched.
+//  2. Raw enrollment tokens: for scripted / CI flows that can't use
+//     the install-command shape.
+//
+// The tokens are called "enrollment tokens" on the user surface —
+// the backend tables and code paths still use the historical "PAT"
+// name, but exposing that acronym led users to confuse them with
+// account-scoped API tokens. They are not. They burn on first
+// enrollment; mTLS takes over for everything after.
 //
 // Every table row shows derived status, not a mutable column, so
 // refreshing the view always reflects what's true.
@@ -146,7 +153,7 @@ export default function EnrollmentPage() {
         <>
             <PageHeader
                 title="Enrollment"
-                subtitle="Generate one-shot install commands (recommended) or raw access tokens for CI / automation"
+                subtitle="Generate one-shot install commands (recommended) or raw enrollment tokens for CI / automation"
             />
             <Tabs
                 value={tab}
@@ -158,7 +165,7 @@ export default function EnrollmentPage() {
                         <Zap className="size-3.5" />
                         Install commands
                     </TabsTrigger>
-                    <TabsTrigger value="tokens">Access tokens (PAT)</TabsTrigger>
+                    <TabsTrigger value="tokens">Enrollment tokens</TabsTrigger>
                 </TabsList>
                 <TabsContent value="install" className="mt-4">
                     <InstallPanel projectID={project.id} projectSlug={project.slug} />
@@ -586,7 +593,7 @@ function IssueInstallDialog({
                 <DialogHeader>
                     <DialogTitle>Generate install command</DialogTitle>
                     <DialogDescription>
-                        One-shot `curl ... | sh` bootstrap that issues a single-use access token on first fetch.
+                        One-shot `curl ... | sh` bootstrap that issues a single-use enrollment token on first fetch.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -746,7 +753,7 @@ function PATPanel({ projectID }: { projectID: string }) {
             setError(null);
         } catch (e) {
             setError(humanizeError(e));
-            toast.error(`Couldn't load access tokens: ${humanizeError(e)}`);
+            toast.error(`Couldn't load enrollment tokens: ${humanizeError(e)}`);
         } finally {
             setLoading(false);
         }
@@ -762,7 +769,7 @@ function PATPanel({ projectID }: { projectID: string }) {
         setPendingRevoke(null);
         try {
             await revokePAT(projectID, r.token_id);
-            toast.success("Access token revoked");
+            toast.success("Enrollment token revoked");
             refresh();
         } catch (e) {
             toast.error(`Couldn't revoke: ${humanizeError(e)}`);
@@ -798,7 +805,7 @@ function PATPanel({ projectID }: { projectID: string }) {
                         </Button>
                         <Button size="sm" onClick={() => setIssueOpen(true)}>
                             <Plus className="size-3.5" />
-                            Issue access token
+                            Issue enrollment token
                         </Button>
                     </>
                 }
@@ -824,8 +831,8 @@ function PATPanel({ projectID }: { projectID: string }) {
                     </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
-                        title="No access tokens issued yet"
-                        description="Prefer the install command tab unless you need raw access tokens (PATs) for a CI pipeline."
+                        title="No enrollment tokens issued yet"
+                        description="Prefer the install command tab unless you need raw enrollment tokens for a CI pipeline."
                     />
                 ) : (
                     <Table>
@@ -897,7 +904,7 @@ function PATPanel({ projectID }: { projectID: string }) {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Revoke access token?</AlertDialogTitle>
+                        <AlertDialogTitle>Revoke enrollment token?</AlertDialogTitle>
                         <AlertDialogDescription>
                             The token will be rejected on any subsequent enrollment attempt.
                         </AlertDialogDescription>
@@ -942,7 +949,7 @@ function IssuePATDialog({
             onIssued(r);
             form.reset({ description: "", binding_machine_id: "" });
         } catch (e) {
-            toast.error(`Couldn't issue access token: ${humanizeError(e)}`);
+            toast.error(`Couldn't issue enrollment token: ${humanizeError(e)}`);
         }
     }
 
@@ -950,9 +957,11 @@ function IssuePATDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
-                    <DialogTitle>Issue an access token</DialogTitle>
+                    <DialogTitle>Issue an enrollment token</DialogTitle>
                     <DialogDescription>
-                        Raw access token (PAT) for scripted enrollment flows.
+                        Raw token an agent can submit at /enroll. Use this when you need
+                        the bare credential for a CI / scripted flow that can't run the
+                        install command shape.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -1002,7 +1011,7 @@ function IssuePATDialog({
                                         />
                                     </FormControl>
                                     <FormDescription>
-                                        How long the access token stays valid.{" "}
+                                        How long the enrollment token stays valid.{" "}
                                         {typeof field.value === "number" && field.value > 0
                                             ? `= ${formatSeconds(field.value)}`
                                             : "Default 3600 (= 1h)."}
@@ -1055,10 +1064,10 @@ function IssuePATDialog({
                                     <FormDescription>
                                         Optional. Paste the host's
                                         <code> /etc/machine-id</code> contents to lock this
-                                        access token to that one host — useful for long-lived
-                                        tokens, since a stolen token cannot be replayed
-                                        elsewhere. Leave empty for short-lived tokens you don't
-                                        plan to reuse.
+                                        enrollment token to that one host — useful for
+                                        long-lived tokens, since a stolen token cannot be
+                                        replayed elsewhere. Leave empty for short-lived
+                                        tokens you don't plan to reuse.
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
@@ -1103,7 +1112,7 @@ function IssuedPATDialog({
         <Dialog open={result !== null} onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="sm:max-w-[640px]">
                 <DialogHeader>
-                    <DialogTitle>Access token issued</DialogTitle>
+                    <DialogTitle>Enrollment token issued</DialogTitle>
                     <DialogDescription>
                         This is the only time the token is shown. Copy it now — the server cannot
                         show it again.

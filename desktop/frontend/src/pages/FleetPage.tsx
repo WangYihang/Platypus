@@ -1,10 +1,12 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, Network, Rows3, Timer } from "lucide-react";
 
 import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
 import PageHeader from "../components/PageHeader";
 import { useCurrentProject } from "../layout/ProjectShell";
+import { icons } from "../lib/icons";
 import { usePreference } from "../lib/preferences";
+import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import HostsCardPanel from "./fleet/HostsCardPanel";
@@ -84,9 +86,28 @@ export default function FleetPage() {
         </span>
     );
 
+    // "Enroll agent" is the primary action on Fleet — it's how the
+    // fleet grows. The Enrollment surface used to live as its own
+    // sidebar entry under Admin, but it's not really an admin verb;
+    // it's the onboarding step for the surface you're already
+    // looking at. Keep it visible in the header so it's discoverable
+    // without browsing the sidebar.
+    const EnrollIcon = icons.enrollment;
+    const actions = (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Button asChild variant="outline" size="sm">
+                <Link to={`/projects/${project.slug}/fleet/enroll`}>
+                    <EnrollIcon className="size-3.5" />
+                    Enroll agent
+                </Link>
+            </Button>
+            {switcher}
+        </span>
+    );
+
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={switcher} />
+            <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={actions} />
             <EnrollmentWaitBanner projectID={project.id} projectSlug={project.slug} />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                 <div
