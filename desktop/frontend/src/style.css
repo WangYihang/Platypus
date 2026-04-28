@@ -330,3 +330,27 @@ main {
     color: var(--color-text-muted);
 }
 
+/* Indeterminate transfer progress bar -------------------------------------
+ * Archive (folder → tar.gz) downloads have no reliable total — the wire
+ * stream is gzip-compressed but the pre-scan total is uncompressed, so a
+ * percentage would be meaningless. The UI renders a 30%-wide segment that
+ * slides across the track to signal "work is happening, total unknown".
+ * Without this animation the segment sits statically at the left edge and
+ * looks like a stuck progress bar. */
+@keyframes pl-transfers-indeterminate {
+    0% {
+        left: -30%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+.transfers-indeterminate {
+    animation: pl-transfers-indeterminate 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .transfers-indeterminate {
+        animation: none;
+    }
+}
+

@@ -256,6 +256,7 @@ function ProgressBar({ pct, status }: ProgressBarProps) {
         >
             {indeterminate ? (
                 <div
+                    className="transfers-indeterminate"
                     style={{
                         position: "absolute",
                         top: 0,
