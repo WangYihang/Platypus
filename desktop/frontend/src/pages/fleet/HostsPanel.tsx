@@ -5,9 +5,7 @@ import {
     HelpCircle,
     Laptop,
     Layers,
-    Loader2,
     Monitor,
-    Search,
     Server,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,8 +15,8 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
+import FilterToolbar from "../../components/FilterToolbar";
 import StatusDot from "../../components/StatusDot";
-import Toolbar from "../../components/Toolbar";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, space } from "../../layout/theme";
 import { Host, listHosts } from "../../lib/api";
@@ -80,31 +78,20 @@ export default function HostsPanel() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <Toolbar
-                left={
-                    <div className="relative max-w-[360px] w-full">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
-                        <Input
-                            placeholder="Search hostname, alias, OS"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            className="h-8 pl-8"
-                        />
-                    </div>
+            <FilterToolbar
+                search={{
+                    value: query,
+                    onChange: setQuery,
+                    placeholder: "Search hostname, alias, OS",
+                    minWidth: 280,
+                }}
+                count={
+                    hosts === null
+                        ? "Loading…"
+                        : `${hosts.length} total · ${onlineCount} online`
                 }
-                right={
-                    <span style={{ color: palette.textMuted, fontSize: 12 }}>
-                        {hosts === null
-                            ? "Loading…"
-                            : `${hosts.length} total · ${onlineCount} online`}
-                        {loading && hosts !== null && (
-                            <Loader2
-                                className="size-3.5 animate-spin inline-block ml-2"
-                                style={{ verticalAlign: "middle" }}
-                            />
-                        )}
-                    </span>
-                }
+                refreshLoading={loading}
+                onRefresh={refresh}
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {error && (

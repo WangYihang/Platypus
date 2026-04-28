@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Search, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../lib/humanizeError";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
 import StatusPill from "../../components/StatusPill";
-import Toolbar from "../../components/Toolbar";
+import FilterToolbar from "../../components/FilterToolbar";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, space } from "../../layout/theme";
 import {
@@ -96,45 +96,34 @@ export default function SessionsPanel() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <Toolbar
-                left={
-                    <>
-                        <ToggleGroup
-                            type="single"
-                            variant="outline"
-                            size="sm"
-                            value={filter}
-                            onValueChange={(v) => {
-                                if (v) setFilter(v as FilterMode);
-                            }}
-                        >
-                            <ToggleGroupItem value="live">Live</ToggleGroupItem>
-                            <ToggleGroupItem value="all">All</ToggleGroupItem>
-                        </ToggleGroup>
-                        <div className="relative max-w-[360px] w-full">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
-                            <Input
-                                placeholder="Search session, host, user"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className="h-8 pl-8"
-                            />
-                        </div>
-                    </>
+            <FilterToolbar
+                search={{
+                    value: query,
+                    onChange: setQuery,
+                    placeholder: "Search session, host, user",
+                    minWidth: 280,
+                }}
+                filters={
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        size="sm"
+                        value={filter}
+                        onValueChange={(v) => {
+                            if (v) setFilter(v as FilterMode);
+                        }}
+                    >
+                        <ToggleGroupItem value="live">Live</ToggleGroupItem>
+                        <ToggleGroupItem value="all">All</ToggleGroupItem>
+                    </ToggleGroup>
                 }
-                right={
-                    <span style={{ color: palette.textMuted, fontSize: 12 }}>
-                        {sessions === null
-                            ? "Loading…"
-                            : `${sessions.length} ${filter === "live" ? "live" : "total"}`}
-                        {loading && sessions !== null && (
-                            <Loader2
-                                className="size-3.5 animate-spin inline-block ml-2"
-                                style={{ verticalAlign: "middle" }}
-                            />
-                        )}
-                    </span>
+                count={
+                    sessions === null
+                        ? "Loading…"
+                        : `${sessions.length} ${filter === "live" ? "live" : "total"}`
                 }
+                refreshLoading={loading}
+                onRefresh={refresh}
             />
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
                 {error && (

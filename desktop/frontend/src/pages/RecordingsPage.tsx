@@ -7,7 +7,6 @@ import {
     Loader2,
     Pencil,
     Play,
-    Search,
     Trash2,
     X,
 } from "lucide-react";
@@ -17,8 +16,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import StatusPill from "../components/StatusPill";
-import RefreshButton from "../components/RefreshButton";
-import Toolbar from "../components/Toolbar";
+import FilterToolbar from "../components/FilterToolbar";
 import { icons } from "../lib/icons";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, radius, space } from "../layout/theme";
@@ -223,47 +221,42 @@ export default function RecordingsPage() {
                 component renders only the toolbar + body. The Refresh
                 button moved into the toolbar's right slot since there
                 is no PageHeader actions slot at this depth anymore. */}
-            <Toolbar
-                left={
-                    <>
-                        <Select
-                            value={statusFilter || "__all__"}
-                            onValueChange={(v) =>
-                                setStatusFilter(v === "__all__" ? "" : (v as RecordingStatus))
-                            }
-                        >
-                            <SelectTrigger size="sm" className="min-w-[150px]">
-                                <SelectValue placeholder="Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All statuses</SelectItem>
-                                <SelectItem value="completed">completed</SelectItem>
-                                <SelectItem value="recording">recording</SelectItem>
-                                <SelectItem value="failed">failed</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <div className="relative max-w-[320px] w-full">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
-                            <Input
-                                placeholder="Search title / shell / host"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className="h-8 pl-8"
-                            />
-                        </div>
-                    </>
+            <FilterToolbar
+                search={{
+                    value: query,
+                    onChange: setQuery,
+                    placeholder: "Search title / shell / host",
+                    minWidth: 280,
+                }}
+                filters={
+                    <Select
+                        value={statusFilter || "__all__"}
+                        onValueChange={(v) =>
+                            setStatusFilter(v === "__all__" ? "" : (v as RecordingStatus))
+                        }
+                    >
+                        <SelectTrigger size="sm" className="min-w-[150px]">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">All statuses</SelectItem>
+                            <SelectItem value="completed">completed</SelectItem>
+                            <SelectItem value="recording">recording</SelectItem>
+                            <SelectItem value="failed">failed</SelectItem>
+                        </SelectContent>
+                    </Select>
                 }
-                right={
-                    <>
-                        <span style={{ color: palette.textSecondary, fontSize: 12 }}>
-                            {items === null
-                                ? "Loading…"
-                                : `${total.toLocaleString()} session${total === 1 ? "" : "s"}`}
-                            {totalPagesHint > 1 && ` · page ${pageNumber} of ${totalPagesHint}`}
-                        </span>
-                        <RefreshButton loading={loading} onClick={() => refresh(currentCursor)} />
-                    </>
+                count={
+                    items === null
+                        ? "Loading…"
+                        : `${total.toLocaleString()} session${total === 1 ? "" : "s"}${
+                              totalPagesHint > 1
+                                  ? ` · page ${pageNumber} of ${totalPagesHint}`
+                                  : ""
+                          }`
                 }
+                refreshLoading={loading}
+                onRefresh={() => refresh(currentCursor)}
             />
 
             <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>

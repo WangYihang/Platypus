@@ -7,9 +7,8 @@ import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
 import PageShell from "../../components/PageShell";
-import RefreshButton from "../../components/RefreshButton";
+import FilterToolbar from "../../components/FilterToolbar";
 import StatusPill from "../../components/StatusPill";
-import Toolbar from "../../components/Toolbar";
 import { palette, space } from "../../layout/theme";
 import { humanizeError } from "../../lib/humanizeError";
 import {
@@ -143,15 +142,15 @@ function RolesTab() {
 
     return (
         <>
-            <Toolbar
-                right={
-                    <>
-                        <RefreshButton loading={loading} onClick={() => refresh()} />
-                        <Button size="sm" onClick={() => setCreateOpen(true)}>
-                            <Plus className="size-3.5" />
-                            New role
-                        </Button>
-                    </>
+            <FilterToolbar
+                count={rows ? `${rows.length} role${rows.length === 1 ? "" : "s"}` : null}
+                onRefresh={() => refresh()}
+                refreshLoading={loading}
+                actions={
+                    <Button size="sm" onClick={() => setCreateOpen(true)}>
+                        <Plus className="size-3.5" />
+                        New role
+                    </Button>
                 }
             />
             {error && (
