@@ -6,7 +6,7 @@
 // their mime prefixes / extension lists below; the dispatcher in
 // FileBrowser branches on the returned kind.
 
-export type ViewerKind = "image" | "pdf" | "text";
+export type ViewerKind = "image" | "pdf" | "video" | "audio" | "markdown" | "text";
 
 const IMAGE_EXT = new Set([
     "png",
@@ -23,6 +23,10 @@ const IMAGE_EXT = new Set([
     "heic",
 ]);
 
+const VIDEO_EXT = new Set(["mp4", "m4v", "mov", "webm", "mkv", "avi"]);
+const AUDIO_EXT = new Set(["mp3", "wav", "ogg", "oga", "flac", "m4a", "aac", "opus"]);
+const MARKDOWN_EXT = new Set(["md", "markdown"]);
+
 function extOf(name: string): string {
     const i = name.lastIndexOf(".");
     if (i < 0 || i === name.length - 1) return "";
@@ -30,14 +34,16 @@ function extOf(name: string): string {
 }
 
 export function pickViewerKind(mime: string | undefined, name: string): ViewerKind {
-    if (mime === "application/pdf") return "pdf";
-    if (mime && mime.startsWith("image/")) return "image";
-
-    // Server didn't classify (older agent or unknown ext on the server) —
-    // fall back to extension sniffing for the cases viewers care about.
     const ext = extOf(name);
-    if (ext === "pdf") return "pdf";
-    if (IMAGE_EXT.has(ext)) return "image";
+
+    // Markdown gets first dibs over the generic text/* match below so a
+    // .md file with mime "text/plain" still routes to the rendered view.
+    if (mime === "text/markdown" || MARKDOWN_EXT.has(ext)) return "markdown";
+
+    if (mime === "application/pdf" || ext === "pdf") return "pdf";
+    if (mime?.startsWith("image/") || IMAGE_EXT.has(ext)) return "image";
+    if (mime?.startsWith("video/") || VIDEO_EXT.has(ext)) return "video";
+    if (mime?.startsWith("audio/") || AUDIO_EXT.has(ext)) return "audio";
 
     return "text";
 }

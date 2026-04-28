@@ -24,6 +24,28 @@ describe("pickViewerKind", () => {
         expect(pickViewerKind("application/octet-stream", "shot.gif")).toBe("image");
     });
 
+    it("returns video for video mime types", () => {
+        expect(pickViewerKind("video/mp4", "clip.mp4")).toBe("video");
+        expect(pickViewerKind("video/webm", "x.webm")).toBe("video");
+        expect(pickViewerKind(undefined, "movie.mkv")).toBe("video");
+        expect(pickViewerKind("application/octet-stream", "x.MOV")).toBe("video");
+    });
+
+    it("returns audio for audio mime types", () => {
+        expect(pickViewerKind("audio/mpeg", "song.mp3")).toBe("audio");
+        expect(pickViewerKind("audio/wav", "voice.wav")).toBe("audio");
+        expect(pickViewerKind(undefined, "tone.OGG")).toBe("audio");
+        expect(pickViewerKind(undefined, "x.flac")).toBe("audio");
+    });
+
+    it("returns markdown for *.md and text/markdown", () => {
+        // Markdown has its own viewer (rendered preview); plain
+        // text/* falls through to the text editor as before.
+        expect(pickViewerKind("text/markdown", "README.md")).toBe("markdown");
+        expect(pickViewerKind(undefined, "README.MD")).toBe("markdown");
+        expect(pickViewerKind("text/plain", "spec.markdown")).toBe("markdown");
+    });
+
     it("returns text for text-y mimes and editable code", () => {
         expect(pickViewerKind("text/plain", "x.txt")).toBe("text");
         expect(pickViewerKind("text/typescript", "App.tsx")).toBe("text");

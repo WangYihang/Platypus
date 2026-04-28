@@ -67,6 +67,8 @@ const FileEditor = lazy(() => import("./FileEditor"));
 const FileViewerPaged = lazy(() => import("./FileViewerPaged"));
 const ImageViewer = lazy(() => import("./ImageViewer"));
 const PdfViewer = lazy(() => import("./PdfViewer"));
+const MediaViewer = lazy(() => import("./MediaViewer"));
+const MarkdownViewer = lazy(() => import("./MarkdownViewer"));
 import { pickViewerKind } from "./viewerKind";
 
 // Files larger than this open in the read-only paged viewer. Anything
@@ -603,6 +605,28 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                     if (kind === "pdf") {
                                         return (
                                             <PdfViewer
+                                                projectID={projectID}
+                                                sessionHash={sessionHash}
+                                                path={fullPath}
+                                                size={openingEntry.size}
+                                            />
+                                        );
+                                    }
+                                    if (kind === "video" || kind === "audio") {
+                                        return (
+                                            <MediaViewer
+                                                projectID={projectID}
+                                                sessionHash={sessionHash}
+                                                path={fullPath}
+                                                size={openingEntry.size}
+                                                kind={kind}
+                                                mime={openingEntry.mime}
+                                            />
+                                        );
+                                    }
+                                    if (kind === "markdown" && openingEntry.size <= SMALL_FILE_LIMIT) {
+                                        return (
+                                            <MarkdownViewer
                                                 projectID={projectID}
                                                 sessionHash={sessionHash}
                                                 path={fullPath}
