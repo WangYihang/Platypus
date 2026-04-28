@@ -73,6 +73,15 @@ message StreamHeader {
   // will echo this in any resulting Event.correlation_id so
   // operators can trace a stream end-to-end.
   string correlation_id = 3;
+
+  // Per-link session id, generated server-side when a v2 agent is
+  // registered with the link service. Stable for the lifetime of the
+  // yamux session and identical on every header the server emits for
+  // that link, so operators can group all RPCs / streams that flowed
+  // over a single agent connection. Empty on agent->server initiated
+  // streams unless the agent has stashed the value from a prior
+  // server-initiated stream. Opaque to the protocol; logging only.
+  string link_session_id = 4;
 }
 
 // StreamAccept is the receiver's positive acknowledgement. Sent

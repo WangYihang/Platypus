@@ -58,7 +58,7 @@ func TestServeRPCStream_DispatchesExec(t *testing.T) {
 
 	resp, err := link.CallRPC(ctx, clientSess, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: "ls"}},
-	})
+	}, "test-corr")
 	if err != nil {
 		t.Fatalf("CallRPC: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestServeRPCStream_UnsupportedPayload(t *testing.T) {
 
 	resp, err := link.CallRPC(ctx, clientSess, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_ListDir{ListDir: &v2pb.ListDirRequest{Path: "/"}},
-	})
+	}, "test-corr")
 	if err != nil {
 		t.Fatalf("CallRPC: %v", err)
 	}

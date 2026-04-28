@@ -67,27 +67,34 @@ func RegisterV2AgentRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService, rb
 	operator.POST("/exec", logRPCHandler("exec", v2RPCExec(svc)))
 }
 
-// logRPCHandler wraps a per-endpoint gin handler with enter / exit
+// logRPCHandler wraps a per-endpoint gin handler with start / finish
 // structured logs so each v2 agent-RPC HTTP call is traceable
 // without touching each body. The CallAgentRPC round-trip itself
-// is logged independently in internal/core, so these two layers
-// together show: handler wallclock vs. RPC wallclock vs. middleware
-// overhead.
-func logRPCHandler(name string, fn gin.HandlerFunc) gin.HandlerFunc {
+// is logged independently in internal/core; these two layers together
+// show: handler wallclock vs. RPC wallclock vs. middleware overhead.
+//
+// `http.rpc.start` and `http.rpc.finish` carry agent_id, project_id,
+// rpc_method and the canonical HTTP fields (`http_method`,
+// `http_path`, `client_ip`). Naming intentionally avoids `path`
+// because that key is also used by RPC payloads (e.g. list_dir.path);
+// `http_path` keeps them disjoint.
+func logRPCHandler(method string, fn gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		log.L.Info("http_rpc_enter",
-			"name", name,
+		baseFields := []any{
+			"rpc_method", method,
 			"agent_id", c.Param("agent_id"),
-			"path", c.Request.URL.Path,
-		)
+			"project_id", c.Param("pid"),
+			"http_method", c.Request.Method,
+			"http_path", c.Request.URL.Path,
+			"client_ip", c.ClientIP(),
+		}
+		log.L.Info("http.rpc.start", baseFields...)
 		fn(c)
-		log.L.Info("http_rpc_exit",
-			"name", name,
-			"agent_id", c.Param("agent_id"),
-			"status", c.Writer.Status(),
+		log.L.Info("http.rpc.finish", append(baseFields,
+			"http_status", c.Writer.Status(),
 			"elapsed_ms", time.Since(start).Milliseconds(),
-		)
+		)...)
 	}
 }
 

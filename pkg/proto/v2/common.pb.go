@@ -140,6 +140,14 @@ type StreamHeader struct {
 	// will echo this in any resulting Event.correlation_id so
 	// operators can trace a stream end-to-end.
 	CorrelationId string `protobuf:"bytes,3,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	// Per-link session id, generated server-side when a v2 agent is
+	// registered with the link service. Stable for the lifetime of the
+	// yamux session and identical on every header the server emits for
+	// that link, so operators can group all RPCs / streams that flowed
+	// over a single agent connection. Empty on agent->server initiated
+	// streams unless the agent has stashed the value from a prior
+	// server-initiated stream. Opaque to the protocol; logging only.
+	LinkSessionId string `protobuf:"bytes,4,opt,name=link_session_id,json=linkSessionId,proto3" json:"link_session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,6 +199,13 @@ func (x *StreamHeader) GetMetadata() []byte {
 func (x *StreamHeader) GetCorrelationId() string {
 	if x != nil {
 		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *StreamHeader) GetLinkSessionId() string {
+	if x != nil {
+		return x.LinkSessionId
 	}
 	return ""
 }
@@ -297,11 +312,12 @@ var File_common_proto protoreflect.FileDescriptor
 
 const file_common_proto_rawDesc = "" +
 	"\n" +
-	"\fcommon.proto\x12\vplatypus.v2\"~\n" +
+	"\fcommon.proto\x12\vplatypus.v2\"\xa6\x01\n" +
 	"\fStreamHeader\x12+\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x17.platypus.v2.StreamTypeR\x04type\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\fR\bmetadata\x12%\n" +
-	"\x0ecorrelation_id\x18\x03 \x01(\tR\rcorrelationId\"\x0e\n" +
+	"\x0ecorrelation_id\x18\x03 \x01(\tR\rcorrelationId\x12&\n" +
+	"\x0flink_session_id\x18\x04 \x01(\tR\rlinkSessionId\"\x0e\n" +
 	"\fStreamAccept\"<\n" +
 	"\fStreamReject\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +

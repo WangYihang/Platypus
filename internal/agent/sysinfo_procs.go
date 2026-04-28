@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -33,24 +34,38 @@ const cmdlineTruncateBytes = 512
 // Every per-process probe is guarded by a 200ms context so a
 // single wedged /proc entry doesn't stall the collection. The
 // returned response always carries total_count (pre-truncation).
+//
+// Emits structured logs under the `process_list.*` namespace; the
+// per-stream identifiers (correlation_id, link_session_id) seeded
+// into ctx by dispatchAgentStream are pulled back out and included
+// so the snapshot's sub-events tie to the parent rpc.serve.* round
+// trip.
 func CollectProcessList(ctx context.Context, top uint32, sortBy string) *v2pb.ProcessListResponse {
 	t0 := time.Now()
 	resp := &v2pb.ProcessListResponse{}
+	correlationID := CorrelationIDFromContext(ctx)
+	linkSessionID := LinkSessionIDFromContext(ctx)
+	parentFields := []any{
+		"link_session_id", linkSessionID,
+		"correlation_id", correlationID,
+		slog.Group("request", "top_n", top, "sort_by", sortBy),
+	}
+
 	procs, err := procinfo.ProcessesWithContext(ctx)
 	if err != nil {
-		log.L.Warn("process_list_enumerate_failed",
+		log.L.Warn("process_list.enumerate_failed", append(parentFields,
 			"error", err.Error(),
 			"elapsed_ms", time.Since(t0).Milliseconds(),
-		)
+		)...)
 		resp.Error = err.Error()
 		return resp
 	}
 	tEnumerate := time.Now()
 	resp.TotalCount = uint32(len(procs))
-	log.L.Info("process_list_enumerated",
-		"count", len(procs),
+	log.L.Info("process_list.enumerated", append(parentFields,
+		"process_count", len(procs),
 		"elapsed_ms", tEnumerate.Sub(t0).Milliseconds(),
-	)
+	)...)
 
 	var slowCount int
 	out := make([]*v2pb.ProcessInfo, 0, len(procs))
@@ -62,10 +77,10 @@ func CollectProcessList(ctx context.Context, top uint32, sortBy string) *v2pb.Pr
 		info := snapshotProcess(ctx, p)
 		if d := time.Since(probeStart); d.Milliseconds() > slowProbeMs {
 			slowCount++
-			log.L.Debug("process_list_slow_probe",
+			log.L.Debug("process_list.slow_probe", append(parentFields,
 				"pid", p.Pid,
 				"elapsed_ms", d.Milliseconds(),
-			)
+			)...)
 		}
 		if info == nil {
 			continue
@@ -86,15 +101,15 @@ func CollectProcessList(ctx context.Context, top uint32, sortBy string) *v2pb.Pr
 	}
 	resp.Processes = out
 
-	log.L.Info("process_list_done",
-		"total", resp.TotalCount,
-		"returned", len(resp.Processes),
-		"slow_probes", slowCount,
-		"enumerate_ms", tEnumerate.Sub(t0).Milliseconds(),
-		"snapshot_ms", tSnapshot.Sub(tEnumerate).Milliseconds(),
-		"sort_ms", tSort.Sub(tSnapshot).Milliseconds(),
-		"total_ms", time.Since(t0).Milliseconds(),
-	)
+	log.L.Info("process_list.completed", append(parentFields,
+		"total_count", resp.TotalCount,
+		"returned_count", len(resp.Processes),
+		"slow_probe_count", slowCount,
+		"phase_enumerate_ms", tEnumerate.Sub(t0).Milliseconds(),
+		"phase_snapshot_ms", tSnapshot.Sub(tEnumerate).Milliseconds(),
+		"phase_sort_ms", tSort.Sub(tSnapshot).Milliseconds(),
+		"elapsed_ms", time.Since(t0).Milliseconds(),
+	)...)
 	return resp
 }
 

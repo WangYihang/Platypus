@@ -103,14 +103,15 @@ func ServeLink(ctx context.Context, sess *link.Session, deps AgentHandlerDeps) e
 // distinguish "agent version doesn't support this" from an
 // outright crash.
 func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.ReadWriteCloser, deps AgentHandlerDeps) {
-	log.L.Debug("agent_stream_open",
+	log.L.Debug("link.stream_open",
 		"stream_type", hdr.GetType().String(),
-		"corr_id", hdr.GetCorrelationId(),
+		"correlation_id", hdr.GetCorrelationId(),
+		"link_session_id", hdr.GetLinkSessionId(),
 	)
-	// Seed corr_id into ctx so the RPC dispatch log lines can echo
-	// the same id as the (future) server-side issuer. Empty today
-	// because link.CallRPC still hardcodes ""; stays forward-safe.
-	ctx = ContextWithCorrelationID(ctx, hdr.GetCorrelationId())
+	// Seed both ids into ctx so per-RPC log lines and any sub-spans
+	// they emit (process_list.*, file_*, etc.) carry the same values
+	// the server stamped on the wire.
+	ctx = ContextWithStreamIDs(ctx, hdr.GetCorrelationId(), hdr.GetLinkSessionId())
 	switch hdr.Type {
 	case v2pb.StreamType_STREAM_TYPE_RPC:
 		if err := ServeRPCStream(ctx, stream, deps.RPC); err != nil {

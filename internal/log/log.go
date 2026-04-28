@@ -79,6 +79,16 @@ func Close() error {
 	return nil
 }
 
+// SetBaseFields permanently extends L with a fixed set of attributes
+// emitted on every subsequent log line. Call exactly once at process
+// startup with whatever always-on context the binary has —
+// service, hostname, agent_id, version. Not safe to call concurrently
+// with active log calls; the contract is "wire it in main() before
+// goroutines spawn".
+func SetBaseFields(attrs ...any) {
+	L = L.With(attrs...)
+}
+
 func Data(format string, a ...interface{}) {
 	L.Info(fmt.Sprintf(format, a...), "kind", "data")
 }

@@ -15,15 +15,21 @@ import (
 // — the underlying stream is closed, releasing any server-side
 // reader blocked on it.
 //
+// correlationID identifies a single request/response pair and is
+// echoed in StreamHeader.correlation_id so both peers can grep one
+// round-trip out of the log stream. The link-session id (stable for
+// the lifetime of the agent connection) is read off sess itself —
+// callers no longer need to thread it explicitly.
+//
 // Errors mean "the RPC did not complete"; callers must not
 // interpret a nil err + populated RpcResponse.Error as anything
 // other than a service-level failure reported by the peer.
-func CallRPC(ctx context.Context, sess *Session, req *v2pb.RpcRequest) (*v2pb.RpcResponse, error) {
+func CallRPC(ctx context.Context, sess *Session, req *v2pb.RpcRequest, correlationID string) (*v2pb.RpcResponse, error) {
 	if req == nil {
 		return nil, errors.New("link: CallRPC: nil request")
 	}
 
-	stream, err := sess.Open(v2pb.StreamType_STREAM_TYPE_RPC, nil, "")
+	stream, err := sess.Open(v2pb.StreamType_STREAM_TYPE_RPC, nil, correlationID)
 	if err != nil {
 		return nil, fmt.Errorf("link: CallRPC open: %w", err)
 	}

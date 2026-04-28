@@ -8,14 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/WangYihang/Platypus/internal/agent"
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/pkg/options"
 )
@@ -25,6 +29,17 @@ func main() {
 		Level: slog.LevelDebug,
 	}))
 	slog.SetDefault(logger)
+	// log.L (used by all internal/agent library code) gets stable
+	// per-process fields up-front. agent_id is filled in once we've
+	// loaded / enrolled an Identity below — until then logs render
+	// agent_id="" but at least carry service+hostname so cross-host
+	// log aggregation can still bucket lines.
+	hostname, _ := os.Hostname()
+	log.SetBaseFields(
+		"service", "platypus-agent",
+		"hostname", hostname,
+		"agent_version", "v2",
+	)
 
 	opts, err := options.InitOptions()
 	if err != nil {
@@ -114,7 +129,32 @@ func main() {
 		caPEM = decoded
 	}
 
-	hostname, _ := os.Hostname()
+	// Bootstrap can run before the agent has any persisted identity
+	// (fresh install) so we promote agent_id into the log base fields
+	// the first time we manage to load one off disk after a successful
+	// enrollment. Idempotent across reconnects.
+	var agentIDPromoted sync.Once
+	promoteAgentID := func() {
+		agentIDPromoted.Do(func() {
+			id, err := agent.LoadIdentity(identityDir)
+			if err != nil || id == nil {
+				return
+			}
+			block, _ := pem.Decode(id.CertPEM)
+			if block == nil {
+				return
+			}
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				return
+			}
+			agentID := agentIDFromURIs(cert.URIs)
+			if agentID == "" {
+				return
+			}
+			log.SetBaseFields("agent_id", agentID)
+		})
+	}
 
 	var connectAttempt int
 	connect := func() error {
@@ -148,6 +188,7 @@ func main() {
 			return err
 		}
 		defer sess.Close()
+		promoteAgentID()
 
 		linkStart := time.Now()
 		logger.Info("v2 link established; serving streams",
@@ -280,4 +321,19 @@ func certPoolFromPEM(caPEM []byte) (*x509.CertPool, error) {
 		return nil, errors.New("no valid CERTIFICATE blocks in CA PEM")
 	}
 	return pool, nil
+}
+
+// agentIDFromURIs extracts the agent_id encoded in the cert's
+// "platypus://agent/<id>" URI SAN. Mirrors the server-side
+// parseAgentSANs but trimmed to the single field the agent-side log
+// base needs. Returns "" when no matching SAN is present (older
+// fixtures, malformed certs).
+func agentIDFromURIs(uris []*url.URL) string {
+	for _, u := range uris {
+		if u == nil || u.Scheme != "platypus" || u.Host != "agent" {
+			continue
+		}
+		return strings.TrimPrefix(u.Path, "/")
+	}
+	return ""
 }

@@ -68,7 +68,7 @@ func TestServeLink_DispatchesRPC(t *testing.T) {
 	defer callCancel()
 	resp, err := link.CallRPC(callCtx, clientSess, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: "uname"}},
-	})
+	}, "test-corr")
 	if err != nil {
 		t.Fatalf("CallRPC: %v", err)
 	}

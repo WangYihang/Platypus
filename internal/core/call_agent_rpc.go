@@ -27,105 +27,73 @@ func (e *ErrAgentNotConnected) Error() string {
 // returns a typed error so callers can map it to the right HTTP
 // status without string-matching.
 //
-// Emits one structured log line per call (agent_rpc_start +
-// agent_rpc_ok/app_error/failed/not_connected) with a locally
-// generated corr_id so the server log alone can be grep'd for a
-// full round-trip; the same field set surfaces in the agent-side
-// logs (by type + agent_id + approximate timestamp) even though
-// we don't wire the corr_id across the link today.
+// Each call emits one structured log line per outcome under the
+// `rpc.call.*` namespace:
+//
+//	rpc.call.start          -> always, before dispatch
+//	rpc.call.ok             -> handler ran cleanly
+//	rpc.call.app_error      -> handler ran but reported a service error
+//	rpc.call.transport_error-> link / yamux / framing failure
+//	rpc.call.agent_offline  -> no live session for agent_id
+//
+// Every line carries the same context envelope: agent_id,
+// project_id (when known), link_session_id, correlation_id,
+// rpc_method, plus a `request` slog.Group with the relevant
+// payload fields. Success and failure lines additionally carry
+// elapsed_ms and a `response` group (ok path only).
 func CallAgentRPC(ctx context.Context, svc *AgentLinkService, agentID string, req *v2pb.RpcRequest) (*v2pb.RpcResponse, error) {
 	if svc == nil {
 		return nil, fmt.Errorf("core: CallAgentRPC: nil AgentLinkService")
 	}
-	reqType := rpcPayloadName(req.GetPayload())
-	corrID := shortID()
+	method := log.RPCMethodName(req.GetPayload())
+	correlationID := newCorrelationID()
+	requestAttr := log.RPCRequestAttr(req.GetPayload())
 	start := time.Now()
-	log.L.Info("agent_rpc_start",
-		"agent_id", agentID,
-		"type", reqType,
-		"corr_id", corrID,
-	)
 
-	sess, ok := svc.Get(agentID)
+	sess, linkSessionID, ok := svc.GetWithSessionID(agentID)
+	baseFields := []any{
+		"agent_id", agentID,
+		"link_session_id", linkSessionID,
+		"correlation_id", correlationID,
+		"rpc_method", method,
+		requestAttr,
+	}
+	log.L.Info("rpc.call.start", baseFields...)
+
 	if !ok {
-		log.L.Warn("agent_rpc_not_connected",
-			"agent_id", agentID,
-			"type", reqType,
-			"corr_id", corrID,
+		log.L.Warn("rpc.call.agent_offline", append(baseFields,
 			"elapsed_ms", time.Since(start).Milliseconds(),
-		)
+		)...)
 		return nil, &ErrAgentNotConnected{AgentID: agentID}
 	}
 
-	resp, err := link.CallRPC(ctx, sess, req)
+	resp, err := link.CallRPC(ctx, sess, req, correlationID)
 	elapsed := time.Since(start).Milliseconds()
 	switch {
 	case err != nil:
-		log.L.Warn("agent_rpc_failed",
-			"agent_id", agentID,
-			"type", reqType,
-			"corr_id", corrID,
+		log.L.Warn("rpc.call.transport_error", append(baseFields,
 			"elapsed_ms", elapsed,
 			"error", err.Error(),
-		)
+		)...)
 	case resp != nil && resp.GetError() != "":
-		log.L.Warn("agent_rpc_app_error",
-			"agent_id", agentID,
-			"type", reqType,
-			"corr_id", corrID,
+		log.L.Warn("rpc.call.app_error", append(baseFields,
 			"elapsed_ms", elapsed,
 			"error", resp.GetError(),
-		)
+		)...)
 	default:
-		respType := ""
-		if resp != nil {
-			respType = rpcPayloadName(resp.GetPayload())
-		}
-		log.L.Info("agent_rpc_ok",
-			"agent_id", agentID,
-			"type", reqType,
-			"corr_id", corrID,
+		log.L.Info("rpc.call.ok", append(baseFields,
 			"elapsed_ms", elapsed,
-			"resp_type", respType,
-		)
+			log.RPCResponseAttr(resp.GetPayload()),
+		)...)
 	}
 	return resp, err
 }
 
-// rpcPayloadName returns a stable short string for one of the
-// oneof variants carried by RpcRequest/RpcResponse. Used for log
-// fields only; unknown / nil payloads collapse to sentinel strings
-// so log consumers can still filter on them.
-func rpcPayloadName(p any) string {
-	switch p.(type) {
-	case *v2pb.RpcRequest_Exec, *v2pb.RpcResponse_Exec:
-		return "exec"
-	case *v2pb.RpcRequest_ListDir, *v2pb.RpcResponse_ListDir:
-		return "list_dir"
-	case *v2pb.RpcRequest_Stat, *v2pb.RpcResponse_Stat:
-		return "stat"
-	case *v2pb.RpcRequest_Delete, *v2pb.RpcResponse_Delete:
-		return "delete"
-	case *v2pb.RpcRequest_Rename, *v2pb.RpcResponse_Rename:
-		return "rename"
-	case *v2pb.RpcRequest_Mkdir, *v2pb.RpcResponse_Mkdir:
-		return "mkdir"
-	case *v2pb.RpcRequest_Chmod, *v2pb.RpcResponse_Chmod:
-		return "chmod"
-	case *v2pb.RpcRequest_SysInfo, *v2pb.RpcResponse_SysInfo:
-		return "sys_info"
-	case *v2pb.RpcRequest_ProcessList, *v2pb.RpcResponse_ProcessList:
-		return "process_list"
-	case nil:
-		return ""
-	default:
-		return "unknown"
-	}
-}
-
-// shortID returns 8 hex chars of crypto/rand for log correlation.
-// Not a wire value — never leaves the server.
-func shortID() string {
+// newCorrelationID returns 8 hex chars of crypto/rand for log
+// correlation. Travels in StreamHeader.correlation_id so the agent
+// echoes the same id and a single grep can pull both sides of one
+// round-trip out of the log stream. Not a wire authentication value.
+func newCorrelationID() string {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "00000000"

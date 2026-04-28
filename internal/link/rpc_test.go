@@ -54,7 +54,7 @@ func TestCallRPC_Roundtrip(t *testing.T) {
 
 	resp, err := CallRPC(ctx, client, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: "hello"}},
-	})
+	}, "test-corr")
 	if err != nil {
 		t.Fatalf("CallRPC: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestCallRPC_ContextTimeout(t *testing.T) {
 
 	_, err := CallRPC(ctx, client, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: "x"}},
-	})
+	}, "test-corr")
 	if err == nil {
 		t.Fatal("CallRPC should have returned an error on ctx timeout")
 	}
@@ -127,7 +127,7 @@ func TestCallRPC_StreamClosedBeforeResponse(t *testing.T) {
 
 	_, err := CallRPC(ctx, client, &v2pb.RpcRequest{
 		Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{Command: "x"}},
-	})
+	}, "test-corr")
 	if err == nil {
 		t.Fatal("CallRPC should error when server closes without responding")
 	}

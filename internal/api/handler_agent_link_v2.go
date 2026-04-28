@@ -69,8 +69,9 @@ func (h *AgentLinkHandler) WithDB(db *storage.DB) *AgentLinkHandler {
 func (h *AgentLinkHandler) Handle(c *gin.Context) {
 	linkStart := time.Now()
 	if c.Request.TLS == nil || len(c.Request.TLS.PeerCertificates) == 0 {
-		log.L.Warn("agent_link_no_client_cert",
+		log.L.Warn("link.cert_missing",
 			"remote_addr", c.Request.RemoteAddr,
+			"client_ip", c.ClientIP(),
 		)
 		c.String(http.StatusUnauthorized, "agent link: client certificate required")
 		return
@@ -84,8 +85,9 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		Roots:     h.caPoolFn(),
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}); err != nil {
-		log.L.Warn("agent_link_cert_verify_failed",
+		log.L.Warn("link.cert_verify_failed",
 			"remote_addr", c.Request.RemoteAddr,
+			"client_ip", c.ClientIP(),
 			"error", err.Error(),
 		)
 		c.String(http.StatusUnauthorized, "agent link: client cert verification failed: %s", err)
@@ -94,8 +96,9 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 
 	agentID, projectID, err := parseAgentSANs(leaf)
 	if err != nil {
-		log.L.Warn("agent_link_san_parse_failed",
+		log.L.Warn("link.san_parse_failed",
 			"remote_addr", c.Request.RemoteAddr,
+			"client_ip", c.ClientIP(),
 			"error", err.Error(),
 		)
 		c.String(http.StatusBadRequest, "agent link: %s", err)
@@ -106,7 +109,12 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		Subprotocols: []string{link.Subprotocol},
 	})
 	if err != nil {
-		log.Error("agent link: ws upgrade for %s: %v", agentID, err)
+		log.L.Warn("link.ws_upgrade_failed",
+			"agent_id", agentID,
+			"project_id", projectID,
+			"client_ip", c.ClientIP(),
+			"error", err.Error(),
+		)
 		return
 	}
 	// CloseNow on error paths; on normal path the yamux Close
@@ -116,32 +124,42 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 	nc := websocket.NetConn(context.Background(), wsConn, websocket.MessageBinary)
 	sess, err := link.NewServerSession(nc)
 	if err != nil {
-		log.Error("agent link: yamux server for %s: %v", agentID, err)
+		log.L.Warn("link.yamux_init_failed",
+			"agent_id", agentID,
+			"project_id", projectID,
+			"client_ip", c.ClientIP(),
+			"error", err.Error(),
+		)
 		return
 	}
 	defer func() { _ = sess.Close() }()
 
 	// Register, displacing any stale prior session. Close the
 	// displaced one so its accept loop unwinds.
-	if prev := h.svc.Register(agentID, sess); prev != nil {
+	linkSessionID, prev := h.svc.Register(agentID, sess)
+	sess.SetLinkSessionID(linkSessionID)
+	if prev != nil {
 		_ = prev.Close()
-		log.L.Warn("agent_link_displaced_stale",
+		log.L.Warn("link.displaced",
 			"agent_id", agentID,
 			"project_id", projectID,
+			"link_session_id", linkSessionID,
 		)
 	}
 	defer func() {
 		h.svc.Unregister(agentID)
-		log.L.Info("agent_link_unregistered",
+		log.L.Info("link.unregistered",
 			"agent_id", agentID,
 			"project_id", projectID,
-			"duration_ms", time.Since(linkStart).Milliseconds(),
+			"link_session_id", linkSessionID,
+			"elapsed_ms", time.Since(linkStart).Milliseconds(),
 		)
 	}()
 
-	log.L.Info("agent_link_connected",
+	log.L.Info("link.connected",
 		"agent_id", agentID,
 		"project_id", projectID,
+		"link_session_id", linkSessionID,
 		"remote_addr", c.Request.RemoteAddr,
 		"client_ip", c.ClientIP(),
 	)
@@ -177,37 +195,41 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		hdr, stream, err := sess.Accept()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.L.Info("agent_link_disconnected",
+				log.L.Info("link.disconnected",
 					"agent_id", agentID,
 					"project_id", projectID,
+					"link_session_id", linkSessionID,
 					"reason", "peer_eof",
-					"duration_ms", time.Since(linkStart).Milliseconds(),
+					"elapsed_ms", time.Since(linkStart).Milliseconds(),
 				)
 				return
 			}
 			// Treat "shutdown via our own Close" as a clean exit.
 			if c.Request.Context().Err() != nil {
-				log.L.Info("agent_link_disconnected",
+				log.L.Info("link.disconnected",
 					"agent_id", agentID,
 					"project_id", projectID,
+					"link_session_id", linkSessionID,
 					"reason", "ctx_cancelled",
-					"duration_ms", time.Since(linkStart).Milliseconds(),
+					"elapsed_ms", time.Since(linkStart).Milliseconds(),
 				)
 				return
 			}
-			log.L.Warn("agent_link_accept_failed",
+			log.L.Warn("link.accept_failed",
 				"agent_id", agentID,
 				"project_id", projectID,
+				"link_session_id", linkSessionID,
 				"error", err.Error(),
-				"duration_ms", time.Since(linkStart).Milliseconds(),
+				"elapsed_ms", time.Since(linkStart).Milliseconds(),
 			)
 			return
 		}
-		log.L.Debug("agent_link_stream_accept",
+		log.L.Debug("link.stream_accept",
 			"agent_id", agentID,
 			"project_id", projectID,
+			"link_session_id", linkSessionID,
 			"stream_type", hdr.GetType().String(),
-			"corr_id", hdr.GetCorrelationId(),
+			"correlation_id", hdr.GetCorrelationId(),
 		)
 		go h.dispatchStream(agentID, hdr, stream)
 	}
@@ -260,14 +282,14 @@ func (h *AgentLinkHandler) endLiveSession(sessionID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := h.db.Sessions().MarkDisconnected(ctx, sessionID); err != nil {
-		log.L.Warn("agent_link_session_mark_disconnected_failed",
-			"session_id", sessionID,
+		log.L.Warn("link.session_record.close_failed",
+			"session_record_id", sessionID,
 			"error", err.Error(),
 		)
 		return
 	}
-	log.L.Info("agent_link_session_ended",
-		"session_id", sessionID,
+	log.L.Info("link.session_record.closed",
+		"session_record_id", sessionID,
 	)
 }
 

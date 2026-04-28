@@ -32,25 +32,49 @@ type AgentRPCHandlers struct {
 	ProcessList func(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse
 }
 
-// correlationKey is the context key under which ServeRPCStream (or
-// its caller) stashes the corr_id read off StreamHeader. It lets
-// dispatchRPC include the same id in its log lines without
-// widening any function signatures. Unset / empty is fine and just
-// shows up as corr_id="" in the logs.
-type correlationKey struct{}
+// streamCtxKey carries per-stream identifiers (correlation_id,
+// link_session_id) so dispatchRPC can include them in log lines
+// without widening any function signatures. All fields are unset /
+// empty when the StreamHeader didn't carry the matching value.
+type streamCtxKey struct{}
 
-// ContextWithCorrelationID returns a copy of ctx carrying corrID
-// for later retrieval by dispatchRPC. Exported so the agent's
-// per-stream router (dispatchAgentStream) can seed the value
-// straight from StreamHeader.
-func ContextWithCorrelationID(ctx context.Context, corrID string) context.Context {
-	return context.WithValue(ctx, correlationKey{}, corrID)
+type streamCtx struct {
+	correlationID string
+	linkSessionID string
 }
 
-// correlationFromContext is the reader side; returns "" when unset.
-func correlationFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(correlationKey{}).(string)
-	return v
+// ContextWithStreamIDs returns a copy of ctx tagged with the per-stream
+// identifiers parsed off StreamHeader. dispatchAgentStream calls this
+// once per accepted stream so RPC handlers and any logs they emit can
+// echo the same values the server stamped on the wire.
+func ContextWithStreamIDs(ctx context.Context, correlationID, linkSessionID string) context.Context {
+	return context.WithValue(ctx, streamCtxKey{}, streamCtx{
+		correlationID: correlationID,
+		linkSessionID: linkSessionID,
+	})
+}
+
+// streamIDsFromContext is the reader; both fields default to "" when
+// the context wasn't seeded.
+func streamIDsFromContext(ctx context.Context) (correlationID, linkSessionID string) {
+	if v, ok := ctx.Value(streamCtxKey{}).(streamCtx); ok {
+		return v.correlationID, v.linkSessionID
+	}
+	return "", ""
+}
+
+// CorrelationIDFromContext exposes just the correlation id for handlers
+// that want to thread it into sub-spans (e.g. process_list emitting
+// its own enumerate / completion lines under the same id).
+func CorrelationIDFromContext(ctx context.Context) string {
+	c, _ := streamIDsFromContext(ctx)
+	return c
+}
+
+// LinkSessionIDFromContext is the matching getter for the per-link id.
+func LinkSessionIDFromContext(ctx context.Context) string {
+	_, l := streamIDsFromContext(ctx)
+	return l
 }
 
 // ServeRPCStream is the agent-side entrypoint for a single accepted
@@ -75,41 +99,48 @@ func ServeRPCStream(ctx context.Context, stream io.ReadWriteCloser, handlers Age
 
 // dispatchRPC wraps dispatchRPCInner with structured start / end
 // logs. The split keeps the pure routing logic unit-testable while
-// still covering every case arm with a single log pair. Fields
-// mirror the server-side agent_rpc_* lines so operators can match
-// request/response across log streams by (agent_id, type, rough
-// timestamp) — the corr_id isn't wired through the link today, but
-// gets populated here if the caller stashed one in ctx.
+// still covering every case arm with a single log pair.
+//
+// Events emitted (`rpc.serve.*` namespace mirrors the server-side
+// `rpc.call.*`):
+//
+//	rpc.serve.start          -> always, before handler runs
+//	rpc.serve.ok             -> handler returned a clean response
+//	rpc.serve.app_error      -> handler returned non-empty Error
+//	rpc.serve.empty_response -> handler returned nil response
+//
+// The emitted `correlation_id` and `link_session_id` come straight
+// from StreamHeader, so server-side and agent-side log lines for one
+// round-trip share both ids and a single grep ties them together.
 func dispatchRPC(ctx context.Context, req *v2pb.RpcRequest, h AgentRPCHandlers) *v2pb.RpcResponse {
 	start := time.Now()
-	name := rpcPayloadName(req.GetPayload())
-	corrID := correlationFromContext(ctx)
-	log.L.Info("rpc_dispatch_start",
-		"type", name,
-		"corr_id", corrID,
-	)
+	method := log.RPCMethodName(req.GetPayload())
+	correlationID, linkSessionID := streamIDsFromContext(ctx)
+	requestAttr := log.RPCRequestAttr(req.GetPayload())
+
+	baseFields := []any{
+		"link_session_id", linkSessionID,
+		"correlation_id", correlationID,
+		"rpc_method", method,
+		requestAttr,
+	}
+
+	log.L.Info("rpc.serve.start", baseFields...)
 	resp := dispatchRPCInner(ctx, req, h)
 	elapsed := time.Since(start).Milliseconds()
 	switch {
 	case resp == nil:
-		log.L.Warn("rpc_dispatch_nil_resp",
-			"type", name,
-			"corr_id", corrID,
-			"elapsed_ms", elapsed,
-		)
+		log.L.Warn("rpc.serve.empty_response", append(baseFields, "elapsed_ms", elapsed)...)
 	case resp.GetError() != "":
-		log.L.Warn("rpc_dispatch_app_error",
-			"type", name,
-			"corr_id", corrID,
+		log.L.Warn("rpc.serve.app_error", append(baseFields,
 			"elapsed_ms", elapsed,
 			"error", resp.GetError(),
-		)
+		)...)
 	default:
-		log.L.Info("rpc_dispatch_ok",
-			"type", name,
-			"corr_id", corrID,
+		log.L.Info("rpc.serve.ok", append(baseFields,
 			"elapsed_ms", elapsed,
-		)
+			log.RPCResponseAttr(resp.GetPayload()),
+		)...)
 	}
 	return resp
 }
@@ -167,37 +198,6 @@ func dispatchRPCInner(ctx context.Context, req *v2pb.RpcRequest, h AgentRPCHandl
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ProcessList{ProcessList: h.ProcessList(ctx, p.ProcessList)}}
 	default:
 		return &v2pb.RpcResponse{Error: "agent: unknown RPC payload type"}
-	}
-}
-
-// rpcPayloadName returns a stable short string for one of the
-// oneof variants carried by RpcRequest/RpcResponse. Intentionally
-// duplicated (tiny) with internal/core.rpcPayloadName so neither
-// package gains a cross-dependency just for a log helper.
-func rpcPayloadName(p any) string {
-	switch p.(type) {
-	case *v2pb.RpcRequest_Exec, *v2pb.RpcResponse_Exec:
-		return "exec"
-	case *v2pb.RpcRequest_ListDir, *v2pb.RpcResponse_ListDir:
-		return "list_dir"
-	case *v2pb.RpcRequest_Stat, *v2pb.RpcResponse_Stat:
-		return "stat"
-	case *v2pb.RpcRequest_Delete, *v2pb.RpcResponse_Delete:
-		return "delete"
-	case *v2pb.RpcRequest_Rename, *v2pb.RpcResponse_Rename:
-		return "rename"
-	case *v2pb.RpcRequest_Mkdir, *v2pb.RpcResponse_Mkdir:
-		return "mkdir"
-	case *v2pb.RpcRequest_Chmod, *v2pb.RpcResponse_Chmod:
-		return "chmod"
-	case *v2pb.RpcRequest_SysInfo, *v2pb.RpcResponse_SysInfo:
-		return "sys_info"
-	case *v2pb.RpcRequest_ProcessList, *v2pb.RpcResponse_ProcessList:
-		return "process_list"
-	case nil:
-		return ""
-	default:
-		return "unknown"
 	}
 }
 

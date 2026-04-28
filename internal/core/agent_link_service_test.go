@@ -51,16 +51,47 @@ func TestAgentLinkService_DuplicateRegisterReturnsPrevious(t *testing.T) {
 	first := &link.Session{}
 	second := &link.Session{}
 
-	if prev := s.Register("a-1", first); prev != nil {
+	if _, prev := s.Register("a-1", first); prev != nil {
 		t.Fatalf("first Register returned prev=%v; want nil", prev)
 	}
-	prev := s.Register("a-1", second)
+	_, prev := s.Register("a-1", second)
 	if prev != first {
 		t.Fatalf("second Register returned prev=%v; want first", prev)
 	}
 	got, _ := s.Get("a-1")
 	if got != second {
 		t.Fatal("Get after second Register did not return the second session")
+	}
+}
+
+// Register stamps a freshly generated session_id on every call, and
+// the same id surfaces through both GetWithSessionID and SessionIDFor.
+// This is the link.session_id every log line on this connection
+// carries; collisions across reconnects would silently merge log
+// streams from unrelated agents on the operator side, so this is a
+// regression test more than a feature test.
+func TestAgentLinkService_RegisterStampsSessionID(t *testing.T) {
+	s := NewAgentLinkService()
+	id, _ := s.Register("a-1", &link.Session{})
+	if id == "" {
+		t.Fatal("Register returned empty session_id")
+	}
+
+	_, id2, ok := s.GetWithSessionID("a-1")
+	if !ok {
+		t.Fatal("GetWithSessionID ok=false after Register")
+	}
+	if id2 != id {
+		t.Fatalf("GetWithSessionID returned %q; want %q", id2, id)
+	}
+	if got := s.SessionIDFor("a-1"); got != id {
+		t.Fatalf("SessionIDFor returned %q; want %q", got, id)
+	}
+
+	// Reconnect path: Register again must return a fresh id.
+	id3, _ := s.Register("a-1", &link.Session{})
+	if id3 == id {
+		t.Fatalf("reregister returned identical session_id %q", id3)
 	}
 }
 

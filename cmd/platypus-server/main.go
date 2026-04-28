@@ -59,6 +59,12 @@ const defaultIngressAddr = ":9443"
 
 func main() {
 	log.Init()
+	hostname, _ := os.Hostname()
+	log.SetBaseFields(
+		"service", "platypus-server",
+		"version", update.Version,
+		"hostname", hostname,
+	)
 
 	cfg, configFile, err := loadConfig()
 	if err != nil {
