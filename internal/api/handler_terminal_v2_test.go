@@ -103,7 +103,7 @@ func setupTerminalV2Test(t *testing.T, agentID string) *terminalTestEnv {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2TerminalRoute(r, svc, fixture.RBAC)
+	RegisterV2TerminalRoute(r, svc, fixture.RBAC, nil)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return &terminalTestEnv{srv: srv, fixture: fixture}
@@ -163,7 +163,7 @@ func TestTerminalV2_UnknownAgent404(t *testing.T) {
 	svc := core.NewAgentLinkService()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2TerminalRoute(r, svc, fixture.RBAC)
+	RegisterV2TerminalRoute(r, svc, fixture.RBAC, nil)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 

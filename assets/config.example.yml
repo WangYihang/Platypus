@@ -66,3 +66,14 @@ mesh:
   discovery_lan: true        # Enable LAN peer discovery via mDNS
   discovery_interval: 30     # Interval in seconds between LAN scans
   project_id: "default"      # Project ID to isolate discovery on LAN
+
+# Terminal session recording (optional). When enabled, every
+# interactive shell opened by an operator is captured to an asciinema
+# v2 cast file under `dir`. Recordings are exposed in the web UI under
+# /projects/<slug>/recordings for replay, download, and management.
+#
+# When `dir` is empty, the server defaults to <data-dir>/recordings,
+# where data-dir is the parent of restful.db_file.
+recording:
+  enabled: false
+  dir: ""

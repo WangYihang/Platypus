@@ -16,6 +16,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/recording"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
@@ -46,8 +47,11 @@ const defaultShell = "/bin/bash"
 // NewV2TerminalHandler returns the Gin handler for the v2 browser
 // terminal endpoint. It bridges the xterm.js WS protocol to a
 // STREAM_TYPE_PROCESS_OPEN stream on the named agent's live v2
-// session.
-func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
+// session. When recMgr is non-nil and enabled, the handler also
+// streams every stdout/stderr/resize event into an asciinema v2 cast
+// file via the recording.Manager so operators can replay the session
+// later.
+func NewV2TerminalHandler(svc *core.AgentLinkService, recMgr *recording.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		agentID := c.Param("agent_id")
 		if agentID == "" {
@@ -89,7 +93,7 @@ func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
 			At:         start,
 		})
 
-		runErr := runV2Terminal(ctx, ws, sess, agentID)
+		runErr := runV2Terminal(ctx, ws, sess, agentID, recMgr, recordingMetaFromContext(c, agentID, start))
 		if runErr != nil && !errors.Is(runErr, context.Canceled) {
 			log.Debug("v2 terminal %s: %v", agentID, runErr)
 		}
@@ -114,6 +118,24 @@ func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
 	}
 }
 
+// recordingMetaFromContext bundles the project / host / user
+// attribution we know up-front so runV2Terminal can call
+// recording.Manager.Begin without re-reading the gin context (which
+// the WS goroutine has lost access to by the time the recorder needs
+// it).
+func recordingMetaFromContext(c *gin.Context, agentID string, start time.Time) recording.BeginInput {
+	in := recording.BeginInput{
+		AgentID:   agentID,
+		ProjectID: c.Param("pid"),
+		Shell:     defaultShell,
+		StartedAt: start,
+	}
+	if p, ok := PrincipalFromContext(c); ok {
+		in.UserID = p.UserID
+	}
+	return in
+}
+
 // runV2Terminal drives one browser WS session. Flow:
 //
 //  1. Read the first frame. It must be opcode '1' (resize) so we can
@@ -122,8 +144,9 @@ func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
 //     first SIGWINCH.
 //  2. Open STREAM_TYPE_PROCESS_OPEN with those dimensions.
 //  3. Read ProcessOpenResponse; abort on Error.
-//  4. Run two pumps: WS → stream, stream → WS.
-func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, agentID string) error {
+//  4. Open a recording session (no-op when recMgr is disabled).
+//  5. Run two pumps: WS → stream, stream → WS.
+func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, agentID string, recMgr *recording.Manager, recMeta recording.BeginInput) error {
 	firstType, firstData, err := ws.Read(ctx)
 	if err != nil {
 		return err
@@ -135,6 +158,18 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 	if err != nil {
 		return err
 	}
+
+	// Resolve host_id for this agent so the recording row is filterable
+	// per-host on the UI list page. Best-effort: a missing host is
+	// surprising (the RBAC chain already enforced project membership)
+	// but we still record the session under the agent_id.
+	if recMgr != nil && recMgr.Enabled() && recMeta.HostID == "" {
+		if hid, ok := lookupHostIDForAgent(ctx, agentID); ok {
+			recMeta.HostID = hid
+		}
+	}
+	recMeta.Cols = cols
+	recMeta.Rows = rows
 
 	req := &v2pb.ProcessOpenRequest{
 		Command: defaultShell,
@@ -159,6 +194,29 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 	if ack.Error != "" {
 		return errors.New("agent open error: " + ack.Error)
 	}
+
+	// Begin recording AFTER the agent acknowledges the PTY open — a
+	// rejected open should not leave an empty .cast on disk. When the
+	// manager is disabled Begin returns a no-op session.
+	var recSess *recording.Session
+	if recMgr != nil {
+		// Use a context detached from the request so the row finalisation
+		// can run after the WS has closed.
+		bgCtx := context.Background()
+		var beginErr error
+		recSess, beginErr = recMgr.Begin(bgCtx, recMeta)
+		if beginErr != nil {
+			log.L.Warn("recording_begin_failed",
+				"agent_id", agentID,
+				"error", beginErr.Error(),
+			)
+		}
+	}
+	defer func() {
+		if recSess != nil {
+			recSess.Finish(context.Background(), "")
+		}
+	}()
 
 	// writeWS serialises the single browser-facing write stream.
 	var wsMu sync.Mutex
@@ -188,6 +246,7 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 			}
 			switch data[0] {
 			case termOpcodeInput:
+				recSess.WriteInput(data[1:])
 				if err := link.WriteFrame(stream, &v2pb.ProcessFrame{
 					Payload: &v2pb.ProcessFrame_Stdin{Stdin: data[1:]},
 				}); err != nil {
@@ -198,6 +257,7 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 				if perr != nil {
 					continue
 				}
+				recSess.WriteResize(cols, rows)
 				_ = link.WriteFrame(stream, &v2pb.ProcessFrame{
 					Payload: &v2pb.ProcessFrame_Resize{Resize: &v2pb.WindowSize{Cols: cols, Rows: rows}},
 				})
@@ -220,11 +280,13 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 		}
 		switch p := f.Payload.(type) {
 		case *v2pb.ProcessFrame_Stdout:
+			recSess.WriteOutput(p.Stdout)
 			if err := writeWS(termOpcodeInput, p.Stdout); err != nil {
 				closeDone()
 				return nil
 			}
 		case *v2pb.ProcessFrame_Stderr:
+			recSess.WriteOutput(p.Stderr)
 			if err := writeWS(termOpcodeInput, p.Stderr); err != nil {
 				closeDone()
 				return nil
@@ -271,12 +333,32 @@ func parseResizeFrame(data []byte) (cols, rows uint32, err error) {
 // passes the JWT as a "Bearer.<jwt>" Sec-WebSocket-Protocol entry; the
 // middleware extracts it and stamps AccessClaims for the downstream
 // RBAC checks.
-func RegisterV2TerminalRoute(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC) {
+func RegisterV2TerminalRoute(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC, recMgr *recording.Manager) {
 	grp := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
 	grp.Use(
 		rbac.RequireAuthWS(),
 		rbac.RequireProjectRole("pid", user.RoleOperator),
 		rbac.RequireAgentInProject("pid", "agent_id"),
 	)
-	grp.GET("/terminal/ws", NewV2TerminalHandler(svc))
+	grp.GET("/terminal/ws", NewV2TerminalHandler(svc, recMgr))
+}
+
+// hostLookupForAgent is the package-level shim runV2Terminal uses to
+// resolve the host_id behind an agent without taking a hard dep on
+// *storage.DB. main.go installs a callback that closes over the live
+// DB handle. Stays nil in tests that don't exercise recording.
+var hostLookupForAgent func(ctx context.Context, agentID string) (string, bool)
+
+// SetHostLookup installs the lookup callback. main.go calls this once
+// after constructing storage.DB so the v2 terminal handler can stamp
+// host_id on recording rows.
+func SetHostLookup(fn func(ctx context.Context, agentID string) (string, bool)) {
+	hostLookupForAgent = fn
+}
+
+func lookupHostIDForAgent(ctx context.Context, agentID string) (string, bool) {
+	if hostLookupForAgent == nil {
+		return "", false
+	}
+	return hostLookupForAgent(ctx, agentID)
 }

@@ -69,3 +69,11 @@ mesh:
   project_id: "default"
   discovery_lan: true      # → UI-overridable as mesh.discovery_lan
   # discovery_interval: 30 # → UI-overridable as mesh.discovery_interval_seconds
+
+# Terminal session recording. When enabled, every interactive shell
+# opened by an operator is captured as an asciinema v2 cast file under
+# `dir` (defaults to <data-dir>/recordings). The web UI's Recordings
+# page lists, plays back, and manages them.
+recording:
+  enabled: true
+  dir: "/app/data/recordings"

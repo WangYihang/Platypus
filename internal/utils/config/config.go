@@ -46,6 +46,19 @@ type RESTfulConfig struct {
 	DBFile string `yaml:"db_file" mapstructure:"db_file"` // empty defaults to ./platypus.db
 }
 
+// DirOrDefault returns the configured recording directory. The caller
+// passes the data-dir fallback (parent of the SQLite file) to keep
+// recordings co-located with the rest of the persistent state.
+func (c RecordingConfig) DirOrDefault(dataDir string) string {
+	if c.Dir != "" {
+		return c.Dir
+	}
+	if dataDir == "" {
+		return "./recordings"
+	}
+	return dataDir + "/recordings"
+}
+
 // DBFileOrDefault returns the configured SQLite path, or "./platypus.db"
 // when unset. Unix paths only for now.
 //
@@ -98,11 +111,24 @@ type MeshConfig struct {
 	BootstrapTarget   string `yaml:"bootstrap_target"   mapstructure:"bootstrap_target"`
 }
 
+// RecordingConfig controls terminal session recording. Recordings
+// are written in asciinema v2 (.cast) format to Dir; one file per
+// shell, named <recording_id>.cast. Disabling recording means the
+// terminal handler still works, just without persistence.
+//
+// When Dir is empty the server defaults to <data_dir>/recordings,
+// where data_dir is the parent of restful.db_file.
+type RecordingConfig struct {
+	Enabled bool   `yaml:"enabled" mapstructure:"enabled"`
+	Dir     string `yaml:"dir"     mapstructure:"dir"`
+}
+
 type Config struct {
 	Ingress     IngressConfig     `yaml:"ingress"`
 	RESTful     RESTfulConfig     `yaml:"restful"`
 	Distributor DistributorConfig `yaml:"distributor"`
 	Mesh        MeshConfig        `yaml:"mesh"`
+	Recording   RecordingConfig   `yaml:"recording"`
 }
 
 // ErrMissingStoreCredentials is returned by Validate when the

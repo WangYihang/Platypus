@@ -42,6 +42,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/pki"
+	"github.com/WangYihang/Platypus/internal/recording"
 	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -440,7 +441,49 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
-	api.RegisterV2TerminalRoute(rest, agentLinkSvc, rbac)
+
+	// Terminal session recording: every operator shell is mirrored to
+	// an asciinema v2 cast file under <data-dir>/recordings (or the
+	// configured override). Disabled by default; flip
+	// recording.enabled in config.yml to turn it on.
+	dataDir := filepath.Dir(cfg.RESTful.DBFileOrDefault())
+	recDir := cfg.Recording.DirOrDefault(dataDir)
+	if cfg.Recording.Enabled {
+		if err := os.MkdirAll(recDir, 0o700); err != nil {
+			log.L.Warn("recording_dir_create_failed",
+				"dir", recDir,
+				"error", err.Error(),
+				"hint", "recordings will fail until this directory is writable",
+			)
+		} else {
+			log.L.Info("terminal_recording_enabled", "dir", recDir)
+		}
+	}
+	recMgr := recording.New(db, recDir, cfg.Recording.Enabled)
+
+	// Audit-tail close for recordings: a previous instance that exited
+	// without graceful shutdown leaves rows in `recording` state. Mark
+	// them failed so the UI can render them as truncated rather than
+	// "still recording" forever.
+	if n, err := db.TerminalRecordings().MarkAbandoned(ctx, "server restarted before session ended", time.Now().UTC()); err != nil {
+		log.L.Warn("recording_audit_close_failed", "error", err.Error())
+	} else if n > 0 {
+		log.L.Info("recording_audit_close", "rows", n)
+	}
+
+	// Host-id lookup callback consumed by the v2 terminal handler so
+	// recording rows carry host_id without the recording package
+	// importing storage in a way that would cycle.
+	api.SetHostLookup(func(ctx context.Context, agentID string) (string, bool) {
+		host, err := db.Hosts().GetByAgentID(ctx, agentID)
+		if err != nil || host == nil {
+			return "", false
+		}
+		return host.ID, true
+	})
+
+	api.RegisterV2TerminalRoute(rest, agentLinkSvc, rbac, recMgr)
+	api.RegisterV1RecordingRoutes(rest, api.NewRecordingsHandler(db, recMgr), rbac)
 	api.RegisterV2FileRoutes(rest, agentLinkSvc, rbac)
 	// File-transfer archive + scan + transfers REST API. The cancel
 	// registry is shared between the streaming handler (which
@@ -506,7 +549,6 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// <data-dir>/bootstrap.secret with mode 0600 and log only the path.
 	// When an admin exists, log a redacted marker so operators can see
 	// the server is up without leaking anything.
-	dataDir := filepath.Dir(cfg.RESTful.DBFileOrDefault())
 	bootstrapPath := filepath.Join(dataDir, "bootstrap.secret")
 	adminCount, _ := db.Users().Count(ctx)
 	if adminCount == 0 {

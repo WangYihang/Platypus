@@ -22,6 +22,7 @@ const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"))
 const FleetPage = lazy(() => import("./pages/FleetPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
+const RecordingsPage = lazy(() => import("./pages/RecordingsPage"));
 const TransfersPage = lazy(() => import("./pages/TransfersPage"));
 const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
@@ -178,6 +179,7 @@ export const routeTree: RouteObject[] = [
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
                     { path: "activities", element: withSuspense(<ActivitiesPage />) },
+                    { path: "recordings", element: withSuspense(<RecordingsPage />) },
                     { path: "transfers", element: withSuspense(<TransfersPage />) },
                     {
                         path: "enrollment",
