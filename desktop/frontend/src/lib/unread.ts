@@ -1,38 +1,43 @@
 // Per-server unread aggregator. Subscribes once to notify fan-out
 // events that matter across workspaces (new session, host seen) and
-// tracks a count per serverId. The ServerRail consumes counts via
-// useUnread(id); clears happen on switchServer.
+// tracks a count per serverId. ServerSwitcher consumes counts via
+// `useUnread(id)`; clears happen on switchServer.
+//
+// Backed by a zustand store (replaced the previous hand-rolled
+// `Map<serverId, count> + Set<listener> + emit()` registry). The
+// counts slot is an immutable Record so zustand selectors stay
+// referentially stable per-server until that server's count
+// changes.
+
+import { create } from "zustand";
 
 import { getActiveServerId, onServersChange } from "./servers";
 import { NotifyEvent, onNotifyAny } from "./notify";
 import { onActiveChange } from "./auth";
-import { useSyncExternalStore } from "react";
 
-const counts = new Map<string, number>();
-const listeners = new Set<() => void>();
-
-function emit() {
-    for (const fn of listeners) {
-        try {
-            fn();
-        } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error("unread listener threw:", err);
-        }
-    }
+interface UnreadState {
+    counts: Record<string, number>;
 }
+
+const useUnreadStore = create<UnreadState>(() => ({
+    counts: {},
+}));
 
 function bump(serverId: string) {
     if (serverId === getActiveServerId()) return;
-    counts.set(serverId, (counts.get(serverId) ?? 0) + 1);
-    emit();
+    useUnreadStore.setState((s) => {
+        const current = s.counts[serverId] ?? 0;
+        return { counts: { ...s.counts, [serverId]: current + 1 } };
+    });
 }
 
 function clear(serverId: string | null) {
     if (!serverId) return;
-    if (!counts.has(serverId)) return;
-    counts.delete(serverId);
-    emit();
+    useUnreadStore.setState((s) => {
+        if (!(serverId in s.counts)) return s;
+        const { [serverId]: _drop, ...rest } = s.counts;
+        return { counts: rest };
+    });
 }
 
 // One-time wiring. Module import order guarantees this runs before
@@ -52,28 +57,13 @@ onServersChange(() => {
     if (current) clear(current);
 });
 
-function subscribe(fn: () => void): () => void {
-    listeners.add(fn);
-    return () => {
-        listeners.delete(fn);
-    };
-}
-
-function snapshot(serverId: string): number {
-    return counts.get(serverId) ?? 0;
-}
-
-// useUnread is a tiny useSyncExternalStore hook so ServerTile stays a
-// pure function of its props. The `getServerSnapshot` branch is the
-// same as client since we only run in the browser.
+// useUnread selects this server's count out of the store. Selector
+// returns a primitive number, so zustand's default Object.is
+// comparison is exactly right — no derivation pitfalls.
 export function useUnread(serverId: string): number {
-    return useSyncExternalStore(
-        subscribe,
-        () => snapshot(serverId),
-        () => snapshot(serverId),
-    );
+    return useUnreadStore((s) => s.counts[serverId] ?? 0);
 }
 
 export function peekUnread(serverId: string): number {
-    return snapshot(serverId);
+    return useUnreadStore.getState().counts[serverId] ?? 0;
 }
