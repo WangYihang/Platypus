@@ -7,10 +7,13 @@ import {
     LayoutGrid,
     LayoutList,
     Loader2,
+    Map as MapIcon,
+    PanelRightOpen,
     Pencil,
     RefreshCw,
     Rows2,
     Rows3,
+    SlidersHorizontal,
     X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -49,8 +52,22 @@ import {
     suggestedArchiveFilename,
 } from "./archive";
 import FolderArchiveDialog from "./FolderArchiveDialog";
-import QuickPaths from "./QuickPaths";
+import { quickPathsForHost } from "./quickPaths";
 import type { Host } from "../../../lib/api";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTransfersDrawer } from "../../../components/TransfersPill";
 import {
     ChmodDialog,
@@ -121,6 +138,172 @@ function CrumbDroppable({
         >
             {label}
         </button>
+    );
+}
+
+// PreviewPaneShell renders the file preview / editor surface for the
+// expanded right-hand panel. Extracted from FileBrowser so the
+// expanded vs collapsed branches of the layout don't both have to
+// inline ~120 lines of viewer dispatch. Mounting state stays the
+// same — Suspense boundaries and lazy imports are unchanged from the
+// inlined version.
+function PreviewPaneShell({
+    entry,
+    canToggleEdit,
+    previewKind,
+    editMode,
+    setEditMode,
+    onClose,
+    projectID,
+    sessionHash,
+    dirPath,
+    onDownload,
+    onReload,
+}: {
+    entry: FileEntryDTO | null;
+    canToggleEdit: boolean;
+    previewKind: ReturnType<typeof pickViewerKind> | null;
+    editMode: boolean;
+    setEditMode: (fn: (v: boolean) => boolean) => void;
+    onClose: () => void;
+    projectID: string;
+    sessionHash: string;
+    dirPath: string;
+    onDownload: () => void;
+    onReload: () => void;
+}) {
+    return (
+        <div
+            className="flex h-full w-full flex-col overflow-hidden rounded-md border"
+            data-testid="preview-pane"
+        >
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
+                <span className="truncate font-mono">
+                    {entry?.name ?? "Preview"}
+                </span>
+                <div className="flex items-center gap-1">
+                    {/* Edit / View toggle — only meaningful for kinds that
+                        have a distinct rendered view (today: markdown). For
+                        "text" the editor is the only viewer, so the toggle
+                        button stays hidden to avoid suggesting a
+                        non-existent "view" mode. */}
+                    {canToggleEdit && previewKind === "markdown" && (
+                        <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={editMode ? "View rendered" : "Edit source"}
+                            title={editMode ? "View rendered" : "Edit source"}
+                            aria-pressed={editMode}
+                            onClick={() => setEditMode((v) => !v)}
+                        >
+                            {editMode ? (
+                                <Eye className="size-3.5" />
+                            ) : (
+                                <Pencil className="size-3.5" />
+                            )}
+                        </Button>
+                    )}
+                    <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Close preview"
+                        onClick={onClose}
+                    >
+                        <X className="size-3.5" />
+                    </Button>
+                </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+                {entry ? (
+                    <Suspense
+                        fallback={
+                            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="size-4 animate-spin" />
+                                Loading editor…
+                            </div>
+                        }
+                    >
+                        {(() => {
+                            const fullPath = joinPath(dirPath, entry.name);
+                            const kind = pickViewerKind(entry.mime, entry.name);
+                            if (kind === "image") {
+                                return (
+                                    <ImageViewer
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        path={fullPath}
+                                        size={entry.size}
+                                        mime={entry.mime}
+                                    />
+                                );
+                            }
+                            if (kind === "pdf") {
+                                return (
+                                    <PdfViewer
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        path={fullPath}
+                                        size={entry.size}
+                                    />
+                                );
+                            }
+                            if (kind === "video" || kind === "audio") {
+                                return (
+                                    <MediaViewer
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        path={fullPath}
+                                        size={entry.size}
+                                        kind={kind}
+                                        mime={entry.mime}
+                                    />
+                                );
+                            }
+                            if (
+                                kind === "markdown" &&
+                                entry.size <= SMALL_FILE_LIMIT &&
+                                !editMode
+                            ) {
+                                return (
+                                    <MarkdownViewer
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        path={fullPath}
+                                        size={entry.size}
+                                    />
+                                );
+                            }
+                            if (entry.size > SMALL_FILE_LIMIT) {
+                                return (
+                                    <FileViewerPaged
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        path={fullPath}
+                                        size={entry.size}
+                                        onDownload={onDownload}
+                                    />
+                                );
+                            }
+                            return (
+                                <FileEditor
+                                    projectID={projectID}
+                                    sessionHash={sessionHash}
+                                    path={fullPath}
+                                    size={entry.size}
+                                    onSaved={onReload}
+                                />
+                            );
+                        })()}
+                    </Suspense>
+                ) : (
+                    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                        Select a single file to preview.
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }
 
@@ -529,22 +712,39 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path, preview.open]);
 
     const crumbs = splitCrumbs(dir.path);
+    // Quick-jump destinations are now rendered as a `Go to ▾` dropdown
+    // instead of a chip row, so we read the data layer directly here.
+    // quickPathsForHost is pure (see ./quickPaths.ts) and returns null
+    // while the host fetch is still in flight.
+    const quickPaths = quickPathsForHost(host);
+    const statusText = `${dir.entries.length} item${dir.entries.length === 1 ? "" : "s"}${
+        selectedEntries.length > 0
+            ? ` · ${selectedEntries.length} selected · ${humanize(
+                  selectedEntries.reduce((acc, e) => acc + (e.size || 0), 0),
+              )}`
+            : ""
+    }${!dir.eof ? ` · first ${dir.entries.length} of ${dir.total}` : ""}`;
+    // The Preview panel collapses to a 24 px right-edge rail whenever
+    // there's no concrete previewable file in scope — i.e. preview was
+    // explicitly closed, or the selection is empty / multi / non-file.
+    // The rail keeps the affordance visible without sacrificing 38 % of
+    // the viewport to a placeholder. Click rail → opens preview.
+    const previewExpanded = preview.open && !!previewEntry;
 
     return (
         <DndContext sensors={sensors}>
             <div className="flex h-full min-h-0 flex-col gap-1.5">
-                {/* Single chrome row: ↑ + ⟳ + breadcrumb on the left,
-                    QuickPaths chips on the right. Every other action
+                {/* Single chrome row: left side carries ↑ + ⟳ + breadcrumb;
+                    right side carries the listing counter, a `Go to ▾`
+                    dropdown (platform-aware quick paths), and a `View`
+                    popover (density + layout). Every other action
                     (New file / folder, Upload, Download, Rename, Chmod,
-                    Delete) lives in the right-click context menu —
-                    operators reported the previous toolbar duplicated
-                    work the menu already covers. Refresh stays as a
-                    one-click icon because re-fetching is the highest-
-                    frequency action and a context-menu round-trip read
-                    as friction in profiling. */}
+                    Delete) lives in the right-click context menu. Refresh
+                    stays as a one-click icon because re-fetching is the
+                    highest-frequency action. */}
                 <div
                     data-testid="files-chrome"
-                    className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                    className="flex items-center gap-2"
                 >
                     <div
                         data-testid="files-breadcrumb-row"
@@ -599,290 +799,288 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             );
                         })}
                     </div>
-                    <QuickPaths host={host} onSelect={dir.cd} />
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-md border">
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={density === "compact" ? "secondary" : "ghost"}
-                                aria-label="Compact density"
-                                aria-pressed={density === "compact"}
-                                onClick={() => setDensity("compact")}
-                                title="Compact rows"
-                            >
-                                <Rows3 className="size-3.5" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={density === "comfortable" ? "secondary" : "ghost"}
-                                aria-label="Comfortable density"
-                                aria-pressed={density === "comfortable"}
-                                onClick={() => setDensity("comfortable")}
-                                title="Comfortable rows"
-                            >
-                                <Rows2 className="size-3.5" />
-                            </Button>
-                        </div>
-                        <div className="flex items-center rounded-md border">
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "list" ? "secondary" : "ghost"}
-                                aria-label="List view"
-                                aria-pressed={viewMode === "list"}
-                                onClick={() => setViewMode("list")}
-                            >
-                                <LayoutList className="size-3.5" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                                aria-label="Grid view"
-                                aria-pressed={viewMode === "grid"}
-                                onClick={() => setViewMode("grid")}
-                            >
-                                <LayoutGrid className="size-3.5" />
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Browser + preview split. ResizablePanelGroup handles
-                    the drag handle, keyboard nudges, and percent-based
-                    persistence (autoSaveId → localStorage). The inner
-                    panels stretch to h-full so the rounded border + scroll
-                    container chrome lives inside each panel rather than
-                    on the panel wrapper itself. */}
-                <ResizablePanelGroup
-                    direction="horizontal"
-                    autoSaveId="files-preview-split"
-                    className="min-h-0 flex-1"
-                >
-                    <ResizablePanel
-                        id="files-list"
-                        defaultSize={preview.open ? 62 : 100}
-                        minSize={30}
-                        className="flex"
+                    {/* Listing counter — operators previously had to glance
+                        at a separate bottom strip for "N items, M selected"
+                        which broke flow when navigating by click. Inlined
+                        here so both the path and the cardinality live in
+                        the same eye-line. */}
+                    <span
+                        data-testid="files-status"
+                        className="hidden whitespace-nowrap text-[11px] text-muted-foreground sm:inline"
                     >
-                    <FileContextMenu
-                        variant={{ kind: "empty" }}
-                        onNewFile={() => setShowNewFile(true)}
-                        onNewFolder={() => setShowNewFolder(true)}
-                        onUploadHere={handleUploadClick}
-                        onRefresh={dir.reload}
-                    >
-                        <div
-                            className={cn(
-                                "h-full w-full overflow-auto rounded-md border",
-                                dragOver && "bg-accent/40 outline outline-2 outline-primary",
-                            )}
-                            {...dropHandlers}
-                        >
-                            {dir.error ? (
-                                <div className="p-6 text-sm text-red-500">
-                                    Load error: {dir.error}
-                                </div>
-                            ) : viewMode === "grid" ? (
-                                <FileGrid
-                                    entries={dir.entries}
-                                    currentPath={dir.path}
-                                    selectedNames={selected}
-                                    setSelectedNames={setSelected}
-                                    onOpen={openEntry}
-                                    onInternalMove={handleInternalMove}
-                                    projectID={projectID}
-                                    sessionHash={sessionHash}
-                                    wrapRow={wrapRowWithContextMenu}
-                                />
-                            ) : (
-                                <FileTable
-                                    entries={dir.entries}
-                                    currentPath={dir.path}
-                                    selectedNames={selected}
-                                    setSelectedNames={setSelected}
-                                    onOpen={openEntry}
-                                    sorting={sorting}
-                                    setSorting={setSorting}
-                                    onInternalMove={handleInternalMove}
-                                    wrapRow={wrapRowWithContextMenu}
-                                    density={density}
-                                />
-                            )}
-                        </div>
-                    </FileContextMenu>
-                    </ResizablePanel>
-                    {preview.open && (
-                        <>
-                            <ResizableHandle className="mx-1 bg-transparent" />
-                            <ResizablePanel
-                                id="files-preview"
-                                defaultSize={38}
-                                minSize={20}
-                                maxSize={70}
-                                className="flex"
+                        {statusText}
+                    </span>
+                    {quickPaths && quickPaths.length > 0 && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    aria-label="Go to common path"
+                                    title="Go to common path"
+                                    data-testid="files-goto"
+                                >
+                                    <MapIcon className="size-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[180px]">
+                                <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {quickPaths.map((p) => (
+                                    <DropdownMenuItem
+                                        key={p.path}
+                                        onSelect={() => dir.cd(p.path)}
+                                        title={p.title}
+                                        className="font-mono text-xs"
+                                    >
+                                        {p.label}
+                                        <span className="ml-auto text-[10px] text-muted-foreground">
+                                            {p.path}
+                                        </span>
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label="View options"
+                                title="View options"
+                                data-testid="files-view"
                             >
-                        <div
-                            className="flex h-full w-full flex-col overflow-hidden rounded-md border"
-                            data-testid="preview-pane"
+                                <SlidersHorizontal className="size-3.5" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            align="end"
+                            className="w-auto min-w-[200px] p-3"
                         >
-                            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
-                                <span className="truncate font-mono">
-                                    {previewEntry?.name ?? "Preview"}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    {/* Edit / View toggle — only meaningful for
-                                        kinds that have a distinct rendered
-                                        view (today: markdown). For "text" the
-                                        editor is the only viewer, so the
-                                        toggle button stays hidden to avoid
-                                        suggesting a non-existent "view"
-                                        mode. The button is the discoverable
-                                        sibling to the right-click "Edit"
-                                        item on the row. */}
-                                    {canToggleEdit && previewKind === "markdown" && (
+                            <div className="flex flex-col gap-3 text-xs">
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                        Density
+                                    </span>
+                                    <div className="flex items-center rounded-md border">
                                         <Button
                                             type="button"
                                             size="icon-sm"
-                                            variant="ghost"
-                                            aria-label={editMode ? "View rendered" : "Edit source"}
-                                            title={editMode ? "View rendered" : "Edit source"}
-                                            aria-pressed={editMode}
-                                            onClick={() => setEditMode((v) => !v)}
+                                            variant={density === "compact" ? "secondary" : "ghost"}
+                                            aria-label="Compact density"
+                                            aria-pressed={density === "compact"}
+                                            onClick={() => setDensity("compact")}
+                                            title="Compact rows"
                                         >
-                                            {editMode ? (
-                                                <Eye className="size-3.5" />
-                                            ) : (
-                                                <Pencil className="size-3.5" />
-                                            )}
+                                            <Rows3 className="size-3.5" />
                                         </Button>
-                                    )}
-                                    <Button
-                                        type="button"
-                                        size="icon-sm"
-                                        variant="ghost"
-                                        aria-label="Close preview"
-                                        onClick={preview.close}
-                                    >
-                                        <X className="size-3.5" />
-                                    </Button>
+                                        <Button
+                                            type="button"
+                                            size="icon-sm"
+                                            variant={density === "comfortable" ? "secondary" : "ghost"}
+                                            aria-label="Comfortable density"
+                                            aria-pressed={density === "comfortable"}
+                                            onClick={() => setDensity("comfortable")}
+                                            title="Comfortable rows"
+                                        >
+                                            <Rows2 className="size-3.5" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                        Layout
+                                    </span>
+                                    <div className="flex items-center rounded-md border">
+                                        <Button
+                                            type="button"
+                                            size="icon-sm"
+                                            variant={viewMode === "list" ? "secondary" : "ghost"}
+                                            aria-label="List view"
+                                            aria-pressed={viewMode === "list"}
+                                            onClick={() => setViewMode("list")}
+                                        >
+                                            <LayoutList className="size-3.5" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="icon-sm"
+                                            variant={viewMode === "grid" ? "secondary" : "ghost"}
+                                            aria-label="Grid view"
+                                            aria-pressed={viewMode === "grid"}
+                                            onClick={() => setViewMode("grid")}
+                                        >
+                                            <LayoutGrid className="size-3.5" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-hidden">
-                                {previewEntry ? (
-                                    <Suspense
-                                        fallback={
-                                            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-                                                <Loader2 className="size-4 animate-spin" />
-                                                Loading editor…
-                                            </div>
-                                        }
-                                    >
-                                        {(() => {
-                                            const fullPath = joinPath(dir.path, previewEntry.name);
-                                            const kind = pickViewerKind(previewEntry.mime, previewEntry.name);
-                                            if (kind === "image") {
-                                                return (
-                                                    <ImageViewer
-                                                        projectID={projectID}
-                                                        sessionHash={sessionHash}
-                                                        path={fullPath}
-                                                        size={previewEntry.size}
-                                                        mime={previewEntry.mime}
-                                                    />
-                                                );
-                                            }
-                                            if (kind === "pdf") {
-                                                return (
-                                                    <PdfViewer
-                                                        projectID={projectID}
-                                                        sessionHash={sessionHash}
-                                                        path={fullPath}
-                                                        size={previewEntry.size}
-                                                    />
-                                                );
-                                            }
-                                            if (kind === "video" || kind === "audio") {
-                                                return (
-                                                    <MediaViewer
-                                                        projectID={projectID}
-                                                        sessionHash={sessionHash}
-                                                        path={fullPath}
-                                                        size={previewEntry.size}
-                                                        kind={kind}
-                                                        mime={previewEntry.mime}
-                                                    />
-                                                );
-                                            }
-                                            if (
-                                                kind === "markdown" &&
-                                                previewEntry.size <= SMALL_FILE_LIMIT &&
-                                                !editMode
-                                            ) {
-                                                return (
-                                                    <MarkdownViewer
-                                                        projectID={projectID}
-                                                        sessionHash={sessionHash}
-                                                        path={fullPath}
-                                                        size={previewEntry.size}
-                                                    />
-                                                );
-                                            }
-                                            if (previewEntry.size > SMALL_FILE_LIMIT) {
-                                                return (
-                                                    <FileViewerPaged
-                                                        projectID={projectID}
-                                                        sessionHash={sessionHash}
-                                                        path={fullPath}
-                                                        size={previewEntry.size}
-                                                        onDownload={handleDownloadClick}
-                                                    />
-                                                );
-                                            }
-                                            return (
-                                                <FileEditor
-                                                    projectID={projectID}
-                                                    sessionHash={sessionHash}
-                                                    path={fullPath}
-                                                    size={previewEntry.size}
-                                                    onSaved={dir.reload}
-                                                />
-                                            );
-                                        })()}
-                                    </Suspense>
-                                ) : (
-                                    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-                                        Select a single file to preview.
+                        </PopoverContent>
+                    </Popover>
+                </div>
+
+                {/* Browser + preview split. The preview pane is "either /
+                    or": when a single previewable file is selected and the
+                    pane is open, it renders as a resizable panel (panel
+                    group autoSaveId persists the width). Otherwise it
+                    collapses to a 24 px right-edge rail so the listing
+                    reclaims the full width — no more 38 % wasted on a
+                    "Select a single file to preview" placeholder. The two
+                    branches don't share the same ResizablePanelGroup
+                    because the rail must sit *outside* the group; mounting
+                    it inside as a fixed-width sibling fights the
+                    percent-based layout the panel group uses. */}
+                {previewExpanded ? (
+                    <ResizablePanelGroup
+                        direction="horizontal"
+                        autoSaveId="files-preview-split"
+                        className="min-h-0 flex-1"
+                    >
+                        <ResizablePanel id="files-list" defaultSize={62} minSize={30} className="flex">
+                            <FileContextMenu
+                                variant={{ kind: "empty" }}
+                                onNewFile={() => setShowNewFile(true)}
+                                onNewFolder={() => setShowNewFolder(true)}
+                                onUploadHere={handleUploadClick}
+                                onRefresh={dir.reload}
+                            >
+                                <div
+                                    className={cn(
+                                        "h-full w-full overflow-auto rounded-md border",
+                                        dragOver && "bg-accent/40 outline outline-2 outline-primary",
+                                    )}
+                                    {...dropHandlers}
+                                >
+                                    {dir.error ? (
+                                        <div className="p-6 text-sm text-red-500">
+                                            Load error: {dir.error}
+                                        </div>
+                                    ) : viewMode === "grid" ? (
+                                        <FileGrid
+                                            entries={dir.entries}
+                                            currentPath={dir.path}
+                                            selectedNames={selected}
+                                            setSelectedNames={setSelected}
+                                            onOpen={openEntry}
+                                            onInternalMove={handleInternalMove}
+                                            projectID={projectID}
+                                            sessionHash={sessionHash}
+                                            wrapRow={wrapRowWithContextMenu}
+                                        />
+                                    ) : (
+                                        <FileTable
+                                            entries={dir.entries}
+                                            currentPath={dir.path}
+                                            selectedNames={selected}
+                                            setSelectedNames={setSelected}
+                                            onOpen={openEntry}
+                                            sorting={sorting}
+                                            setSorting={setSorting}
+                                            onInternalMove={handleInternalMove}
+                                            wrapRow={wrapRowWithContextMenu}
+                                            density={density}
+                                        />
+                                    )}
+                                </div>
+                            </FileContextMenu>
+                        </ResizablePanel>
+                        <ResizableHandle className="mx-1 bg-transparent" />
+                        <ResizablePanel
+                            id="files-preview"
+                            defaultSize={38}
+                            minSize={20}
+                            maxSize={70}
+                            className="flex"
+                        >
+                            <PreviewPaneShell
+                                entry={previewEntry}
+                                canToggleEdit={canToggleEdit}
+                                previewKind={previewKind}
+                                editMode={editMode}
+                                setEditMode={setEditMode}
+                                onClose={preview.close}
+                                projectID={projectID}
+                                sessionHash={sessionHash}
+                                dirPath={dir.path}
+                                onDownload={handleDownloadClick}
+                                onReload={dir.reload}
+                            />
+                        </ResizablePanel>
+                    </ResizablePanelGroup>
+                ) : (
+                    <div className="flex min-h-0 flex-1 gap-1">
+                        <FileContextMenu
+                            variant={{ kind: "empty" }}
+                            onNewFile={() => setShowNewFile(true)}
+                            onNewFolder={() => setShowNewFolder(true)}
+                            onUploadHere={handleUploadClick}
+                            onRefresh={dir.reload}
+                        >
+                            <div
+                                className={cn(
+                                    "h-full flex-1 overflow-auto rounded-md border",
+                                    dragOver && "bg-accent/40 outline outline-2 outline-primary",
+                                )}
+                                {...dropHandlers}
+                            >
+                                {dir.error ? (
+                                    <div className="p-6 text-sm text-red-500">
+                                        Load error: {dir.error}
                                     </div>
+                                ) : viewMode === "grid" ? (
+                                    <FileGrid
+                                        entries={dir.entries}
+                                        currentPath={dir.path}
+                                        selectedNames={selected}
+                                        setSelectedNames={setSelected}
+                                        onOpen={openEntry}
+                                        onInternalMove={handleInternalMove}
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        wrapRow={wrapRowWithContextMenu}
+                                    />
+                                ) : (
+                                    <FileTable
+                                        entries={dir.entries}
+                                        currentPath={dir.path}
+                                        selectedNames={selected}
+                                        setSelectedNames={setSelected}
+                                        onOpen={openEntry}
+                                        sorting={sorting}
+                                        setSorting={setSorting}
+                                        onInternalMove={handleInternalMove}
+                                        wrapRow={wrapRowWithContextMenu}
+                                        density={density}
+                                    />
                                 )}
                             </div>
-                        </div>
-                            </ResizablePanel>
-                        </>
-                    )}
-                </ResizablePanelGroup>
-
-                {/* Bottom status strip — "X items / Y selected" only.
-                    The density + view-mode toggles moved up to the
-                    chrome row so they stay pinned while the file list
-                    scrolls. */}
-                <div
-                    data-testid="files-status-strip"
-                    className="flex items-center border-t pt-0.5 text-[11px] text-muted-foreground"
-                >
-                    <span>
-                        {dir.entries.length} item
-                        {dir.entries.length === 1 ? "" : "s"}
-                        {selectedEntries.length > 0 &&
-                            ` · ${selectedEntries.length} selected · ${humanize(
-                                selectedEntries.reduce((acc, e) => acc + (e.size || 0), 0),
-                            )}`}
-                        {!dir.eof &&
-                            ` · showing first ${dir.entries.length} of ${dir.total}`}
-                    </span>
-                </div>
+                        </FileContextMenu>
+                        {/* Right-edge rail: a 24 px column that keeps the
+                            "open preview" affordance visible at all times.
+                            Click expands to the full panel; if the
+                            current selection isn't a previewable file,
+                            the panel mounts on the placeholder. The
+                            tooltip explains the behaviour without
+                            stealing space. */}
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    aria-label="Open preview"
+                                    data-testid="files-preview-rail"
+                                    onClick={() => preview.setOpen(true)}
+                                    className="flex w-6 shrink-0 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                >
+                                    <PanelRightOpen className="size-3.5" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Preview</TooltipContent>
+                        </Tooltip>
+                    </div>
+                )}
             </div>
 
             <FolderArchiveDialog
