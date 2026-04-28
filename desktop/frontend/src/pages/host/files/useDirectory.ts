@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ListDir } from "@wails/go/app/App";
 import type { FileEntryDTO } from "@wails/go/app/App";
@@ -62,9 +62,13 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
         // entry around briefly so a quick "Up → re-cd same dir"
         // round-trip feels instant.
         staleTime: 5_000,
-        // Persist the last-visited path on every successful fetch.
-        // Putting this in the queryFn keeps the side effect tied to
-        // an actual successful directory load.
+        // `placeholderData: keepPreviousData` keeps the previous
+        // directory's entries rendered while the new path's fetch is
+        // in flight. Without this the grid blanks for the duration of
+        // every cd round-trip — bad UX, and the original
+        // useState-driven implementation (commit 92f9c94) preserved
+        // the entries explicitly via `setState({...s, loading:true})`.
+        placeholderData: keepPreviousData,
     });
 
     useEffect(() => {

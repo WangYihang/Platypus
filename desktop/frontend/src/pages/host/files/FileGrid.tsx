@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Fragment } from "react";
 import { useDraggable, useDroppable, useDndMonitor } from "@dnd-kit/core";
 import { File, FileSymlink, Folder } from "lucide-react";
@@ -34,16 +35,7 @@ function isImageEntry(e: FileEntryDTO): boolean {
     return false;
 }
 
-function Tile({
-    entry,
-    isSelected,
-    onSelectChange,
-    onOpen,
-    isDroppable,
-    projectID,
-    sessionHash,
-    fullPath,
-}: {
+interface TileProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onSelect"> {
     entry: FileEntryDTO;
     isSelected: boolean;
     onSelectChange: (e: React.MouseEvent) => void;
@@ -52,7 +44,32 @@ function Tile({
     projectID?: string;
     sessionHash?: string;
     fullPath?: string;
-}) {
+}
+
+// `forwardRef` + spread of `...rest` is load-bearing: the per-row
+// FileContextMenu wraps each Tile via `<ContextMenuTrigger asChild>`,
+// which clones the child to attach an `onContextMenu` listener and a
+// ref. Without forwardRef + props passthrough Radix has no way to
+// reach the underlying <button>, the inner trigger silently does
+// nothing, and right-clicks bubble up to the outer empty-area
+// trigger — so the user sees the New file / Upload here menu instead
+// of the row's Open / Download / Rename / Delete menu.
+const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile(
+    {
+        entry,
+        isSelected,
+        onSelectChange,
+        onOpen,
+        isDroppable,
+        projectID,
+        sessionHash,
+        fullPath,
+        onClick: extraOnClick,
+        onDoubleClick: extraOnDoubleClick,
+        ...rest
+    },
+    forwardedRef,
+) {
     const drag = useDraggable({
         id: `grid-row:${entry.name}`,
         data: { entry },
@@ -63,9 +80,11 @@ function Tile({
         disabled: !isDroppable,
     });
 
-    const setRefs = (node: HTMLElement | null) => {
+    const setRefs = (node: HTMLButtonElement | null) => {
         drag.setNodeRef(node);
         if (isDroppable) drop.setNodeRef(node);
+        if (typeof forwardedRef === "function") forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
     };
 
     const showThumb =
@@ -94,10 +113,17 @@ function Tile({
                 drop.isOver && isDroppable && "outline outline-2 outline-primary",
                 drag.isDragging && "opacity-60",
             )}
-            onClick={onSelectChange}
-            onDoubleClick={onOpen}
+            onClick={(e) => {
+                onSelectChange(e);
+                extraOnClick?.(e);
+            }}
+            onDoubleClick={(e) => {
+                onOpen();
+                extraOnDoubleClick?.(e);
+            }}
             {...drag.listeners}
             {...drag.attributes}
+            {...rest}
         >
             <div className="flex size-12 items-center justify-center overflow-hidden rounded bg-muted">
                 {entry.isDir ? (
@@ -121,7 +147,7 @@ function Tile({
             )}
         </button>
     );
-}
+});
 
 export default function FileGrid({
     entries,

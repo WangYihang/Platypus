@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Fragment, useMemo } from "react";
 import {
     flexRender,
@@ -54,21 +55,36 @@ interface Props {
 // DraggableRow wires dnd-kit's drag source to a single entry row. We
 // keep the drag id equal to the entry name so DndMonitor in the parent
 // can reconstruct the (from, to) pair without a custom data payload.
-function DraggableRow({
-    entry,
-    isSelected,
-    onSelectChange,
-    onOpen,
-    isDroppable,
-    children,
-}: {
+//
+// `forwardRef` + `...rest` spread is load-bearing: per-row right-click
+// menus wrap each <DraggableRow> via `<ContextMenuTrigger asChild>`,
+// which clones the child to attach an `onContextMenu` listener and a
+// ref. Without these the contextmenu event bubbles up to the outer
+// empty-area trigger and the user sees the New file / Upload here
+// menu instead of the row's Open / Download / Rename / Delete menu.
+interface DraggableRowProps extends Omit<React.HTMLAttributes<HTMLTableRowElement>, "onSelect"> {
     entry: FileEntryDTO;
     isSelected: boolean;
     onSelectChange: (e: React.MouseEvent) => void;
     onOpen: () => void;
     isDroppable: boolean;
     children: React.ReactNode;
-}) {
+}
+
+const DraggableRow = React.forwardRef<HTMLTableRowElement, DraggableRowProps>(function DraggableRow(
+    {
+        entry,
+        isSelected,
+        onSelectChange,
+        onOpen,
+        isDroppable,
+        children,
+        onClick: extraOnClick,
+        onDoubleClick: extraOnDoubleClick,
+        ...rest
+    },
+    forwardedRef,
+) {
     const drag = useDraggable({
         id: `row:${entry.name}`,
         data: { entry },
@@ -79,9 +95,11 @@ function DraggableRow({
         disabled: !isDroppable,
     });
 
-    const setRefs = (node: HTMLElement | null) => {
+    const setRefs = (node: HTMLTableRowElement | null) => {
         drag.setNodeRef(node);
         if (isDroppable) drop.setNodeRef(node);
+        if (typeof forwardedRef === "function") forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
     };
 
     return (
@@ -94,15 +112,22 @@ function DraggableRow({
                 drop.isOver && isDroppable && "outline outline-2 outline-primary",
                 drag.isDragging && "opacity-60",
             )}
-            onClick={onSelectChange}
-            onDoubleClick={onOpen}
+            onClick={(e) => {
+                onSelectChange(e);
+                extraOnClick?.(e);
+            }}
+            onDoubleClick={(e) => {
+                onOpen();
+                extraOnDoubleClick?.(e);
+            }}
             {...drag.listeners}
             {...drag.attributes}
+            {...rest}
         >
             {children}
         </TableRow>
     );
-}
+});
 
 export default function FileTable({
     entries,
