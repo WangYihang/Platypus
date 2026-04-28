@@ -10,6 +10,30 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
+// PAT is the typed view of an auth_tokens row with kind='pat': a
+// long-lived, user-issued personal access token. Scopes are stamped
+// at issue time and capped against the user's live role at verify
+// time (see internal/api token verifier). project_id and role stay
+// NULL on the row — PATs bind to the user, not a project, and inherit
+// the user's current role rather than freezing one.
+type PAT struct {
+	TokenID       string
+	SecretHash    []byte
+	UserID        string
+	Name          string
+	Description   string
+	Scopes        []string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	LastUsedAt    *time.Time
+	LastUsedIP    string
+	UserAgent     string
+	Revoked       bool
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
+}
+
 // UserSession is the typed view of an auth_tokens row with kind=
 // 'user_session'. Roles / scopes are intentionally absent — sessions
 // inherit them from the live users.role at verify time so a demoted
@@ -37,6 +61,95 @@ func (db *DB) AuthTokens() *AuthTokenRepo { return &AuthTokenRepo{db: db.DB} }
 
 type AuthTokenRepo struct {
 	db *sql.DB
+}
+
+// CreatePAT inserts a row representing a freshly-minted user PAT. The
+// caller has already hashed the secret. Validates the input shape
+// against what the table CHECK requires so the error message points
+// at the offending field instead of returning a generic CHECK failure.
+func (r *AuthTokenRepo) CreatePAT(ctx context.Context, p *PAT) error {
+	if err := validatePAT(p); err != nil {
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO auth_tokens (
+			token_id, kind, secret_hash, user_id,
+			name, description,
+			created_at, expires_at,
+			scopes
+		) VALUES (?, 'pat', ?, ?, ?, ?, ?, ?, ?)`,
+		p.TokenID,
+		p.SecretHash,
+		p.UserID,
+		p.Name,
+		nullableString(p.Description),
+		p.CreatedAt.UTC(),
+		p.ExpiresAt.UTC(),
+		optoken.FormatList(p.Scopes),
+	)
+	return err
+}
+
+func validatePAT(p *PAT) error {
+	switch {
+	case p == nil:
+		return errors.New("storage: PAT is nil")
+	case p.TokenID == "":
+		return errors.New("storage: PAT.TokenID empty")
+	case p.UserID == "":
+		return errors.New("storage: PAT.UserID empty")
+	case p.Name == "":
+		return errors.New("storage: PAT.Name empty (required by CHECK)")
+	case len(p.Scopes) == 0:
+		return errors.New("storage: PAT.Scopes empty (required by CHECK)")
+	case len(p.SecretHash) == 0:
+		return errors.New("storage: PAT.SecretHash empty")
+	case p.CreatedAt.IsZero():
+		return errors.New("storage: PAT.CreatedAt unset")
+	case p.ExpiresAt.IsZero():
+		return errors.New("storage: PAT.ExpiresAt unset")
+	}
+	return nil
+}
+
+// GetPAT fetches a single PAT by id. ErrNotFound for missing rows;
+// the kind filter rejects rows of any other kind so the typed accessor
+// never silently leaks a session row as a PAT.
+func (r *AuthTokenRepo) GetPAT(ctx context.Context, tokenID string) (*PAT, error) {
+	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = 'pat'`, tokenID)
+	rec, err := scanAuthTokenRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rowToPAT(rec), nil
+}
+
+// ListPATsForUser returns the PATs a user owns, newest first. When
+// includeRevoked is false, revoked rows are filtered server-side.
+// Drives the Tokens tab on the /account page.
+func (r *AuthTokenRepo) ListPATsForUser(ctx context.Context, userID string, includeRevoked bool) ([]*PAT, error) {
+	q := baseSelect + ` WHERE kind = 'pat' AND user_id = ?`
+	if !includeRevoked {
+		q += ` AND revoked_at IS NULL`
+	}
+	q += ` ORDER BY created_at DESC`
+	rows, err := r.db.QueryContext(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*PAT
+	for rows.Next() {
+		rec, err := scanAuthTokenRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rowToPAT(rec))
+	}
+	return out, rows.Err()
 }
 
 // CreateSession inserts an auth_tokens row with kind='user_session'.
@@ -296,6 +409,33 @@ func scanAuthTokenRow(s rowScanner) (*authTokenRow, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+func rowToPAT(r *authTokenRow) *PAT {
+	p := &PAT{
+		TokenID:       r.tokenID,
+		SecretHash:    r.secretHash,
+		UserID:        r.userID,
+		Name:          r.name.String,
+		Description:   r.description.String,
+		Scopes:        optoken.ParseList(r.scopesStr.String),
+		CreatedAt:     r.createdAt,
+		ExpiresAt:     r.expiresAt,
+		LastUsedIP:    r.lastUsedIP.String,
+		UserAgent:     r.userAgent.String,
+		Revoked:       r.revokedAt.Valid,
+		RevokedByUser: r.revokedByUser.String,
+		RevokedReason: r.revokedReason.String,
+	}
+	if r.lastUsedAt.Valid {
+		t := r.lastUsedAt.Time
+		p.LastUsedAt = &t
+	}
+	if r.revokedAt.Valid {
+		t := r.revokedAt.Time
+		p.RevokedAt = &t
+	}
+	return p
 }
 
 func rowToSession(r *authTokenRow) *UserSession {

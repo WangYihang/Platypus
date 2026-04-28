@@ -8,6 +8,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/api"
 	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/storage"
+	"github.com/WangYihang/Platypus/internal/user"
 )
 
 // verifierTestSetup creates an in-memory db, seeds a user, creates a
@@ -223,6 +224,80 @@ func TestTokenVerifier_CacheHitWrongSecret(t *testing.T) {
 	}
 	if reason == "success" {
 		t.Errorf("reason = success on tampered secret with cached id (must reject)")
+	}
+}
+
+// TestTokenVerifier_PAT_RoleDowngradeShrinksScopes pins the security
+// guarantee that a PAT issued at admin time loses write scopes the
+// moment the holder is demoted, even though the on-row scope set
+// still claims them. The verifier intersects the stored scope set
+// against the user's live role-derived ceiling at every Verify.
+func TestTokenVerifier_PAT_RoleDowngradeShrinksScopes(t *testing.T) {
+	t.Parallel()
+
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("storage.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Seed an admin user.
+	if _, err := db.Exec(`
+		INSERT INTO users (id, username, password_hash, role, created_at)
+		VALUES ('u-pat','u-pat','x','admin',?)`, time.Now().UTC()); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	// Issue a PAT with the full admin scope set.
+	id, secret, hash, plaintext, err := optoken.Generate(optoken.PATPrefix)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	now := time.Now().UTC()
+	pat := &storage.PAT{
+		TokenID:    id,
+		SecretHash: hash,
+		UserID:     "u-pat",
+		Name:       "downgrade-test",
+		Scopes:     optoken.ScopesFromRole(user.RoleAdmin),
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(24 * time.Hour),
+	}
+	if err := db.AuthTokens().CreatePAT(context.Background(), pat); err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	_ = secret
+
+	cache := optoken.NewCache(64, 30*time.Second)
+	v := api.NewTokenVerifier(db, cache)
+
+	p, reason, err := v.Verify(context.Background(), plaintext)
+	if err != nil || reason != "success" || p == nil {
+		t.Fatalf("first Verify: reason=%q err=%v p=%v", reason, err, p)
+	}
+	if !optoken.HasScope(p.Scopes, optoken.ScopeHostsExec) {
+		t.Errorf("admin PAT missing hosts:exec at issue time: %v", p.Scopes)
+	}
+
+	// Demote the user to viewer and bust the cache so the next
+	// Verify takes the DB+intersection path.
+	if _, err := db.Exec(`UPDATE users SET role='viewer' WHERE id='u-pat'`); err != nil {
+		t.Fatalf("demote: %v", err)
+	}
+	v.Invalidate(id)
+
+	p, reason, err = v.Verify(context.Background(), plaintext)
+	if err != nil || reason != "success" || p == nil {
+		t.Fatalf("post-demote Verify: reason=%q err=%v p=%v", reason, err, p)
+	}
+	if optoken.HasScope(p.Scopes, optoken.ScopeHostsExec) {
+		t.Errorf("demoted-user PAT still carries hosts:exec: %v", p.Scopes)
+	}
+	if !optoken.HasScope(p.Scopes, optoken.ScopeHostsRead) {
+		t.Errorf("demoted-user PAT lost hosts:read (should still survive — viewer holds it): %v", p.Scopes)
+	}
+	if p.Role != user.RoleViewer {
+		t.Errorf("Role on principal = %q, want viewer (live role refresh)", p.Role)
 	}
 }
 

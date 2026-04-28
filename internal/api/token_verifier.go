@@ -90,11 +90,15 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 	}
 
 	// Sessions inherit role/username from the live users row so a
-	// demote takes effect within one cache TTL (≤30s). Scoped tokens keep
-	// their on-row role/scope — issuer-time intent is the source of
-	// truth for tokens. A users row that has been deleted out from
-	// under a session yields auth failure (treated as revoked).
-	if kind == optoken.KindUserSession {
+	// demote takes effect within one cache TTL (≤30s). PATs do the
+	// same role refresh AND intersect their stored scope set against
+	// the user's current role-derived ceiling — so a token issued at
+	// admin time loses write scopes the moment the holder is demoted
+	// to viewer, even though the on-row scopes still claim them.
+	// A users row deleted out from under a token yields auth failure
+	// (treated as revoked).
+	switch kind {
+	case optoken.KindUserSession:
 		u, err := v.db.Users().GetByID(ctx, verified.UserID)
 		if err != nil {
 			return nil, "revoked", nil
@@ -102,6 +106,14 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 		verified.Role = u.Role
 		verified.Username = u.Username
 		verified.Scopes = optoken.ScopesFromRole(u.Role)
+	case optoken.KindPAT:
+		u, err := v.db.Users().GetByID(ctx, verified.UserID)
+		if err != nil {
+			return nil, "revoked", nil
+		}
+		verified.Role = u.Role
+		verified.Username = u.Username
+		verified.Scopes = optoken.IntersectScopes(verified.Scopes, optoken.ScopesFromRole(u.Role))
 	}
 
 	v.cache.Put(id, verified)
