@@ -154,6 +154,105 @@ func TestTerminalV2_StdoutBridge(t *testing.T) {
 	t.Fatalf("did not see expected stdout; got %q", got)
 }
 
+// Browser-close should immediately tear down the agent-side
+// PROCESS_OPEN stream. Before the cross-cancel fix the WS-read pump
+// closed only the in-handler `done` channel; the main pump remained
+// blocked in link.ReadFrame waiting on the agent, leaking a
+// goroutine + a yamux stream + (in production) the agent-side PTY
+// process for as long as the agent was silent.
+//
+// Reproduce: a fake agent that holds the stream open without ever
+// writing an Exit frame. The browser closes the WS. The agent-side
+// stream MUST observe EOF/error within a tight bound; if it doesn't,
+// the leak is back.
+func TestTerminalV2_BrowserCloseTearsDownAgentStream(t *testing.T) {
+	const agentID = "agent-term-leak"
+	fixture := newAgentRouteFixture(t, agentID)
+
+	svc := core.NewAgentLinkService()
+	clientConn, serverConn := net.Pipe()
+	serverCh := make(chan *link.Session, 1)
+	go func() {
+		s, err := link.NewServerSession(serverConn)
+		if err != nil {
+			t.Errorf("server session: %v", err)
+			return
+		}
+		serverCh <- s
+	}()
+	agentSess, err := link.NewClientSession(clientConn)
+	if err != nil {
+		t.Fatalf("client session: %v", err)
+	}
+	peer := <-serverCh
+	svc.Register(agentID, agentSess)
+	t.Cleanup(func() {
+		agentSess.Close()
+		peer.Close()
+	})
+
+	// Agent loop: accept the PROCESS_OPEN, ack it, then go silent and
+	// only return when the stream itself observes an error (which is
+	// what we want the handler to cause on browser disconnect).
+	streamClosed := make(chan error, 1)
+	go func() {
+		hdr, stream, err := peer.Accept()
+		if err != nil {
+			streamClosed <- err
+			return
+		}
+		if hdr.Type != v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN {
+			_ = stream.Close()
+			streamClosed <- nil
+			return
+		}
+		_ = link.WriteFrame(stream, &v2pb.ProcessOpenResponse{Pid: 4321})
+		// Block on read. We expect the handler to close the stream
+		// (cascade from browser-close) so this returns within a
+		// reasonable bound.
+		buf := make([]byte, 64)
+		_, readErr := stream.Read(buf)
+		_ = stream.Close()
+		streamClosed <- readErr
+	}()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	RegisterV2TerminalRoute(r, svc, fixture.RBAC, nil)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+
+	dialCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	wsURL := strings.Replace(srv.URL, "http://", "ws://", 1) +
+		fixture.URL("/terminal/ws")
+	c, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + fixture.Token}},
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	if err := c.Write(dialCtx, websocket.MessageBinary,
+		[]byte(`1{"columns":80,"rows":24}`)); err != nil {
+		t.Fatalf("write resize: %v", err)
+	}
+
+	// Browser close. After this the handler must propagate teardown
+	// to the agent-side stream — that's the bug we're guarding.
+	_ = c.Close(websocket.StatusNormalClosure, "bye")
+
+	select {
+	case err := <-streamClosed:
+		if err == nil || err == io.EOF {
+			return // expected: handler closed the stream
+		}
+		// Any error is acceptable evidence the stream was torn down.
+		return
+	case <-time.After(3 * time.Second):
+		t.Fatal("agent-side stream still open 3s after browser close: handler did not propagate WS-close into stream teardown")
+	}
+}
+
 // Unknown agent id (no live link.Session) → 404 on the HTTP Upgrade.
 // The host row + project membership are pre-seeded by the fixture so
 // the request makes it past the auth and project-scope gates and
