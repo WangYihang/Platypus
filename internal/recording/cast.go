@@ -98,22 +98,30 @@ func NewWriter(path string, h Header) (*Writer, error) {
 		return nil, fmt.Errorf("recording: write header: %w", err)
 	}
 
+	// Use time.Now() (not time.Unix(h.Timestamp, 0)) so the writer's
+	// reference instant carries:
+	//   * sub-second precision — h.Timestamp is integer seconds, which
+	//     would otherwise smear up to one second of drift onto the
+	//     first event's delta.
+	//   * Go's monotonic clock reading — time.Unix() strips it, which
+	//     means time.Since() against that start would fall back to the
+	//     wall clock and could produce negative deltas across NTP step
+	//     adjustments.
 	return &Writer{
 		path:         path,
-		start:        time.Unix(h.Timestamp, 0),
+		start:        time.Now(),
 		f:            f,
 		bytesWritten: int64(n),
 	}, nil
 }
 
 // WriteOutput appends an output event ("o") with the bytes the agent
-// produced. delta is computed from now - start so the player paces
-// playback in real time. A zero-length payload is a no-op.
+// produced. A zero-length payload is a no-op.
 func (w *Writer) WriteOutput(data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
-	return w.writeEvent(time.Now(), "o", string(data))
+	return w.writeEvent("o", string(data))
 }
 
 // WriteInput appends an input event ("i"). asciinema v2 supports it
@@ -124,7 +132,7 @@ func (w *Writer) WriteInput(data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
-	return w.writeEvent(time.Now(), "i", string(data))
+	return w.writeEvent("i", string(data))
 }
 
 // WriteResize appends a resize event ("r") with the new pty
@@ -136,7 +144,7 @@ func (w *Writer) WriteResize(cols, rows uint32) error {
 	if cols == 0 || rows == 0 {
 		return nil
 	}
-	return w.writeEvent(time.Now(), "r", fmt.Sprintf("%dx%d", cols, rows))
+	return w.writeEvent("r", fmt.Sprintf("%dx%d", cols, rows))
 }
 
 // writeEvent serialises one event tuple. asciinema uses a top-level
@@ -144,15 +152,26 @@ func (w *Writer) WriteResize(cols, rows uint32) error {
 // the line because json.Marshal of `[]any{f, s, p}` produces the same
 // shape but allocates two intermediate slices per event; for a chatty
 // shell session that adds up.
-func (w *Writer) writeEvent(at time.Time, kind, payload string) error {
+//
+// The delta is computed UNDER the mutex (not in the caller). Two
+// concurrent goroutines — one writing stdin echoes, one writing
+// stdout coming back from the agent — would otherwise capture
+// time.Now() before serialising into different orders, breaking the
+// non-decreasing time invariant the asciicast spec requires.
+func (w *Writer) writeEvent(kind, payload string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
 		return errors.New("recording: writer closed")
 	}
 
-	delta := at.Sub(w.start).Seconds()
+	delta := time.Since(w.start).Seconds()
 	if delta < 0 {
+		// Defensive: time.Since against a monotonic-bearing start
+		// shouldn't go negative, but if for any reason w.start was
+		// constructed without monotonic info, NTP step adjustments
+		// could push us back. Clamp to zero so the file stays
+		// monotonic.
 		delta = 0
 	}
 
