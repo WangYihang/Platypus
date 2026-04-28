@@ -20,7 +20,10 @@ type EventBroadcaster struct {
 	ws *melody.Melody
 }
 
-// NewEventBroadcaster creates a new event broadcaster.
+// NewEventBroadcaster creates a new event broadcaster with its own
+// melody instance. Mostly useful in tests; production code should
+// share the existing /notify channel via NewEventBroadcasterFromMelody
+// so frontend subscribers see all event types in one connection.
 func NewEventBroadcaster() *EventBroadcaster {
 	ws := melody.New()
 	ws.HandleConnect(func(s *melody.Session) {
@@ -29,6 +32,14 @@ func NewEventBroadcaster() *EventBroadcaster {
 	ws.HandleDisconnect(func(s *melody.Session) {
 		log.Info("Event client disconnected from: %s", s.Request.RemoteAddr)
 	})
+	return &EventBroadcaster{ws: ws}
+}
+
+// NewEventBroadcasterFromMelody wraps an existing melody (typically
+// the /notify fan-out channel registered by RegisterWebSocketRoutes)
+// so file-transfer events ride the same WS connection browsers
+// already keep open for session lifecycle events.
+func NewEventBroadcasterFromMelody(ws *melody.Melody) *EventBroadcaster {
 	return &EventBroadcaster{ws: ws}
 }
 

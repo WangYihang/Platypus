@@ -434,6 +434,31 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV2TerminalRoute(rest, agentLinkSvc, rbac)
 	api.RegisterV2FileRoutes(rest, agentLinkSvc, rbac)
+	// File-transfer archive + scan + transfers REST API. The cancel
+	// registry is shared between the streaming handler (which
+	// registers in-flight transfers) and the cancel REST endpoint
+	// (which fires the matching cancel func). The broadcaster rides
+	// the existing /notify melody so frontend subscribers get progress
+	// events on the same connection they already keep open for session
+	// lifecycle events.
+	transferCancels := api.NewTransferCancelRegistry()
+	transferRecorder := api.NewDBTransferRecorder(db)
+	var archiveBroadcaster *api.EventBroadcaster
+	if core.Ctx.NotifyWebSocket != nil {
+		archiveBroadcaster = api.NewEventBroadcasterFromMelody(core.Ctx.NotifyWebSocket)
+	}
+	api.RegisterV2FileArchiveRoutes(rest, api.FileArchiveDeps{
+		Service:     agentLinkSvc,
+		RBAC:        rbac,
+		Recorder:    transferRecorder,
+		Broadcaster: archiveBroadcaster,
+		Cancels:     transferCancels,
+	})
+	api.RegisterV1TransferRoutes(rest, api.TransferRoutesDeps{
+		DB:      db,
+		RBAC:    rbac,
+		Cancels: transferCancels,
+	})
 	api.RegisterV2AgentRPCRoutes(rest, agentLinkSvc, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
