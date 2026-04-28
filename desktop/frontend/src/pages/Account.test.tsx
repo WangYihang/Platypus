@@ -22,11 +22,15 @@ const issueAccountPAT = vi.fn().mockResolvedValue({
     expires_at: "2026-07-27T00:00:00Z",
 });
 const revokeAccountPAT = vi.fn().mockResolvedValue(undefined);
+const listMyPermissions = vi
+    .fn()
+    .mockResolvedValue(["hosts:read", "hosts:exec", "files:read"]);
 
 vi.mock("../lib/api", () => ({
     listAccountPATs: (...args: unknown[]) => listAccountPATs(...args),
     issueAccountPAT: (...args: unknown[]) => issueAccountPAT(...args),
     revokeAccountPAT: (...args: unknown[]) => revokeAccountPAT(...args),
+    listMyPermissions: (...args: unknown[]) => listMyPermissions(...args),
 }));
 
 import Account from "./Account";
@@ -95,15 +99,19 @@ describe("<Account>", () => {
         const user = userEvent.setup();
         listAccountPATs.mockClear();
         listAccountPATs.mockResolvedValueOnce([]);
+        listMyPermissions.mockClear();
+        listMyPermissions.mockResolvedValueOnce(["hosts:read", "hosts:exec"]);
         renderInRouter(<Account />);
         await user.click(screen.getByRole("tab", { name: /tokens/i }));
         await user.click(screen.getByRole("button", { name: /issue token/i }));
 
         // Modal is open and asks for a name.
         expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
-        // Scope checkboxes (admin caller has every scope checked by
-        // default per plan).
-        expect(screen.getByLabelText("hosts:read")).toBeInTheDocument();
+        // Scope checkboxes are sourced from listMyPermissions, fetched
+        // when the dialog opens.
+        await waitFor(() => {
+            expect(screen.getByLabelText("hosts:read")).toBeInTheDocument();
+        });
         expect(screen.getByLabelText("hosts:exec")).toBeInTheDocument();
     });
 });

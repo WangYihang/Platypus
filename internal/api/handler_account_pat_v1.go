@@ -232,6 +232,26 @@ func (h *AccountPATHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, toAccountPATListItem(pat))
 }
 
+// ListMyPermissions handles GET /api/v1/account/permissions. Returns
+// the calling user's effective permission set — the live permissions
+// of their global role. The PAT issue dialog reads this so its scope
+// checkboxes match exactly what the server will accept; viewers can
+// see the (smaller) set their role offers without trying to mint a
+// scope they don't hold and getting a 403.
+func (h *AccountPATHandler) ListMyPermissions(c *gin.Context) {
+	p, ok := PrincipalFromContext(c)
+	if !ok || p.UserID == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no principal"})
+		return
+	}
+	role, err := h.db.Roles().Get(c.Request.Context(), string(p.Role))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup role"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"permissions": role.Permissions})
+}
+
 // Revoke handles DELETE /api/v1/account/pat/:tid. Idempotent: revoking
 // an already-revoked or non-existent owned token is still 204 to avoid
 // leaking row existence to the caller.
@@ -287,11 +307,14 @@ func (h *AccountPATHandler) audit(c *gin.Context, action, tid string, details in
 	})
 }
 
-// RegisterV1AccountPATRoutes mounts the user-self PAT routes behind
-// RequireAuth — anyone with a valid bearer can manage their own PATs.
-// The handler itself enforces "human session only" on POST and
-// per-row owner gating on GET / DELETE.
+// RegisterV1AccountPATRoutes mounts the user-self PAT routes and the
+// /api/v1/account/permissions reflector behind RequireAuth — anyone
+// with a valid bearer can manage their own PATs and see their own
+// effective permissions. The handler itself enforces "human session
+// only" on POST and per-row owner gating on GET / DELETE.
 func RegisterV1AccountPATRoutes(engine *gin.Engine, h *AccountPATHandler, rbac *RBAC) {
+	auth := engine.Group("/api/v1/account").Use(rbac.RequireAuth())
+	auth.GET("/permissions", h.ListMyPermissions)
 	g := engine.Group("/api/v1/account/pat")
 	g.Use(rbac.RequireAuth())
 	{

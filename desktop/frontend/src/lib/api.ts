@@ -573,6 +573,16 @@ export async function revokeAccountPAT(tokenID: string): Promise<void> {
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
 }
 
+// listMyPermissions returns the effective permission set the calling
+// user holds (their global role's permissions). Drives the PAT issue
+// dialog's scope selector so the available checkboxes match exactly
+// what the server will accept — server side, requesting any scope
+// outside this set returns 403.
+export async function listMyPermissions(): Promise<string[]> {
+    const j = await authJSON<{ permissions: string[] }>(`/api/v1/account/permissions`);
+    return j.permissions ?? [];
+}
+
 // --- RBAC (admin: permission catalogue + role CRUD) -----------------
 //
 // Wired off /api/v1/admin/{permissions,roles}. Every route is gated

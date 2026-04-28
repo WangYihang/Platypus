@@ -235,6 +235,52 @@ func TestAccountPAT_List_OnlyOwnTokens(t *testing.T) {
 	}
 }
 
+func TestAccountPermissions_ReturnsCallerRolePermissions(t *testing.T) {
+	t.Parallel()
+	r, db, _ := patHandlerSetup(t)
+	_, opSess := patSeedUser(t, db, "op-perm-list", user.RoleOperator)
+	_, viewerSess := patSeedUser(t, db, "viewer-perm-list", user.RoleViewer)
+
+	for _, tc := range []struct {
+		name, sess string
+		mustHave   []string
+		mustNot    []string
+	}{
+		{
+			name:     "operator",
+			sess:     opSess,
+			mustHave: []string{"hosts:exec", "files:write"},
+			mustNot:  []string{"admin:users"},
+		},
+		{
+			name:     "viewer",
+			sess:     viewerSess,
+			mustHave: []string{"hosts:read"},
+			mustNot:  []string{"hosts:exec", "files:write", "admin:users"},
+		},
+	} {
+		w := patReq(t, r, "GET", "/api/v1/account/permissions", tc.sess, nil)
+		if w.Code != http.StatusOK {
+			t.Errorf("%s status=%d body=%s", tc.name, w.Code, w.Body.String())
+			continue
+		}
+		var resp struct {
+			Permissions []string `json:"permissions"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		for _, must := range tc.mustHave {
+			if !contains(resp.Permissions, must) {
+				t.Errorf("%s missing %q in %v", tc.name, must, resp.Permissions)
+			}
+		}
+		for _, no := range tc.mustNot {
+			if contains(resp.Permissions, no) {
+				t.Errorf("%s unexpectedly has %q in %v", tc.name, no, resp.Permissions)
+			}
+		}
+	}
+}
+
 func TestAccountPAT_RevokeIdempotent(t *testing.T) {
 	t.Parallel()
 	r, db, _ := patHandlerSetup(t)

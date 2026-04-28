@@ -21,6 +21,7 @@ import {
     type IssueAccountPATResponse,
     issueAccountPAT,
     listAccountPATs,
+    listMyPermissions,
     revokeAccountPAT,
 } from "../lib/api";
 
@@ -86,26 +87,21 @@ const passwordSchema = z
     });
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
-// Scope catalogue — kept in sync with internal/optoken/scopes.go. Two
-// visual zones (Read / Write) so a viewer can see at a glance which
-// scopes are off-limits for them.
-const READ_SCOPES = [
-    "hosts:read",
-    "files:read",
-    "projects:read",
-    "activity:read",
-] as const;
-const WRITE_SCOPES = ["hosts:exec", "files:write", "rpc:invoke"] as const;
-const ALL_SCOPES = [...READ_SCOPES, ...WRITE_SCOPES] as const;
-type Scope = (typeof ALL_SCOPES)[number];
-
-function isViewer(role: string | undefined) {
-    return role === "viewer";
-}
-
-function defaultScopesForRole(role: string | undefined): Scope[] {
-    if (isViewer(role)) return [...READ_SCOPES];
-    return [...ALL_SCOPES];
+// PAT scopes are now fetched from /api/v1/account/permissions — the
+// caller's effective role permissions, post-RBAC. The hardcoded
+// READ/WRITE split is gone; the dialog renders whatever the server
+// reports, grouped by the resource prefix in the slug
+// (hosts:* / files:* / etc.) so a long list stays readable.
+function groupScopesByResource(scopes: string[]): Array<[string, string[]]> {
+    const m = new Map<string, string[]>();
+    for (const s of scopes) {
+        const colon = s.indexOf(":");
+        const resource = colon > 0 ? s.slice(0, colon) : "other";
+        const list = m.get(resource) ?? [];
+        list.push(s);
+        m.set(resource, list);
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
 export default function Account() {
@@ -240,7 +236,7 @@ export default function Account() {
                         </TabsContent>
 
                         <TabsContent value="tokens" className="space-y-4">
-                            <AccountTokensTab role={user?.role} />
+                            <AccountTokensTab />
                         </TabsContent>
                     </Tabs>
                 </div>
@@ -249,7 +245,7 @@ export default function Account() {
     );
 }
 
-function AccountTokensTab({ role }: { role: string | undefined }) {
+function AccountTokensTab() {
     const [rows, setRows] = useState<AccountPAT[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -453,7 +449,6 @@ function AccountTokensTab({ role }: { role: string | undefined }) {
                     setIssueOpen(false);
                     refresh();
                 }}
-                role={role}
             />
             <IssuedAccountPATDialog
                 result={lastIssued}
@@ -491,48 +486,59 @@ function IssueAccountPATDialog({
     open,
     onOpenChange,
     onIssued,
-    role,
 }: {
     open: boolean;
     onOpenChange: (o: boolean) => void;
     onIssued: (r: IssueAccountPATResponse) => void;
-    role: string | undefined;
 }) {
-    const viewerLocked = isViewer(role);
-    const initialScopes = useMemo(() => defaultScopesForRole(role), [role]);
-
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
-    const [scopes, setScopes] = useState<Scope[]>(initialScopes);
+    // available is the caller's effective permission set, fetched on
+    // open. selected is the subset they want to put on the new PAT.
+    const [available, setAvailable] = useState<string[] | null>(null);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
     const [ttlDays, setTtlDays] = useState<number>(90);
     const [submitting, setSubmitting] = useState(false);
 
-    // Reset when the dialog re-opens so each new token starts clean.
+    // Reset + refetch on open so each new token starts clean and
+    // reflects any role changes since the page mounted.
     useEffect(() => {
-        if (open) {
-            setName("");
-            setDescription("");
-            setScopes(defaultScopesForRole(role));
-            setTtlDays(90);
-            setSubmitting(false);
-        }
-    }, [open, role]);
+        if (!open) return;
+        setName("");
+        setDescription("");
+        setTtlDays(90);
+        setSubmitting(false);
+        setAvailable(null);
+        setSelected(new Set());
+        listMyPermissions()
+            .then((perms) => {
+                setAvailable(perms);
+                setSelected(new Set(perms));
+            })
+            .catch((e) => {
+                toast.error(`Couldn't load permissions: ${humanizeError(e)}`);
+                setAvailable([]);
+            });
+    }, [open]);
 
-    function toggleScope(s: Scope) {
-        setScopes((prev) =>
-            prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
-        );
+    function toggleScope(s: string) {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(s)) next.delete(s);
+            else next.add(s);
+            return next;
+        });
     }
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();
-        if (!name.trim() || scopes.length === 0) return;
+        if (!name.trim() || selected.size === 0) return;
         setSubmitting(true);
         try {
             const r = await issueAccountPAT({
                 name: name.trim(),
                 description: description.trim() || undefined,
-                scopes,
+                scopes: Array.from(selected),
                 ttl_seconds: ttlDays * 24 * 60 * 60,
             });
             onIssued(r);
@@ -576,21 +582,12 @@ function IssueAccountPATDialog({
 
                     <div className="space-y-2">
                         <Label>Scopes</Label>
-                        <ScopeGroup
-                            label="Read access"
-                            options={READ_SCOPES}
-                            selected={scopes}
-                            onToggle={toggleScope}
-                            disabled={false}
-                        />
-                        <ScopeGroup
-                            label="Write access"
-                            options={WRITE_SCOPES}
-                            selected={scopes}
-                            onToggle={toggleScope}
-                            disabled={viewerLocked}
-                        />
-                        {viewerLocked && (
+                        {available === null ? (
+                            <div className="flex items-center gap-2 text-text-muted text-xs">
+                                <Loader2 className="size-3.5 animate-spin" />
+                                Loading your permissions…
+                            </div>
+                        ) : available.length === 0 ? (
                             <p
                                 style={{
                                     color: palette.textMuted,
@@ -598,8 +595,20 @@ function IssueAccountPATDialog({
                                     margin: 0,
                                 }}
                             >
-                                Your role doesn't grant write scopes.
+                                Your role doesn't grant any permissions — there's
+                                nothing to scope a token to. Ask an admin to update
+                                your role.
                             </p>
+                        ) : (
+                            groupScopesByResource(available).map(([resource, perms]) => (
+                                <ScopeGroup
+                                    key={resource}
+                                    label={resource}
+                                    options={perms}
+                                    selected={selected}
+                                    onToggle={toggleScope}
+                                />
+                            ))
                         )}
                     </div>
 
@@ -628,7 +637,7 @@ function IssueAccountPATDialog({
                         <Button
                             type="submit"
                             disabled={
-                                submitting || !name.trim() || scopes.length === 0
+                                submitting || !name.trim() || selected.size === 0
                             }
                         >
                             {submitting && (
@@ -648,21 +657,21 @@ function ScopeGroup({
     options,
     selected,
     onToggle,
-    disabled,
 }: {
     label: string;
-    options: readonly Scope[];
-    selected: Scope[];
-    onToggle: (s: Scope) => void;
-    disabled: boolean;
+    options: readonly string[];
+    selected: Set<string>;
+    onToggle: (s: string) => void;
 }) {
     return (
         <div>
             <div
                 style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     color: palette.textMuted,
                     marginBottom: space[1],
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
                 }}
             >
                 {label}
@@ -683,14 +692,13 @@ function ScopeGroup({
                             alignItems: "center",
                             gap: space[2],
                             fontSize: 13,
-                            color: disabled ? palette.textMuted : palette.textPrimary,
-                            cursor: disabled ? "not-allowed" : "pointer",
+                            color: palette.textPrimary,
+                            cursor: "pointer",
                         }}
                     >
                         <Checkbox
                             id={`scope-${s}`}
-                            checked={!disabled && selected.includes(s)}
-                            disabled={disabled}
+                            checked={selected.has(s)}
                             onCheckedChange={() => onToggle(s)}
                         />
                         <Mono size={12}>{s}</Mono>
