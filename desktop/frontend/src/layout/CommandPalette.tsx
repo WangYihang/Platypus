@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     Clock,
@@ -27,12 +27,7 @@ import {
 import { palette, radius, space } from "./theme";
 import { useShell } from "./ProjectShell";
 import { Host, listHosts } from "../lib/api";
-import {
-    ServerProfile,
-    getActiveServerId,
-    listServers,
-    onServersChange,
-} from "../lib/servers";
+import { ServerProfile, useServersStore } from "../lib/servers";
 import { switchServer } from "../lib/auth";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 
@@ -427,28 +422,18 @@ function PaletteItem({
     );
 }
 
-// servers.ts fires onServersChange on both mutations and active
-// pointer changes, so one version counter covers both reads.
-let serverVersion = 0;
-onServersChange(() => {
-    serverVersion++;
-});
+// Plain zustand selectors (the previous version-counter dance is in
+// the migration commit history). The `profiles` array reference is
+// replaced on every CRUD mutation; `activeId` is a primitive string;
+// both are Object.is-stable until the underlying data actually
+// changes, so React only re-renders when needed.
 
 function useServerList(): ServerProfile[] {
-    const v = useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => serverVersion,
-        () => serverVersion,
-    );
-    return useMemo(() => listServers(), [v]);
+    return useServersStore((s) => s.profiles);
 }
 
 function useActiveServerId(): string | null {
-    return useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => getActiveServerId(),
-        () => getActiveServerId(),
-    );
+    return useServersStore((s) => s.activeId);
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {

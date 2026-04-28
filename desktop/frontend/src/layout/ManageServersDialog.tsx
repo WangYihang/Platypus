@@ -27,9 +27,8 @@ import { palette, radius, space } from "./theme";
 import {
     ServerProfile,
     avatarFor,
-    listServers,
-    onServersChange,
     renameServer,
+    useServersStore,
 } from "../lib/servers";
 import {
     forgetAndRemoveServer,
@@ -255,22 +254,13 @@ function ServerRow({
 
 // --- Hooks ----------------------------------------------------------
 
-let serverListVersion = 0;
-onServersChange(() => {
-    serverListVersion++;
-});
 let sessionVersion = 0;
 onSessionChange(() => {
     sessionVersion++;
 });
 
 function useServerSnapshot(): ServerProfile[] {
-    const v = useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => serverListVersion,
-        () => serverListVersion,
-    );
-    return useMemo(() => listServers(), [v]);
+    return useServersStore((s) => s.profiles);
 }
 
 function useHasPersistedSession(serverId: string): boolean {

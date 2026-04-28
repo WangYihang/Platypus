@@ -63,11 +63,9 @@ import { palette, radius } from "./theme";
 import {
     ServerProfile,
     avatarFor,
-    getActiveServerId,
-    listServers,
-    onServersChange,
     renameServer,
     reorderServers,
+    useServersStore,
 } from "../lib/servers";
 import {
     ConnectionState,
@@ -484,45 +482,28 @@ function dotColorForState(state: ConnectionState, loggedIn: boolean): string {
     }
 }
 
-// --- Hooks (mirror of the originals from ServerRail.tsx) -------------
+// --- Hooks ------------------------------------------------------------
 
-let serverListVersion = 0;
-onServersChange(() => {
-    serverListVersion++;
-});
+// Plain zustand selectors. The previous implementation used
+// `useSyncExternalStore` over the hand-rolled `onServersChange`
+// listener registry plus a version-counter shim — see commit
+// a80e3d6 for the React error #185 we hit when a snapshot getter
+// returned a fresh object on every call. Selectors return either
+// arrays (compared by reference; zustand's default Object.is is
+// fine because we always replace the array on mutation) or
+// primitive strings, both of which are stable.
 
 function useServerList(): ServerProfile[] {
-    const v = useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => serverListVersion,
-        () => serverListVersion,
-    );
-    return useMemo(() => listServers(), [v]);
+    return useServersStore((s) => s.profiles);
 }
 
 function useActiveServerId(): string | null {
-    return useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => getActiveServerId(),
-        () => getActiveServerId(),
-    );
+    return useServersStore((s) => s.activeId);
 }
 
 function useActiveServer(): ServerProfile | null {
-    // Derive the active profile from the already-stable list +
-    // active-id hooks rather than subscribing again. A naïve
-    // `useSyncExternalStore(..., getActiveServer, ...)` infinite-loops
-    // because `getActiveServer()` parses localStorage and returns a
-    // fresh object reference on every call — React thinks the
-    // snapshot changed and re-renders forever (Minified React error
-    // #185 → "Maximum update depth exceeded"). The list snapshot is
-    // already keyed on `serverListVersion` and the id snapshot is a
-    // primitive string, so this derivation is stable across renders.
-    const id = useActiveServerId();
-    const profiles = useServerList();
-    return useMemo(
-        () => (id ? profiles.find((p) => p.id === id) ?? null : null),
-        [id, profiles],
+    return useServersStore((s) =>
+        s.activeId ? s.profiles.find((p) => p.id === s.activeId) ?? null : null,
     );
 }
 
