@@ -197,19 +197,23 @@ function ShellChrome({
                         defaultSize="240px"
                         minSize="180px"
                         maxSize="480px"
-                        className="flex flex-col"
+                        className="relative"
                     >
-                        <ProjectSidebar
-                            user={user}
-                            serverURL={serverURL}
-                            projects={projects}
-                            currentSlug={currentSlug}
-                            onProjectsChanged={() => void refresh()}
-                        />
+                        <div className="absolute inset-0 flex flex-col">
+                            <ProjectSidebar
+                                user={user}
+                                serverURL={serverURL}
+                                projects={projects}
+                                currentSlug={currentSlug}
+                                onProjectsChanged={() => void refresh()}
+                            />
+                        </div>
                     </ResizablePanel>
                     <ResizableHandle />
-                    <ResizablePanel id="main" minSize="40%" className="flex flex-col">
-                        <MainColumn>{children}</MainColumn>
+                    <ResizablePanel id="main" minSize="40%" className="relative">
+                        <div className="absolute inset-0">
+                            <MainColumn>{children}</MainColumn>
+                        </div>
                     </ResizablePanel>
                 </ResizablePanelGroup>
             </div>
@@ -288,12 +292,11 @@ function MainColumn({ children }: { children: ReactNode }) {
                 direction="vertical"
                 style={{ flex: 1, minHeight: 0 }}
             >
-                <ResizablePanel id="main-content" minSize="20%" className="flex flex-col">
+                <ResizablePanel id="main-content" minSize="20%" className="relative">
                     <main
                         style={{
-                            flex: 1,
-                            minWidth: 0,
-                            minHeight: 0,
+                            position: "absolute",
+                            inset: 0,
                             overflow: "auto",
                         }}
                     >
@@ -342,7 +345,7 @@ function MainColumn({ children }: { children: ReactNode }) {
                     }
                     minSize="0px"
                     maxSize="85%"
-                    className="flex flex-col"
+                    className="relative"
                     onResize={(size) => {
                         // Only let the drag persist a new height when
                         // the drawer is meant to be open and active —
@@ -354,7 +357,9 @@ function MainColumn({ children }: { children: ReactNode }) {
                         }
                     }}
                 >
-                    <TerminalDrawer />
+                    <div className="absolute inset-0">
+                        <TerminalDrawer />
+                    </div>
                 </ResizablePanel>
             </ResizablePanelGroup>
             <TransfersDrawer />

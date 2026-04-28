@@ -665,7 +665,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         id="files-list"
                         defaultSize={preview.open ? 62 : 100}
                         minSize={30}
-                        className="flex flex-col"
+                        className="relative"
                     >
                     <FileContextMenu
                         variant={{ kind: "empty" }}
@@ -676,7 +676,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     >
                         <div
                             className={cn(
-                                "min-h-0 flex-1 overflow-auto rounded-md border",
+                                "absolute inset-0 overflow-auto rounded-md border",
                                 dragOver && "bg-accent/40 outline outline-2 outline-primary",
                             )}
                             {...dropHandlers}
@@ -722,10 +722,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                 defaultSize={38}
                                 minSize={20}
                                 maxSize={70}
-                                className="flex flex-col"
+                                className="relative"
                             >
                         <div
-                            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border"
+                            className="absolute inset-0 flex flex-col overflow-hidden rounded-md border"
                             data-testid="preview-pane"
                         >
                             <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
