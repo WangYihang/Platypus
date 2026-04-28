@@ -10,7 +10,6 @@ import {
     Layers,
     Loader2,
     Monitor,
-    RotateCw,
     Server,
     TerminalSquare,
 } from "lucide-react";
@@ -21,6 +20,7 @@ import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
 import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
+import RefreshButton from "../components/RefreshButton";
 import StatusDot from "../components/StatusDot";
 import StatusPill from "../components/StatusPill";
 import PageHeader from "../components/PageHeader";
@@ -312,20 +312,13 @@ export default function HostView({ projectID, hostID }: Props) {
                 actions={
                     <span style={{ display: "inline-flex", gap: space[2] }}>
                         {openTerminalAction}
-                        <Button
-                            size="icon-sm"
-                            variant="outline"
-                            disabled={loading}
+                        <RefreshButton
+                            loading={loading}
                             onClick={refresh}
+                            iconOnly
                             aria-label="Refresh"
                             title="Refresh host"
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                        </Button>
+                        />
                     </span>
                 }
                 tabs={tabBar}
@@ -527,14 +520,11 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                             <span>System</span>
                             {liveBadge}
                         </span>
-                        <Button size="sm" variant="ghost" onClick={onRefreshSysInfo} disabled={sysInfoLoading}>
-                            {sysInfoLoading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton
+                            variant="ghost"
+                            loading={sysInfoLoading}
+                            onClick={onRefreshSysInfo}
+                        />
                     </span>
                 }
                 padding={5}
