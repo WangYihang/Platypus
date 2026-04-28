@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { SortingState } from "@tanstack/react-table";
 import {
+    ChevronDown,
     ChevronUp,
     Download,
     Edit,
@@ -12,6 +13,7 @@ import {
     LayoutList,
     Loader2,
     Lock,
+    MoreHorizontal,
     RefreshCw,
     Trash2,
     Upload,
@@ -20,7 +22,15 @@ import { toast } from "sonner";
 import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import FileContextMenu from "./FileContextMenu";
 
 import {
     Chmod,
@@ -151,6 +161,61 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const selectedEntries = useMemo(
         () => dir.entries.filter((e) => selected.has(e.name)),
         [dir.entries, selected],
+    );
+
+    // Right-click on a row: build a FileContextMenu wired to the same
+    // toolbar handlers. Selection is reconciled on open so a
+    // right-click against an unselected row first selects it (matching
+    // OS conventions); right-click inside an existing multi-selection
+    // keeps the whole set as the action target.
+    const wrapRowWithContextMenu = useCallback(
+        (entry: FileEntryDTO, node: React.ReactNode): React.ReactNode => {
+            const isInSelection = selected.has(entry.name);
+            const targets =
+                isInSelection && selectedEntries.length > 0 ? selectedEntries : [entry];
+            const fullPath = joinPath(dir.path, entry.name);
+            return (
+                <FileContextMenu
+                    variant={{ kind: "row", entries: targets }}
+                    onOpenChange={(open) => {
+                        if (open && !isInSelection) {
+                            setSelected(new Set([entry.name]));
+                        }
+                    }}
+                    onOpen={() => openEntry(entry)}
+                    onDownload={handleDownloadClick}
+                    onRename={
+                        targets.length === 1 ? () => setShowRename(true) : undefined
+                    }
+                    onChmod={
+                        targets.length === 1 ? () => setShowChmod(true) : undefined
+                    }
+                    onCopyPath={async () => {
+                        try {
+                            await navigator.clipboard.writeText(fullPath);
+                            toast.success("Copied path");
+                        } catch (err) {
+                            toast.error(`copy: ${humanizeError(err)}`);
+                        }
+                    }}
+                    onCopyName={async () => {
+                        try {
+                            await navigator.clipboard.writeText(entry.name);
+                            toast.success("Copied name");
+                        } catch (err) {
+                            toast.error(`copy: ${humanizeError(err)}`);
+                        }
+                    }}
+                    onDelete={() => setShowDelete(true)}
+                >
+                    {node}
+                </FileContextMenu>
+            );
+        },
+        // selectedEntries depends on selected; including both keeps the
+        // closure's view of the selection set fresh on each render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [dir.path, selected, selectedEntries.length],
     );
 
     // --- DnD: OS drop + container-level droppable for "drop into this
@@ -438,24 +503,28 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         )}
                         Refresh
                     </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowNewFile(true)}
-                    >
-                        <FilePlus className="size-3.5" />
-                        New file
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowNewFolder(true)}
-                    >
-                        <FolderPlus className="size-3.5" />
-                        New folder
-                    </Button>
+                    {/* New ▾ split-button: New file + New folder behind
+                        a single trigger. Reduces toolbar width without
+                        hiding the actions. */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="outline" size="sm">
+                                <FilePlus className="size-3.5" />
+                                New
+                                <ChevronDown className="size-3" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            <DropdownMenuItem onSelect={() => setShowNewFile(true)}>
+                                <FilePlus className="size-3.5" />
+                                New file
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setShowNewFolder(true)}>
+                                <FolderPlus className="size-3.5" />
+                                New folder
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button type="button" variant="outline" size="sm" onClick={handleUploadClick}>
                         <Upload className="size-3.5" />
                         Upload
@@ -484,36 +553,52 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         Download
                         {selectedEntries.length > 1 && ` (${selectedEntries.length})`}
                     </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowRename(true)}
-                        disabled={selectedEntries.length !== 1}
-                    >
-                        <Edit className="size-3.5" />
-                        Rename
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowChmod(true)}
-                        disabled={selectedEntries.length !== 1}
-                    >
-                        <Lock className="size-3.5" />
-                        Chmod
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setShowDelete(true)}
-                        disabled={selectedEntries.length === 0}
-                    >
-                        <Trash2 className="size-3.5" />
-                        Delete
-                    </Button>
+                    {/* More ▾ overflow: low-frequency single-target
+                        actions (Rename, Chmod) and the destructive
+                        Delete. The right-click context menu is the
+                        primary path for these — the toolbar dropdown
+                        is the discoverable backup. */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={selectedEntries.length === 0}
+                                aria-label="More actions"
+                                data-testid="files-more-menu"
+                            >
+                                <MoreHorizontal className="size-3.5" />
+                                More
+                                <ChevronDown className="size-3" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            <DropdownMenuItem
+                                onSelect={() => setShowRename(true)}
+                                disabled={selectedEntries.length !== 1}
+                            >
+                                <Edit className="size-3.5" />
+                                Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onSelect={() => setShowChmod(true)}
+                                disabled={selectedEntries.length !== 1}
+                            >
+                                <Lock className="size-3.5" />
+                                Chmod
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => setShowDelete(true)}
+                                disabled={selectedEntries.length === 0}
+                            >
+                                <Trash2 className="size-3.5" />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                         <span>
                             {selectedEntries.length > 0 && `${selectedEntries.length} selected · `}
@@ -547,41 +632,51 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
                 {/* Browser + editor split */}
                 <div className="flex flex-1 gap-3 overflow-hidden">
-                    <div
-                        className={cn(
-                            "flex-1 overflow-auto rounded-md border",
-                            dragOver && "bg-accent/40 outline outline-2 outline-primary",
-                        )}
-                        {...dropHandlers}
+                    <FileContextMenu
+                        variant={{ kind: "empty" }}
+                        onNewFile={() => setShowNewFile(true)}
+                        onNewFolder={() => setShowNewFolder(true)}
+                        onUploadHere={handleUploadClick}
+                        onRefresh={dir.reload}
                     >
-                        {dir.error ? (
-                            <div className="p-6 text-sm text-red-500">
-                                Load error: {dir.error}
-                            </div>
-                        ) : viewMode === "grid" ? (
-                            <FileGrid
-                                entries={dir.entries}
-                                currentPath={dir.path}
-                                selectedNames={selected}
-                                setSelectedNames={setSelected}
-                                onOpen={openEntry}
-                                onInternalMove={handleInternalMove}
-                                projectID={projectID}
-                                sessionHash={sessionHash}
-                            />
-                        ) : (
-                            <FileTable
-                                entries={dir.entries}
-                                currentPath={dir.path}
-                                selectedNames={selected}
-                                setSelectedNames={setSelected}
-                                onOpen={openEntry}
-                                sorting={sorting}
-                                setSorting={setSorting}
-                                onInternalMove={handleInternalMove}
-                            />
-                        )}
-                    </div>
+                        <div
+                            className={cn(
+                                "flex-1 overflow-auto rounded-md border",
+                                dragOver && "bg-accent/40 outline outline-2 outline-primary",
+                            )}
+                            {...dropHandlers}
+                        >
+                            {dir.error ? (
+                                <div className="p-6 text-sm text-red-500">
+                                    Load error: {dir.error}
+                                </div>
+                            ) : viewMode === "grid" ? (
+                                <FileGrid
+                                    entries={dir.entries}
+                                    currentPath={dir.path}
+                                    selectedNames={selected}
+                                    setSelectedNames={setSelected}
+                                    onOpen={openEntry}
+                                    onInternalMove={handleInternalMove}
+                                    projectID={projectID}
+                                    sessionHash={sessionHash}
+                                    wrapRow={wrapRowWithContextMenu}
+                                />
+                            ) : (
+                                <FileTable
+                                    entries={dir.entries}
+                                    currentPath={dir.path}
+                                    selectedNames={selected}
+                                    setSelectedNames={setSelected}
+                                    onOpen={openEntry}
+                                    sorting={sorting}
+                                    setSorting={setSorting}
+                                    onInternalMove={handleInternalMove}
+                                    wrapRow={wrapRowWithContextMenu}
+                                />
+                            )}
+                        </div>
+                    </FileContextMenu>
                     {openingEntry && (
                         <div className="flex-1 overflow-hidden rounded-md border">
                             <Suspense

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import {
     flexRender,
     getCoreRowModel,
@@ -38,6 +38,12 @@ interface Props {
     // or breadcrumb segment. We surface it here so the parent can issue
     // the RenameFile RPC.
     onInternalMove?: (fromEntry: FileEntryDTO, toDir: string) => void;
+    // Optional row wrapper for cross-cutting concerns the table
+    // shouldn't have to know about (today: right-click context menu).
+    // The function receives the entry and the rendered <tr> and
+    // returns a node — usually the <tr> wrapped in a primitive that
+    // attaches its own listeners via Radix's `asChild` pattern.
+    wrapRow?: (entry: FileEntryDTO, node: React.ReactNode) => React.ReactNode;
 }
 
 // DraggableRow wires dnd-kit's drag source to a single entry row. We
@@ -101,6 +107,7 @@ export default function FileTable({
     sorting,
     setSorting,
     onInternalMove,
+    wrapRow,
 }: Props) {
     useDndMonitor({
         onDragEnd(event) {
@@ -236,7 +243,7 @@ export default function FileTable({
                 {table.getRowModel().rows.map((row) => {
                     const e = row.original;
                     const selected = selectedNames.has(e.name);
-                    return (
+                    const rowNode = (
                         <DraggableRow
                             key={e.name}
                             entry={e}
@@ -269,6 +276,11 @@ export default function FileTable({
                                 );
                             })}
                         </DraggableRow>
+                    );
+                    return wrapRow ? (
+                        <Fragment key={e.name}>{wrapRow(e, rowNode)}</Fragment>
+                    ) : (
+                        rowNode
                     );
                 })}
                 {entries.length === 0 && (

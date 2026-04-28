@@ -33,6 +33,11 @@ type Variant = { kind: "row"; entries: FileEntryDTO[] } | { kind: "empty" };
 interface Props {
     variant: Variant;
     children: ReactNode;
+    // Forwarded to Radix's ContextMenu root so callers can react to
+    // open/close — most commonly to fix selection state when a user
+    // right-clicks an unselected row (the row should become the
+    // selection target before the menu's actions resolve).
+    onOpenChange?: (open: boolean) => void;
     // Row callbacks.
     onOpen?: () => void;
     onDownload?: () => void;
@@ -51,6 +56,7 @@ interface Props {
 export default function FileContextMenu({
     variant,
     children,
+    onOpenChange,
     onOpen,
     onDownload,
     onRename,
@@ -64,7 +70,7 @@ export default function FileContextMenu({
     onRefresh,
 }: Props) {
     return (
-        <ContextMenu>
+        <ContextMenu onOpenChange={onOpenChange}>
             <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
             <ContextMenuContent>
                 {variant.kind === "row"

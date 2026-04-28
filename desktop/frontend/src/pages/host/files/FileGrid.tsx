@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useDraggable, useDroppable, useDndMonitor } from "@dnd-kit/core";
 import { File, FileSymlink, Folder } from "lucide-react";
 
@@ -15,6 +16,9 @@ interface Props {
     // Same internal-move surface as FileTable so the toggle is a pure
     // presentation switch — selection / drag semantics match.
     onInternalMove?: (fromEntry: FileEntryDTO, toDir: string) => void;
+    // Same row-wrapper escape hatch FileTable exposes — used by
+    // FileBrowser to wrap each tile in a right-click context menu.
+    wrapRow?: (entry: FileEntryDTO, node: React.ReactNode) => React.ReactNode;
 }
 
 // MAX_THUMB_BYTES caps the size of files we will fetch to render a
@@ -123,6 +127,7 @@ export default function FileGrid({
     currentPath,
     projectID,
     sessionHash,
+    wrapRow,
 }: Props & { projectID?: string; sessionHash?: string }) {
     useDndMonitor({
         onDragEnd(event) {
@@ -158,23 +163,30 @@ export default function FileGrid({
 
     return (
         <div className="flex flex-wrap content-start gap-2 p-2">
-            {entries.map((e) => (
-                <Tile
-                    key={e.name}
-                    entry={e}
-                    isSelected={selectedNames.has(e.name)}
-                    isDroppable={e.isDir}
-                    onSelectChange={(ev) => toggleRow(e, ev)}
-                    onOpen={() => onOpen(e)}
-                    projectID={projectID}
-                    sessionHash={sessionHash}
-                    fullPath={
-                        projectID && sessionHash
-                            ? `${currentPath.replace(/\/$/, "")}/${e.name}`
-                            : undefined
-                    }
-                />
-            ))}
+            {entries.map((e) => {
+                const tile = (
+                    <Tile
+                        key={e.name}
+                        entry={e}
+                        isSelected={selectedNames.has(e.name)}
+                        isDroppable={e.isDir}
+                        onSelectChange={(ev) => toggleRow(e, ev)}
+                        onOpen={() => onOpen(e)}
+                        projectID={projectID}
+                        sessionHash={sessionHash}
+                        fullPath={
+                            projectID && sessionHash
+                                ? `${currentPath.replace(/\/$/, "")}/${e.name}`
+                                : undefined
+                        }
+                    />
+                );
+                return wrapRow ? (
+                    <Fragment key={e.name}>{wrapRow(e, tile)}</Fragment>
+                ) : (
+                    tile
+                );
+            })}
         </div>
     );
 }
