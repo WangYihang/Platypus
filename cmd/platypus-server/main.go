@@ -379,6 +379,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	enrollTokensH := api.NewEnrollmentTokensHandler(db, enrollSvc)
 	accountPATH := api.NewAccountPATHandler(db, tokenVerifier)
+	adminRolesH := api.NewAdminRolesHandler(db)
 
 	// /api/v1/install/<token> and /v1/manifest/* now live on the same
 	// gin engine — no dedicated distributor port. distributorBase is
@@ -435,6 +436,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 	api.RegisterV1EnrollmentTokenRoutes(rest, enrollTokensH, rbac)
 	api.RegisterV1AccountPATRoutes(rest, accountPATH, rbac)
+	api.RegisterV1AdminRolesRoutes(rest, adminRolesH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
