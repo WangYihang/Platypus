@@ -23,15 +23,24 @@ const TAB_BAR_HEIGHT = 36;
 // TerminalDrawer is the VSCode-style bottom panel mounted once inside
 // ShellChrome's content column — it sits beneath <main> and beside
 // (not under) ServerRail/ProjectSidebar, so it spans only the project
-// content area. xterm instances still survive route changes because
-// GlobalTerminalProvider lives at the shell root, above the column.
+// content area.
 //
-// Collapse model: as long as there's at least one shell open we keep
-// every <Terminal> mounted (display:none for non-active and for the
-// whole content slab when collapsed). xterm scrollback lives on the
-// xterm instance, so unmounting it would wipe history — collapsing
-// into a slim tab strip preserves it. The "expand" button on the
-// strip and Ctrl+` both reopen the drawer to its previous height.
+// Persistence model: as long as any shell exists in the global
+// terminal context, the drawer container stays in the React tree so
+// every <Terminal> can stay mounted. That means xterm + the
+// underlying WebSocket survive route changes (Overview ↔ host page)
+// AND host switches — without that, navigating away would dispose the
+// WebSocket and kick whatever was attached on the agent (e.g. a tmux
+// client). Visibility is layered on top:
+//   · on a non-host route, OR a host page with no shells of its own,
+//     the drawer collapses to height 0 and visibility:hidden so the
+//     bottom of the screen is free for the page itself.
+//   · on a host page with shells, the drawer reveals normally and
+//     the tab bar lists only that host's shells (cross-host
+//     visibility lives in the status-bar terminals popover).
+//   · when the operator collapses the drawer (Ctrl+`), only the tab
+//     strip is shown; xterm content slab is display:none but still
+//     mounted so scrollback survives.
 export default function TerminalDrawer() {
     const {
         shells,
@@ -45,10 +54,6 @@ export default function TerminalDrawer() {
         setDrawerHeight,
     } = useGlobalTerminal();
 
-    // The drawer is scoped to the host detail page. Off-host the
-    // drawer is invisible — operators see only host shells when
-    // they're looking at that host. Cross-host visibility lives in
-    // the status-bar terminals popover.
     const { hostId: routeHostId } = useParams<{
         projectSlug?: string;
         hostId?: string;
@@ -68,74 +73,102 @@ export default function TerminalDrawer() {
         return visibleShells.length > 0 ? visibleShells[0].id : null;
     }, [visibleShells, activeId]);
 
-    // Nothing to show: don't reserve a row in the shell flexbox.
-    if (!routeHostId || visibleShells.length === 0) {
+    // Nothing to keep alive: no terminals anywhere. Skip rendering
+    // entirely so the drawer doesn't reserve any space.
+    if (shells.length === 0) {
         return null;
     }
+
+    // Drawer is "active" — i.e. visually present — only on a host
+    // detail page that has at least one shell on that host. When
+    // inactive, we still render the container (so <Terminal>
+    // children stay mounted) but collapse it to zero height and
+    // hide it.
+    const drawerActive = !!routeHostId && visibleShells.length > 0;
 
     // Collapsed: render only the tab strip so users can see what's
     // running and click to expand. Terminal content slabs are still
     // mounted (display:none) below so xterm buffers survive.
-    const containerHeight = drawerOpen
-        ? drawerHeight
-        : TAB_BAR_HEIGHT;
+    const containerHeight = !drawerActive
+        ? 0
+        : drawerOpen
+            ? drawerHeight
+            : TAB_BAR_HEIGHT;
 
     // Host indicator colour — every tab in this drawer belongs to
     // the same host (we filtered by routeHostId), so a single
     // accent stripe along the top of the drawer reads as "this is
     // host X" without needing a per-tab dot.
-    const hostAccent = colorForId(routeHostId);
+    const hostAccent = routeHostId ? colorForId(routeHostId) : palette.border;
 
     return (
         <div
             data-testid="terminal-drawer"
+            data-active={drawerActive ? "true" : "false"}
             data-collapsed={drawerOpen ? "false" : "true"}
-            data-host-id={routeHostId}
+            data-host-id={routeHostId ?? ""}
             style={{
                 position: "relative",
                 height: containerHeight,
                 flexShrink: 0,
-                borderTop: `2px solid ${hostAccent}`,
+                borderTop: drawerActive ? `2px solid ${hostAccent}` : "none",
                 background: palette.main,
                 display: "flex",
                 flexDirection: "column",
+                visibility: drawerActive ? "visible" : "hidden",
+                overflow: "hidden",
             }}
         >
-            {drawerOpen && (
+            {drawerActive && drawerOpen && (
                 <ResizeHandle height={drawerHeight} onResize={setDrawerHeight} />
             )}
-            <TabBar
-                shells={visibleShells}
-                activeId={visibleActiveId}
-                onActivate={setActive}
-                onClose={closeShell}
-                onToggleDrawer={drawerOpen ? closeDrawer : openDrawer}
-                drawerOpen={drawerOpen}
-            />
+            {drawerActive && (
+                <TabBar
+                    shells={visibleShells}
+                    activeId={visibleActiveId}
+                    onActivate={setActive}
+                    onClose={closeShell}
+                    onToggleDrawer={drawerOpen ? closeDrawer : openDrawer}
+                    drawerOpen={drawerOpen}
+                />
+            )}
             <div
                 style={{
                     flex: 1,
                     minHeight: 0,
                     position: "relative",
-                    display: drawerOpen ? "block" : "none",
+                    display: drawerActive && drawerOpen ? "block" : "none",
                 }}
             >
-                {visibleShells.map((s) => (
-                    <div
-                        key={s.id}
-                        style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: s.id === visibleActiveId ? "block" : "none",
-                        }}
-                    >
-                        <Terminal
-                            projectID={s.projectID}
-                            sessionHash={s.sessionHash}
-                            onClose={() => closeShell(s.id)}
-                        />
-                    </div>
-                ))}
+                {/* Render <Terminal> for *every* shell, not just the
+                    ones for the current host. Otherwise navigating
+                    off the host page (or to a different host) would
+                    unmount the xterm + WebSocket, which kicks the
+                    operator's tmux client on the agent. Off-host
+                    and non-active shells are display:none but still
+                    fully mounted; xterm continues to buffer
+                    incoming output and the WebSocket stays open. */}
+                {shells.map((s) => {
+                    const onCurrentHost = s.hostId === routeHostId;
+                    const visible =
+                        drawerActive && onCurrentHost && s.id === visibleActiveId;
+                    return (
+                        <div
+                            key={s.id}
+                            style={{
+                                position: "absolute",
+                                inset: 0,
+                                display: visible ? "block" : "none",
+                            }}
+                        >
+                            <Terminal
+                                projectID={s.projectID}
+                                sessionHash={s.sessionHash}
+                                onClose={() => closeShell(s.id)}
+                            />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
