@@ -37,6 +37,11 @@ import { basename, humanize } from "../../../lib/format";
 
 import FileTable from "./FileTable";
 import FileGrid from "./FileGrid";
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { useViewMode } from "./useViewMode";
 import {
     ArchiveFormat,
@@ -645,8 +650,23 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     </div>
                 </div>
 
-                {/* Browser + editor split */}
-                <div className="flex min-h-0 flex-1 gap-2 overflow-hidden">
+                {/* Browser + preview split. ResizablePanelGroup handles
+                    the drag handle, keyboard nudges, and percent-based
+                    persistence (autoSaveId → localStorage). The inner
+                    panels stretch to h-full so the rounded border + scroll
+                    container chrome lives inside each panel rather than
+                    on the panel wrapper itself. */}
+                <ResizablePanelGroup
+                    direction="horizontal"
+                    autoSaveId="files-preview-split"
+                    className="min-h-0 flex-1"
+                >
+                    <ResizablePanel
+                        id="files-list"
+                        defaultSize={preview.open ? 62 : 100}
+                        minSize={30}
+                        className="flex"
+                    >
                     <FileContextMenu
                         variant={{ kind: "empty" }}
                         onNewFile={() => setShowNewFile(true)}
@@ -656,7 +676,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     >
                         <div
                             className={cn(
-                                "flex-1 overflow-auto rounded-md border",
+                                "h-full w-full overflow-auto rounded-md border",
                                 dragOver && "bg-accent/40 outline outline-2 outline-primary",
                             )}
                             {...dropHandlers}
@@ -693,10 +713,19 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             )}
                         </div>
                     </FileContextMenu>
+                    </ResizablePanel>
                     {preview.open && (
+                        <>
+                            <ResizableHandle className="mx-1 bg-transparent" />
+                            <ResizablePanel
+                                id="files-preview"
+                                defaultSize={38}
+                                minSize={20}
+                                maxSize={70}
+                                className="flex"
+                            >
                         <div
-                            className="flex flex-col overflow-hidden rounded-md border"
-                            style={{ width: preview.width, flexShrink: 0 }}
+                            className="flex h-full w-full flex-col overflow-hidden rounded-md border"
                             data-testid="preview-pane"
                         >
                             <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
@@ -830,8 +859,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                 )}
                             </div>
                         </div>
+                            </ResizablePanel>
+                        </>
                     )}
-                </div>
+                </ResizablePanelGroup>
 
                 {/* Bottom status strip — "X items / Y selected" only.
                     The density + view-mode toggles moved up to the

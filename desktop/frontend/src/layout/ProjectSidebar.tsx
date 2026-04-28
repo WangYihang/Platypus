@@ -178,13 +178,13 @@ export default function ProjectSidebar({
     return (
         <aside
             style={{
-                width: 240,
+                width: "100%",
                 height: "100%",
+                minWidth: 0,
                 background: palette.sidebar,
                 borderRight: `1px solid ${palette.border}`,
                 display: "flex",
                 flexDirection: "column",
-                flexShrink: 0,
             }}
         >
             <div

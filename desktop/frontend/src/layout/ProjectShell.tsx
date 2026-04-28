@@ -19,6 +19,11 @@ import ManageServersDialog from "./ManageServersDialog";
 import ServerRail from "./ServerRail";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 interface ShellState {
     projects: Project[];
@@ -166,27 +171,49 @@ function ShellChrome({
                     onAddServer={() => setAddOpen(true)}
                     onManageServers={() => setManageOpen(true)}
                 />
-                <ProjectSidebar
-                    user={user}
-                    serverURL={serverURL}
-                    projects={projects}
-                    currentSlug={currentSlug}
-                    onProjectsChanged={() => void refresh()}
-                />
-                <div
-                    style={{
-                        flex: 1,
-                        minWidth: 0,
-                        minHeight: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        // position: relative anchors the absolutely
-                        // positioned TransfersDrawer to the main pane
-                        // so it slides in from the right edge of the
-                        // outlet (not the viewport).
-                        position: "relative",
-                    }}
+                {/* ResizablePanelGroup owns the sidebar ↔ main split.
+                    ServerRail stays outside the group because it's a
+                    narrow icon column with no interesting resize range
+                    (RAIL_WIDTH constant). The sidebar starts at 240px
+                    to match the previous fixed width; persisted layout
+                    is keyed under platypus.layout.shell-sidebar so a
+                    user's choice survives reloads. */}
+                <ResizablePanelGroup
+                    direction="horizontal"
+                    autoSaveId="shell-sidebar"
+                    style={{ flex: 1, minHeight: 0, minWidth: 0 }}
                 >
+                    <ResizablePanel
+                        id="sidebar"
+                        defaultSize="240px"
+                        minSize="180px"
+                        maxSize="480px"
+                        className="flex"
+                    >
+                        <ProjectSidebar
+                            user={user}
+                            serverURL={serverURL}
+                            projects={projects}
+                            currentSlug={currentSlug}
+                            onProjectsChanged={() => void refresh()}
+                        />
+                    </ResizablePanel>
+                    <ResizableHandle />
+                    <ResizablePanel id="main" minSize="40%" className="flex">
+                        <div
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                minHeight: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                // position: relative anchors the absolutely
+                                // positioned TransfersDrawer to the main pane
+                                // so it slides in from the right edge of the
+                                // outlet (not the viewport).
+                                position: "relative",
+                            }}
+                        >
                     <main style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}>
                         {/* P3: cap the rendered content width on wide
                             displays. Without the cap, KPI cards, tables
@@ -218,7 +245,9 @@ function ShellChrome({
                     </main>
                     <TerminalDrawer />
                     <TransfersDrawer />
-                </div>
+                        </div>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
             </div>
             <StatusBar />
             <CommandPalette
