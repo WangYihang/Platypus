@@ -1,35 +1,19 @@
-import { useCallback, useState } from "react";
+import { usePreference, type PreferenceDefs } from "../../../lib/preferences";
 
-// useDensity persists the FileTable row-height preference (compact /
-// comfortable) so a user who tightens the layout once doesn't have
-// to re-toggle on every reload. Stored alongside ViewMode under a
-// global (not per-host) key so the choice follows them.
+// useDensity is now a thin wrapper over the global `ui.density`
+// preference. The Files tab used to ship its own
+// `platypus:filesDensity` localStorage key with a "compact" default;
+// we unified onto the project-wide preference so flipping it in
+// /preferences immediately propagates to file tables, host tables,
+// and any future surface that respects the same flag. The default
+// stays "compact" — see DEFAULTS in lib/preferences.ts.
+//
+// Public API kept as a `[Density, setDensity]` tuple so every existing
+// call site keeps working without an import-list change.
 
-export type Density = "compact" | "comfortable";
-
-const KEY = "platypus:filesDensity";
-
-function read(): Density {
-    try {
-        const v = localStorage.getItem(KEY);
-        if (v === "compact" || v === "comfortable") return v;
-    } catch {
-        // localStorage may be unavailable in some embedded WebViews.
-    }
-    // Default to compact: file lists are typically long and the
-    // operator wants to see as many rows as possible without scrolling.
-    return "compact";
-}
+export type Density = PreferenceDefs["ui.density"];
 
 export function useDensity(): [Density, (next: Density) => void] {
-    const [density, setDensity] = useState<Density>(() => read());
-    const set = useCallback((next: Density) => {
-        setDensity(next);
-        try {
-            localStorage.setItem(KEY, next);
-        } catch {
-            // ignore
-        }
-    }, []);
-    return [density, set];
+    const [value, setValue] = usePreference("ui.density");
+    return [value, setValue];
 }

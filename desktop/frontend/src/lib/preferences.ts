@@ -24,6 +24,8 @@ export interface PreferenceDefs {
     "ui.density": "comfortable" | "compact";
     "ui.fleet.defaultView": "cards" | "table" | "timeline" | "graph";
     "ui.activities.defaultRange": "24h" | "7d" | "30d" | "all";
+    "ui.files.viewMode": "list" | "grid";
+    "ui.files.previewOpen": boolean;
 
     // --- Terminal
     "terminal.fontSize": number;
@@ -35,9 +37,15 @@ export interface PreferenceDefs {
 }
 
 const DEFAULTS: PreferenceDefs = {
-    "ui.density": "comfortable",
+    // Compact is the default at the *project level* — file lists,
+    // host tables, and audit feeds all routinely show hundreds of
+    // rows, and operators almost always want max density. The
+    // Preferences UI lets a user flip to "comfortable" once.
+    "ui.density": "compact",
     "ui.fleet.defaultView": "table",
     "ui.activities.defaultRange": "7d",
+    "ui.files.viewMode": "list",
+    "ui.files.previewOpen": true,
     "terminal.fontSize": 13,
     "terminal.cursorBlink": true,
     "terminal.scrollback": 5000,

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+
+import { usePreference } from "../../../lib/preferences";
 
 // usePreviewPane is the storage layer behind the Quick-Look style
 // preview pane. It tracks open/closed state only — the split width
@@ -6,20 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 // ResizablePanelGroup in FileBrowser (see autoSaveId="files-preview-split"
 // in localStorage), so we don't duplicate the persistence here.
 //
-// Persistence is intentionally per-browser (localStorage), not
-// per-server: the user's preferred layout follows them across project
-// switches but doesn't roam to other devices.
-
-const KEY_OPEN = "files.previewOpen";
-
-function loadOpen(): boolean {
-    if (typeof window === "undefined") return false;
-    try {
-        return window.localStorage.getItem(KEY_OPEN) === "true";
-    } catch {
-        return false;
-    }
-}
+// Backed by `ui.files.previewOpen` in the typed preference registry —
+// previously a hand-rolled `files.previewOpen` localStorage key.
 
 export interface PreviewPane {
     open: boolean;
@@ -29,23 +19,8 @@ export interface PreviewPane {
 }
 
 export function usePreviewPane(): PreviewPane {
-    const [open, setOpenRaw] = useState<boolean>(loadOpen);
-
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(KEY_OPEN, String(open));
-        } catch {
-            // Quota errors etc. are best-effort; preview state is
-            // not critical so we silently lose persistence.
-        }
-    }, [open]);
-
-    const setOpen = useCallback((next: boolean) => {
-        setOpenRaw(next);
-    }, []);
-
-    const toggle = useCallback(() => setOpenRaw((o) => !o), []);
-    const close = useCallback(() => setOpenRaw(false), []);
-
+    const [open, setOpen] = usePreference("ui.files.previewOpen");
+    const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
+    const close = useCallback(() => setOpen(false), [setOpen]);
     return { open, setOpen, toggle, close };
 }
