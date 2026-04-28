@@ -187,7 +187,16 @@ func (m *streamManager) handleClose(env *v2pb.MeshEnvelope) {
 		return
 	}
 	st.closeErr = msg.Reason
-	_ = m.enqueueInbound(st, inboundFrame{reason: msg.Reason})
+	// Try the orderly path first: deliver the close as a frame so
+	// pumpInbound flushes anything queued ahead of it. If the queue
+	// is full (pumpInbound is blocked in conn.Write — typically because
+	// the local consumer stalled), we MUST tear the stream down
+	// directly so closeConn unblocks the write and the goroutine
+	// exits. Without this fall-through a silent peer + a stuck local
+	// consumer leaves pumpInbound parked forever.
+	if !m.enqueueInbound(st, inboundFrame{reason: msg.Reason}) {
+		go m.closeStream(st, msg.Reason, false)
+	}
 }
 
 func (m *streamManager) pumpOutbound(st *streamState) {
