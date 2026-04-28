@@ -17,8 +17,15 @@ interface Props {
 }
 
 export default function FilesTab({ projectID, sessionHash, host }: Props) {
+    // HostView wraps every tab in 24px of outer padding so the Info /
+    // Sessions / Processes cards breathe. The Files tab has no card
+    // chrome of its own — it's a full-bleed file browser — and that
+    // 24px gutter visibly chops the available rows on common laptop
+    // viewports. Pull half of it back with a negative margin so the
+    // browser can stretch to the panel edges without disturbing the
+    // other tabs' layouts.
     return (
-        <div className="h-full">
+        <div className="-mx-3 -my-3 h-full">
             <FileBrowser
                 projectID={projectID}
                 sessionHash={sessionHash}

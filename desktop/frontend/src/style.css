@@ -271,24 +271,34 @@ main {
     animation: pl-fade-in 140ms ease-out;
 }
 
-/* Lighter scrollbars on the dark theme. */
+/* Scrollbars on the dark theme. The previous palette (#2e2e2e thumb on
+ * a 10px track with a 2px transparent border) collapsed to a 6px sliver
+ * that vanished against #1f1f1f surfaces — operators reported the file
+ * browser and preview pane "had no scrollbar". Bumped the visible bar
+ * width and pinned the thumb at the bright `--color-border-strong` so
+ * it reads on every surface; Firefox gets the matching `scrollbar-color`
+ * declaration. */
 ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
 }
 ::-webkit-scrollbar-track {
     background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: #2e2e2e;
+    background: var(--color-border-strong);
     border-radius: 6px;
-    border: 2px solid transparent;
+    border: 3px solid transparent;
     background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #525252;
+    background: var(--color-text-muted);
     background-clip: padding-box;
-    border: 2px solid transparent;
+    border: 3px solid transparent;
+}
+* {
+    scrollbar-color: var(--color-border-strong) transparent;
+    scrollbar-width: thin;
 }
 
 /* Command palette (cmdk) -------------------------------------------------- */

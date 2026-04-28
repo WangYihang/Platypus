@@ -5,19 +5,17 @@ import {
     ChevronDown,
     ChevronUp,
     Download,
-    Edit,
+    Eye,
     FilePlus,
     FolderDown,
     FolderPlus,
     LayoutGrid,
     LayoutList,
     Loader2,
-    Lock,
-    MoreHorizontal,
+    Pencil,
     RefreshCw,
     Rows2,
     Rows3,
-    Trash2,
     Upload,
     X,
 } from "lucide-react";
@@ -29,7 +27,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
@@ -156,6 +153,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [showArchive, setShowArchive] = useState(false);
     const [viewMode, setViewMode] = useViewMode();
     const [density, setDensity] = useDensity();
+    // editMode forces the CodeMirror editor over read-only renderers
+    // (today: MarkdownViewer). It resets whenever the previewed entry
+    // changes so opening a different file always lands on the default
+    // viewer for that file's kind.
+    const [editMode, setEditMode] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -187,6 +189,38 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         return e;
     }, [preview.open, selectedEntries]);
 
+    // Reset editMode whenever the previewed entry changes — switching
+    // files should always land on the file's default viewer rather
+    // than carrying the previous file's "Edit" state forward.
+    useEffect(() => {
+        setEditMode(false);
+    }, [previewEntry?.name]);
+
+    // isEditableEntry — whether the row's right-click menu should
+    // surface an "Edit" item. Today: text + markdown files under the
+    // CodeMirror full-load threshold. Larger files route to the read-
+    // only paged viewer so the editor doesn't apply.
+    const isEditableEntry = useCallback((entry: FileEntryDTO): boolean => {
+        if (entry.isDir || entry.isSymlink) return false;
+        if (entry.size > SMALL_FILE_LIMIT) return false;
+        const k = pickViewerKind(entry.mime, entry.name);
+        return k === "text" || k === "markdown";
+    }, []);
+
+    // editorKind tells the preview-pane dispatch whether to switch
+    // away from the default renderer. Today MarkdownViewer is the only
+    // renderer with a distinct read-only mode; "text" already mounts
+    // the editor by default.
+    const previewKind = useMemo(() => {
+        if (!previewEntry) return null;
+        return pickViewerKind(previewEntry.mime, previewEntry.name);
+    }, [previewEntry]);
+    const canToggleEdit = !!(
+        previewEntry &&
+        previewEntry.size <= SMALL_FILE_LIMIT &&
+        (previewKind === "markdown" || previewKind === "text")
+    );
+
     // Right-click on a row: build a FileContextMenu wired to the same
     // toolbar handlers. Selection is reconciled on open so a
     // right-click against an unselected row first selects it (matching
@@ -198,6 +232,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             const targets =
                 isInSelection && selectedEntries.length > 0 ? selectedEntries : [entry];
             const fullPath = joinPath(dir.path, entry.name);
+            const editable = targets.length === 1 && isEditableEntry(entry);
             return (
                 <FileContextMenu
                     variant={{ kind: "row", entries: targets }}
@@ -207,6 +242,15 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         }
                     }}
                     onOpen={() => openEntry(entry)}
+                    onEdit={
+                        editable
+                            ? () => {
+                                  setSelected(new Set([entry.name]));
+                                  preview.setOpen(true);
+                                  setEditMode(true);
+                              }
+                            : undefined
+                    }
                     onDownload={handleDownloadClick}
                     onRename={
                         targets.length === 1 ? () => setShowRename(true) : undefined
@@ -239,7 +283,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         // selectedEntries depends on selected; including both keeps the
         // closure's view of the selection set fresh on each render.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [dir.path, selected, selectedEntries.length],
+        [dir.path, selected, selectedEntries.length, isEditableEntry],
     );
 
     // --- DnD: OS drop + container-level droppable for "drop into this
@@ -499,17 +543,24 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
     return (
         <DndContext sensors={sensors}>
-            <div className="flex h-full min-h-[520px] flex-col gap-3">
-                {/* Single chrome row: ↑ + breadcrumb on the left,
-                    quick-paths chips floated to the right. Saves a
-                    full row vs. the previous two-stack layout (the
-                    five chrome rows above the file list were a
-                    common complaint). */}
+            <div className="flex h-full min-h-[520px] flex-col gap-1.5">
+                {/* Single chrome row collapses the previous breadcrumb +
+                    toolbar stack: ↑ + crumb path on the left, then the
+                    primary file actions (Refresh / New / Upload /
+                    Download), then the QuickPaths chips. The "More"
+                    dropdown was removed — its actions (Rename, Chmod,
+                    Delete) live exclusively in the right-click context
+                    menu now that operators reported the toolbar dropdown
+                    duplicated work the menu already covers. Single-
+                    target actions stay one keystroke away (F2, Del). */}
                 <div
-                    data-testid="files-breadcrumb-row"
-                    className="flex items-center gap-2"
+                    data-testid="files-toolbar"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
                 >
-                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                    <div
+                        data-testid="files-breadcrumb-row"
+                        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                    >
                         <Button
                             type="button"
                             variant="ghost"
@@ -520,27 +571,36 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         >
                             <ChevronUp className="size-3.5" />
                         </Button>
-                        {crumbs.map((c, idx) => (
-                            <div key={c.path} className="flex items-center gap-1">
-                                {idx > 0 && <span className="text-muted-foreground">/</span>}
-                                <CrumbDroppable
-                                    path={c.path}
-                                    label={c.label}
-                                    onClick={() => dir.cd(c.path)}
-                                    isLast={idx === crumbs.length - 1}
-                                />
-                            </div>
-                        ))}
+                        {crumbs.map((c, idx) => {
+                            // splitCrumbs always emits the root segment
+                            // first with label "/". Rendering an extra
+                            // "/" separator before the next crumb gave
+                            // operators a stuttering "//home/..." path —
+                            // suppress the separator when the previous
+                            // crumb is already the root slash.
+                            const showSep = idx > 0 && crumbs[idx - 1].label !== "/";
+                            return (
+                                <div key={c.path} className="flex items-center gap-1">
+                                    {showSep && (
+                                        <span className="text-muted-foreground">/</span>
+                                    )}
+                                    <CrumbDroppable
+                                        path={c.path}
+                                        label={c.label}
+                                        onClick={() => dir.cd(c.path)}
+                                        isLast={idx === crumbs.length - 1}
+                                    />
+                                </div>
+                            );
+                        })}
                     </div>
-                    <QuickPaths host={host} onSelect={dir.cd} />
-                </div>
-
-                {/* Toolbar */}
-                <div
-                    data-testid="files-toolbar"
-                    className="flex flex-wrap items-center gap-2"
-                >
-                    <Button type="button" variant="outline" size="sm" onClick={dir.reload} disabled={dir.loading}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={dir.reload}
+                        disabled={dir.loading}
+                    >
                         {dir.loading ? (
                             <Loader2 className="size-3.5 animate-spin" />
                         ) : (
@@ -548,9 +608,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         )}
                         Refresh
                     </Button>
-                    {/* New ▾ split-button: New file + New folder behind
-                        a single trigger. Reduces toolbar width without
-                        hiding the actions. */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button type="button" variant="outline" size="sm">
@@ -598,56 +655,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         Download
                         {selectedEntries.length > 1 && ` (${selectedEntries.length})`}
                     </Button>
-                    {/* More ▾ overflow: low-frequency single-target
-                        actions (Rename, Chmod) and the destructive
-                        Delete. The right-click context menu is the
-                        primary path for these — the toolbar dropdown
-                        is the discoverable backup. */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={selectedEntries.length === 0}
-                                aria-label="More actions"
-                                data-testid="files-more-menu"
-                            >
-                                <MoreHorizontal className="size-3.5" />
-                                More
-                                <ChevronDown className="size-3" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            <DropdownMenuItem
-                                onSelect={() => setShowRename(true)}
-                                disabled={selectedEntries.length !== 1}
-                            >
-                                <Edit className="size-3.5" />
-                                Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onSelect={() => setShowChmod(true)}
-                                disabled={selectedEntries.length !== 1}
-                            >
-                                <Lock className="size-3.5" />
-                                Chmod
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                variant="destructive"
-                                onSelect={() => setShowDelete(true)}
-                                disabled={selectedEntries.length === 0}
-                            >
-                                <Trash2 className="size-3.5" />
-                                Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <QuickPaths host={host} onSelect={dir.cd} />
                 </div>
 
                 {/* Browser + editor split */}
-                <div className="flex flex-1 gap-3 overflow-hidden">
+                <div className="flex flex-1 gap-2 overflow-hidden">
                     <FileContextMenu
                         variant={{ kind: "empty" }}
                         onNewFile={() => setShowNewFile(true)}
@@ -700,19 +712,47 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             style={{ width: preview.width, flexShrink: 0 }}
                             data-testid="preview-pane"
                         >
-                            <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
                                 <span className="truncate font-mono">
                                     {previewEntry?.name ?? "Preview"}
                                 </span>
-                                <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    aria-label="Close preview"
-                                    onClick={preview.close}
-                                >
-                                    <X className="size-3.5" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                    {/* Edit / View toggle — only meaningful for
+                                        kinds that have a distinct rendered
+                                        view (today: markdown). For "text" the
+                                        editor is the only viewer, so the
+                                        toggle button stays hidden to avoid
+                                        suggesting a non-existent "view"
+                                        mode. The button is the discoverable
+                                        sibling to the right-click "Edit"
+                                        item on the row. */}
+                                    {canToggleEdit && previewKind === "markdown" && (
+                                        <Button
+                                            type="button"
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            aria-label={editMode ? "View rendered" : "Edit source"}
+                                            title={editMode ? "View rendered" : "Edit source"}
+                                            aria-pressed={editMode}
+                                            onClick={() => setEditMode((v) => !v)}
+                                        >
+                                            {editMode ? (
+                                                <Eye className="size-3.5" />
+                                            ) : (
+                                                <Pencil className="size-3.5" />
+                                            )}
+                                        </Button>
+                                    )}
+                                    <Button
+                                        type="button"
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label="Close preview"
+                                        onClick={preview.close}
+                                    >
+                                        <X className="size-3.5" />
+                                    </Button>
+                                </div>
                             </div>
                             <div className="flex-1 overflow-hidden">
                                 {previewEntry ? (
@@ -760,7 +800,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                                     />
                                                 );
                                             }
-                                            if (kind === "markdown" && previewEntry.size <= SMALL_FILE_LIMIT) {
+                                            if (
+                                                kind === "markdown" &&
+                                                previewEntry.size <= SMALL_FILE_LIMIT &&
+                                                !editMode
+                                            ) {
                                                 return (
                                                     <MarkdownViewer
                                                         projectID={projectID}
@@ -802,13 +846,14 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     )}
                 </div>
 
-                {/* Bottom status strip — Finder-style. Frees a row up
-                    top by moving "X items / Y selected" + the view-
-                    mode + density toggles to a thin footer that sits
-                    flush with the file pane. */}
+                {/* Bottom status strip — Finder-style. "X items / Y
+                    selected" on the left, density + view-mode toggles
+                    on the right. Kept flush against the file pane with
+                    no top padding so the chrome footprint stays minimal
+                    even on shorter windows. */}
                 <div
                     data-testid="files-status-strip"
-                    className="flex items-center justify-between border-t pt-1 text-xs text-muted-foreground"
+                    className="flex items-center justify-between border-t pt-0.5 text-[11px] text-muted-foreground"
                 >
                     <span>
                         {dir.entries.length} item

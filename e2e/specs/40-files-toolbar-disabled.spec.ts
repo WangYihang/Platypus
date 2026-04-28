@@ -2,10 +2,12 @@ import { expect, test } from "../fixtures/test";
 
 import { loginAsAdmin } from "../fixtures/auth";
 
-// The Files toolbar exposes Download / Rename / Chmod / Delete —
-// all selection-dependent. With no row selected they must be
-// disabled (visually faded + onClick a no-op) so users don't try
-// the action and get a silent failure or a confusing toast.
+// The Files toolbar exposes Refresh / New / Upload / Download.
+// Download is the only selection-dependent action — the rest are
+// always available because they don't operate on the current
+// selection. Rename / Chmod / Delete moved out of the toolbar and
+// live exclusively in the right-click context menu now (the
+// duplicated "More" dropdown was a redundant entry point).
 test.describe("host files toolbar disabled state", () => {
     test("selection-dependent actions are disabled with no selection", async ({
         page,
@@ -28,17 +30,13 @@ test.describe("host files toolbar disabled state", () => {
 
         const toolbar = page.getByTestId("files-toolbar");
 
-        // No row selected; the toolbar buttons that need exactly
-        // one selection (Download / Rename / Chmod) and the Delete
-        // button (>=1) are disabled.
-        for (const name of ["Download", "Rename", "Chmod", "Delete"]) {
-            await expect(
-                toolbar.getByRole("button", { name: new RegExp(`^${name}$`) }),
-            ).toBeDisabled();
-        }
+        // Download requires at least one selection.
+        await expect(
+            toolbar.getByRole("button", { name: /^Download/ }),
+        ).toBeDisabled();
 
-        // Refresh / New folder / Upload don't depend on selection.
-        for (const name of ["Refresh", "New folder", "Upload"]) {
+        // Refresh / New / Upload don't depend on selection.
+        for (const name of ["Refresh", "New", "Upload"]) {
             await expect(
                 toolbar.getByRole("button", { name: new RegExp(`^${name}$`) }),
             ).toBeEnabled();

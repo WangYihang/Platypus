@@ -46,7 +46,7 @@ describe("<FileContextMenu> (row variant, single entry)", () => {
         );
 
         openMenu();
-        fireEvent.click(screen.getByText(/^preview$/i));
+        fireEvent.click(screen.getByText(/^open$/i));
         expect(onOpen).toHaveBeenCalled();
 
         openMenu();
@@ -74,7 +74,14 @@ describe("<FileContextMenu> (row variant, single entry)", () => {
         expect(onDelete).toHaveBeenCalled();
     });
 
-    it("labels Open as 'Open' for folders and 'Preview' for files", () => {
+    it("labels the default action 'Open' for both folders and files", () => {
+        // Folders enter the directory; files mount the preview /
+        // editor — but operators got tripped up when files said
+        // "Preview" (read-only-sounding) while the same click would
+        // actually mount an editable CodeMirror editor for text. A
+        // single "Open" label keeps the contract honest, with a
+        // sibling "Edit" item layered in by the parent for editor-
+        // backed kinds.
         const { rerender } = render(
             <FileContextMenu
                 variant={{ kind: "row", entries: [entry({ isDir: true, name: "src" })] }}
@@ -94,9 +101,35 @@ describe("<FileContextMenu> (row variant, single entry)", () => {
                 <div data-testid="row">file</div>
             </FileContextMenu>,
         );
-        // Re-open after the rerender.
         openMenu();
-        expect(screen.getByText(/^preview$/i)).toBeInTheDocument();
+        expect(screen.getByText(/^open$/i)).toBeInTheDocument();
+    });
+
+    it("renders an 'Edit' item only when onEdit is wired", () => {
+        const onEdit = vi.fn();
+        const { rerender } = render(
+            <FileContextMenu
+                variant={{ kind: "row", entries: [entry({ name: "doc.md" })] }}
+                onOpen={() => {}}
+            >
+                <div data-testid="row">doc.md</div>
+            </FileContextMenu>,
+        );
+        openMenu();
+        expect(screen.queryByText(/^edit$/i)).toBeNull();
+
+        rerender(
+            <FileContextMenu
+                variant={{ kind: "row", entries: [entry({ name: "doc.md" })] }}
+                onOpen={() => {}}
+                onEdit={onEdit}
+            >
+                <div data-testid="row">doc.md</div>
+            </FileContextMenu>,
+        );
+        openMenu();
+        fireEvent.click(screen.getByText(/^edit$/i));
+        expect(onEdit).toHaveBeenCalled();
     });
 });
 

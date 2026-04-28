@@ -16,7 +16,9 @@ function read(): Density {
     } catch {
         // localStorage may be unavailable in some embedded WebViews.
     }
-    return "comfortable";
+    // Default to compact: file lists are typically long and the
+    // operator wants to see as many rows as possible without scrolling.
+    return "compact";
 }
 
 export function useDensity(): [Density, (next: Density) => void] {

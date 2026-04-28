@@ -218,7 +218,12 @@ export default function FileTable({
             data-density={density}
             className={cn(
                 density === "compact" &&
-                    "[&_td]:py-1 [&_td]:text-xs [&_th]:py-1 [&_th]:text-xs",
+                    // Override the shadcn defaults: TableHead is `h-10` (40px)
+                    // and TableCell is `p-2` (8px) — both designed for cards
+                    // with a few rows. The file browser routinely shows
+                    // hundreds of entries, so collapse the row height by
+                    // tightening padding and clamping <th> height.
+                    "[&_th]:h-7 [&_th]:py-0 [&_th]:text-xs [&_td]:py-1 [&_td]:text-xs",
             )}
         >
             <TableHeader>

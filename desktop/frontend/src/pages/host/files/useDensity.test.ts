@@ -12,28 +12,33 @@ afterEach(() => {
 });
 
 describe("useDensity", () => {
-    it("defaults to 'comfortable' when no value is persisted", () => {
+    it("defaults to 'compact' when no value is persisted", () => {
+        // Compact is the default because file lists are typically long
+        // and the operator wants as many rows on screen as possible
+        // before scrolling.
         const { result } = renderHook(() => useDensity());
-        expect(result.current[0]).toBe("comfortable");
+        expect(result.current[0]).toBe("compact");
     });
 
     it("persists the chosen density and rehydrates across mounts", () => {
         const { result, unmount } = renderHook(() => useDensity());
-        act(() => result.current[1]("compact"));
-        expect(result.current[0]).toBe("compact");
-        expect(window.localStorage.getItem("platypus:filesDensity")).toBe("compact");
+        act(() => result.current[1]("comfortable"));
+        expect(result.current[0]).toBe("comfortable");
+        expect(window.localStorage.getItem("platypus:filesDensity")).toBe(
+            "comfortable",
+        );
 
         unmount();
 
         const remount = renderHook(() => useDensity());
-        expect(remount.result.current[0]).toBe("compact");
+        expect(remount.result.current[0]).toBe("comfortable");
     });
 
     it("falls back to the default when the persisted value is garbage", () => {
         // A migration / typo shouldn't lock the user out of toggling —
-        // unknown values silently revert to comfortable on next load.
+        // unknown values silently revert to the default on next load.
         window.localStorage.setItem("platypus:filesDensity", "ultradense");
         const { result } = renderHook(() => useDensity());
-        expect(result.current[0]).toBe("comfortable");
+        expect(result.current[0]).toBe("compact");
     });
 });

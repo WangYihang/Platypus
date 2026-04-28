@@ -40,6 +40,13 @@ interface Props {
     onOpenChange?: (open: boolean) => void;
     // Row callbacks.
     onOpen?: () => void;
+    // onEdit is offered alongside onOpen for files that mount the
+    // CodeMirror editor — the toolbar used to be the only way operators
+    // could find that path, which left "where's the edit button?" as a
+    // recurring complaint. Wiring it is the caller's call: pass undefined
+    // for kinds that have no editor (images, video, …) and the item just
+    // hides.
+    onEdit?: () => void;
     onDownload?: () => void;
     onRename?: () => void;
     onChmod?: () => void;
@@ -58,6 +65,7 @@ export default function FileContextMenu({
     children,
     onOpenChange,
     onOpen,
+    onEdit,
     onDownload,
     onRename,
     onChmod,
@@ -76,6 +84,7 @@ export default function FileContextMenu({
                 {variant.kind === "row"
                     ? renderRowItems(variant.entries, {
                           onOpen,
+                          onEdit,
                           onDownload,
                           onRename,
                           onChmod,
@@ -98,20 +107,29 @@ function renderRowItems(
     entries: FileEntryDTO[],
     cbs: Pick<
         Props,
-        "onOpen" | "onDownload" | "onRename" | "onChmod" | "onCopyPath" | "onCopyName" | "onDelete"
+        | "onOpen"
+        | "onEdit"
+        | "onDownload"
+        | "onRename"
+        | "onChmod"
+        | "onCopyPath"
+        | "onCopyName"
+        | "onDelete"
     >,
 ) {
     const single = entries.length === 1 ? entries[0] : null;
-    // The Open label depends on what's selected: directories "open" by
-    // entering them; files "preview" in the side pane.
-    const openLabel = single?.isDir ? "Open" : "Preview";
 
     return (
         <>
             {cbs.onOpen && (
                 <ContextMenuItem onSelect={cbs.onOpen}>
-                    {openLabel}
+                    Open
                     <ContextMenuShortcut>Enter</ContextMenuShortcut>
+                </ContextMenuItem>
+            )}
+            {cbs.onEdit && (
+                <ContextMenuItem onSelect={cbs.onEdit}>
+                    Edit
                 </ContextMenuItem>
             )}
             {cbs.onDownload && (
