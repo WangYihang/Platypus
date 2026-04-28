@@ -42,6 +42,19 @@ enum StreamType {
   // Async events from agent->server. Opened by agent on demand
   // (process_exited, tunnel_closed, sys_metrics, etc.).
   STREAM_TYPE_EVENT = 8;
+
+  // Walks the requested paths and reports counts (files, total
+  // bytes) without transferring any payload. Used to size a
+  // progress bar before opening STREAM_TYPE_FILE_ARCHIVE.
+  // server->agent.
+  STREAM_TYPE_FILE_SCAN = 9;
+
+  // Streaming archive build. The agent walks the given paths,
+  // packs them into the requested archive format (tar / tar.gz /
+  // zip), and streams the bytes back as FileChunk frames. Saves
+  // the per-chunk HTTP roundtrip the legacy
+  // read-offset-by-offset path pays. server->agent.
+  STREAM_TYPE_FILE_ARCHIVE = 10;
 }
 
 // StreamHeader is the first protobuf message on every new yamux

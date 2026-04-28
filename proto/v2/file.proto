@@ -78,3 +78,78 @@ message FileWriteResult {
   int64 bytes_written = 1;
   string error = 2;
 }
+
+// FileScanRequest opens a STREAM_TYPE_FILE_SCAN stream. The agent
+// walks the named paths, accumulates totals, and replies with a
+// single FileScanResponse. No file bytes flow. Used by the server
+// to size a progress bar before kicking off an archive download.
+message FileScanRequest {
+  // Roots to walk. Each element is treated as a path on the
+  // agent's filesystem; directories are descended recursively,
+  // regular files contribute their size, others are counted but
+  // contribute zero bytes.
+  repeated string paths = 1;
+
+  // If true, the walker follows symlinks; default false to avoid
+  // accidental cycles. Note: even with this disabled, the listed
+  // root paths themselves are stat'd via Lstat, so a symlink root
+  // is reported as a 0-byte symlink.
+  bool follow_symlinks = 2;
+}
+
+message FileScanResponse {
+  // Number of regular files counted.
+  int64 file_count = 1;
+
+  // Number of directories counted.
+  int64 dir_count = 2;
+
+  // Sum of regular file sizes in bytes.
+  int64 total_bytes = 3;
+
+  // Populated when the walker could not even open one of the
+  // root paths (missing, permission denied). Mid-walk errors are
+  // silently skipped to keep the count useful even with a few
+  // unreadable subtrees.
+  string error = 4;
+}
+
+// ArchiveFormat picks the on-the-wire encoding for a
+// STREAM_TYPE_FILE_ARCHIVE stream. tar.gz is the preferred default
+// for cross-platform Unix payloads; zip is offered for Windows
+// callers; uncompressed tar is mostly useful for already-compressed
+// payloads (videos, archives) where gzip would burn CPU for no win.
+enum ArchiveFormat {
+  ARCHIVE_FORMAT_UNSPECIFIED = 0;
+  ARCHIVE_FORMAT_TAR = 1;
+  ARCHIVE_FORMAT_TAR_GZ = 2;
+  ARCHIVE_FORMAT_ZIP = 3;
+}
+
+// FileArchiveRequest opens a STREAM_TYPE_FILE_ARCHIVE stream. The
+// agent walks the named paths and streams the resulting archive
+// back as FileChunk frames, the last one carrying eof=true. The
+// server tallies bytes on the wire to drive progress reporting —
+// no in-band progress frames are needed.
+message FileArchiveRequest {
+  repeated string paths = 1;
+  ArchiveFormat format = 2;
+
+  // If true, the walker follows symlinks. Same caveats as
+  // FileScanRequest.follow_symlinks.
+  bool follow_symlinks = 3;
+
+  // Compression level for tar.gz / zip (0 = library default).
+  // Range mirrors compress/gzip and archive/zip semantics: 1=fast,
+  // 9=best. Out-of-range values clamp.
+  int32 compression_level = 4;
+}
+
+// FileArchiveResponse is the first frame on the archive stream.
+// Mirrors FileReadResponse: an empty error means the agent
+// successfully opened the listed roots and is about to start
+// emitting FileChunk frames; a populated error means the request
+// failed before any data flowed and the stream is closing.
+message FileArchiveResponse {
+  string error = 1;
+}

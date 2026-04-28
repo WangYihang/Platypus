@@ -167,10 +167,12 @@ func main() {
 				SysInfo:     agent.HandleSysInfo,
 				ProcessList: agent.HandleProcessList,
 			},
-			Process:    agent.HandleProcessStream,
-			FileRead:   agent.HandleFileReadStream,
-			FileWrite:  agent.HandleFileWriteStream,
-			TunnelPull: agent.HandleTunnelPullStream,
+			Process:     agent.HandleProcessStream,
+			FileRead:    agent.HandleFileReadStream,
+			FileWrite:   agent.HandleFileWriteStream,
+			FileScan:    agent.HandleFileScanStream,
+			FileArchive: agent.HandleFileArchiveStream,
+			TunnelPull:  agent.HandleTunnelPullStream,
 		})
 		reason := "peer_close"
 		if serveErr != nil {

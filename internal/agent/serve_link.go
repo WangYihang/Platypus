@@ -21,11 +21,13 @@ import (
 // get rejected. Tunnel / file / event / socks5 slots will land
 // alongside their respective handlers.
 type AgentHandlerDeps struct {
-	RPC        AgentRPCHandlers
-	Process    ProcessHandler
-	FileRead   FileReadHandler
-	FileWrite  FileWriteHandler
-	TunnelPull TunnelPullHandler
+	RPC         AgentRPCHandlers
+	Process     ProcessHandler
+	FileRead    FileReadHandler
+	FileWrite   FileWriteHandler
+	FileScan    FileScanHandler
+	FileArchive FileArchiveHandler
+	TunnelPull  TunnelPullHandler
 }
 
 // ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
@@ -40,6 +42,14 @@ type FileReadHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v
 // FileWriteHandler processes one STREAM_TYPE_FILE_WRITE stream.
 // Production impl: HandleFileWriteStream.
 type FileWriteHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileWriteRequest) error
+
+// FileScanHandler processes one STREAM_TYPE_FILE_SCAN stream.
+// Production impl: HandleFileScanStream.
+type FileScanHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileScanRequest) error
+
+// FileArchiveHandler processes one STREAM_TYPE_FILE_ARCHIVE stream.
+// Production impl: HandleFileArchiveStream.
+type FileArchiveHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileArchiveRequest) error
 
 // TunnelPullHandler processes one STREAM_TYPE_TUNNEL_PULL stream.
 // Production impl: HandleTunnelPullStream.
@@ -144,6 +154,32 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 		}
 		if err := deps.FileWrite(ctx, stream, &req); err != nil {
 			log.Warn("agent: file-write stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_FILE_SCAN:
+		if deps.FileScan == nil {
+			rejectStream(stream, "unsupported_type", "file-scan handler not registered")
+			return
+		}
+		var req v2pb.FileScanRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse FileScanRequest: "+err.Error())
+			return
+		}
+		if err := deps.FileScan(ctx, stream, &req); err != nil {
+			log.Warn("agent: file-scan stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_FILE_ARCHIVE:
+		if deps.FileArchive == nil {
+			rejectStream(stream, "unsupported_type", "file-archive handler not registered")
+			return
+		}
+		var req v2pb.FileArchiveRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse FileArchiveRequest: "+err.Error())
+			return
+		}
+		if err := deps.FileArchive(ctx, stream, &req); err != nil {
+			log.Warn("agent: file-archive stream for %s: %v", hdr.CorrelationId, err)
 		}
 	case v2pb.StreamType_STREAM_TYPE_TUNNEL_PULL:
 		if deps.TunnelPull == nil {
