@@ -17,6 +17,7 @@ import {
     renameServer,
     reorderServers,
     setActiveServerId,
+    useServersStore,
 } from "./servers";
 
 // servers.ts is being migrated from a hand-rolled
@@ -35,10 +36,15 @@ import {
 
 beforeEach(() => {
     window.localStorage.clear();
+    // The zustand store state lives in memory; clearing localStorage
+    // alone leaves residue from a prior test. Reset both so each
+    // spec starts with an empty profile list and no active pointer.
+    useServersStore.setState({ profiles: [], activeId: null });
 });
 
 afterEach(() => {
     window.localStorage.clear();
+    useServersStore.setState({ profiles: [], activeId: null });
 });
 
 describe("servers — pure helpers", () => {
