@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -148,9 +147,7 @@ func v2FileUploadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 			err  error
 		}
 		readCh := make(chan readResult, 1)
-		var pumpDone uint32
 		pump := func() {
-			defer atomic.StoreUint32(&pumpDone, 1)
 			buf := make([]byte, fileUploadChunkSize)
 			for {
 				n, rerr := c.Request.Body.Read(buf)
@@ -224,7 +221,6 @@ func v2FileUploadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 				}
 			}
 		}
-		_ = pumpDone
 		// Final eof chunk → tells the agent the body is fully drained.
 		if err := link.WriteFrame(stream, &v2pb.FileChunk{Eof: true}); err != nil {
 			finalizeUpload(deps, ft, statusFromCtx(streamCtx, storage.TransferStatusFailed),
