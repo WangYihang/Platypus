@@ -42,6 +42,7 @@ function makeRow(over: Partial<TransferItem>): TransferItem {
         paths: ["/etc/hosts"],
         status: "running",
         bytes_transferred: 0,
+        wire_bytes: 0,
         total_bytes: 1024,
         started_at: "2025-01-01T00:00:00Z",
         ...over,
