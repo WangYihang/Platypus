@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Loader2, Plus, RotateCw, Trash2, Zap } from "lucide-react";
+import { Copy, Loader2, Plus, Trash2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { UseFormReturn, useForm } from "react-hook-form";
@@ -10,6 +10,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import PageHeader from "../components/PageHeader";
+import RefreshButton from "../components/RefreshButton";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
@@ -245,14 +246,7 @@ function InstallPanel({
                 }
                 right={
                     <>
-                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={refresh} />
                         <Button size="sm" onClick={() => setIssueOpen(true)}>
                             <Plus className="size-3.5" />
                             Generate install command
@@ -795,14 +789,7 @@ function PATPanel({ projectID }: { projectID: string }) {
                 }
                 right={
                     <>
-                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={refresh} />
                         <Button size="sm" onClick={() => setIssueOpen(true)}>
                             <Plus className="size-3.5" />
                             Issue enrollment token

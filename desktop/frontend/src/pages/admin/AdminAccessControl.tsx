@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Loader2, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
 import PageHeader from "../../components/PageHeader";
+import RefreshButton from "../../components/RefreshButton";
 import StatusPill from "../../components/StatusPill";
 import Toolbar from "../../components/Toolbar";
 import { palette, space } from "../../layout/theme";
@@ -150,14 +151,7 @@ function RolesTab() {
             <Toolbar
                 right={
                     <>
-                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={refresh} />
                         <Button size="sm" onClick={() => setCreateOpen(true)}>
                             <Plus className="size-3.5" />
                             New role

@@ -6,7 +6,6 @@ import {
     Loader2,
     Pencil,
     Play,
-    RotateCw,
     Search,
     Trash2,
     X,
@@ -17,6 +16,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import StatusPill from "../components/StatusPill";
+import RefreshButton from "../components/RefreshButton";
 import Toolbar from "../components/Toolbar";
 import { icons } from "../lib/icons";
 import { useCurrentProject } from "../layout/ProjectShell";
@@ -258,19 +258,7 @@ export default function RecordingsPage() {
                                 : `${total.toLocaleString()} session${total === 1 ? "" : "s"}`}
                             {totalPagesHint > 1 && ` · page ${pageNumber} of ${totalPagesHint}`}
                         </span>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading}
-                            onClick={() => refresh(currentCursor)}
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={() => refresh(currentCursor)} />
                     </>
                 }
             />

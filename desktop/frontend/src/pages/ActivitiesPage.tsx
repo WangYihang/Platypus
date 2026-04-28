@@ -4,7 +4,6 @@ import {
     Clock,
     Download,
     Loader2,
-    RotateCw,
     Search,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +12,7 @@ import { humanizeError } from "../lib/humanizeError";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
+import RefreshButton from "../components/RefreshButton";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
@@ -373,19 +373,12 @@ export default function ActivitiesPage() {
                             <Download className="size-3.5" />
                             CSV
                         </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading}
+                        <RefreshButton
+                            loading={loading}
                             onClick={refresh}
+                            iconOnly
                             aria-label="Refresh"
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                        </Button>
+                        />
                     </div>
                 }
             />

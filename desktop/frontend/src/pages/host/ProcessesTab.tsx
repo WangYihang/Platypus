@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, RotateCw } from "lucide-react";
-
 import Mono from "../../components/Mono";
+import RefreshButton from "../../components/RefreshButton";
 import { palette, space } from "../../layout/theme";
 import {
     HostProcess,
@@ -11,7 +10,6 @@ import {
 } from "../../lib/api";
 import { fromNow } from "../../lib/time";
 
-import { Button } from "@/components/ui/button";
 import {
     Table,
     TableBody,
@@ -167,14 +165,7 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
                         ))}
                     </select>
                 </label>
-                <Button size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
-                    {loading ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                        <RotateCw className="size-3.5" />
-                    )}
-                    Refresh
-                </Button>
+                <RefreshButton loading={loading} onClick={() => void refresh()} />
                 <span style={{ fontSize: 12, color: palette.textSecondary }}>
                     {data?.total_count !== undefined
                         ? `${filtered.length} of ${data.total_count}`

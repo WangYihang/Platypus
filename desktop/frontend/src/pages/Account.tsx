@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, KeyRound, Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import Card from "../components/Card";
 import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
+import RefreshButton from "../components/RefreshButton";
 import PageHeader from "../components/PageHeader";
 import Toolbar from "../components/Toolbar";
 import { palette, space } from "../layout/theme";
@@ -320,19 +321,7 @@ function AccountTokensTab() {
                 }
                 right={
                     <>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading}
-                            onClick={refresh}
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={refresh} />
                         <Button size="sm" onClick={() => setIssueOpen(true)}>
                             <Plus className="size-3.5" />
                             Issue token

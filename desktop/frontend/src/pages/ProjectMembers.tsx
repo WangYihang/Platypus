@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
@@ -9,6 +9,7 @@ import { z } from "zod";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import PageHeader from "../components/PageHeader";
+import RefreshButton from "../components/RefreshButton";
 import RoleHelpIcon from "../components/RoleHelpIcon";
 import StatusPill from "../components/StatusPill";
 import { palette, space } from "../layout/theme";
@@ -186,14 +187,7 @@ export default function ProjectMembers({ project }: Props) {
                 subtitle={`${members?.length ?? 0} member(s)`}
                 actions={
                     <>
-                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={refresh} />
                         {canAdd && (
                             <Button size="sm" onClick={openAddDialog}>
                                 <Plus className="size-3.5" />

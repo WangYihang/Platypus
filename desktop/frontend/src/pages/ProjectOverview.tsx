@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Monitor, RotateCw, Users } from "lucide-react";
+import { Monitor, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import LineChartCard, { LinePoint } from "../components/charts/LineChartCard";
 import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
 import PageHeader from "../components/PageHeader";
+import RefreshButton from "../components/RefreshButton";
 import { palette, space } from "../layout/theme";
 import {
     Host,
@@ -132,19 +133,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 }
                 actions={
                     <>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading}
-                            onClick={() => void refresh()}
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
+                        <RefreshButton loading={loading} onClick={() => void refresh()} />
                         {onOpenMembers && (
                             <Button size="sm" variant="outline" onClick={onOpenMembers}>
                                 <Users className="size-3.5" />

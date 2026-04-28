@@ -10,7 +10,6 @@ import {
     Map as MapIcon,
     PanelRightOpen,
     Pencil,
-    RefreshCw,
     Rows2,
     Rows3,
     SlidersHorizontal,
@@ -21,6 +20,7 @@ import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import RefreshButton from "../../../components/RefreshButton";
 import FileContextMenu from "./FileContextMenu";
 
 import {
@@ -760,22 +760,15 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         >
                             <ChevronUp className="size-3.5" />
                         </Button>
-                        <Button
-                            type="button"
+                        <RefreshButton
                             variant="ghost"
-                            size="icon-sm"
+                            iconOnly
+                            loading={dir.loading}
                             onClick={dir.reload}
-                            disabled={dir.loading}
                             aria-label="Refresh"
                             title="Refresh"
                             data-testid="files-refresh"
-                        >
-                            {dir.loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RefreshCw className="size-3.5" />
-                            )}
-                        </Button>
+                        />
                         {crumbs.map((c, idx) => {
                             // splitCrumbs always emits the root segment
                             // first with label "/". Rendering an extra
