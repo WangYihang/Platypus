@@ -197,7 +197,7 @@ function ShellChrome({
                         defaultSize="240px"
                         minSize="180px"
                         maxSize="480px"
-                        className="flex"
+                        className="flex flex-col"
                     >
                         <ProjectSidebar
                             user={user}
@@ -208,7 +208,7 @@ function ShellChrome({
                         />
                     </ResizablePanel>
                     <ResizableHandle />
-                    <ResizablePanel id="main" minSize="40%" className="flex">
+                    <ResizablePanel id="main" minSize="40%" className="flex flex-col">
                         <MainColumn>{children}</MainColumn>
                     </ResizablePanel>
                 </ResizablePanelGroup>
@@ -288,7 +288,7 @@ function MainColumn({ children }: { children: ReactNode }) {
                 direction="vertical"
                 style={{ flex: 1, minHeight: 0 }}
             >
-                <ResizablePanel id="main-content" minSize="20%" className="flex">
+                <ResizablePanel id="main-content" minSize="20%" className="flex flex-col">
                     <main
                         style={{
                             flex: 1,
@@ -342,7 +342,7 @@ function MainColumn({ children }: { children: ReactNode }) {
                     }
                     minSize="0px"
                     maxSize="85%"
-                    className="flex"
+                    className="flex flex-col"
                     onResize={(size) => {
                         // Only let the drag persist a new height when
                         // the drawer is meant to be open and active —
