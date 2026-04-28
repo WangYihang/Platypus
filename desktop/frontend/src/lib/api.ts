@@ -509,6 +509,67 @@ export async function revokeEnrollmentToken(pid: string, tokenID: string, reason
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
 }
 
+// --- Account-level Personal Access Tokens (PATs) --------------------
+//
+// User-issued, long-lived API tokens for the /account page Tokens
+// tab. Distinct from EnrollmentToken (`plt_*`) — those are one-shot
+// agent-bootstrap secrets minted by admins. PATs are the GitHub-style
+// `pat_*` strings a logged-in user creates and uses for API access.
+//
+// The plaintext token only ever returns from the POST issue call;
+// every subsequent list / get returns metadata only.
+
+export interface AccountPAT {
+    token_id: string;
+    name: string;
+    description?: string;
+    scopes: string[];
+    created_at: string;
+    expires_at: string;
+    last_used_at?: string;
+    last_used_ip?: string;
+    revoked: boolean;
+    revoked_at?: string;
+}
+
+export interface IssueAccountPATRequest {
+    name: string;
+    description?: string;
+    // Omit `scopes` to default to the caller's full role-derived
+    // ceiling (admin/operator: every scope; viewer: read scopes only).
+    scopes?: string[];
+    // Defaults to 90d; capped server-side at 1y.
+    ttl_seconds?: number;
+}
+
+export interface IssueAccountPATResponse {
+    token_id: string;
+    token: string; // pat_<id>.<secret> — plaintext exposed exactly once
+    name: string;
+    scopes: string[];
+    created_at: string;
+    expires_at: string;
+}
+
+export async function listAccountPATs(includeRevoked = false): Promise<AccountPAT[]> {
+    const q = includeRevoked ? "?include_revoked=true" : "";
+    const j = await authJSON<{ tokens: AccountPAT[] }>(`/api/v1/account/pat${q}`);
+    return j.tokens ?? [];
+}
+
+export async function issueAccountPAT(req: IssueAccountPATRequest): Promise<IssueAccountPATResponse> {
+    return authJSON<IssueAccountPATResponse>(`/api/v1/account/pat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+    });
+}
+
+export async function revokeAccountPAT(tokenID: string): Promise<void> {
+    const r = await authFetch(`/api/v1/account/pat/${tokenID}`, { method: "DELETE" });
+    if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);
+}
+
 // --- Install artifacts ----------------------------------------------
 //
 // "Generate a one-shot curl command to install an agent". The returned
