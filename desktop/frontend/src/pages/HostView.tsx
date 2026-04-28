@@ -357,7 +357,7 @@ export default function HostView({ projectID, hostID }: Props) {
                         flexDirection: "column",
                         flex: 1,
                         minHeight: 0,
-                        padding: space[6],
+                        padding: space[3],
                     }}
                 >
                     {pickedSessionID ? (
@@ -373,7 +373,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <div
                     style={{
                         display: activeTab === "sessions" ? "block" : "none",
-                        padding: space[6],
+                        padding: space[4],
                     }}
                 >
                     <SessionsPanel sessions={sessions} />
@@ -381,7 +381,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <div
                     style={{
                         display: activeTab === "info" ? "block" : "none",
-                        padding: space[6],
+                        padding: space[4],
                     }}
                 >
                     <InfoPanel
@@ -395,7 +395,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <div
                     style={{
                         display: activeTab === "processes" ? "block" : "none",
-                        padding: space[6],
+                        padding: space[4],
                     }}
                 >
                     <ProcessesTab

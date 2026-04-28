@@ -174,10 +174,14 @@ function ShellChrome({
                 {/* ResizablePanelGroup owns the sidebar ↔ main split.
                     ServerRail stays outside the group because it's a
                     narrow icon column with no interesting resize range
-                    (RAIL_WIDTH constant). The sidebar starts at 240px
-                    to match the previous fixed width; persisted layout
-                    is keyed under platypus.layout.shell-sidebar so a
-                    user's choice survives reloads. */}
+                    (RAIL_WIDTH constant). The sidebar starts at 200px
+                    to match the 2026-04 density pass; the previous
+                    240px default left fewer than half the file rows
+                    on screen for the typical operator layout. The
+                    persisted layout is keyed under
+                    platypus.layout.shell-sidebar so a user's choice
+                    survives reloads — bumping the default does not
+                    invalidate existing preferences. */}
                 <ResizablePanelGroup
                     direction="horizontal"
                     autoSaveId="shell-sidebar"
@@ -185,8 +189,8 @@ function ShellChrome({
                 >
                     <ResizablePanel
                         id="sidebar"
-                        defaultSize="240px"
-                        minSize="180px"
+                        defaultSize="200px"
+                        minSize="168px"
                         maxSize="480px"
                         className="flex"
                     >

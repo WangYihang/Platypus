@@ -222,8 +222,11 @@ export default function FileTable({
                     // and TableCell is `p-2` (8px) — both designed for cards
                     // with a few rows. The file browser routinely shows
                     // hundreds of entries, so collapse the row height by
-                    // tightening padding and clamping <th> height.
-                    "[&_th]:h-7 [&_th]:py-0 [&_th]:text-xs [&_td]:py-1 [&_td]:text-xs",
+                    // tightening padding and clamping <th> height. The
+                    // 2026-04 density pass tightens further: header h-6,
+                    // 11px caps; rows py-0.5 + leading-tight + 12px text
+                    // so a row lands at ~22 px.
+                    "[&_th]:h-6 [&_th]:py-0 [&_th]:text-[11px] [&_td]:py-0.5 [&_td]:text-[12px] [&_td]:leading-tight",
             )}
         >
             <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">

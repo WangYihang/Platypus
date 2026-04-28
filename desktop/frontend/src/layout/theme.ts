@@ -85,9 +85,17 @@ export const font = {
 
 // Region widths. Kept here so CSS transitions can read them and the
 // collapsed states animate predictably.
+//
+// 2026-04 density pass: the original widths were sized for a 1080p
+// laptop with a sparse nav. On 1440p+ the 280-wide sidebar plus the
+// 56-tall page header pushed the file list to ~30% of the viewport
+// before the operator could see a single row. Tighter defaults bring
+// that back without forcing every consumer to opt in via a density
+// toggle. The ResizablePanel still lets the user widen the sidebar
+// if their monitor permits.
 export const layout = {
     profileRailWidth: 56,
-    sidebarWidth: 280,
-    detailRailWidth: 280,
-    mainHeaderHeight: 56,
+    sidebarWidth: 220,
+    detailRailWidth: 220,
+    mainHeaderHeight: 40,
 } as const;

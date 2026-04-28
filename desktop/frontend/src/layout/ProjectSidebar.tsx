@@ -192,7 +192,7 @@ export default function ProjectSidebar({
                     display: "flex",
                     alignItems: "center",
                     gap: space[2],
-                    padding: `${space[4]}px ${space[3]}px ${space[3]}px`,
+                    padding: `${space[3]}px ${space[3]}px ${space[2]}px`,
                 }}
             >
                 <Brand />
@@ -200,7 +200,7 @@ export default function ProjectSidebar({
                     style={{
                         fontWeight: 600,
                         color: palette.textPrimary,
-                        fontSize: 14,
+                        fontSize: 13,
                         letterSpacing: -0.2,
                         flex: 1,
                     }}
@@ -210,7 +210,7 @@ export default function ProjectSidebar({
                 <CmdKHint />
             </div>
 
-            <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
+            <div style={{ padding: `0 ${space[3]}px ${space[2]}px` }}>
                 <ProjectSwitcher
                     projects={projects}
                     currentSlug={currentSlug}
@@ -219,7 +219,7 @@ export default function ProjectSidebar({
                 />
             </div>
 
-            <nav style={{ flex: 1, padding: `${space[2]}px ${space[2]}px`, overflow: "auto" }}>
+            <nav style={{ flex: 1, padding: `${space[1]}px ${space[2]}px`, overflow: "auto" }}>
                 {currentSlug ? (
                     visibleGroups.map((g, gi) => (
                         <div
@@ -228,14 +228,17 @@ export default function ProjectSidebar({
                                 // First group sits flush; subsequent
                                 // groups get extra top space so the
                                 // section break reads as a break, not
-                                // an accidental gap.
-                                marginTop: gi === 0 ? 0 : space[3],
+                                // an accidental gap. Tightened from
+                                // space[3] (12) → space[2] (8) so all
+                                // four IA groups + their items fit
+                                // above the user menu without scroll.
+                                marginTop: gi === 0 ? 0 : space[2],
                             }}
                         >
                             <div
                                 data-testid={`nav-group-${g.key}`}
                                 style={{
-                                    padding: `${space[1]}px ${space[3]}px ${space[1]}px`,
+                                    padding: `${space[1]}px ${space[3]}px 2px`,
                                     fontSize: 10,
                                     fontWeight: 600,
                                     letterSpacing: 0.6,

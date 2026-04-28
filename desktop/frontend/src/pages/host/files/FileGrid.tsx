@@ -83,7 +83,12 @@ function Tile({
             aria-label={entry.name}
             data-selected={isSelected || undefined}
             className={cn(
-                "group relative flex w-28 flex-col items-center gap-1 rounded-md border border-transparent p-2 text-center text-xs",
+                // 2026-04 density pass: tile shrunk from w-28 / size-16 /
+                // size-10 (icon) → w-20 / size-12 / size-8 so the grid
+                // renders ~12 columns on a 1440 viewport instead of ~7.
+                // Padding and gap tightened to match. The file size
+                // line is already 10 px so it stays unchanged.
+                "group relative flex w-20 flex-col items-center gap-0.5 rounded-md border border-transparent p-1.5 text-center text-[11px]",
                 "hover:bg-accent",
                 isSelected && "border-primary bg-accent",
                 drop.isOver && isDroppable && "outline outline-2 outline-primary",
@@ -94,11 +99,11 @@ function Tile({
             {...drag.listeners}
             {...drag.attributes}
         >
-            <div className="flex size-16 items-center justify-center overflow-hidden rounded bg-muted">
+            <div className="flex size-12 items-center justify-center overflow-hidden rounded bg-muted">
                 {entry.isDir ? (
-                    <Folder className="size-10 text-amber-500" />
+                    <Folder className="size-8 text-amber-500" />
                 ) : entry.isSymlink ? (
-                    <FileSymlink className="size-10 text-sky-500" />
+                    <FileSymlink className="size-8 text-sky-500" />
                 ) : showThumb ? (
                     <Thumbnail
                         projectID={projectID!}
@@ -107,7 +112,7 @@ function Tile({
                         mime={entry.mime}
                     />
                 ) : (
-                    <File className="size-10 text-muted-foreground" />
+                    <File className="size-8 text-muted-foreground" />
                 )}
             </div>
             <div className="w-full truncate font-mono">{entry.name}</div>
@@ -162,7 +167,7 @@ export default function FileGrid({
     }
 
     return (
-        <div className="flex flex-wrap content-start gap-2 p-2">
+        <div className="flex flex-wrap content-start gap-1.5 p-1.5">
             {entries.map((e) => {
                 const tile = (
                     <Tile
