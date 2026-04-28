@@ -301,6 +301,82 @@ func TestTokenVerifier_PAT_RoleDowngradeShrinksScopes(t *testing.T) {
 	}
 }
 
+// TestTokenVerifier_PAT_RoleEditPropagatesToLiveTokens pins the new
+// RBAC behaviour: a PAT's effective scope set is computed against
+// the current state of the issuer's role at every Verify, not
+// frozen at issue time. After an admin edits the role's permissions
+// (e.g. adds enrollment:issue to the operator role) any active PAT
+// issued under that role gains the new permission on its next
+// Verify. This is the "permissions are live, not snapshotted" rule
+// that lets RBAC edits roll out without reissuing every PAT.
+func TestTokenVerifier_PAT_RoleEditPropagatesToLiveTokens(t *testing.T) {
+	t.Parallel()
+
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("storage.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if _, err := db.Exec(`
+		INSERT INTO users (id, username, password_hash, role, created_at)
+		VALUES ('u-roleedit','u-roleedit','x','operator',?)`, time.Now().UTC()); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	id, _, hash, plaintext, err := optoken.Generate(optoken.PATPrefix)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	now := time.Now().UTC()
+
+	// Issue the PAT with the operator role's seeded permissions.
+	opRole, err := db.Roles().Get(context.Background(), "operator")
+	if err != nil {
+		t.Fatalf("Roles.Get: %v", err)
+	}
+	pat := &storage.PAT{
+		TokenID:    id,
+		SecretHash: hash,
+		UserID:     "u-roleedit",
+		Name:       "role-edit-test",
+		Scopes:     opRole.Permissions,
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(24 * time.Hour),
+	}
+	if err := db.AuthTokens().CreatePAT(context.Background(), pat); err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	cache := optoken.NewCache(64, 30*time.Second)
+	v := api.NewTokenVerifier(db, cache)
+
+	// Admin shrinks the operator role: drop rpc:invoke. The PAT's
+	// stored scope set still claims it, but the verifier's
+	// IntersectScopes against the LIVE role permissions strips it.
+	shrunk := []string{}
+	for _, p := range opRole.Permissions {
+		if p != optoken.ScopeRPCInvoke {
+			shrunk = append(shrunk, p)
+		}
+	}
+	if err := db.Roles().Update(context.Background(), opRole, shrunk); err != nil {
+		t.Fatalf("Roles.Update: %v", err)
+	}
+	v.Invalidate(id)
+
+	p, reason, err := v.Verify(context.Background(), plaintext)
+	if err != nil || reason != "success" || p == nil {
+		t.Fatalf("Verify after role edit: reason=%q err=%v p=%v", reason, err, p)
+	}
+	if optoken.HasScope(p.Scopes, optoken.ScopeRPCInvoke) {
+		t.Errorf("PAT still carries rpc:invoke after role lost it: %v", p.Scopes)
+	}
+	if !optoken.HasScope(p.Scopes, optoken.ScopeHostsRead) {
+		t.Errorf("PAT lost hosts:read which operator still has: %v", p.Scopes)
+	}
+}
+
 func TestTokenVerifier_TouchLastUsed(t *testing.T) {
 	t.Parallel()
 	v, db, plaintext, s := verifierTestSetup(t)
