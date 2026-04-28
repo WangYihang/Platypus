@@ -11,7 +11,7 @@ import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import RefreshButton from "../components/RefreshButton";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import Toolbar from "../components/Toolbar";
 import { palette, space } from "../layout/theme";
 import { fromNow } from "../lib/time";
@@ -125,13 +125,12 @@ export default function Account() {
     }
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Account"
-                subtitle={user ? `Signed in as ${user.username}` : "Account"}
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                <div style={{ maxWidth: 720 }}>
+        <PageShell
+            title="Account"
+            subtitle={user ? `Signed in as ${user.username}` : "Account"}
+            bodyPadding={8}
+        >
+            <div style={{ maxWidth: 720 }}>
                     <Tabs defaultValue="identity">
                         <TabsList data-testid="account-tabs" className="mb-4">
                             <TabsTrigger value="identity">Identity</TabsTrigger>
@@ -241,8 +240,7 @@ export default function Account() {
                         </TabsContent>
                     </Tabs>
                 </div>
-            </div>
-        </div>
+        </PageShell>
     );
 }
 

@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import RefreshButton from "../../components/RefreshButton";
 import RoleHelpIcon from "../../components/RoleHelpIcon";
 import StatusPill from "../../components/StatusPill";
@@ -196,21 +196,21 @@ export default function AdminUsers() {
     }
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Users"
-                subtitle="Manage who can log in and what they can do"
-                actions={
-                    <>
-                        <RefreshButton loading={loading} onClick={refresh} />
-                        <Button size="sm" onClick={() => setCreateOpen(true)}>
-                            <Plus className="size-3.5" />
-                            New user
-                        </Button>
-                    </>
-                }
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+        <>
+        <PageShell
+            title="Users"
+            subtitle="Manage who can log in and what they can do"
+            actions={
+                <>
+                    <RefreshButton loading={loading} onClick={refresh} />
+                    <Button size="sm" onClick={() => setCreateOpen(true)}>
+                        <Plus className="size-3.5" />
+                        New user
+                    </Button>
+                </>
+            }
+            bodyPadding={8}
+        >
                 {error && (
                     <div
                         style={{
@@ -309,7 +309,7 @@ export default function AdminUsers() {
                         </Table>
                     </Card>
                 )}
-            </div>
+        </PageShell>
 
             {/* Create user */}
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -477,6 +477,6 @@ export default function AdminUsers() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 }

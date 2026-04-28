@@ -2,7 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, Network, Rows3, Timer } from "lucide-react";
 
 import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { icons } from "../lib/icons";
 import { usePreference } from "../lib/preferences";
@@ -106,8 +106,13 @@ export default function FleetPage() {
     );
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader title="Fleet" subtitle={SUBTITLES[view]} actions={actions} />
+        <PageShell
+            title="Fleet"
+            subtitle={SUBTITLES[view]}
+            actions={actions}
+            bodyPadding={0}
+            bodyStyle={{ overflow: "visible", display: "flex", flexDirection: "column", padding: 0 }}
+        >
             <EnrollmentWaitBanner projectID={project.id} projectSlug={project.slug} />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                 <div
@@ -156,6 +161,6 @@ export default function FleetPage() {
                     <TopologyPanel />
                 </div>
             </div>
-        </div>
+        </PageShell>
     );
 }

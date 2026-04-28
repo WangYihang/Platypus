@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -44,37 +44,29 @@ export default function AuditPage() {
         : "activities";
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Audit"
-                subtitle={`History across ${project.name}`}
-                tabs={
-                    <Tabs
-                        value={activeTab}
-                        onValueChange={(v) =>
-                            navigate(`/projects/${project.slug}/audit/${v}`)
-                        }
-                    >
-                        <TabsList className="h-7">
-                            {TABS.map((t) => (
-                                <TabsTrigger key={t} value={t}>
-                                    {TAB_LABELS[t]}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
-                }
-            />
-            <div
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                }}
-            >
-                <Outlet />
-            </div>
-        </div>
+        <PageShell
+            title="Audit"
+            subtitle={`History across ${project.name}`}
+            tabs={
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(v) =>
+                        navigate(`/projects/${project.slug}/audit/${v}`)
+                    }
+                >
+                    <TabsList className="h-7">
+                        {TABS.map((t) => (
+                            <TabsTrigger key={t} value={t}>
+                                {TAB_LABELS[t]}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+            }
+            bodyPadding={0}
+            bodyStyle={{ display: "flex", flexDirection: "column", padding: 0 }}
+        >
+            <Outlet />
+        </PageShell>
     );
 }

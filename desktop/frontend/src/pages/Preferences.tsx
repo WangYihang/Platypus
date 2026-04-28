@@ -2,7 +2,7 @@ import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import Card from "../components/Card";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import { palette, space } from "../layout/theme";
 import {
     PreferenceDefs,
@@ -40,35 +40,33 @@ import {
 // DEFAULTS in lib/preferences.ts and add a SettingRow here.
 export default function Preferences() {
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Preferences"
-                subtitle="This browser only · not synced across devices"
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                <div style={{ maxWidth: 720 }}>
-                    <Tabs defaultValue="display">
-                        <TabsList
-                            data-testid="preferences-tabs"
-                            className="mb-4"
-                        >
-                            <TabsTrigger value="display">Display</TabsTrigger>
-                            <TabsTrigger value="terminal">Terminal</TabsTrigger>
-                            <TabsTrigger value="behaviour">Behaviour</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="display" className="space-y-4">
-                            <DisplayTab />
-                        </TabsContent>
-                        <TabsContent value="terminal" className="space-y-4">
-                            <TerminalTab />
-                        </TabsContent>
-                        <TabsContent value="behaviour" className="space-y-4">
-                            <BehaviourTab />
-                        </TabsContent>
-                    </Tabs>
-                </div>
+        <PageShell
+            title="Preferences"
+            subtitle="This browser only · not synced across devices"
+            bodyPadding={8}
+        >
+            <div style={{ maxWidth: 720 }}>
+                <Tabs defaultValue="display">
+                    <TabsList
+                        data-testid="preferences-tabs"
+                        className="mb-4"
+                    >
+                        <TabsTrigger value="display">Display</TabsTrigger>
+                        <TabsTrigger value="terminal">Terminal</TabsTrigger>
+                        <TabsTrigger value="behaviour">Behaviour</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="display" className="space-y-4">
+                        <DisplayTab />
+                    </TabsContent>
+                    <TabsContent value="terminal" className="space-y-4">
+                        <TerminalTab />
+                    </TabsContent>
+                    <TabsContent value="behaviour" className="space-y-4">
+                        <BehaviourTab />
+                    </TabsContent>
+                </Tabs>
             </div>
-        </div>
+        </PageShell>
     );
 }
 

@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import { useShell } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import { Project } from "../lib/api";
@@ -38,12 +38,11 @@ export default function ProjectsLanding() {
             : "Ask your admin to create a project or invite you to an existing one. Projects scope hosts, sessions, and access — you'll see them here once you have access.";
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Projects"
-                subtitle="Pick a project to inspect its fleet and activity"
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+        <PageShell
+            title="Projects"
+            subtitle="Pick a project to inspect its fleet and activity"
+            bodyPadding={8}
+        >
                 {loading ? (
                     <ProjectsLandingSkeleton />
                 ) : list.length === 0 ? (
@@ -69,8 +68,7 @@ export default function ProjectsLanding() {
                         ))}
                     </div>
                 )}
-            </div>
-        </div>
+        </PageShell>
     );
 }
 

@@ -5,7 +5,7 @@ import { humanizeError } from "../../lib/humanizeError";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import StatusPill from "../../components/StatusPill";
 import { palette, space } from "../../layout/theme";
 import {
@@ -179,20 +179,17 @@ export default function AdminSettings() {
     }
 
     return (
-        <div
-            style={{
+        <PageShell
+            title="Server settings"
+            subtitle="Runtime policy knobs. Changes take effect immediately — no restart needed."
+            bodyPadding={4}
+            bodyStyle={{
                 display: "flex",
                 flexDirection: "column",
                 gap: space[4],
-                padding: space[4],
-                minHeight: "100%",
                 background: palette.main,
             }}
         >
-            <PageHeader
-                title="Server settings"
-                subtitle="Runtime policy knobs. Changes take effect immediately — no restart needed."
-            />
 
             {loading && descs === null && (
                 <div style={{ display: "flex", justifyContent: "center", padding: space[6] }}>
@@ -264,7 +261,7 @@ export default function AdminSettings() {
                     </div>
                 </Card>
             ))}
-        </div>
+        </PageShell>
     );
 }
 

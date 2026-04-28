@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import LineChartCard, { LinePoint } from "../components/charts/LineChartCard";
 import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import RefreshButton from "../components/RefreshButton";
 import { palette, space } from "../layout/theme";
 import {
@@ -120,30 +120,29 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
     }, [sessions24h, hosts, navigate, project.slug]);
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title={project.name}
-                subtitle={
-                    <>
-                        <Mono size={12} color={palette.textMuted}>
-                            {project.slug}
-                        </Mono>{" "}
-                        · overview
-                    </>
-                }
-                actions={
-                    <>
-                        <RefreshButton loading={loading} onClick={() => void refresh()} />
-                        {onOpenMembers && (
-                            <Button size="sm" variant="outline" onClick={onOpenMembers}>
-                                <Users className="size-3.5" />
-                                Members
-                            </Button>
-                        )}
-                    </>
-                }
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+        <PageShell
+            title={project.name}
+            subtitle={
+                <>
+                    <Mono size={12} color={palette.textMuted}>
+                        {project.slug}
+                    </Mono>{" "}
+                    · overview
+                </>
+            }
+            actions={
+                <>
+                    <RefreshButton loading={loading} onClick={() => void refresh()} />
+                    {onOpenMembers && (
+                        <Button size="sm" variant="outline" onClick={onOpenMembers}>
+                            <Users className="size-3.5" />
+                            Members
+                        </Button>
+                    )}
+                </>
+            }
+            bodyPadding={8}
+        >
                 {error && (
                     <div
                         style={{
@@ -275,8 +274,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 </Card>
                 </>
                 )}
-            </div>
-        </div>
+        </PageShell>
     );
 }
 

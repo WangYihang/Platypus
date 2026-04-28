@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import RefreshButton from "../../components/RefreshButton";
 import StatusPill from "../../components/StatusPill";
 import Toolbar from "../../components/Toolbar";
@@ -70,28 +70,26 @@ import { Textarea } from "@/components/ui/textarea";
 //                   before designing custom roles.
 export default function AdminAccessControl() {
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Access control"
-                subtitle="Roles and permissions · admin only"
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                <div style={{ maxWidth: 960 }}>
-                    <Tabs defaultValue="roles">
-                        <TabsList data-testid="access-control-tabs" className="mb-4">
-                            <TabsTrigger value="roles">Roles</TabsTrigger>
-                            <TabsTrigger value="permissions">Permissions</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="roles" className="space-y-4">
-                            <RolesTab />
-                        </TabsContent>
-                        <TabsContent value="permissions" className="space-y-4">
-                            <PermissionsTab />
-                        </TabsContent>
-                    </Tabs>
-                </div>
+        <PageShell
+            title="Access control"
+            subtitle="Roles and permissions · admin only"
+            bodyPadding={8}
+        >
+            <div style={{ maxWidth: 960 }}>
+                <Tabs defaultValue="roles">
+                    <TabsList data-testid="access-control-tabs" className="mb-4">
+                        <TabsTrigger value="roles">Roles</TabsTrigger>
+                        <TabsTrigger value="permissions">Permissions</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="roles" className="space-y-4">
+                        <RolesTab />
+                    </TabsContent>
+                    <TabsContent value="permissions" className="space-y-4">
+                        <PermissionsTab />
+                    </TabsContent>
+                </Tabs>
             </div>
-        </div>
+        </PageShell>
     );
 }
 

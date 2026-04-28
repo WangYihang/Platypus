@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import Card from "../components/Card";
 import DataList from "../components/DataList";
 import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import { useCurrentProject, useShell } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import { deleteProject } from "../lib/api";
@@ -56,9 +56,8 @@ export default function ProjectSettings() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader title="Settings" subtitle={`Project · ${project.slug}`} />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+        <>
+        <PageShell title="Settings" subtitle={`Project · ${project.slug}`} bodyPadding={8}>
                 <div
                     style={{
                         display: "flex",
@@ -117,7 +116,7 @@ export default function ProjectSettings() {
                         </div>
                     </Card>
                 </div>
-            </div>
+        </PageShell>
 
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                 <AlertDialogContent>
@@ -148,6 +147,6 @@ export default function ProjectSettings() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 }

@@ -13,7 +13,9 @@ interface Props {
     // Body padding token. Pages used to spell `padding: space[8]`
     // inline (32 px) or `space[6]` / `space[4]`; centralising here so
     // a future density tweak edits one component, not seventeen.
-    bodyPadding?: SpaceKey;
+    // `0` opts out of padding entirely (FleetPage / AuditPage manage
+    // their own panel layout inside the body).
+    bodyPadding?: SpaceKey | 0;
     // Pass-through for the body wrapper className. Used by pages that
     // need a different overflow/scroll regime than the default
     // (`overflow: auto`).
@@ -53,7 +55,7 @@ export default function PageShell({
                 style={{
                     flex: 1,
                     overflow: "auto",
-                    padding: space[bodyPadding],
+                    padding: bodyPadding === 0 ? 0 : space[bodyPadding],
                     ...bodyStyle,
                 }}
             >
