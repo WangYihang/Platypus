@@ -31,7 +31,10 @@ vi.mock("./notify", () => {
 import { authJSON, authFetch } from "./auth";
 import * as notify from "./notify";
 import {
+    computeInstantaneousRate,
     createTransfersStore,
+    pruneSamplesOlderThan,
+    type ThroughputSample,
     type TransferItem,
     cancelTransfer,
     formatBytesPerSec,
@@ -366,6 +369,82 @@ describe("transferDirectionTone", () => {
         expect(transferDirectionTone({ ...baseRow, direction: "upload" })).toBe(
             "info",
         );
+    });
+});
+
+// --- Throughput-pill helpers ----------------------------------------
+//
+// computeInstantaneousRate / pruneSamplesOlderThan power the
+// status-bar throughput pill. They live in lib/transfers because
+// the rate maths is pure — the component would need them via the
+// useTransferThroughput hook anyway, and isolating them here makes
+// the contract testable without DOM.
+
+describe("computeInstantaneousRate", () => {
+    it("returns null with zero or one sample (insufficient window)", () => {
+        expect(computeInstantaneousRate([])).toBeNull();
+        expect(
+            computeInstantaneousRate([{ ts: 1000, bytes: 4096 }] as ThroughputSample[]),
+        ).toBeNull();
+    });
+
+    it("computes B/s from the oldest+newest sample over the window", () => {
+        // 1 MiB delta over 1000 ms = 1 048 576 B/s.
+        expect(
+            computeInstantaneousRate([
+                { ts: 1000, bytes: 0 },
+                { ts: 2000, bytes: 1048576 },
+            ]),
+        ).toBe(1048576);
+    });
+
+    it("collapses multi-sample windows to oldest-vs-newest", () => {
+        // 4 MiB delta over 4 s spread across 5 samples → 1 MiB/s.
+        expect(
+            computeInstantaneousRate([
+                { ts: 0, bytes: 0 },
+                { ts: 1000, bytes: 1024 * 1024 },
+                { ts: 2000, bytes: 2 * 1024 * 1024 },
+                { ts: 3000, bytes: 3 * 1024 * 1024 },
+                { ts: 4000, bytes: 4 * 1024 * 1024 },
+            ]),
+        ).toBe(1048576);
+    });
+
+    it("clamps negative deltas to 0 (counter reset / reload)", () => {
+        expect(
+            computeInstantaneousRate([
+                { ts: 1000, bytes: 5 * 1024 * 1024 },
+                { ts: 2000, bytes: 1024 * 1024 },
+            ]),
+        ).toBe(0);
+    });
+});
+
+describe("pruneSamplesOlderThan", () => {
+    const samples: ThroughputSample[] = [
+        { ts: 0, bytes: 0 },
+        { ts: 1000, bytes: 100 },
+        { ts: 2000, bytes: 200 },
+        { ts: 3000, bytes: 300 },
+        { ts: 5000, bytes: 500 },
+    ];
+
+    it("keeps every sample whose ts >= now-windowMs", () => {
+        // window 3 s ending at ts 5000 → keep ts in [2000, 5000].
+        expect(pruneSamplesOlderThan(samples, 5000, 3000)).toEqual([
+            { ts: 2000, bytes: 200 },
+            { ts: 3000, bytes: 300 },
+            { ts: 5000, bytes: 500 },
+        ]);
+    });
+
+    it("returns the empty array when nothing is in window", () => {
+        expect(pruneSamplesOlderThan(samples, 100000, 1000)).toEqual([]);
+    });
+
+    it("returns the input unchanged when window covers everything", () => {
+        expect(pruneSamplesOlderThan(samples, 5000, 60000)).toEqual(samples);
     });
 });
 
