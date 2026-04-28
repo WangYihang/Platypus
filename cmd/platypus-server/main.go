@@ -253,7 +253,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rest := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg)
+	rest, agentLinkSvc := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg)
 
 	// Audit retention reaper: sweeps every hour, consults settings
 	// for the live retention window. A zero window keeps everything
@@ -312,6 +312,13 @@ func main() {
 		},
 	})
 
+	// Tear down hijacked agent-link WS connections first. Their accept
+	// loops block in yamux until the underlying session closes —
+	// http.Server.Shutdown does not track hijacked conns, so without
+	// this sweep Shutdown waits the full grace window for handlers
+	// that would never return on their own.
+	agentLinkSvc.CloseAll()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
@@ -352,7 +359,7 @@ func formatValidationError(err error) error {
 	return errors.New(msg)
 }
 
-func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) http.Handler {
+func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) (http.Handler, *core.AgentLinkService) {
 	rest := api.CreateRESTfulAPIServer()
 
 	auth := api.NewAuth()
@@ -602,7 +609,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	)
 
 	core.Ctx.RESTful = rest
-	return rest
+	return rest, agentLinkSvc
 }
 
 // tryStartServerMesh self-issues a cert-bound mesh identity for the

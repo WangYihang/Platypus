@@ -1,8 +1,12 @@
 package core
 
 import (
+	"errors"
+	"io"
+	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/WangYihang/Platypus/internal/link"
 )
@@ -142,6 +146,80 @@ func TestAgentLinkService_AllSnapshot(t *testing.T) {
 	delete(snap, "a-1")
 	if _, ok := s.Get("a-1"); !ok {
 		t.Fatal("mutating snapshot affected registry")
+	}
+}
+
+// CloseAll is the shutdown hook: every registered session has its
+// underlying yamux torn down so accept loops in their hijacked-WS
+// handlers unblock and http.Server.Shutdown can complete within the
+// 30s grace window. Without this, every SIGTERM with at least one
+// connected agent waits the full timeout before the process exits.
+func TestAgentLinkService_CloseAllUnblocksAccept(t *testing.T) {
+	s := NewAgentLinkService()
+
+	// Build two real paired Sessions per agent so Accept on the
+	// "server side" can be awaited; CloseAll on the "client side"
+	// (which is what s holds) must propagate teardown.
+	mkPair := func() (clientSess, serverSess *link.Session) {
+		t.Helper()
+		c, srv := net.Pipe()
+		ch := make(chan *link.Session, 1)
+		go func() {
+			ss, err := link.NewServerSession(srv)
+			if err != nil {
+				t.Errorf("server session: %v", err)
+				return
+			}
+			ch <- ss
+		}()
+		clientSess, err := link.NewClientSession(c)
+		if err != nil {
+			t.Fatalf("client session: %v", err)
+		}
+		return clientSess, <-ch
+	}
+	c1, p1 := mkPair()
+	c2, p2 := mkPair()
+	s.Register("a-1", c1)
+	s.Register("a-2", c2)
+
+	// Each peer Accept must block until CloseAll fires.
+	type acceptResult struct{ err error }
+	out := make(chan acceptResult, 2)
+	for _, p := range []*link.Session{p1, p2} {
+		p := p
+		go func() {
+			_, _, err := p.Accept()
+			out <- acceptResult{err: err}
+		}()
+	}
+
+	// Sanity: Accept should still be blocked here.
+	select {
+	case r := <-out:
+		t.Fatalf("Accept returned before CloseAll: err=%v", r.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	s.CloseAll()
+
+	// Both Accepts must unblock with EOF (yamux session shutdown).
+	for i := 0; i < 2; i++ {
+		select {
+		case r := <-out:
+			if r.err != nil && !errors.Is(r.err, io.EOF) {
+				// Any non-nil err is acceptable (the session was torn
+				// down somehow); we're guarding against "Accept stays
+				// blocked forever".
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Accept did not unblock within 2s of CloseAll")
+		}
+	}
+
+	// Registry is emptied so a follow-up shutdown sweep is a no-op.
+	if got := s.IDs(); len(got) != 0 {
+		t.Fatalf("IDs after CloseAll = %v; want empty", got)
 	}
 }
 
