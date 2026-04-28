@@ -605,6 +605,21 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 			c.String(http.StatusBadRequest, "path query param required")
 			return
 		}
+
+		// Range branch: a single `bytes=A-B` / `bytes=A-` / `bytes=-N`
+		// request is served as 206 Partial Content and bypasses the
+		// TransferRecorder — otherwise a single video preview that
+		// seeks 50 times would explode the file_transfers drawer
+		// into 50 rows. Multi-range or malformed Range headers fall
+		// through to the full 200 path so badly-behaved clients
+		// still get bytes (the response just isn't ranged).
+		if rngHdr := c.GetHeader("Range"); rngHdr != "" {
+			if spec, ok := parseSingleByteRange(rngHdr); ok {
+				serveFsReadRange(c, deps, sess, c.Param("agent_id"), path, spec)
+				return
+			}
+		}
+
 		offset, _ := parseInt64Query(c, "offset")
 		length, _ := parseInt64Query(c, "length")
 
@@ -687,6 +702,10 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 		}
 
 		c.Writer.Header().Set("Content-Type", "application/octet-stream")
+		// Advertise Range support so well-behaved clients (pdf.js,
+		// video.js) opt into Range on the second request even though
+		// this first response was 200.
+		c.Writer.Header().Set("Accept-Ranges", "bytes")
 		if totalBytes > 0 {
 			c.Writer.Header().Set("Content-Length",
 				fmt.Sprintf("%d", totalBytes))
