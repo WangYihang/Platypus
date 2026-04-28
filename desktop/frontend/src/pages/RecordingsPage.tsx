@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     ChevronLeft,
     ChevronRight,
@@ -80,12 +81,8 @@ function formatDuration(ms: number): string {
 // shell session.
 export default function RecordingsPage() {
     const project = useCurrentProject();
-    const [items, setItems] = useState<TerminalRecording[] | null>(null);
-    const [total, setTotal] = useState<number>(0);
+    const queryClient = useQueryClient();
     const [pageStack, setPageStack] = useState<(string | undefined)[]>([undefined]);
-    const [nextCursor, setNextCursor] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     const [statusFilter, setStatusFilter] = useState<RecordingStatus | "">("");
     const [query, setQuery] = useState("");
@@ -107,29 +104,39 @@ export default function RecordingsPage() {
     const currentCursor = pageStack[pageStack.length - 1];
     const pageNumber = pageStack.length;
 
+    const recordingsKey = [
+        "recordings",
+        project.id,
+        { cursor: currentCursor ?? null, status: statusFilter || null, q: debouncedQuery || null },
+    ] as const;
+
+    const recordingsQuery = useQuery({
+        queryKey: recordingsKey,
+        queryFn: () =>
+            listRecordings(project.id, {
+                cursor: currentCursor,
+                limit: PAGE_SIZE,
+                status: statusFilter || undefined,
+                q: debouncedQuery || undefined,
+            }),
+    });
+    const items = recordingsQuery.data?.items ?? null;
+    const total = recordingsQuery.data?.total ?? 0;
+    const nextCursor = recordingsQuery.data?.next_cursor ?? null;
+    const loading = recordingsQuery.isFetching;
+    const error = recordingsQuery.error;
+
+    // Refresh the current page in-place — used by mutations
+    // (rename / delete) that need to reflect new state.
     const refresh = useCallback(
-        async (cursor: string | undefined) => {
-            setLoading(true);
-            try {
-                const resp = await listRecordings(project.id, {
-                    cursor,
-                    limit: PAGE_SIZE,
-                    status: statusFilter || undefined,
-                    q: debouncedQuery || undefined,
-                });
-                setItems(resp.items);
-                setTotal(resp.total);
-                setNextCursor(resp.next_cursor ?? null);
-                setError(null);
-            } catch (e) {
-                setError(humanizeError(e));
-                toast.error(`load recordings: ${humanizeError(e)}`);
-            } finally {
-                setLoading(false);
-            }
-        },
-        [project.id, statusFilter, debouncedQuery],
+        (_cursor?: string) =>
+            queryClient.invalidateQueries({ queryKey: recordingsKey }),
+        [queryClient, recordingsKey],
     );
+
+    useEffect(() => {
+        if (error) toast.error(`load recordings: ${humanizeError(error)}`);
+    }, [error]);
 
     // Reset to page 1 whenever the filter or query changes — otherwise
     // the cursor stack would carry stale offsets that don't match the
@@ -137,10 +144,6 @@ export default function RecordingsPage() {
     useEffect(() => {
         setPageStack([undefined]);
     }, [statusFilter, debouncedQuery, project.id]);
-
-    useEffect(() => {
-        refresh(currentCursor);
-    }, [refresh, currentCursor]);
 
     const totalPagesHint = useMemo(() => {
         if (total <= PAGE_SIZE) return 1;
@@ -275,7 +278,7 @@ export default function RecordingsPage() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {!items && (

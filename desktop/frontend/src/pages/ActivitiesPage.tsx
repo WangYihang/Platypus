@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Clock,
     Download,
@@ -30,6 +31,7 @@ import {
     listProjectActivities,
     ListActivitiesOpts,
 } from "../lib/api";
+import { qk } from "../lib/queryKeys";
 import { fromNow } from "../lib/time";
 import { cn } from "@/lib/cn";
 
@@ -98,12 +100,7 @@ const OUTCOME_TONE: Record<ActivityOutcome, "success" | "warning" | "danger"> = 
 // so the table itself can stay compact.
 export default function ActivitiesPage() {
     const project = useCurrentProject();
-    const [items, setItems] = useState<ActivityItem[] | null>(null);
-    const [nextCursor, setNextCursor] = useState<string | null>(null);
-    const [total, setTotal] = useState<number | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
 
     const [range, setRange] = useState<TimeRange>("7d");
     const [categories, setCategories] = useState<string[]>([]);
@@ -153,39 +150,49 @@ export default function ActivitiesPage() {
         [fromDate, categories, sources, actor, outcome, query, includeGlobal],
     );
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const resp = await listProjectActivities(project.id, buildOpts());
-            setItems(resp.items);
-            setNextCursor(resp.next_cursor ?? null);
-            setTotal(resp.total ?? null);
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-            toast.error(`load activities: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [project.id, buildOpts]);
+    // The query key embeds the page-1 buildOpts (cursor=undefined) so
+    // changing any filter rebuilds the cursor stack from scratch —
+    // useInfiniteQuery guarantees `pages[0]` is always page-1 of the
+    // current filter set.
+    const baseOpts = useMemo(() => buildOpts(), [buildOpts]);
+    const activitiesQuery = useInfiniteQuery({
+        queryKey: qk.activities(project.id, baseOpts),
+        queryFn: ({ pageParam }) =>
+            listProjectActivities(
+                project.id,
+                buildOpts((pageParam as string | null) ?? undefined),
+            ),
+        initialPageParam: null as string | null,
+        getNextPageParam: (last) => last.next_cursor ?? null,
+    });
+
+    const items = useMemo<ActivityItem[] | null>(() => {
+        if (!activitiesQuery.data) return null;
+        return activitiesQuery.data.pages.flatMap((p) => p.items);
+    }, [activitiesQuery.data]);
+    const total = activitiesQuery.data?.pages[0]?.total ?? null;
+    const nextCursor: string | null =
+        activitiesQuery.data?.pages.at(-1)?.next_cursor ?? null;
+    const loading = activitiesQuery.isFetching && !activitiesQuery.isFetchingNextPage;
+    const loadingMore = activitiesQuery.isFetchingNextPage;
+    const error = activitiesQuery.error;
+
+    const refresh = useCallback(() => {
+        return queryClient.invalidateQueries({
+            queryKey: qk.activities(project.id, baseOpts),
+        });
+    }, [queryClient, project.id, baseOpts]);
+
+    const loadMore = useCallback(() => {
+        if (!nextCursor) return;
+        activitiesQuery.fetchNextPage().catch((e) => {
+            toast.error(`load more: ${humanizeError(e)}`);
+        });
+    }, [activitiesQuery, nextCursor]);
 
     useEffect(() => {
-        refresh();
-    }, [refresh]);
-
-    const loadMore = useCallback(async () => {
-        if (!nextCursor) return;
-        setLoadingMore(true);
-        try {
-            const resp = await listProjectActivities(project.id, buildOpts(nextCursor));
-            setItems((prev) => [...(prev ?? []), ...resp.items]);
-            setNextCursor(resp.next_cursor ?? null);
-        } catch (e) {
-            toast.error(`load more: ${humanizeError(e)}`);
-        } finally {
-            setLoadingMore(false);
-        }
-    }, [project.id, nextCursor, buildOpts]);
+        if (error) toast.error(`load activities: ${humanizeError(error)}`);
+    }, [error]);
 
     const handleExport = useCallback(
         async (format: "jsonl" | "csv") => {
@@ -395,7 +402,7 @@ export default function ActivitiesPage() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {!items && (
