@@ -1,17 +1,13 @@
 package api
 
 import (
-	"errors"
-	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
-	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -21,25 +17,18 @@ import (
 // chunk size so end-to-end paste-sized uploads aren't fragmented.
 const fileUploadChunkSize = 256 * 1024
 
-// RegisterV2FileRoutes mounts the v2 file endpoints under the
-// project-scoped agent group. Both operate on a live agent looked up
-// via AgentLinkService; missing agent → 404; agent-reported errors →
-// 502 so the frontend knows the request reached the agent but the
-// agent refused.
+// RegisterV2FileRoutes mounts the v2 mutation file endpoints under
+// the project-scoped agent group. Today this is just /fs/write; the
+// matching /fs/read mount has moved to RegisterV2FileArchiveRoutes
+// so single-file downloads share the same file_transfers tracking
+// (row + WS progress + cancel) the archive download path uses.
 //
-// fs/read is viewer-tier (a read), fs/write is operator-tier (a
-// mutation). RequireAgentInProject prevents cross-project pivots via
-// a forged agent_id under a project the caller is a member of.
+// fs/write is operator-tier (a mutation). RequireAgentInProject
+// prevents cross-project pivots via a forged agent_id under a
+// project the caller is a member of.
 func RegisterV2FileRoutes(engine *gin.Engine, svc *core.AgentLinkService, rbac *RBAC) {
 	base := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
 	base.Use(rbac.RequireAuth())
-
-	viewer := base.Group("")
-	viewer.Use(
-		rbac.RequireProjectRole("pid", user.RoleViewer),
-		rbac.RequireAgentInProject("pid", "agent_id"),
-	)
-	viewer.GET("/fs/read", v2FileDownload(svc))
 
 	operator := base.Group("")
 	operator.Use(
@@ -47,75 +36,6 @@ func RegisterV2FileRoutes(engine *gin.Engine, svc *core.AgentLinkService, rbac *
 		rbac.RequireAgentInProject("pid", "agent_id"),
 	)
 	operator.PUT("/fs/write", v2FileUpload(svc))
-}
-
-// v2FileDownload streams the remote file's content back to the
-// caller as an octet-stream body. Piped straight from the yamux
-// stream so memory usage stays proportional to the agent's chunk
-// size, not the file size.
-func v2FileDownload(svc *core.AgentLinkService) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		sess, ok := lookupAgent(c, svc)
-		if !ok {
-			return
-		}
-		path := c.Query("path")
-		if path == "" {
-			c.String(http.StatusBadRequest, "path query param required")
-			return
-		}
-		offset, _ := strconv.ParseInt(c.Query("offset"), 10, 64)
-		length, _ := strconv.ParseInt(c.Query("length"), 10, 64)
-
-		meta, _ := proto.Marshal(&v2pb.FileReadRequest{
-			Path: path, Offset: offset, Length: length,
-		})
-		stream, err := sess.Open(v2pb.StreamType_STREAM_TYPE_FILE_READ, meta,
-			"fs-read-"+c.Param("agent_id"))
-		if err != nil {
-			c.String(http.StatusBadGateway, "open stream: %s", err)
-			return
-		}
-		defer func() { _ = stream.Close() }()
-
-		var hdr v2pb.FileReadResponse
-		if err := link.ReadFrame(stream, &hdr); err != nil {
-			c.String(http.StatusBadGateway, "read header: %s", err)
-			return
-		}
-		if hdr.Error != "" {
-			c.String(http.StatusBadGateway, "agent: %s", hdr.Error)
-			return
-		}
-
-		c.Writer.Header().Set("Content-Type", "application/octet-stream")
-		if hdr.Size > 0 && length == 0 && offset == 0 {
-			// Only set a known length on full downloads; offset /
-			// length slices have a smaller effective size that we
-			// don't pre-compute.
-			c.Writer.Header().Set("Content-Length", strconv.FormatInt(hdr.Size, 10))
-		}
-		c.Status(http.StatusOK)
-
-		for {
-			var ch v2pb.FileChunk
-			if err := link.ReadFrame(stream, &ch); err != nil {
-				if !errors.Is(err, io.EOF) {
-					log.Warn("v2 fs-read %s: mid-stream error: %v", path, err)
-				}
-				return
-			}
-			if len(ch.Data) > 0 {
-				if _, err := c.Writer.Write(ch.Data); err != nil {
-					return
-				}
-				c.Writer.Flush()
-			}
-			if ch.Eof {
-				return
-			}
-		}
-	}
 }
 
 // v2FileUpload streams the request body to the agent as FileChunk

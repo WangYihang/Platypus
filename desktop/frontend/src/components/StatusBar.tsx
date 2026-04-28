@@ -7,7 +7,9 @@ import { getActiveServer, onServersChange } from "../lib/servers";
 import { ServerInfo, getServerInfo } from "../lib/api";
 import { formatBytes, formatUptimeSeconds } from "../lib/format";
 import TerminalsPill from "../terminal/TerminalsPill";
+import TransfersPill from "./TransfersPill";
 import Mono from "./Mono";
+import Sparkline from "./Sparkline";
 import StatusDot from "./StatusDot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -19,12 +21,31 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 // endpoint.
 const POLL_MS = 1_000;
 
+// HISTORY_SIZE bounds the in-memory ring per metric the right-hand
+// pills sparkline against. 60 samples × 1 Hz = the last minute, which
+// matches the per-host topology sparklines.
+const HISTORY_SIZE = 60;
+
 // StatusBar is pinned to the bottom of ShellChrome. Three zones:
-//   · left   — local build (app version + commit)
-//   · center — connection health (dot + server host)
-//   · right  — remote counts + server version
+//   · left   — brand + connection health (dot + server host)
+//   · center — global-action pills (terminals, transfers)
+//   · right  — runtime telemetry + counts + version
 // On fetch failure the last-known counts stay on screen; the dot flips
 // to `error` so the UI stays legible rather than flashing empty.
+//
+// Redesign notes:
+//   * The old build pill on the left ("Platypus v0.0.0 · dev") was
+//     redundant with the right-hand "server vX.Y" link, so the brand
+//     is now pure text and the version chip is single-source.
+//   * The standalone "web vX.Y" pill was always 0.0.0 (vite reads
+//     package.json, which we don't bump) so it landed empty. Drop it.
+//   * The active-server profile name is hidden when it equals the
+//     server URL host (the common case in dev — the user adds a
+//     server URL and accepts the default name) so the bar doesn't
+//     show "localhost:9443 · localhost:9443".
+//   * The current-user pill moved into the status-dot popover; users
+//     already know who they are, and the inline chip ate horizontal
+//     space the telemetry needs.
 export default function StatusBar() {
     const [session, setSession] = useState(() => getSession());
     const [activeName, setActiveName] = useState(() => getActiveServer()?.name ?? null);
@@ -33,6 +54,8 @@ export default function StatusBar() {
     const [lastPollAt, setLastPollAt] = useState<number | null>(null);
     const [lastPollMs, setLastPollMs] = useState<number | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
+    const [memHistory, setMemHistory] = useState<number[]>([]);
+    const [grtnHistory, setGrtnHistory] = useState<number[]>([]);
     const timerRef = useRef<number | null>(null);
 
     // Keep local session / active-profile state in sync with login,
@@ -54,6 +77,8 @@ export default function StatusBar() {
         if (!session) {
             setInfo(null);
             setOnline("offline");
+            setMemHistory([]);
+            setGrtnHistory([]);
             return;
         }
 
@@ -68,6 +93,12 @@ export default function StatusBar() {
                 setLastError(null);
                 setLastPollAt(Date.now());
                 setLastPollMs(Date.now() - start);
+                if (fresh.mem_alloc_bytes !== undefined) {
+                    setMemHistory((prev) => pushBounded(prev, fresh.mem_alloc_bytes!));
+                }
+                if (fresh.goroutines !== undefined) {
+                    setGrtnHistory((prev) => pushBounded(prev, fresh.goroutines!));
+                }
             } catch (err) {
                 if (cancelled) return;
                 setOnline("error");
@@ -107,6 +138,12 @@ export default function StatusBar() {
         }
     })();
 
+    // Hide the active-server profile chip when it equals the URL host
+    // (the dev default of "localhost:9443" / "localhost:9443" was the
+    // motivating regression). Showing a single label is a cleaner
+    // signal than two identical ones separated by a bullet.
+    const showActiveName = !!activeName && activeName !== serverHost;
+
     return (
         <div
             role="status"
@@ -138,24 +175,7 @@ export default function StatusBar() {
                     }}
                 />
                 <span style={{ color: palette.textSecondary, fontWeight: 500 }}>Platypus</span>
-                <Mono size={11} color={palette.textMuted}>
-                    v{__APP_VERSION__}
-                </Mono>
                 <span style={{ color: palette.border }}>·</span>
-                <Mono size={11} color={palette.textMuted}>
-                    {__APP_COMMIT__.slice(0, 7)}
-                </Mono>
-            </div>
-
-            <div
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: space[2],
-                    minWidth: 0,
-                    flex: "0 1 auto",
-                }}
-            >
                 <Popover>
                     <PopoverTrigger asChild>
                         <button
@@ -219,6 +239,12 @@ export default function StatusBar() {
                                 <span className="text-text-muted">Server: </span>
                                 <span className="text-text-primary">{serverHost}</span>
                             </div>
+                            {showActiveName && (
+                                <div>
+                                    <span className="text-text-muted">Workspace: </span>
+                                    <span className="text-text-primary">{activeName}</span>
+                                </div>
+                            )}
                             {info?.public_addr && (
                                 <div data-testid="status-bar-ingress-popover">
                                     <span className="text-text-muted">Ingress: </span>
@@ -227,26 +253,31 @@ export default function StatusBar() {
                                     </span>
                                 </div>
                             )}
+                            {session?.user && (
+                                <div data-testid="status-bar-user">
+                                    <span className="text-text-muted">User: </span>
+                                    <span className="text-text-primary">
+                                        {session.user.username}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </PopoverContent>
                 </Popover>
-                {activeName && (
-                    <>
-                        <span
-                            style={{
-                                color: palette.textSecondary,
-                                fontWeight: 500,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                            }}
-                            title={activeName}
-                        >
-                            {activeName}
-                        </span>
-                        <span style={{ color: palette.border, flexShrink: 0 }}>·</span>
-                    </>
+                {showActiveName && (
+                    <span
+                        style={{
+                            color: palette.textSecondary,
+                            fontWeight: 500,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            minWidth: 0,
+                        }}
+                        title={activeName!}
+                    >
+                        {activeName}
+                    </span>
                 )}
                 <span
                     style={{
@@ -261,35 +292,24 @@ export default function StatusBar() {
                         {serverHost}
                     </Mono>
                 </span>
-                {session?.user && (
-                    <>
-                        <span style={{ color: palette.border, flexShrink: 0 }}>·</span>
-                        <span
-                            data-testid="status-bar-user"
-                            style={{
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                            }}
-                            title={session.user.username}
-                        >
-                            <Mono size={11} color={palette.textMuted}>
-                                {session.user.username}
-                            </Mono>
-                        </span>
-                    </>
-                )}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
                 <TerminalsPill />
-                <RuntimePills info={info} />
+                <TransfersPill />
+                <RuntimePills info={info} memHistory={memHistory} grtnHistory={grtnHistory} />
                 <CountPills info={info} />
-                <VersionLinks info={info} />
+                <VersionLink info={info} />
             </div>
         </div>
     );
+}
+
+// pushBounded appends a sample to a ring buffer of up to HISTORY_SIZE
+// entries. Returns a new array so React's setState sees the change.
+function pushBounded(prev: number[], next: number): number[] {
+    const out = [...prev, next];
+    return out.length > HISTORY_SIZE ? out.slice(out.length - HISTORY_SIZE) : out;
 }
 
 // --- right-zone sub-components ----------------------------------------
@@ -297,7 +317,15 @@ export default function StatusBar() {
 // They tick at 1 Hz alongside the parent's poll loop because the
 // parent re-renders on every tick.
 
-function RuntimePills({ info }: { info: ServerInfo | null }) {
+function RuntimePills({
+    info,
+    memHistory,
+    grtnHistory,
+}: {
+    info: ServerInfo | null;
+    memHistory: number[];
+    grtnHistory: number[];
+}) {
     // Uptime needs Date.now(), which would change every tick — we
     // recompute on each render so the pill counts up live without
     // a separate timer. Anchored to started_at_unix so the
@@ -311,22 +339,32 @@ function RuntimePills({ info }: { info: ServerInfo | null }) {
         <>
             <Pill
                 testid="status-bar-mem"
-                title="Resident memory (runtime.MemStats.Alloc)"
+                title="Resident memory (runtime.MemStats.Alloc) — last 60 s"
             >
                 <span style={{ color: palette.textMuted }}>mem</span>
                 <Mono size={11} color={palette.textPrimary}>
                     {formatBytes(info?.mem_alloc_bytes)}
                 </Mono>
+                <Sparkline
+                    values={memHistory}
+                    title="resident memory, last 60 s"
+                    color={palette.info}
+                />
             </Pill>
             <Sep />
             <Pill
                 testid="status-bar-goroutines"
-                title="Active goroutines (runtime.NumGoroutine)"
+                title="Active goroutines (runtime.NumGoroutine) — last 60 s"
             >
                 <span style={{ color: palette.textMuted }}>grtn</span>
                 <Mono size={11} color={palette.textPrimary}>
                     {info?.goroutines ?? "—"}
                 </Mono>
+                <Sparkline
+                    values={grtnHistory}
+                    title="goroutines, last 60 s"
+                    color={palette.success}
+                />
             </Pill>
             <Sep />
             <Pill
@@ -352,7 +390,7 @@ function CountPills({ info }: { info: ServerInfo | null }) {
             <Sep />
             <Pill
                 testid="status-bar-hosts"
-                title="Live / total hosts (live = last_seen within 60s)"
+                title="live hosts (last_seen within 60 s) / total enrolled hosts"
             >
                 <span style={{ color: palette.textMuted }}>Hosts</span>
                 <Mono size={11} color={palette.textPrimary}>
@@ -366,7 +404,7 @@ function CountPills({ info }: { info: ServerInfo | null }) {
             <Sep />
             <Pill
                 testid="status-bar-sessions"
-                title="Live / total sessions (live = no disconnected_at stamp)"
+                title="live sessions (no disconnected_at) / total sessions ever"
             >
                 <span style={{ color: palette.textMuted }}>Sessions</span>
                 <Mono size={11} color={palette.textPrimary}>
@@ -381,14 +419,14 @@ function CountPills({ info }: { info: ServerInfo | null }) {
     );
 }
 
-function VersionLinks({ info }: { info: ServerInfo | null }) {
-    // git_repo defaults to the canonical Platypus repo when the
-    // server doesn't report one — older builds didn't include the
-    // field. The web version comes from vite's __APP_VERSION__
-    // build-time global.
+// VersionLink renders a single "vX.Y" link to the matching GitHub
+// release. We dropped the standalone "web v…" pill: vite reads the
+// package.json version (which we don't bump in dev) so the chip was
+// always "v0.0.0", redundant with the server pill, and visually noisy.
+// One source of truth — the server's reported version — is enough.
+function VersionLink({ info }: { info: ServerInfo | null }) {
     const repo = info?.git_repo || "WangYihang/Platypus";
     const serverVer = info?.version;
-    const webVer = __APP_VERSION__;
 
     return (
         <>
@@ -398,13 +436,6 @@ function VersionLinks({ info }: { info: ServerInfo | null }) {
                 repo={repo}
                 version={serverVer}
                 label="server"
-            />
-            <Sep />
-            <ReleaseLink
-                testid="status-bar-web-version"
-                repo={repo}
-                version={webVer}
-                label="web"
             />
         </>
     );

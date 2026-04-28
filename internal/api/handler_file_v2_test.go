@@ -20,8 +20,8 @@ import (
 )
 
 // v2 file endpoints (project-scoped):
-//   GET  /api/v1/projects/:pid/agents/:agent_id/fs/read?path=...   — download
-//   PUT  /api/v1/projects/:pid/agents/:agent_id/fs/write?path=...  — upload
+//   GET  /api/v1/projects/:pid/agents/:agent_id/fs/read?path=...   — download (mounted by RegisterV2FileArchiveRoutes; tracked)
+//   PUT  /api/v1/projects/:pid/agents/:agent_id/fs/write?path=...  — upload (mounted by RegisterV2FileRoutes; un-tracked)
 //
 // Both look up the agent in AgentLinkService and open the matching
 // STREAM_TYPE_FILE_* stream on its link.Session.
@@ -120,7 +120,7 @@ func TestFileV2_DownloadHappy(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, a.svc, a.fixture.RBAC)
+	registerDownloadRoute(r, a)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
@@ -151,7 +151,7 @@ func TestFileV2_DownloadAgentError(t *testing.T) {
 	)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, a.svc, a.fixture.RBAC)
+	registerDownloadRoute(r, a)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
@@ -233,7 +233,10 @@ func TestFileV2_UnknownAgent404(t *testing.T) {
 	fixture := newAgentRouteFixture(t, "ghost")
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterV2FileRoutes(r, core.NewAgentLinkService(), fixture.RBAC)
+	RegisterV2FileArchiveRoutes(r, FileArchiveDeps{
+		Service: core.NewAgentLinkService(),
+		RBAC:    fixture.RBAC,
+	})
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
@@ -243,4 +246,16 @@ func TestFileV2_UnknownAgent404(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d; want 404", resp.StatusCode)
 	}
+}
+
+// registerDownloadRoute mounts the tracked /fs/read endpoint with no
+// recorder/broadcaster — that's the smallest dependency surface to
+// exercise the streaming pass-through behaviour these tests assert.
+// The tracked handler degrades to plain pass-through when Recorder
+// is nil.
+func registerDownloadRoute(r *gin.Engine, a *fileTestAgent) {
+	RegisterV2FileArchiveRoutes(r, FileArchiveDeps{
+		Service: a.svc,
+		RBAC:    a.fixture.RBAC,
+	})
 }

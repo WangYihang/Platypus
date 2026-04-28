@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
 import {
     Boxes,
@@ -85,7 +86,7 @@ export default function HostView({ projectID, hostID }: Props) {
 
     const project = useCurrentProject();
     const navigate = useNavigate();
-    const { openShell } = useGlobalTerminal();
+    const { shells, openShell } = useGlobalTerminal();
     const { tab: tabParam } = useParams<{ tab?: string }>();
     const activeTab: TabKey = (TABS as readonly string[]).includes(tabParam ?? "")
         ? (tabParam as TabKey)
@@ -195,6 +196,34 @@ export default function HostView({ projectID, hostID }: Props) {
             setPickedSessionID(next);
         }
     }, [sessions, host?.agent_id, pickedSessionID]);
+
+    // Auto-open a terminal the first time the operator lands on a
+    // host that's reachable. The motivating UX: opening a host from
+    // Fleet usually means "I need a shell here" — making the operator
+    // click "Open terminal" again duplicates intent. The decision
+    // helper is pure (see ./host/autoOpenShell.ts) so the contract
+    // is pinned by unit tests; this hook only handles the side
+    // effects.
+    const autoOpenedRef = useRef(false);
+    useEffect(() => {
+        const action = decideAutoOpenShell({
+            alreadyAutoOpened: autoOpenedRef.current,
+            hasAgentID: !!host?.agent_id,
+            hasLiveSession: sessions.some((s) => !s.disconnected_at),
+            shellAlreadyOpenForHost: shells.some((s) => s.hostId === hostID),
+        });
+        if (action.kind === "skip") return;
+        autoOpenedRef.current = true;
+        if (action.kind === "mark") return;
+        if (!host?.agent_id) return; // narrowed by hasAgentID above; satisfies TS
+        openShell({
+            projectID: project.id,
+            projectSlug: project.slug,
+            hostId: hostID,
+            sessionHash: host.agent_id,
+            label: host.primary_alias || host.hostname || hostID.slice(0, 8),
+        });
+    }, [host, sessions, shells, hostID, project.id, project.slug, openShell]);
 
     if (loading && !host) {
         return (

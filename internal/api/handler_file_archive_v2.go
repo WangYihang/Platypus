@@ -124,6 +124,12 @@ func RegisterV2FileArchiveRoutes(engine *gin.Engine, deps FileArchiveDeps) {
 	)
 	viewer.POST("/fs/scan", v2FileScan(deps))
 	viewer.POST("/fs/archive", v2FileArchive(deps))
+	// /fs/read used to live on RegisterV2FileRoutes as a plain
+	// streaming pass-through. We moved it here so single-file
+	// downloads also get a file_transfers row + progress events.
+	// The route stays at the same URL — only the internals change,
+	// so existing frontends keep working without a wire-shape bump.
+	viewer.GET("/fs/read", v2FileDownloadTracked(deps))
 
 	// /fs/upload is operator-tier — it MUTATES the agent's filesystem.
 	// Same wire shape as /fs/write but threads a file_transfers row,
@@ -444,6 +450,229 @@ func broadcastTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, paths []s
 		ev.FinishedAt = ft.FinishedAt.Format(time.RFC3339Nano)
 	}
 	deps.Broadcaster.Broadcast(EventTypeFileTransferUpdated, ev)
+}
+
+// v2FileDownloadTracked is the tracked counterpart of the legacy
+// streaming /fs/read handler. Wire shape is identical (the agent
+// returns FileReadResponse + a stream of FileChunk frames; we pipe
+// them straight to the HTTP response body). The two differences:
+//
+//   1. We open a file_transfers row before the first byte flows so
+//      operators see the download in the global Transfers drawer
+//      while it's running. total_bytes comes from the agent's
+//      FileReadResponse.Size header so the progress bar is sized.
+//   2. Bytes-out tick into UpdateProgress + a WS broadcast on the
+//      same size+time triggers the archive download uses, so the
+//      drawer's progress bar updates live (and the operator can
+//      cancel mid-stream from the UI without aborting the browser
+//      tab).
+//
+// When the recorder is nil (tests register without it) the handler
+// degrades to a plain streaming pass-through so the existing wire
+// contract still holds.
+func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sess, ok := lookupAgent(c, deps.Service)
+		if !ok {
+			return
+		}
+		path := c.Query("path")
+		if path == "" {
+			c.String(http.StatusBadRequest, "path query param required")
+			return
+		}
+		offset, _ := parseInt64Query(c, "offset")
+		length, _ := parseInt64Query(c, "length")
+
+		projectID := c.Param("pid")
+		agentID := c.Param("agent_id")
+		userIDStr := ""
+		if claims, ok := ClaimsFromContext(c); ok && claims != nil {
+			userIDStr = claims.UserID
+		}
+
+		meta, _ := proto.Marshal(&v2pb.FileReadRequest{
+			Path: path, Offset: offset, Length: length,
+		})
+		stream, err := sess.Open(v2pb.StreamType_STREAM_TYPE_FILE_READ, meta,
+			"fs-read-"+agentID)
+		if err != nil {
+			c.String(http.StatusBadGateway, "open stream: %s", err)
+			return
+		}
+		defer func() { _ = stream.Close() }()
+
+		var hdr v2pb.FileReadResponse
+		if err := link.ReadFrame(stream, &hdr); err != nil {
+			c.String(http.StatusBadGateway, "read header: %s", err)
+			return
+		}
+		if hdr.Error != "" {
+			c.String(http.StatusBadGateway, "agent: %s", hdr.Error)
+			return
+		}
+
+		// Total bytes is only meaningful for full downloads —
+		// offset/length slices have a smaller effective size we
+		// don't pre-compute. Mirrors the un-tracked v2FileDownload's
+		// Content-Length behaviour.
+		var totalBytes int64
+		if hdr.Size > 0 && length == 0 && offset == 0 {
+			totalBytes = hdr.Size
+		}
+
+		var ft *storage.FileTransfer
+		var transferID string
+		var streamCtx context.Context = c.Request.Context()
+		if deps.Recorder != nil {
+			transferID = deps.IDGenerator()
+			pathsJSON := pathsJSONOne(path)
+			now := time.Now().UTC()
+			ft = &storage.FileTransfer{
+				ID:         transferID,
+				ProjectID:  projectID,
+				HostID:     agentID,
+				UserID:     userIDStr,
+				Direction:  storage.TransferDirectionDownload,
+				Kind:       storage.TransferKindFile,
+				Format:     "",
+				PathsJSON:  pathsJSON,
+				Status:     storage.TransferStatusRunning,
+				TotalBytes: totalBytes,
+				StartedAt:  now,
+			}
+			if err := deps.Recorder.Create(c.Request.Context(), ft); err != nil {
+				log.Warn("file_transfer create (download): %v", err)
+			}
+			broadcastTransfer(deps, ft, []string{path})
+
+			var cancel context.CancelFunc
+			streamCtx, cancel = context.WithCancel(c.Request.Context())
+			defer cancel()
+			if deps.Cancels != nil {
+				deps.Cancels.Register(transferID, cancel)
+				defer deps.Cancels.Unregister(transferID)
+			}
+			go func() {
+				<-streamCtx.Done()
+				if dl, ok := stream.(interface{ SetReadDeadline(time.Time) error }); ok {
+					_ = dl.SetReadDeadline(time.Now().Add(-time.Second))
+				}
+				_ = stream.Close()
+			}()
+		}
+
+		c.Writer.Header().Set("Content-Type", "application/octet-stream")
+		if totalBytes > 0 {
+			c.Writer.Header().Set("Content-Length",
+				fmt.Sprintf("%d", totalBytes))
+		}
+		if transferID != "" {
+			c.Writer.Header().Set("X-Transfer-Id", transferID)
+		}
+		c.Status(http.StatusOK)
+
+		var bytesOut int64
+		lastFlushBytes := int64(0)
+		lastFlushAt := time.Now()
+		for {
+			var ch v2pb.FileChunk
+			if err := link.ReadFrame(stream, &ch); err != nil {
+				if ft != nil {
+					if errors.Is(err, io.EOF) {
+						finalizeFileDownload(deps, ft, storage.TransferStatusDone, bytesOut, "", path)
+					} else {
+						finalizeFileDownload(deps, ft,
+							statusFromCtx(streamCtx, storage.TransferStatusFailed),
+							bytesOut, err.Error(), path)
+					}
+				}
+				return
+			}
+			if len(ch.Data) > 0 {
+				if _, werr := c.Writer.Write(ch.Data); werr != nil {
+					if ft != nil {
+						finalizeFileDownload(deps, ft, storage.TransferStatusCanceled,
+							bytesOut, werr.Error(), path)
+					}
+					return
+				}
+				bytesOut += int64(len(ch.Data))
+				now := time.Now()
+				if ft != nil && (bytesOut-lastFlushBytes >= progressFlushBytes ||
+					now.Sub(lastFlushAt) >= progressFlushInterval) {
+					_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesOut, totalBytes)
+					ft.BytesTransferred = bytesOut
+					broadcastTransfer(deps, ft, []string{path})
+					lastFlushBytes = bytesOut
+					lastFlushAt = now
+				}
+				c.Writer.Flush()
+			}
+			if ch.Eof {
+				if ft != nil {
+					finalizeFileDownload(deps, ft, storage.TransferStatusDone, bytesOut, "", path)
+				}
+				return
+			}
+		}
+	}
+}
+
+// finalizeFileDownload mirrors finalizeTransfer but emits a different
+// activity action so the unified audit log distinguishes single-file
+// downloads from archive downloads at a glance.
+func finalizeFileDownload(deps FileArchiveDeps, ft *storage.FileTransfer, status string, bytes int64, errMsg string, path string) {
+	at := time.Now().UTC()
+	ft.Status = status
+	ft.BytesTransferred = bytes
+	ft.ErrorMessage = errMsg
+	ft.FinishedAt = &at
+	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, errMsg, at); err != nil {
+		log.Warn("file_transfer finish (download): %v", err)
+	}
+	broadcastTransfer(deps, ft, []string{path})
+	if deps.Activity != nil {
+		outcome := storage.OutcomeSuccess
+		if status == storage.TransferStatusFailed {
+			outcome = storage.OutcomeError
+		}
+		deps.Activity.Record(activity.Input{
+			ProjectID:   strPtr(ft.ProjectID),
+			ActorType:   storage.ActorTypeUser,
+			ActorUser:   ft.UserID,
+			Category:    storage.CategoryFile,
+			Action:      "download.file",
+			TargetType:  "agent",
+			TargetID:    ft.HostID,
+			TargetLabel: path,
+			Outcome:     outcome,
+			Error:       errMsg,
+			Meta: map[string]any{
+				"transfer_id":       ft.ID,
+				"bytes_transferred": bytes,
+				"status":            status,
+			},
+			At: at,
+		})
+	}
+}
+
+// parseInt64Query reads an integer query param; missing / unparsable
+// values yield zero. Mirrors the original v2FileDownload helper.
+func parseInt64Query(c *gin.Context, key string) (int64, bool) {
+	s := c.Query(key)
+	if s == "" {
+		return 0, false
+	}
+	var n int64
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+		n = n*10 + int64(ch-'0')
+	}
+	return n, true
 }
 
 // resolveArchiveFormat parses the JSON-supplied format string into

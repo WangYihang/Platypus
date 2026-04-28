@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 
 import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
+import { TransfersDrawer, TransfersDrawerProvider } from "../components/TransfersPill";
 import { Project, listProjects } from "../lib/api";
 import { getSessionUser, getSession } from "../lib/auth";
 import { listServers, setActiveServerId } from "../lib/servers";
@@ -87,13 +88,14 @@ export default function ProjectShell({ requireProject = false }: Props) {
             value={{ projects: projectList, project, refresh, loading }}
         >
             <GlobalTerminalProvider>
-                <ShellChrome
-                    user={user}
-                    serverURL={serverURL}
-                    projects={projectList}
-                    currentSlug={params.projectSlug}
-                    refresh={refresh}
-                >
+                <TransfersDrawerProvider>
+                    <ShellChrome
+                        user={user}
+                        serverURL={serverURL}
+                        projects={projectList}
+                        currentSlug={params.projectSlug}
+                        refresh={refresh}
+                    >
                     {loading && requireProject ? (
                         // For project-scoped routes (Fleet, Members,
                         // Settings, …) the slug must resolve to a real
@@ -115,7 +117,8 @@ export default function ProjectShell({ requireProject = false }: Props) {
                     ) : (
                         <Outlet />
                     )}
-                </ShellChrome>
+                    </ShellChrome>
+                </TransfersDrawerProvider>
             </GlobalTerminalProvider>
         </ProjectShellContext.Provider>
     );
@@ -177,6 +180,11 @@ function ShellChrome({
                         minHeight: 0,
                         display: "flex",
                         flexDirection: "column",
+                        // position: relative anchors the absolutely
+                        // positioned TransfersDrawer to the main pane
+                        // so it slides in from the right edge of the
+                        // outlet (not the viewport).
+                        position: "relative",
                     }}
                 >
                     <main style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}>
@@ -209,6 +217,7 @@ function ShellChrome({
                         </div>
                     </main>
                     <TerminalDrawer />
+                    <TransfersDrawer />
                 </div>
             </div>
             <StatusBar />

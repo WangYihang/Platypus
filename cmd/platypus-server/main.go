@@ -394,7 +394,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db)).WithDB(db)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
-	topologyH := api.NewTopologyHandler(db)
+	topologyH := api.NewTopologyHandler(db).WithAgentLinks(agentLinkSvc)
 	rbac := api.NewRBAC(db, tokenVerifier)
 
 	api.SetActivityRecorder(api.NewActivityRecorder(db))

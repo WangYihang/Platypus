@@ -39,8 +39,18 @@ const fakeInfo = {
 };
 
 const getServerInfoMock = vi.fn();
+const transfersStore = {
+    snapshot: vi.fn(() => []),
+    load: vi.fn(() => Promise.resolve()),
+    subscribe: vi.fn(() => () => {}),
+    dispose: vi.fn(),
+};
 vi.mock("../lib/api", () => ({
     getServerInfo: () => getServerInfoMock(),
+}));
+vi.mock("../lib/transfers", () => ({
+    createTransfersStore: () => transfersStore,
+    cancelTransfer: vi.fn(),
 }));
 
 vi.mock("@wails/runtime/runtime", () => ({
@@ -57,16 +67,19 @@ beforeEach(() => {
 
 // The status bar surfaces the server's runtime telemetry the operator
 // reads at-a-glance: memory, goroutines, uptime, host count, session
-// count, and clickable version links to the matching GitHub release
-// for both server and web. The contract pinned here:
+// count, and clickable version links to the matching GitHub release.
+// Layout contracts pinned here:
 //
 //   1. Once a server-info response lands, the bar renders pills for
 //      mem / goroutines / uptime / hosts / sessions.
-//   2. Server version is a clickable link to /releases/tag/v<ver> on
-//      the repo named in git_repo.
-//   3. Web version (frontend) is also a clickable link.
-//   4. The username span still truncates so a long account name
-//      can't push the bar layout around.
+//   2. mem and grtn pills include a small inline sparkline of the
+//      last samples so operators see the trend at a glance.
+//   3. Server version is a clickable link to /releases/tag/v<ver> on
+//      the repo named in git_repo. The standalone "web vX.Y" pill is
+//      gone — it always rendered as v0.0.0 (vite reads package.json
+//      which dev never bumps), so it was pure visual noise.
+//   4. The current-user chip lives inside the status-dot popover, not
+//      inline — so a long username can't push the bar layout around.
 
 function renderBar() {
     return render(
@@ -98,7 +111,19 @@ describe("<StatusBar> telemetry pills", () => {
         expect(sess.textContent).toMatch(/3.*\/.*47/);
     });
 
-    it("renders clickable server + web version links pointing at GitHub releases", async () => {
+    it("draws inline sparklines inside the mem and grtn pills", async () => {
+        const { container } = renderBar();
+        await waitFor(() => {
+            expect(
+                container.querySelector('[data-testid="status-bar-mem"] [data-testid="sparkline"]'),
+            ).not.toBeNull();
+        });
+        expect(
+            container.querySelector('[data-testid="status-bar-goroutines"] [data-testid="sparkline"]'),
+        ).not.toBeNull();
+    });
+
+    it("renders a single clickable server version link, not a separate web pill", async () => {
         const { container } = renderBar();
         await waitFor(() => {
             expect(
@@ -112,24 +137,26 @@ describe("<StatusBar> telemetry pills", () => {
         expect(server.getAttribute("href")).toBe(
             "https://github.com/WangYihang/Platypus/releases/tag/v0.4.2",
         );
-        // Both pills are independent — the web version comes from
-        // __APP_VERSION__ (set to "test" by vitest.config.ts).
-        const web = container.querySelector(
-            '[data-testid="status-bar-web-version"]',
-        ) as HTMLAnchorElement;
-        expect(web.tagName).toBe("A");
-        expect(web.getAttribute("href")).toMatch(
-            /^https:\/\/github\.com\/WangYihang\/Platypus\/releases\/tag\/v/,
-        );
+        // The old standalone web version chip is gone — it always
+        // rendered as v0.0.0 and crowded the layout with no signal.
+        expect(
+            container.querySelector('[data-testid="status-bar-web-version"]'),
+        ).toBeNull();
     });
 
-    it("clips overflowing username so it can't push adjacent items out", () => {
+    it("does not render the username inline — it lives in the status-dot popover", async () => {
         const { container } = renderBar();
-        const user = container.querySelector('[data-testid="status-bar-user"]');
-        expect(user).not.toBeNull();
-        const style = (user as HTMLElement).getAttribute("style") ?? "";
-        expect(style).toMatch(/overflow:\s*hidden/i);
-        expect(style).toMatch(/text-overflow:\s*ellipsis/i);
+        await waitFor(() => {
+            expect(
+                container.querySelector('[data-testid="status-bar-mem"]'),
+            ).not.toBeNull();
+        });
+        // The inline pill is gone; the only place the username may
+        // still appear is inside the popover (rendered into a portal
+        // when the dot is clicked, so it isn't in the static DOM).
+        expect(
+            container.querySelector('[data-testid="status-bar-user"]'),
+        ).toBeNull();
     });
 
     it("does not render an inline ingress pill — it lives in the status-dot popover now", async () => {

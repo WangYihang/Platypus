@@ -417,3 +417,124 @@ func TestFileV2_ArchiveCancel(t *testing.T) {
 	}
 }
 
+// TestFileV2_DownloadTracked covers the contract that single-file
+// downloads (GET /fs/read) flow through the same file_transfers
+// recorder the archive download path uses, so the global transfers
+// drawer surfaces them too. The download response stays
+// byte-identical to the un-tracked legacy path; the tracking only
+// adds a file_transfers row + an X-Transfer-Id response header.
+func TestFileV2_DownloadTracked(t *testing.T) {
+	want := bytes.Repeat([]byte("ZQ"), 600) // 1200 bytes
+	a := setupArchiveAgentWithRead(t, "agent-dl-tracked", want)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	a.registerArchiveRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet,
+		srv.URL+a.fixture.URL("/fs/read?path=/whatever"), nil)
+	req.Header.Set("Authorization", "Bearer "+a.fixture.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d; want 200; body=%s", resp.StatusCode, b)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("body mismatch: got %d bytes, want %d", len(got), len(want))
+	}
+	if id := resp.Header.Get("X-Transfer-Id"); id != "ft-test-1" {
+		t.Errorf("X-Transfer-Id = %q; want ft-test-1", id)
+	}
+
+	a.recorder.mu.Lock()
+	created := append([]*storage.FileTransfer(nil), a.recorder.created...)
+	finals := append([]TransferFinalUpdate(nil), a.recorder.finals...)
+	a.recorder.mu.Unlock()
+
+	if len(created) != 1 {
+		t.Fatalf("recorder.Create called %d times; want 1", len(created))
+	}
+	if created[0].Direction != storage.TransferDirectionDownload ||
+		created[0].Kind != storage.TransferKindFile {
+		t.Errorf("created = %+v; want download/file", created[0])
+	}
+	if created[0].TotalBytes != int64(len(want)) {
+		t.Errorf("total_bytes = %d; want %d", created[0].TotalBytes, len(want))
+	}
+	if len(finals) != 1 || finals[0].Status != storage.TransferStatusDone {
+		t.Fatalf("finals = %+v; want one done entry", finals)
+	}
+	if finals[0].Bytes != int64(len(want)) {
+		t.Errorf("final bytes = %d; want %d", finals[0].Bytes, len(want))
+	}
+}
+
+// setupArchiveAgentWithRead is a thin variant of setupArchiveAgent
+// that wires a STREAM_TYPE_FILE_READ handler too, so the tracked
+// /fs/read route has an agent to talk to. Returns the same
+// archiveTestAgent the existing scan/archive tests use so it can
+// share registerArchiveRoutes + recorder assertions.
+func setupArchiveAgentWithRead(t *testing.T, agentID string, body []byte) *archiveTestAgent {
+	t.Helper()
+	fixture := newAgentRouteFixture(t, agentID)
+
+	svc := core.NewAgentLinkService()
+	clientConn, serverConn := net.Pipe()
+	serverCh := make(chan *link.Session, 1)
+	go func() {
+		s, err := link.NewServerSession(serverConn)
+		if err != nil {
+			t.Errorf("server session: %v", err)
+			return
+		}
+		serverCh <- s
+	}()
+	agentSess, err := link.NewClientSession(clientConn)
+	if err != nil {
+		t.Fatalf("client session: %v", err)
+	}
+	peer := <-serverCh
+	svc.Register(agentID, agentSess)
+
+	go func() {
+		for {
+			hdr, stream, err := peer.Accept()
+			if err != nil {
+				return
+			}
+			switch hdr.Type {
+			case v2pb.StreamType_STREAM_TYPE_FILE_READ:
+				go func(s io.ReadWriteCloser) {
+					defer s.Close()
+					_ = link.WriteFrame(s, &v2pb.FileReadResponse{
+						Size: int64(len(body)), Mode: 0o644,
+					})
+					_ = link.WriteFrame(s, &v2pb.FileChunk{Data: body, Eof: true})
+				}(stream)
+			default:
+				_ = stream.Close()
+			}
+		}
+	}()
+
+	t.Cleanup(func() {
+		agentSess.Close()
+		peer.Close()
+	})
+	return &archiveTestAgent{
+		svc:      svc,
+		peer:     peer,
+		fixture:  fixture,
+		cancels:  NewTransferCancelRegistry(),
+		recorder: &FakeTransferRecorder{},
+	}
+}
