@@ -13,7 +13,6 @@ import { humanizeError } from "../lib/humanizeError";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
@@ -220,51 +219,18 @@ export default function ActivitiesPage() {
     }, [items, total]);
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Activities"
-                subtitle={subtitle}
-                actions={
-                    <>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleExport("jsonl")}
-                        >
-                            <Download className="size-3.5" />
-                            Export JSONL
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleExport("csv")}
-                        >
-                            <Download className="size-3.5" />
-                            Export CSV
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading}
-                            onClick={refresh}
-                        >
-                            {loading ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                                <RotateCw className="size-3.5" />
-                            )}
-                            Refresh
-                        </Button>
-                    </>
-                }
-            />
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            {/* AuditPage owns the page-level header + tab strip — this
+                component renders only its filter chips, toolbar, and
+                table. Export / Refresh moved into the toolbar's right
+                slot since there's no PageHeader actions slot here. */}
             <div
                 data-testid="activities-quick-filters"
                 style={{
                     display: "flex",
                     flexWrap: "wrap",
                     gap: space[2],
-                    padding: `${space[2]}px ${space[8]}px 0`,
+                    padding: `${space[2]}px ${space[4]}px 0`,
                 }}
             >
                 <QuickFilterChip
@@ -385,9 +351,41 @@ export default function ActivitiesPage() {
                 right={
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ color: palette.textSecondary, fontSize: 12 }}>
+                            {subtitle}
+                        </span>
+                        <span style={{ color: palette.textSecondary, fontSize: 12, marginLeft: 8 }}>
                             Include global
                         </span>
                         <Switch checked={includeGlobal} onCheckedChange={setIncludeGlobal} />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleExport("jsonl")}
+                        >
+                            <Download className="size-3.5" />
+                            JSONL
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleExport("csv")}
+                        >
+                            <Download className="size-3.5" />
+                            CSV
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loading}
+                            onClick={refresh}
+                            aria-label="Refresh"
+                        >
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
+                        </Button>
                     </div>
                 }
             />

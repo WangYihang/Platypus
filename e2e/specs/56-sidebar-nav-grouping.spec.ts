@@ -21,13 +21,18 @@ import { loginAsAdmin } from "../fixtures/auth";
 // fleet), reachable from FleetPage's header. ADMIN now contains
 // only Members.
 //
+// 2026-04 IA pass: AUDIT collapsed Activities + Recordings + Transfers
+// into one "Audit" entry that opens AuditPage with internal tabs. The
+// group keeps a single item so a future second audit kind only needs
+// to push one new entry into the same group.
+//
 //   WORK
 //     · Overview      (dashboard)
 //     · Fleet         (hosts + sessions + topology + enroll)
 //   ADMIN
 //     · Members       (who can see this project)
 //   AUDIT
-//     · Activities    (audit log)
+//     · Audit         (activities / recordings / transfers tabs)
 //   PROJECT
 //     · Settings      (project-level config)
 //
@@ -81,7 +86,7 @@ test.describe("project sidebar nav grouping", () => {
 
         expect(await itemsOf("work")).toEqual(["Overview", "Fleet"]);
         expect(await itemsOf("admin")).toEqual(["Members"]);
-        expect(await itemsOf("audit")).toEqual(["Activities"]);
+        expect(await itemsOf("audit")).toEqual(["Audit"]);
         expect(await itemsOf("project")).toEqual(["Settings"]);
     });
 });

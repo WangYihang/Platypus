@@ -21,6 +21,7 @@ const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const FleetPage = lazy(() => import("./pages/FleetPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
+const AuditPage = lazy(() => import("./pages/AuditPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const RecordingsPage = lazy(() => import("./pages/RecordingsPage"));
 const TransfersPage = lazy(() => import("./pages/TransfersPage"));
@@ -178,9 +179,27 @@ export const routeTree: RouteObject[] = [
                         element: <Navigate to="info" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
-                    { path: "activities", element: withSuspense(<ActivitiesPage />) },
-                    { path: "recordings", element: withSuspense(<RecordingsPage />) },
-                    { path: "transfers", element: withSuspense(<TransfersPage />) },
+                    // Audit consolidation: Activities / Recordings /
+                    // Transfers were three sibling routes before the
+                    // 2026-04 IA pass. Now they live under a parent
+                    // `audit` route that owns the page header + tab
+                    // strip (see pages/AuditPage.tsx). The parent
+                    // index redirects to `activities` so /audit lands
+                    // on a real tab; deep links to a specific tab
+                    // (/audit/recordings) keep working.
+                    {
+                        path: "audit",
+                        element: withSuspense(<AuditPage />),
+                        children: [
+                            {
+                                index: true,
+                                element: <Navigate to="activities" replace />,
+                            },
+                            { path: "activities", element: withSuspense(<ActivitiesPage />) },
+                            { path: "recordings", element: withSuspense(<RecordingsPage />) },
+                            { path: "transfers", element: withSuspense(<TransfersPage />) },
+                        ],
+                    },
                     {
                         path: "enrollment",
                         element: <Navigate to="../fleet/enroll" replace />,

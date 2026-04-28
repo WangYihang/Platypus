@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
-import PageHeader from "../components/PageHeader";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { icons } from "../lib/icons";
@@ -216,30 +215,11 @@ export default function RecordingsPage() {
     const I = icons;
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title="Recordings"
-                subtitle={
-                    items === null
-                        ? "Loading…"
-                        : `${total.toLocaleString()} session${total === 1 ? "" : "s"}`
-                }
-                actions={
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={loading}
-                        onClick={() => refresh(currentCursor)}
-                    >
-                        {loading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                            <RotateCw className="size-3.5" />
-                        )}
-                        Refresh
-                    </Button>
-                }
-            />
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            {/* AuditPage owns the page-level header + tab strip; this
+                component renders only the toolbar + body. The Refresh
+                button moved into the toolbar's right slot since there
+                is no PageHeader actions slot at this depth anymore. */}
             <Toolbar
                 left={
                     <>
@@ -271,10 +251,27 @@ export default function RecordingsPage() {
                     </>
                 }
                 right={
-                    <span style={{ color: palette.textSecondary, fontSize: 12 }}>
-                        Page {pageNumber}
-                        {totalPagesHint > 1 ? ` of ${totalPagesHint}` : ""}
-                    </span>
+                    <>
+                        <span style={{ color: palette.textSecondary, fontSize: 12 }}>
+                            {items === null
+                                ? "Loading…"
+                                : `${total.toLocaleString()} session${total === 1 ? "" : "s"}`}
+                            {totalPagesHint > 1 && ` · page ${pageNumber} of ${totalPagesHint}`}
+                        </span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loading}
+                            onClick={() => refresh(currentCursor)}
+                        >
+                            {loading ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                                <RotateCw className="size-3.5" />
+                            )}
+                            Refresh
+                        </Button>
+                    </>
                 }
             />
 

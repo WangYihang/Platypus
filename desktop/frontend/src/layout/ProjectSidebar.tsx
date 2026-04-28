@@ -140,9 +140,12 @@ export default function ProjectSidebar({
             key: "audit",
             label: "Audit",
             items: [
-                { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
-                { to: "recordings", label: "Recordings", icon: <I.recordings className="size-4" />, requiresProject: true },
-                { to: "transfers", label: "Transfers", icon: <I.transfers className="size-4" />, requiresProject: true },
+                {
+                    to: "audit/activities",
+                    label: "Audit",
+                    icon: <I.activity className="size-4" />,
+                    requiresProject: true,
+                },
             ],
         },
         {
@@ -266,10 +269,21 @@ export default function ProjectSidebar({
                                             // Fleet, so highlight Fleet
                                             // there too.
                                             const forced =
-                                                it.to === "fleet" &&
-                                                pathname.startsWith(
-                                                    `/projects/${currentSlug}/hosts/`,
-                                                );
+                                                (it.to === "fleet" &&
+                                                    pathname.startsWith(
+                                                        `/projects/${currentSlug}/hosts/`,
+                                                    )) ||
+                                                // Audit nav points at the
+                                                // default sub-tab; treat
+                                                // any /audit/* URL as
+                                                // active so switching
+                                                // tabs inside AuditPage
+                                                // doesn't lose the
+                                                // sidebar highlight.
+                                                (it.to.startsWith("audit/") &&
+                                                    pathname.startsWith(
+                                                        `/projects/${currentSlug}/audit`,
+                                                    ));
                                             const active = isActive || forced;
                                             return (
                                                 "pl-nav-link" +
