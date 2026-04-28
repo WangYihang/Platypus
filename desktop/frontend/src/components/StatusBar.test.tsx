@@ -36,6 +36,7 @@ const fakeInfo = {
     live_host_count: 9,
     goroutines: 124,
     mem_alloc_bytes: 47 * 1024 * 1024,
+    cpu_percent: 12.34,
 };
 
 const getServerInfoMock = vi.fn();
@@ -115,6 +116,25 @@ describe("<StatusBar> telemetry pills", () => {
         const sess = container.querySelector('[data-testid="status-bar-sessions"]')!;
         // Live / total in the form "3 / 47".
         expect(sess.textContent).toMatch(/3.*\/.*47/);
+    });
+
+    it("renders a cpu pill with the rounded percent and a tooltip explaining values >100%", async () => {
+        const { container } = renderBar();
+        await waitFor(() => {
+            expect(
+                container.querySelector('[data-testid="status-bar-cpu"]'),
+            ).not.toBeNull();
+        });
+        const cpu = container.querySelector('[data-testid="status-bar-cpu"]')!;
+        // Rounded to integer: 12.34 → "12%".
+        expect(cpu.textContent).toMatch(/12\s*%/);
+        // Tooltip explains the per-core normalisation so values
+        // above 100% don't read as a bug.
+        const tooltip =
+            cpu.getAttribute("title") ||
+            cpu.querySelector("[title]")?.getAttribute("title") ||
+            "";
+        expect(tooltip).toMatch(/>?\s*100\s*%.*multi-core|per-core|across cores/i);
     });
 
     it("draws inline sparklines inside the mem and grtn pills", async () => {

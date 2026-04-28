@@ -134,6 +134,32 @@ func TestInfoV1_RuntimeAndCounts(t *testing.T) {
 	}
 }
 
+// TestInfoV1_CPUPercent — the runtime stats now include the server
+// process's CPU%. Stub the package-level CPUPercent so we don't
+// depend on a live sampler in the handler test.
+func TestInfoV1_CPUPercent(t *testing.T) {
+	r, tok := setupInfoV1Router(t)
+	prev := CPUPercent
+	defer func() { CPUPercent = prev }()
+	CPUPercent = func() float64 { return 12.34 }
+
+	w := infoSmokeReq(t, r, "GET", "/api/v1/info", tok)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v (body=%s)", err, w.Body.String())
+	}
+	pct, ok := got["cpu_percent"].(float64)
+	if !ok {
+		t.Fatalf("cpu_percent missing or wrong type: %#v", got["cpu_percent"])
+	}
+	if pct != 12.34 {
+		t.Errorf("cpu_percent = %v; want 12.34", pct)
+	}
+}
+
 // TestInfoV1_StableStartedAt — uptime must be stable across calls.
 func TestInfoV1_StableStartedAt(t *testing.T) {
 	r, tok := setupInfoV1Router(t)
