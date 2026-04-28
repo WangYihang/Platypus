@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
@@ -19,6 +19,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Card from "../components/Card";
 import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
+import MetricCard from "../components/MetricCard";
 import Mono from "../components/Mono";
 import StatusDot from "../components/StatusDot";
 import StatusPill from "../components/StatusPill";
@@ -426,11 +427,18 @@ interface InfoPanelProps {
     onRefreshSysInfo: () => void;
 }
 
-// InfoPanel bundles four cards: Identity (DB-cached host row),
-// System (OS / kernel / platform / CPU / memory), Network (primary
-// addr, interfaces), and Storage (disk partitions). We prefer the
-// live SysInfo fields when available (they include CPU %, memory
-// used, etc.) and fall back to the cached Host columns otherwise.
+// InfoPanel renders the host Info tab. Three regions, top-down:
+//   1. KPI strip — five live metrics (CPU %, mem %, load1, disk %,
+//      uptime) in a `auto-fit` MetricCard grid; cells hide when their
+//      underlying field is missing so the strip degrades gracefully
+//      when the agent is offline rather than rendering "—" placeholders.
+//   2. Detail grid — Identity / System / Hardware / Network / Storage /
+//      Logged-in users laid out in a two-column CSS grid (System spans
+//      two rows because it carries the most data).
+//   3. Inline cached-fallback note when the live sysInfo fetch failed.
+// We prefer live SysInfo values when available and fall through to
+// the DB-cached Host columns; that fallback is centralised in the
+// individual cards.
 function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysInfo }: InfoPanelProps) {
     // Prefer live sysInfo values; fall through to DB-cached Host.
     const kernel = sysInfo?.kernel_version || host.kernel_version;
@@ -458,7 +466,17 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
     );
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: space[4], maxWidth: 960 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: space[4], maxWidth: 1100 }}>
+            <InfoKPIStrip host={host} sysInfo={sysInfo} />
+            <div
+                data-testid="host-info-detail-grid"
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",
+                    gap: space[3],
+                    alignItems: "start",
+                }}
+            >
             <Card
                 header={
                     <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
@@ -704,7 +722,11 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
             )}
 
             {sysInfo?.users && sysInfo.users.length > 0 && (
-                <Card header="Logged-in users" padding={5}>
+                <Card
+                    header="Logged-in users"
+                    padding={5}
+                    style={{ gridColumn: "1 / -1" }}
+                >
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -735,6 +757,133 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                     </Table>
                 </Card>
             )}
+            </div>
+        </div>
+    );
+}
+
+// InfoKPIStrip renders the at-a-glance health row above the Info-tab
+// detail grid. The five tiles cover the questions an operator asks
+// in the first second after opening a host: is it pegged, out of
+// memory, swapping, full, and how long has it been up? Cells render
+// only when their underlying field is present so an offline agent
+// produces a 0-tile strip rather than a row of "—" placeholders. The
+// `auto-fit` grid wraps gracefully on narrow viewports (a 720 px
+// sidebar+main layout collapses the 5 tiles to a 3+2 row pair).
+function InfoKPIStrip({
+    host,
+    sysInfo,
+}: {
+    host: Host;
+    sysInfo: HostSysInfo | null;
+}) {
+    interface Tile {
+        key: string;
+        label: string;
+        value: ReactNode;
+        hint?: ReactNode;
+        accent?: "default" | "success" | "warning" | "danger";
+    }
+    const tiles: Tile[] = [];
+
+    // CPU %. Warn at 70, danger at 90 — the thresholds match the
+    // colours the operator already associates with the StatusPill
+    // tones elsewhere on the page.
+    if (sysInfo?.cpu_percent !== undefined) {
+        const pct = sysInfo.cpu_percent;
+        tiles.push({
+            key: "cpu",
+            label: "CPU",
+            value: `${pct.toFixed(1)}%`,
+            accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
+        });
+    }
+
+    // Memory %. Computed from used/total — neither field alone is
+    // useful as a KPI on its own (raw bytes scale with the host),
+    // so we hide the tile unless both are present.
+    const memTotal = sysInfo?.mem_total || host.mem_total_bytes;
+    if (sysInfo?.mem_used !== undefined && memTotal) {
+        const pct = (sysInfo.mem_used / memTotal) * 100;
+        tiles.push({
+            key: "mem",
+            label: "Memory",
+            value: `${pct.toFixed(1)}%`,
+            hint: `${formatBytes(sysInfo.mem_used)} / ${formatBytes(memTotal)}`,
+            accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
+        });
+    }
+
+    // Load 1. Threshold is per-CPU because raw load1 means nothing
+    // without core count — load1=4 on a 32-core box is idle, on a
+    // 2-core box it's a full pegging.
+    if (sysInfo?.load1 !== undefined) {
+        const cores = sysInfo.num_cpu || host.num_cpu || 1;
+        const ratio = sysInfo.load1 / cores;
+        tiles.push({
+            key: "load1",
+            label: "Load 1m",
+            value: sysInfo.load1.toFixed(2),
+            hint:
+                sysInfo.load5 !== undefined && sysInfo.load15 !== undefined
+                    ? `${sysInfo.load5.toFixed(2)} · ${sysInfo.load15.toFixed(2)}`
+                    : undefined,
+            accent: ratio >= 2 ? "danger" : ratio >= 1 ? "warning" : "default",
+        });
+    }
+
+    // Disk %. Pick the worst-utilised mount across all reported
+    // disks. The hint names that mount so the operator can drill in
+    // without having to scan the Storage table.
+    if (sysInfo?.disks && sysInfo.disks.length > 0) {
+        let worst: { pct: number; mount: string } | null = null;
+        for (const d of sysInfo.disks) {
+            if (!d.total_bytes || d.total_bytes <= 0) continue;
+            const pct = ((d.used_bytes ?? 0) / d.total_bytes) * 100;
+            if (!worst || pct > worst.pct) {
+                worst = { pct, mount: d.mountpoint || "—" };
+            }
+        }
+        if (worst) {
+            tiles.push({
+                key: "disk",
+                label: "Disk",
+                value: `${worst.pct.toFixed(1)}%`,
+                hint: worst.mount,
+                accent:
+                    worst.pct >= 90 ? "danger" : worst.pct >= 80 ? "warning" : "default",
+            });
+        }
+    }
+
+    // Uptime. Reuses renderUptime() — already returns "Nd Nh Nm" or
+    // "—". We only push the tile when the renderer would produce a
+    // real string so the strip stays clean on never-seen hosts.
+    const uptime = renderUptime(sysInfo?.uptime_seconds, sysInfo?.boot_time_unix || host.boot_time_unix);
+    if (uptime !== "—") {
+        tiles.push({ key: "uptime", label: "Uptime", value: uptime });
+    }
+
+    if (tiles.length === 0) return null;
+
+    return (
+        <div
+            data-testid="host-info-kpi-strip"
+            style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: space[3],
+            }}
+        >
+            {tiles.map((t) => (
+                <MetricCard
+                    key={t.key}
+                    label={t.label}
+                    value={t.value}
+                    hint={t.hint}
+                    accent={t.accent}
+                />
+            ))}
         </div>
     );
 }
