@@ -19,7 +19,7 @@ type Auth struct {
 	secret    string          // server secret for obtaining tokens
 	wsTickets *wsTicketStore  // short-lived one-shot tickets for WS auth
 	// opaqueVerifier, if set, lets Middleware also accept opaque
-	// session / AAT tokens alongside the legacy single-secret path.
+	// session tokens alongside the legacy single-secret path.
 	// Wired by main.go after the verifier is constructed so that
 	// browser clients (which carry pst_ session tokens) can hit
 	// endpoints still mounted under the legacy middleware —
@@ -55,7 +55,7 @@ func (a *Auth) GetSecret() string {
 	return a.secret
 }
 
-// SetOpaqueVerifier enables opaque-token (session / AAT) acceptance in
+// SetOpaqueVerifier enables opaque-token (session) acceptance in
 // Middleware(). Pass the same TokenVerifier used by RBAC. Optional —
 // without it Middleware() only accepts legacy single-secret tokens.
 func (a *Auth) SetOpaqueVerifier(v *TokenVerifier) {

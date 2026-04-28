@@ -47,13 +47,12 @@ func TestKindForPrefix(t *testing.T) {
 		wantKind optoken.Kind
 		wantOK   bool
 	}{
-		{"aat_", optoken.KindAAT, true},
 		{"pst_", optoken.KindUserSession, true},
 		{"plt_", optoken.KindEnrollmentToken, true},
 		{"dl_", optoken.KindInstall, true},
 		{"foo_", "", false},
 		{"", "", false},
-		{"aat", "", false}, // missing trailing underscore — must be exact
+		{"pst", "", false}, // missing trailing underscore — must be exact
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -86,7 +85,6 @@ func TestDetectKind(t *testing.T) {
 		return sample{raw: plaintext, wantKind: kind, wantPfx: prefix}
 	}
 	cases := []sample{
-		mk("aat_", optoken.KindAAT),
 		mk("pst_", optoken.KindUserSession),
 		mk("plt_", optoken.KindEnrollmentToken),
 		mk("dl_", optoken.KindInstall),

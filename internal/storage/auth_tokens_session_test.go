@@ -2,7 +2,6 @@ package storage_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -45,22 +44,6 @@ func TestCreateSession_Roundtrip(t *testing.T) {
 	}
 	if got.IdleExpiresAt.IsZero() {
 		t.Error("IdleExpiresAt zero on freshly-created session")
-	}
-}
-
-func TestCreateSession_RejectsAATKind(t *testing.T) {
-	t.Parallel()
-	db := newAuthDB(t)
-	makeUser(t, db, "u1")
-	ctx := context.Background()
-	// GetAAT must NOT find a session row — type discipline check.
-	s := sampleSession("pst_typetest", "u1")
-	if err := db.AuthTokens().CreateSession(ctx, s); err != nil {
-		t.Fatal(err)
-	}
-	_, err := db.AuthTokens().GetAAT(ctx, s.TokenID)
-	if !errors.Is(err, storage.ErrNotFound) {
-		t.Errorf("GetAAT on session row: err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -194,11 +177,6 @@ func TestRevokeAllSessionsForUser(t *testing.T) {
 	if err := db.AuthTokens().CreateSession(ctx, sampleSession("pst_b1", "bob")); err != nil {
 		t.Fatal(err)
 	}
-	// Also create an AAT for alice — must NOT be revoked.
-	a := sampleAAT("aat_alice", "alice")
-	if err := db.AuthTokens().CreateAAT(ctx, a); err != nil {
-		t.Fatal(err)
-	}
 
 	n, err := db.AuthTokens().RevokeAllSessionsForUser(ctx, "alice", "alice", "password change", time.Now().UTC())
 	if err != nil {
@@ -211,10 +189,5 @@ func TestRevokeAllSessionsForUser(t *testing.T) {
 	bobSessions, _ := db.AuthTokens().ListSessionsForUser(ctx, "bob")
 	if len(bobSessions) != 1 {
 		t.Errorf("bob's sessions affected: len=%d, want 1", len(bobSessions))
-	}
-	// Alice's AAT untouched.
-	aliceAAT, _ := db.AuthTokens().GetAAT(ctx, "aat_alice")
-	if aliceAAT.Revoked {
-		t.Error("RevokeAllSessions also touched AATs (kind filter missing?)")
 	}
 }

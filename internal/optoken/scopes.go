@@ -12,7 +12,6 @@ import (
 type Kind string
 
 const (
-	KindAAT             Kind = "aat"
 	KindUserSession     Kind = "user_session"
 	KindEnrollmentToken Kind = "enrollment"
 	KindInstall         Kind = "install"
@@ -21,13 +20,12 @@ const (
 // Wire-format prefixes. Visible in logs / git / Slack so secret
 // scanners can match each kind the way they do GitHub's `ghp_`. The
 // trailing underscore is part of the prefix — included so a substring
-// like "aat_" never appears mid-id.
+// like "pst_" never appears mid-id.
 //
 // EnrollmentTokenPrefix keeps the historical literal "plt_" so that
 // already-deployed agents and operator scripts (which pasted the prefix
 // into config files) continue to work unchanged.
 const (
-	AATPrefix             = "aat_"
 	UserSessionPrefix     = "pst_"
 	EnrollmentTokenPrefix = "plt_"
 	InstallPrefix         = "dl_"
@@ -37,7 +35,6 @@ const (
 // Adding a new kind = one entry here + one Kind constant + one prefix
 // constant; nothing else in this package needs touching.
 var kindByPrefix = map[string]Kind{
-	AATPrefix:             KindAAT,
 	UserSessionPrefix:     KindUserSession,
 	EnrollmentTokenPrefix: KindEnrollmentToken,
 	InstallPrefix:         KindInstall,
@@ -90,8 +87,9 @@ var allScopes = []string{
 	ScopeRPCInvoke,
 }
 
-// AllScopes returns every scope known to the server. Useful for admin
-// AAT issuance and for the "ScopesFromRole(admin)" implementation.
+// AllScopes returns every scope known to the server. Useful for the
+// "ScopesFromRole(admin)" implementation and for any future
+// scoped-token surface.
 func AllScopes() []string {
 	out := make([]string, len(allScopes))
 	copy(out, allScopes)
@@ -110,8 +108,8 @@ var readScopes = []string{
 // ScopesFromRole returns the scope set a human user implicitly holds
 // based on their global role. Used so RequireScope on a route is a
 // no-op for humans (they're already gated by RequireGlobalRole /
-// RequireProjectRole) while still functioning for AATs, which carry
-// an explicit scope set on the row.
+// RequireProjectRole) while still functioning for scoped opaque
+// tokens, which carry an explicit scope set on the row.
 //
 // Unknown / empty roles return nil, which makes RequireScope deny
 // every check — desirable for a misconfigured user record.

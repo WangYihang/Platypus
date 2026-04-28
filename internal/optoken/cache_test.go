@@ -13,7 +13,7 @@ import (
 func sample(id string) *optoken.Verified {
 	return &optoken.Verified{
 		TokenID:   id,
-		Kind:      optoken.KindAAT,
+		Kind:      optoken.KindUserSession,
 		Hash:      []byte("hash-of-" + id),
 		UserID:    "u-" + id,
 		Username:  "user-" + id,
@@ -34,10 +34,10 @@ func TestCache_GetMiss(t *testing.T) {
 func TestCache_PutGet(t *testing.T) {
 	t.Parallel()
 	c := optoken.NewCache(8, time.Minute)
-	v := sample("aat_abc")
-	c.Put("aat_abc", v)
+	v := sample("tk_abc")
+	c.Put("tk_abc", v)
 
-	got, ok := c.Get("aat_abc")
+	got, ok := c.Get("tk_abc")
 	if !ok {
 		t.Fatal("Get after Put = !ok")
 	}
@@ -52,17 +52,17 @@ func TestCache_TTLExpiry(t *testing.T) {
 	clock := &fakeClock{now: now}
 	c := optoken.NewCache(8, 30*time.Second).WithClock(clock.Now)
 
-	c.Put("aat_x", sample("aat_x"))
+	c.Put("tk_x", sample("tk_x"))
 
 	// Just before TTL — still cached.
 	clock.advance(29 * time.Second)
-	if _, ok := c.Get("aat_x"); !ok {
+	if _, ok := c.Get("tk_x"); !ok {
 		t.Error("Get at t+29s = miss, want hit")
 	}
 
 	// Advance past TTL — entry should be reported as miss.
 	clock.advance(2 * time.Second)
-	if v, ok := c.Get("aat_x"); ok {
+	if v, ok := c.Get("tk_x"); ok {
 		t.Errorf("Get at t+31s = (%v, true), want miss", v)
 	}
 	// Expired entry must also drop from Len.
@@ -77,11 +77,11 @@ func TestCache_PutResetsTTL(t *testing.T) {
 	clock := &fakeClock{now: now}
 	c := optoken.NewCache(8, 30*time.Second).WithClock(clock.Now)
 
-	c.Put("aat_x", sample("aat_x"))
+	c.Put("tk_x", sample("tk_x"))
 	clock.advance(29 * time.Second)
-	c.Put("aat_x", sample("aat_x")) // re-Put with same id resets TTL
+	c.Put("tk_x", sample("tk_x")) // re-Put with same id resets TTL
 	clock.advance(29 * time.Second) // 58s since first Put, but only 29s since second
-	if _, ok := c.Get("aat_x"); !ok {
+	if _, ok := c.Get("tk_x"); !ok {
 		t.Error("Get after re-Put + 29s = miss, want hit (TTL should reset)")
 	}
 }
@@ -89,15 +89,15 @@ func TestCache_PutResetsTTL(t *testing.T) {
 func TestCache_Invalidate(t *testing.T) {
 	t.Parallel()
 	c := optoken.NewCache(8, time.Minute)
-	c.Put("aat_a", sample("aat_a"))
-	c.Put("aat_b", sample("aat_b"))
+	c.Put("tk_a", sample("tk_a"))
+	c.Put("tk_b", sample("tk_b"))
 
-	c.Invalidate("aat_a")
-	if _, ok := c.Get("aat_a"); ok {
+	c.Invalidate("tk_a")
+	if _, ok := c.Get("tk_a"); ok {
 		t.Error("Get after Invalidate = hit")
 	}
-	if _, ok := c.Get("aat_b"); !ok {
-		t.Error("Invalidate(aat_a) removed aat_b too")
+	if _, ok := c.Get("tk_b"); !ok {
+		t.Error("Invalidate(tk_a) removed tk_b too")
 	}
 	// Invalidating a missing key is a no-op, not an error.
 	c.Invalidate("never_existed")

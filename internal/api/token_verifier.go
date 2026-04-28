@@ -90,7 +90,7 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 	}
 
 	// Sessions inherit role/username from the live users row so a
-	// demote takes effect within one cache TTL (≤30s). AATs keep
+	// demote takes effect within one cache TTL (≤30s). Scoped tokens keep
 	// their on-row role/scope — issuer-time intent is the source of
 	// truth for tokens. A users row that has been deleted out from
 	// under a session yields auth failure (treated as revoked).
@@ -108,7 +108,7 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 
 	// last_used_* update runs detached so it never blocks the
 	// request hot path. Sessions also need their idle window
-	// pushed forward — that's the sliding-window mechanism. AATs
+	// pushed forward — that's the sliding-window mechanism. Other token kinds
 	// pass nil so idle_expires_at stays NULL on their rows.
 	var newIdle *time.Time
 	if kind == optoken.KindUserSession {
@@ -127,7 +127,7 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 	return PrincipalFromVerified(verified), "success", nil
 }
 
-// Invalidate drops the cache entry for tokenID. Called by the AAT
+// Invalidate drops the cache entry for tokenID. Called by the token
 // revoke / rotate handlers after the storage write commits, so the
 // next request observes the change immediately on this node. (Cross-
 // node invalidation is out of scope until Platypus runs multi-node.)

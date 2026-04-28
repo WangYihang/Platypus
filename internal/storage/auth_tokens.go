@@ -4,39 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/user"
 )
-
-// AAT is the typed view of an auth_tokens row with kind='aat'. SecretHash
-// stays in the struct (mirroring EnrollmentToken's shape) but never escapes
-// past the storage layer — handlers serialise via response DTOs that
-// omit it. Phase 2 will introduce a UserSession sibling type for
-// kind='user_session' rows; the underlying table is the same.
-type AAT struct {
-	TokenID     string
-	SecretHash  []byte
-	UserID      string // creator
-	Name        string
-	Description string
-	ProjectID   string // empty = global token, no project binding
-	Role        user.Role
-	Scopes      []string
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	LastUsedAt  *time.Time
-	LastUsedIP  string
-	UserAgent   string
-	Revoked     bool
-	RevokedAt   *time.Time
-	// RevokedByUser is the users.id of the actor that called Revoke;
-	// empty when the row is still alive.
-	RevokedByUser string
-	RevokedReason string
-}
 
 // UserSession is the typed view of an auth_tokens row with kind=
 // 'user_session'. Roles / scopes are intentionally absent — sessions
@@ -65,74 +37,6 @@ func (db *DB) AuthTokens() *AuthTokenRepo { return &AuthTokenRepo{db: db.DB} }
 
 type AuthTokenRepo struct {
 	db *sql.DB
-}
-
-// CreateAAT inserts a row representing a freshly-minted AAT. Caller has
-// already hashed the secret; the plaintext never touches storage. The
-// row's CHECK constraint enforces (name, role, scopes) presence — we
-// also validate up-front so the error message points at the offending
-// field instead of returning a generic CHECK violation.
-func (r *AuthTokenRepo) CreateAAT(ctx context.Context, a *AAT) error {
-	if err := validateAAT(a); err != nil {
-		return err
-	}
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO auth_tokens (
-			token_id, kind, secret_hash, user_id,
-			name, description,
-			created_at, expires_at,
-			project_id, role, scopes
-		) VALUES (?, 'aat', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.TokenID,
-		a.SecretHash,
-		a.UserID,
-		a.Name,
-		nullableString(a.Description),
-		a.CreatedAt.UTC(),
-		a.ExpiresAt.UTC(),
-		nullableString(a.ProjectID),
-		string(a.Role),
-		optoken.FormatList(a.Scopes),
-	)
-	return err
-}
-
-func validateAAT(a *AAT) error {
-	switch {
-	case a == nil:
-		return errors.New("storage: AAT is nil")
-	case a.TokenID == "":
-		return errors.New("storage: AAT.TokenID empty")
-	case a.UserID == "":
-		return errors.New("storage: AAT.UserID empty")
-	case a.Name == "":
-		return errors.New("storage: AAT.Name empty (required by CHECK)")
-	case len(a.SecretHash) == 0:
-		return errors.New("storage: AAT.SecretHash empty")
-	case a.CreatedAt.IsZero():
-		return errors.New("storage: AAT.CreatedAt unset")
-	case a.ExpiresAt.IsZero():
-		return errors.New("storage: AAT.ExpiresAt unset")
-	}
-	if _, err := user.ParseRole(string(a.Role)); err != nil {
-		return fmt.Errorf("storage: AAT.Role: %w", err)
-	}
-	return nil
-}
-
-// GetAAT fetches a single AAT by id. Returns ErrNotFound for missing
-// rows and rejects rows of the wrong kind — the typed accessor must
-// not silently leak a session row as an AAT.
-func (r *AuthTokenRepo) GetAAT(ctx context.Context, tokenID string) (*AAT, error) {
-	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = 'aat'`, tokenID)
-	rec, err := scanAuthTokenRow(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return rowToAAT(rec), nil
 }
 
 // CreateSession inserts an auth_tokens row with kind='user_session'.
@@ -180,8 +84,9 @@ func validateSession(s *UserSession) error {
 	return nil
 }
 
-// GetSession fetches a single user_session by id. Same contract as
-// GetAAT: ErrNotFound for missing rows, kind filter rejects AAT rows.
+// GetSession fetches a single user_session by id. ErrNotFound for
+// missing rows; the kind filter rejects rows of any other kind so the
+// typed accessor never silently leaks a non-session row.
 func (r *AuthTokenRepo) GetSession(ctx context.Context, tokenID string) (*UserSession, error) {
 	row := r.db.QueryRowContext(ctx, baseSelect+` WHERE token_id = ? AND kind = 'user_session'`, tokenID)
 	rec, err := scanAuthTokenRow(row)
@@ -219,10 +124,10 @@ func (r *AuthTokenRepo) ListSessionsForUser(ctx context.Context, userID string) 
 
 // RevokeAllSessionsForUser kills every active session for a user.
 // Returns the number of rows touched. Called on password change,
-// account suspension, or admin-initiated forced logout. AAT rows owned
-// by the same user are deliberately left alone — they have their own
-// rotation lifecycle and the issuer may want them to outlive the
-// session reset.
+// account suspension, or admin-initiated forced logout. Other token
+// kinds owned by the same user are deliberately left alone — they
+// have their own rotation lifecycle and the issuer may want them to
+// outlive the session reset.
 func (r *AuthTokenRepo) RevokeAllSessionsForUser(ctx context.Context, userID, byUser, reason string, at time.Time) (int, error) {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE auth_tokens
@@ -239,46 +144,6 @@ func (r *AuthTokenRepo) RevokeAllSessionsForUser(ctx context.Context, userID, by
 		return 0, err
 	}
 	return int(n), nil
-}
-
-// ListAATsByCreator returns AATs the user issued, newest first. When
-// includeRevoked is false, revoked rows are filtered server-side.
-func (r *AuthTokenRepo) ListAATsByCreator(ctx context.Context, userID string, includeRevoked bool) ([]*AAT, error) {
-	q := baseSelect + ` WHERE kind = 'aat' AND user_id = ?`
-	if !includeRevoked {
-		q += ` AND revoked_at IS NULL`
-	}
-	q += ` ORDER BY created_at DESC`
-	return r.queryAATList(ctx, q, userID)
-}
-
-// ListAATsByProject returns AATs scoped to a project, newest first.
-// Global AATs (project_id IS NULL) are deliberately excluded — admins
-// list those via ListAATsByCreator with their own user id.
-func (r *AuthTokenRepo) ListAATsByProject(ctx context.Context, projectID string, includeRevoked bool) ([]*AAT, error) {
-	q := baseSelect + ` WHERE kind = 'aat' AND project_id = ?`
-	if !includeRevoked {
-		q += ` AND revoked_at IS NULL`
-	}
-	q += ` ORDER BY created_at DESC`
-	return r.queryAATList(ctx, q, projectID)
-}
-
-func (r *AuthTokenRepo) queryAATList(ctx context.Context, q string, args ...any) ([]*AAT, error) {
-	rows, err := r.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var out []*AAT
-	for rows.Next() {
-		rec, err := scanAuthTokenRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rowToAAT(rec))
-	}
-	return out, rows.Err()
 }
 
 // Verify is the hot-path lookup the API verifier calls on every
@@ -362,8 +227,8 @@ func (r *AuthTokenRepo) Revoke(ctx context.Context, tokenID, byUser, reason stri
 // TouchLastUsed records the latest authenticated use of a token. Best
 // effort — callers run this asynchronously off the request hot path.
 // idleExpiresAt is honored only for user_session rows (the CHECK
-// constraint already enforces it must stay NULL for AATs); pass nil
-// for AAT touches.
+// constraint already enforces it must stay NULL for other kinds);
+// pass nil for non-session touches.
 func (r *AuthTokenRepo) TouchLastUsed(ctx context.Context, tokenID, ip, ua string, idleExpiresAt *time.Time, at time.Time) error {
 	if idleExpiresAt != nil {
 		_, err := r.db.ExecContext(ctx, `
@@ -394,9 +259,9 @@ const baseSelect = `
 	       idle_expires_at
 	  FROM auth_tokens`
 
-// authTokenRow is the unified internal row. Both AAT and (future)
-// UserSession views are built from it. Private — the layer above this
-// (api) deals only with typed views.
+// authTokenRow is the unified internal row. Typed views (UserSession
+// today, future scoped tokens tomorrow) are built from it. Private —
+// the layer above this (api) deals only with typed views.
 type authTokenRow struct {
 	tokenID                       string
 	kind                          string
@@ -431,35 +296,6 @@ func scanAuthTokenRow(s rowScanner) (*authTokenRow, error) {
 		return nil, err
 	}
 	return &r, nil
-}
-
-func rowToAAT(r *authTokenRow) *AAT {
-	a := &AAT{
-		TokenID:       r.tokenID,
-		SecretHash:    r.secretHash,
-		UserID:        r.userID,
-		Name:          r.name.String,
-		Description:   r.description.String,
-		ProjectID:     r.projectID.String,
-		Role:          user.Role(r.roleStr.String),
-		Scopes:        optoken.ParseList(r.scopesStr.String),
-		CreatedAt:     r.createdAt,
-		ExpiresAt:     r.expiresAt,
-		LastUsedIP:    r.lastUsedIP.String,
-		UserAgent:     r.userAgent.String,
-		Revoked:       r.revokedAt.Valid,
-		RevokedByUser: r.revokedByUser.String,
-		RevokedReason: r.revokedReason.String,
-	}
-	if r.lastUsedAt.Valid {
-		t := r.lastUsedAt.Time
-		a.LastUsedAt = &t
-	}
-	if r.revokedAt.Valid {
-		t := r.revokedAt.Time
-		a.RevokedAt = &t
-	}
-	return a
 }
 
 func rowToSession(r *authTokenRow) *UserSession {

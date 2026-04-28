@@ -10,13 +10,13 @@ import (
 
 // L3: a token-bucket rate limiter for the high-impact agent RPC
 // surface (/api/v1/projects/:pid/agents/:agent_id/exec, /fs/*).
-// Without it, a compromised AAT or session can drive an unlimited
+// Without it, a compromised session or future scoped token can drive an unlimited
 // rate of shell commands / file writes against every host in the
 // project — DoS by design. The default bucket (30 burst, 10/s
 // refill) lets normal interactive usage and small loops through
 // while capping sustained churn.
 //
-// Keying is per-principal so a noisy CI script on its own AAT can't
+// Keying is per-principal so a noisy CI script on its own token can't
 // starve a human admin sharing the project. Per-(principal, agent)
 // would be tighter but creates a 2D map; one-dimensional keying
 // matches the practical attack model (a single compromised
@@ -102,15 +102,12 @@ func (rt *rpcThrottle) Allow(key string) bool {
 }
 
 // principalRateLimitKey returns a stable string identifier for the
-// authenticated subject of the current request. AAT principals are
-// keyed by their TokenID (a stolen AAT shouldn't be able to share
-// budget across attempts), human principals by UserID.
+// authenticated subject of the current request. Human principals are
+// keyed by UserID; future scoped-token principals will key on TokenID
+// so a stolen token can't share budget with its issuer's session.
 func principalRateLimitKey(p *Principal) string {
 	if p == nil {
 		return ""
-	}
-	if p.Kind == PrincipalAATKind && p.TokenID != "" {
-		return "aat:" + p.TokenID
 	}
 	if p.UserID != "" {
 		return "user:" + p.UserID
@@ -162,7 +159,7 @@ func (r *RBAC) RPCThrottle() *rpcThrottle {
 
 // RequireRPCRateLimit is the public entrypoint: a single middleware
 // that token-buckets by principal key. Use it on the operator group
-// of agent RPC routes (exec / file mutations) so an AAT can't drive
+// of agent RPC routes (exec / file mutations) so a future scoped token can't drive
 // unbounded churn against the host it's bound to.
 func (r *RBAC) RequireRPCRateLimit() gin.HandlerFunc {
 	return r.requireRPCRateLimit(r.RPCThrottle())

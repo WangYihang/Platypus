@@ -148,7 +148,7 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		}
 		// Password change invalidates every existing user_session for
 		// the target user. Other live tabs lose access on next request.
-		// AAT rows the user issued are left alone — they have their
+		// Other token kinds owned by the user are left alone — they have their
 		// own rotation lifecycle and the change of an issuer's
 		// password doesn't imply intent to kill their tokens.
 		actor := ""

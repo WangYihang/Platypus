@@ -57,18 +57,6 @@ func TestRPCThrottle_KeysIndependent(t *testing.T) {
 	}
 }
 
-func TestPrincipalRateLimitKey_AATPreferred(t *testing.T) {
-	p := &Principal{
-		Kind:    PrincipalAATKind,
-		UserID:  "u-issuer",
-		TokenID: "aat_xyz",
-	}
-	got := principalRateLimitKey(p)
-	if got != "aat:aat_xyz" {
-		t.Errorf("principalRateLimitKey AAT = %q; want aat:aat_xyz", got)
-	}
-}
-
 func TestPrincipalRateLimitKey_HumanByUserID(t *testing.T) {
 	p := &Principal{
 		Kind:   PrincipalUser,

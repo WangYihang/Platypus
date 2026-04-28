@@ -2,9 +2,7 @@ package api_test
 
 import (
 	"net/http/httptest"
-	"slices"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,7 +14,7 @@ import (
 // PrincipalFromClaims was removed alongside the JWT path. The
 // equivalent test now exercises PrincipalFromVerified for a
 // user_session-kind Verified — that's the production constructor for
-// human principals after Phase 2.
+// human principals after the AAT removal.
 func TestPrincipalFromVerified_UserSession(t *testing.T) {
 	t.Parallel()
 	v := &optoken.Verified{
@@ -45,43 +43,6 @@ func TestPrincipalFromVerified_UserSession(t *testing.T) {
 	}
 }
 
-func TestPrincipalFromVerified(t *testing.T) {
-	t.Parallel()
-	v := &optoken.Verified{
-		TokenID:   "aat_x",
-		Kind:      optoken.KindAAT,
-		UserID:    "u-creator",
-		Role:      user.RoleViewer,
-		Scopes:    []string{optoken.ScopeHostsRead, optoken.ScopeFilesRead},
-		ProjectID: "p1",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-	p := api.PrincipalFromVerified(v)
-	if p.Kind != api.PrincipalAATKind {
-		t.Errorf("Kind = %v, want PrincipalAATKind", p.Kind)
-	}
-	if p.TokenID != "aat_x" {
-		t.Errorf("TokenID = %q", p.TokenID)
-	}
-	if p.UserID != "u-creator" {
-		t.Errorf("UserID = %q (the AAT issuer)", p.UserID)
-	}
-	if p.Role != user.RoleViewer {
-		t.Errorf("Role = %q", p.Role)
-	}
-	if p.ProjectID != "p1" {
-		t.Errorf("ProjectID = %q", p.ProjectID)
-	}
-	if !slices.Equal(p.Scopes, v.Scopes) {
-		t.Errorf("scopes mismatch: got %v want %v", p.Scopes, v.Scopes)
-	}
-	// Username is left empty for AAT — there's no user the request
-	// is "as", just the issuer.
-	if p.Username != "" {
-		t.Errorf("Username = %q, want empty for AAT", p.Username)
-	}
-}
-
 func TestPrincipalFromContext_Empty(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -104,9 +65,9 @@ func TestPrincipalFromContext_RoundTrip(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	want := &api.Principal{
-		Kind:    api.PrincipalAATKind,
-		UserID:  "u",
-		TokenID: "aat_round",
+		Kind:    api.PrincipalUser,
+		UserID:  "u-round",
+		TokenID: "pst_round",
 	}
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -132,35 +93,20 @@ func TestPrincipalFromContext_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestPrincipal_AdminAATBypassRejected(t *testing.T) {
+func TestPrincipal_HumanAdminIsGlobalAdmin(t *testing.T) {
 	t.Parallel()
-	// The plan disables admin-bypass for AAT principals: an AAT with
-	// role=admin and a project binding cannot reach a different
-	// project. This test pins the helper that callers use to make
-	// that decision.
-	aat := &api.Principal{
-		Kind:      api.PrincipalAATKind,
-		Role:      user.RoleAdmin,
-		ProjectID: "p1",
-	}
-	if aat.IsGlobalAdmin() {
-		t.Error("project-bound AAT.IsGlobalAdmin() = true, want false")
-	}
-
-	global := &api.Principal{
-		Kind:      api.PrincipalAATKind,
-		Role:      user.RoleAdmin,
-		ProjectID: "",
-	}
-	if !global.IsGlobalAdmin() {
-		t.Error("unbound AAT.IsGlobalAdmin() = false, want true")
-	}
-
 	human := &api.Principal{
 		Kind: api.PrincipalUser,
 		Role: user.RoleAdmin,
 	}
 	if !human.IsGlobalAdmin() {
 		t.Error("human admin.IsGlobalAdmin() = false, want true")
+	}
+	viewer := &api.Principal{
+		Kind: api.PrincipalUser,
+		Role: user.RoleViewer,
+	}
+	if viewer.IsGlobalAdmin() {
+		t.Error("human viewer.IsGlobalAdmin() = true, want false")
 	}
 }

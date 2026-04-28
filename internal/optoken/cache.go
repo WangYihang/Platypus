@@ -20,15 +20,16 @@ type Verified struct {
 	Kind     Kind
 	Hash     []byte // sha256 of the secret half — for cache-hit secret check
 	UserID   string
-	Username string // empty for AAT
+	Username string // populated for user sessions; empty for token kinds that don't carry it
 	Role     user.Role
 	Scopes   []string
-	// ProjectID is empty for global AATs and for user sessions.
+	// ProjectID is empty for user sessions; reserved for token kinds
+	// that bind to a project.
 	ProjectID string
-	// ExpiresAt is the hard expiry; both kinds carry it.
+	// ExpiresAt is the hard expiry; every kind carries it.
 	ExpiresAt time.Time
 	// IdleExpiresAt is the sliding-window expiry — populated for user
-	// sessions, zero value for AATs.
+	// sessions; zero value for kinds without an idle window.
 	IdleExpiresAt time.Time
 }
 

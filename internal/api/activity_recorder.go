@@ -59,15 +59,12 @@ func RecordSystemActivity(ctx context.Context, in ActivityInput) {
 // Attribution rules:
 //
 //   - Human principals → ActorType=user, ActorUser=users.id.
-//   - AAT principals   → ActorType=api_token, ActorTokenID=token_id;
-//     ActorUser is left empty so per-user dashboards don't conflate
-//     a token's actions with its issuer's own activity.
+//   - Scoped opaque tokens (when reintroduced) → ActorType=api_token,
+//     ActorTokenID=token_id; ActorUser is left empty so per-user
+//     dashboards don't conflate a token's actions with its issuer's
+//     own activity.
 //   - No principal     → ActorType=anonymous (server-side rejected
 //     calls or pre-RequireAuth paths).
-//
-// The Principal source-of-truth supersedes the legacy claims read —
-// for AAT bearers the synthetic claims has UserID=TokenID, which
-// would have populated ActorUser incorrectly under the old logic.
 func fillFromContext(c *gin.Context, in *ActivityInput) {
 	if c == nil {
 		return
@@ -88,19 +85,10 @@ func fillFromContext(c *gin.Context, in *ActivityInput) {
 		}
 	}
 
-	// Pull from Principal if present — it captures both human and
-	// AAT shapes losslessly. Fallback to claims only if no principal
-	// stored (some test paths set claims directly).
+	// Pull from Principal if present. Fallback to claims only if no
+	// principal stored (some test paths set claims directly).
 	if p, ok := PrincipalFromContext(c); ok {
-		switch p.Kind {
-		case PrincipalAATKind:
-			if in.ActorType == "" {
-				in.ActorType = storage.ActorTypeAPIToken
-			}
-			if in.ActorTokenID == "" {
-				in.ActorTokenID = p.TokenID
-			}
-		case PrincipalUser:
+		if p.Kind == PrincipalUser {
 			if in.ActorUser == "" {
 				in.ActorUser = p.UserID
 			}
