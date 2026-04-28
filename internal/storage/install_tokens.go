@@ -38,8 +38,9 @@ type InstallDownloadToken struct {
 }
 
 // InstallDownloadStatus is derived (never materialised). Separate from
-// PATStatus because "consumed" here means "the admin's `curl` happened",
-// which is a different state than "the PAT was redeemed by an agent".
+// EnrollmentStatus because "consumed" here means "the admin's `curl`
+// happened", which is a different state than "the enrollment token was
+// redeemed by an agent".
 type InstallDownloadStatus string
 
 const (

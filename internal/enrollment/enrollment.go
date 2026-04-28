@@ -27,21 +27,21 @@ import (
 )
 
 const (
-	// PATPrefix tags tokens issued as one-shot provisioning credentials.
+	// EnrollmentTokenPrefix tags tokens issued as one-shot provisioning credentials.
 	// Visible in logs / git / Slack so secret scanners can match it the
 	// same way they do GitHub's `ghp_`.
-	PATPrefix = "plt_"
+	EnrollmentTokenPrefix = "plt_"
 
 	// Token shape: "<prefix><id>.<secret>". The id half is the primary
-	// key in pat_tokens (indexed); the secret half is what we hash and
+	// key in enrollment_tokens (indexed); the secret half is what we hash and
 	// compare against the stored SHA-256 digest.
 	idLen     = 20
 	secretLen = 20
 
-	// DefaultPATTTL is applied when an issue request leaves ttl_seconds
+	// DefaultEnrollmentTokenTTL is applied when an issue request leaves ttl_seconds
 	// unset. Short enough that an accidentally-leaked token burns out
 	// quickly; long enough to survive manual copy-paste flows.
-	DefaultPATTTL = 1 * time.Hour
+	DefaultEnrollmentTokenTTL = 1 * time.Hour
 )
 
 // enc is unpadded lowercase base32 — URL-safe, case-insensitive, and
@@ -56,7 +56,7 @@ type CredentialKind int
 
 const (
 	KindUnknown CredentialKind = iota
-	KindPAT
+	KindEnrollmentToken
 )
 
 // ParsedCredential is what Parse returns: a kind-tagged (id, secret)
@@ -74,12 +74,12 @@ type ParsedCredential struct {
 var ErrMalformed = errors.New("enrollment: malformed credential")
 
 // Parse splits a presented PAT credential. It does NOT validate the
-// credential against storage — that's RedeemPAT's job.
+// credential against storage — that's RedeemEnrollmentToken's job.
 func Parse(raw string) (*ParsedCredential, error) {
-	if !strings.HasPrefix(raw, PATPrefix) {
+	if !strings.HasPrefix(raw, EnrollmentTokenPrefix) {
 		return nil, ErrMalformed
 	}
-	rest := strings.TrimPrefix(raw, PATPrefix)
+	rest := strings.TrimPrefix(raw, EnrollmentTokenPrefix)
 	parts := strings.SplitN(rest, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, ErrMalformed
@@ -89,8 +89,8 @@ func Parse(raw string) (*ParsedCredential, error) {
 		return nil, ErrMalformed
 	}
 	return &ParsedCredential{
-		Kind:   KindPAT,
-		ID:     PATPrefix + parts[0],
+		Kind:   KindEnrollmentToken,
+		ID:     EnrollmentTokenPrefix + parts[0],
 		Secret: secret,
 	}, nil
 }
@@ -133,7 +133,7 @@ type Service struct {
 	// settings is optional — when set, MintInstallArtifact consults
 	// it for the default PAT TTL so admins can tune the default from
 	// the Web UI without a server restart. When nil, falls back to
-	// the DefaultPATTTL constant.
+	// the DefaultEnrollmentTokenTTL constant.
 	settings SettingsProvider
 }
 
@@ -174,19 +174,19 @@ func (s *Service) WithSettings(sp SettingsProvider) *Service {
 	return s
 }
 
-// IssuePATResult is what Mint returns. PlaintextToken is the only
+// IssueEnrollmentTokenResult is what Mint returns. PlaintextToken is the only
 // moment the plaintext exists in memory — the caller must return it in
 // the HTTP response and then drop the reference.
-type IssuePATResult struct {
+type IssueEnrollmentTokenResult struct {
 	TokenID        string
 	PlaintextToken string
 	ExpiresAt      time.Time
-	Token          *storage.PATToken
+	Token          *storage.EnrollmentToken
 }
 
-// MintPATInput captures all operator-supplied fields for a new PAT.
+// MintEnrollmentTokenInput captures all operator-supplied fields for a new PAT.
 // Zero values get sensible defaults; MaxUses=0 is coerced to 1.
-type MintPATInput struct {
+type MintEnrollmentTokenInput struct {
 	ProjectID        string
 	IssuedByUser     string
 	Description      string
@@ -196,25 +196,25 @@ type MintPATInput struct {
 	BindingHostAlias string
 }
 
-func (s *Service) MintPAT(ctx context.Context, in MintPATInput) (*IssuePATResult, error) {
+func (s *Service) MintEnrollmentToken(ctx context.Context, in MintEnrollmentTokenInput) (*IssueEnrollmentTokenResult, error) {
 	if in.ProjectID == "" || in.IssuedByUser == "" {
 		return nil, errors.New("enrollment: project_id and issued_by_user required")
 	}
 	ttl := in.TTL
 	if ttl <= 0 {
-		ttl = DefaultPATTTL
+		ttl = DefaultEnrollmentTokenTTL
 	}
 	maxUses := in.MaxUses
 	if maxUses <= 0 {
 		maxUses = 1
 	}
 
-	id, _, hash, full, err := generate(PATPrefix)
+	id, _, hash, full, err := generate(EnrollmentTokenPrefix)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	tok := &storage.PATToken{
+	tok := &storage.EnrollmentToken{
 		TokenID:          id,
 		SecretHash:       hash,
 		ProjectID:        in.ProjectID,
@@ -226,10 +226,10 @@ func (s *Service) MintPAT(ctx context.Context, in MintPATInput) (*IssuePATResult
 		BindingHostAlias: in.BindingHostAlias,
 		Description:      in.Description,
 	}
-	if err := s.db.PATTokens().Create(ctx, tok); err != nil {
+	if err := s.db.EnrollmentTokens().Create(ctx, tok); err != nil {
 		return nil, fmt.Errorf("enrollment: create PAT: %w", err)
 	}
-	return &IssuePATResult{
+	return &IssueEnrollmentTokenResult{
 		TokenID:        id,
 		PlaintextToken: full,
 		ExpiresAt:      tok.ExpiresAt,
@@ -237,10 +237,10 @@ func (s *Service) MintPAT(ctx context.Context, in MintPATInput) (*IssuePATResult
 	}, nil
 }
 
-// RevokePAT marks a PAT revoked and records the action in
+// RevokeEnrollmentToken marks a PAT revoked and records the action in
 // admin_audit_log. Returns ErrNotFound if the id doesn't match any row.
-func (s *Service) RevokePAT(ctx context.Context, tokenID, actorUser, reason string) error {
-	if err := s.db.PATTokens().Revoke(ctx, tokenID, actorUser, reason, time.Now().UTC()); err != nil {
+func (s *Service) RevokeEnrollmentToken(ctx context.Context, tokenID, actorUser, reason string) error {
+	if err := s.db.EnrollmentTokens().Revoke(ctx, tokenID, actorUser, reason, time.Now().UTC()); err != nil {
 		return err
 	}
 	return nil
@@ -276,20 +276,20 @@ type RedeemContext struct {
 	AgentPubKey []byte
 }
 
-// RedeemPAT verifies a PAT string, atomically consumes one use, mints
+// RedeemEnrollmentToken verifies a PAT string, atomically consumes one use, mints
 // a fresh agent_id, and records audit events. Post-v2, agent identity
 // is carried by the client certificate the caller issues from the
 // returned (AgentID, ProjectID) — no server-side session token is
 // created. The result's Outcome is always populated even on the
 // nil-error path so callers can log a consistent classification.
-func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext) (*RedeemResult, error) {
+func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx RedeemContext) (*RedeemResult, error) {
 	parsed, parseErr := Parse(raw)
-	if parseErr != nil || parsed.Kind != KindPAT {
+	if parseErr != nil || parsed.Kind != KindEnrollmentToken {
 		s.logRedemption(ctx, "", rctx, "", "malformed", "")
 		return &RedeemResult{Outcome: "malformed"}, ErrMalformed
 	}
 
-	tok, outcome, err := s.db.PATTokens().TryConsume(ctx,
+	tok, outcome, err := s.db.EnrollmentTokens().TryConsume(ctx,
 		parsed.ID, parsed.Secret, rctx.MachineID, time.Now().UTC())
 	if err != nil {
 		s.logRedemption(ctx, parsed.ID, rctx, "", "error", err.Error())
@@ -322,7 +322,7 @@ func (s *Service) RedeemPAT(ctx context.Context, raw string, rctx RedeemContext)
 // "issue cert from raw pubkey" code path; the v2 enrollment handler
 // doesn't use it — it calls IssueAgentLeafFromCSR directly so the
 // cert binds to a key the server has actually verified against a
-// CSR. Kept here because MintPAT callers that predate the CSR path
+// CSR. Kept here because MintEnrollmentToken callers that predate the CSR path
 // still rely on it returning empty-string on the common "no PKI /
 // no pubkey" combination.
 func (s *Service) maybeIssueCert(ctx context.Context, projectID, agentID string, pubkey []byte, reason string) (string, string) {
@@ -332,7 +332,7 @@ func (s *Service) maybeIssueCert(ctx context.Context, projectID, agentID string,
 	certPEM, caPEM, err := s.pki.IssueForAgent(ctx, projectID, agentID, pubkey, reason)
 	if err != nil {
 		// The maybeIssueCert contract: log-and-return-empty. The
-		// RedeemPAT caller still emits the "success" enrollment event;
+		// RedeemEnrollmentToken caller still emits the "success" enrollment event;
 		// the CA failure surfaces in the PKI handler's own audit log.
 		return "", ""
 	}
@@ -375,7 +375,7 @@ func (s *Service) logRedemption(ctx context.Context, tokenID string, rctx Redeem
 	// project).
 	var projectID *string
 	if tokenID != "" {
-		if tok, err := s.db.PATTokens().Get(ctx, tokenID); err == nil {
+		if tok, err := s.db.EnrollmentTokens().Get(ctx, tokenID); err == nil {
 			pid := tok.ProjectID
 			projectID = &pid
 		}

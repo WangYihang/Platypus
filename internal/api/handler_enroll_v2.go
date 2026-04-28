@@ -24,7 +24,7 @@ import (
 // future connections (no session_token).
 //
 // On the happy path, exactly one leaf cert lands in the DB per call.
-// The PAT is consumed atomically inside enrollment.RedeemPAT;
+// The PAT is consumed atomically inside enrollment.RedeemEnrollmentToken;
 // cert issuance happens afterwards and has its own ACID boundary —
 // a cert issuance failure after PAT consumption is visible in the
 // audit log but the PAT stays consumed. Re-try yields a new
@@ -105,11 +105,11 @@ func (h *EnrollV2Handler) Enroll(c *gin.Context) {
 		MachineID: req.MachineId,
 		Hostname:  req.Hostname,
 		// AgentPubKey deliberately empty: legacy cert-issuance via
-		// RedeemPAT is skipped. We'll issue the cert explicitly from
+		// RedeemEnrollmentToken is skipped. We'll issue the cert explicitly from
 		// the CSR below so the leaf carries the URI SAN bindings and
 		// so the CSR signature is actually verified.
 	}
-	redeemed, err := h.enroll.RedeemPAT(c.Request.Context(), req.Pat, rctx)
+	redeemed, err := h.enroll.RedeemEnrollmentToken(c.Request.Context(), req.Pat, rctx)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "enroll: redeem PAT: %s", err)
 		return

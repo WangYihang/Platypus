@@ -8,14 +8,17 @@ import (
 )
 
 // TestMigration_EnrollmentTokensRenamed locks in migration 000015:
-// after Open() runs all pending migrations, the legacy `pat_tokens` and
-// `pat_redemption_events` tables are gone and their renamed successors
-// `enrollment_tokens` and `enrollment_redemption_events` are present.
+// after Open() runs all pending migrations, the legacy `pat_tokens`
+// table is gone and `enrollment_tokens` is present.
 //
 // The rename frees the "PAT" name for a future user-issued personal-
 // access-token surface; the "PAT" tokens this table used to hold are
 // actually one-shot agent-enrollment credentials, so the storage name
 // is being aligned with what the rows really are.
+//
+// (The companion `pat_redemption_events` table was already dropped in
+// migration 6 when the unified `activities` log absorbed audit duty,
+// so it doesn't appear in this rename.)
 func TestMigration_EnrollmentTokensRenamed(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
@@ -23,25 +26,18 @@ func TestMigration_EnrollmentTokensRenamed(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	for _, want := range []string{"enrollment_tokens", "enrollment_redemption_events"} {
-		var name string
-		err := db.QueryRow(
-			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
-			want,
-		).Scan(&name)
-		if err != nil {
-			t.Errorf("expected table %q after migration 15: %v", want, err)
-		}
+	var name string
+	err = db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='enrollment_tokens'`,
+	).Scan(&name)
+	if err != nil {
+		t.Errorf("expected table enrollment_tokens after migration 15: %v", err)
 	}
-	for _, gone := range []string{"pat_tokens", "pat_redemption_events"} {
-		var name string
-		err := db.QueryRow(
-			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
-			gone,
-		).Scan(&name)
-		if err == nil {
-			t.Errorf("legacy table %q still present after migration 15", gone)
-		}
+	err = db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='pat_tokens'`,
+	).Scan(&name)
+	if err == nil {
+		t.Errorf("legacy table pat_tokens still present after migration 15")
 	}
 }
 

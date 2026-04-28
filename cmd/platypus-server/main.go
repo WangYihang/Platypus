@@ -377,7 +377,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	sessionsH := api.NewSessionsV2Handler(db, agentLinkSvc)
 
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
-	patTokensH := api.NewPATTokensHandler(db, enrollSvc)
+	enrollTokensH := api.NewEnrollmentTokensHandler(db, enrollSvc)
 	aatH := api.NewAATHandler(db, tokenVerifier)
 
 	// /api/v1/install/<token> and /v1/manifest/* now live on the same
@@ -433,7 +433,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
 	api.RegisterV1HostsRoutes(rest, hostsH, rbac)
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
-	api.RegisterV1PATTokenRoutes(rest, patTokensH, rbac)
+	api.RegisterV1EnrollmentTokenRoutes(rest, enrollTokensH, rbac)
 	api.RegisterV1AATRoutes(rest, aatH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)

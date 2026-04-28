@@ -56,10 +56,10 @@ func TestInstallTokens_TryConsume_Success(t *testing.T) {
 
 	secret := []byte("single-use")
 	seedInstallToken(t, db, "dl_ok", proj.ID, admin.ID, secret, 5*time.Minute)
-	// consumed_pat_id FKs to pat_tokens — seed the row so TryConsume
+	// consumed_pat_id FKs to enrollment_tokens — seed the row so TryConsume
 	// can persist the linkage on success.
-	seedPAT(t, db, "plt_minted", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
-	seedPAT(t, db, "plt_other", proj.ID, admin.ID, []byte("y"), time.Hour, 1)
+	seedEnrollmentToken(t, db, "plt_minted", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
+	seedEnrollmentToken(t, db, "plt_other", proj.ID, admin.ID, []byte("y"), time.Hour, 1)
 
 	got, outcome, err := db.InstallDownloadTokens().TryConsume(
 		context.Background(), "dl_ok", secret, "10.0.0.1", "curl/8.0",
@@ -145,10 +145,10 @@ func TestInstallTokens_TryConsume_Concurrent(t *testing.T) {
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 	secret := []byte("race-me")
 	seedInstallToken(t, db, "dl_race", proj.ID, admin.ID, secret, 5*time.Minute)
-	// Seed a real PAT too — consumed_pat_id has an FK into pat_tokens,
+	// Seed a real PAT too — consumed_pat_id has an FK into enrollment_tokens,
 	// so handing TryConsume a fake id would short-circuit with a
 	// constraint failure instead of exercising the race logic.
-	seedPAT(t, db, "plt_fake", proj.ID, admin.ID, []byte("unused"), time.Hour, 1)
+	seedEnrollmentToken(t, db, "plt_fake", proj.ID, admin.ID, []byte("unused"), time.Hour, 1)
 
 	const N = 8
 	var wg sync.WaitGroup

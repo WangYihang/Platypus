@@ -12,31 +12,35 @@ import (
 type Kind string
 
 const (
-	KindAAT         Kind = "aat"
-	KindUserSession Kind = "user_session"
-	KindPAT         Kind = "pat"
-	KindInstall     Kind = "install"
+	KindAAT             Kind = "aat"
+	KindUserSession     Kind = "user_session"
+	KindEnrollmentToken Kind = "enrollment"
+	KindInstall         Kind = "install"
 )
 
 // Wire-format prefixes. Visible in logs / git / Slack so secret
 // scanners can match each kind the way they do GitHub's `ghp_`. The
 // trailing underscore is part of the prefix — included so a substring
 // like "aat_" never appears mid-id.
+//
+// EnrollmentTokenPrefix keeps the historical literal "plt_" so that
+// already-deployed agents and operator scripts (which pasted the prefix
+// into config files) continue to work unchanged.
 const (
-	AATPrefix         = "aat_"
-	UserSessionPrefix = "pst_"
-	PATPrefix         = "plt_"
-	InstallPrefix     = "dl_"
+	AATPrefix             = "aat_"
+	UserSessionPrefix     = "pst_"
+	EnrollmentTokenPrefix = "plt_"
+	InstallPrefix         = "dl_"
 )
 
 // kindByPrefix is the single source of truth for prefix↔kind mapping.
 // Adding a new kind = one entry here + one Kind constant + one prefix
 // constant; nothing else in this package needs touching.
 var kindByPrefix = map[string]Kind{
-	AATPrefix:         KindAAT,
-	UserSessionPrefix: KindUserSession,
-	PATPrefix:         KindPAT,
-	InstallPrefix:     KindInstall,
+	AATPrefix:             KindAAT,
+	UserSessionPrefix:     KindUserSession,
+	EnrollmentTokenPrefix: KindEnrollmentToken,
+	InstallPrefix:         KindInstall,
 }
 
 // KindForPrefix resolves an exact prefix string (including the trailing

@@ -12,21 +12,25 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-// PATTokensHandler owns the /projects/:pid/pat-tokens surface. Listing and
-// revocation hit storage directly; issuance delegates to the enrollment
-// service so the (id, secret) pair stays in one place.
-type PATTokensHandler struct {
+// EnrollmentTokensHandler owns the /projects/:pid/pat-tokens admin
+// surface. The on-the-wire URL still says "pat-tokens" so already
+// shipped operator scripts and the agent install bootstrap keep
+// working; the Go-side names reflect what the rows really are: one-shot
+// agent-enrollment credentials. Listing and revocation hit storage
+// directly; issuance delegates to the enrollment service so the
+// (id, secret) pair stays in one place.
+type EnrollmentTokensHandler struct {
 	db     *storage.DB
 	enroll *enrollment.Service
 }
 
-func NewPATTokensHandler(db *storage.DB, enroll *enrollment.Service) *PATTokensHandler {
-	return &PATTokensHandler{db: db, enroll: enroll}
+func NewEnrollmentTokensHandler(db *storage.DB, enroll *enrollment.Service) *EnrollmentTokensHandler {
+	return &EnrollmentTokensHandler{db: db, enroll: enroll}
 }
 
 // --- Request / Response shapes ---------------------------------------------
 
-type issuePATRequest struct {
+type issueEnrollmentTokenRequest struct {
 	Description      string `json:"description"`
 	TTLSeconds       int    `json:"ttl_seconds"`
 	MaxUses          int    `json:"max_uses"`
@@ -34,9 +38,10 @@ type issuePATRequest struct {
 	BindingHostAlias string `json:"binding_host_alias"`
 }
 
-// issuePATResponse is the ONLY response that carries the plaintext token.
-// Clients must persist it immediately — no other endpoint will return it.
-type issuePATResponse struct {
+// issueEnrollmentTokenResponse is the ONLY response that carries the
+// plaintext token. Clients must persist it immediately — no other
+// endpoint will return it.
+type issueEnrollmentTokenResponse struct {
 	TokenID     string    `json:"token_id"`
 	Token       string    `json:"token"` // plt_<id>.<secret>
 	ExpiresAt   time.Time `json:"expires_at"`
@@ -45,9 +50,9 @@ type issuePATResponse struct {
 	Description string    `json:"description,omitempty"`
 }
 
-// patListItem is the redacted view surfaced to anyone listing tokens.
-// Never contains the secret or its hash.
-type patListItem struct {
+// enrollmentTokenListItem is the redacted view surfaced to anyone
+// listing tokens. Never contains the secret or its hash.
+type enrollmentTokenListItem struct {
 	TokenID          string     `json:"token_id"`
 	Description      string     `json:"description,omitempty"`
 	IssuedByUser     string     `json:"issued_by_user"`
@@ -63,8 +68,8 @@ type patListItem struct {
 	Status           string     `json:"status"` // derived
 }
 
-func toListItem(p *storage.PATToken, now time.Time) patListItem {
-	return patListItem{
+func toEnrollmentListItem(p *storage.EnrollmentToken, now time.Time) enrollmentTokenListItem {
+	return enrollmentTokenListItem{
 		TokenID:          p.TokenID,
 		Description:      p.Description,
 		IssuedByUser:     p.IssuedByUser,
@@ -84,20 +89,20 @@ func toListItem(p *storage.PATToken, now time.Time) patListItem {
 // --- Handlers --------------------------------------------------------------
 
 // Issue handles POST /projects/:pid/pat-tokens. Returns the plaintext
-// PAT exactly once. Operators are expected to copy it into whatever
-// bootstrap channel they're using.
-func (h *PATTokensHandler) Issue(c *gin.Context) {
+// enrollment token exactly once. Operators are expected to copy it into
+// whatever bootstrap channel they're using.
+func (h *EnrollmentTokensHandler) Issue(c *gin.Context) {
 	projectID := c.Param("pid")
 	claims, _ := ClaimsFromContext(c)
 
-	var req issuePATRequest
+	var req issueEnrollmentTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// Body is optional — tolerate bad JSON by falling back to defaults.
-		req = issuePATRequest{}
+		req = issueEnrollmentTokenRequest{}
 	}
 
 	ttl := time.Duration(req.TTLSeconds) * time.Second
-	res, err := h.enroll.MintPAT(c.Request.Context(), enrollment.MintPATInput{
+	res, err := h.enroll.MintEnrollmentToken(c.Request.Context(), enrollment.MintEnrollmentTokenInput{
 		ProjectID:        projectID,
 		IssuedByUser:     claims.UserID,
 		Description:      req.Description,
@@ -113,7 +118,7 @@ func (h *PATTokensHandler) Issue(c *gin.Context) {
 	}
 	h.audit(c, "pat.issue", "pat_token", res.TokenID, projectID, req, "success", "")
 
-	c.JSON(http.StatusCreated, issuePATResponse{
+	c.JSON(http.StatusCreated, issueEnrollmentTokenResponse{
 		TokenID:     res.TokenID,
 		Token:       res.PlaintextToken,
 		ExpiresAt:   res.ExpiresAt,
@@ -125,29 +130,29 @@ func (h *PATTokensHandler) Issue(c *gin.Context) {
 
 // List handles GET /projects/:pid/pat-tokens.
 // Query: ?include_inactive=true to include revoked / consumed / expired.
-func (h *PATTokensHandler) List(c *gin.Context) {
+func (h *EnrollmentTokensHandler) List(c *gin.Context) {
 	projectID := c.Param("pid")
 	includeInactive := c.Query("include_inactive") == "true"
 
-	toks, err := h.db.PATTokens().ListByProject(c.Request.Context(), projectID, includeInactive)
+	toks, err := h.db.EnrollmentTokens().ListByProject(c.Request.Context(), projectID, includeInactive)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list pat tokens"})
 		return
 	}
 	now := time.Now().UTC()
-	out := make([]patListItem, 0, len(toks))
+	out := make([]enrollmentTokenListItem, 0, len(toks))
 	for _, p := range toks {
-		out = append(out, toListItem(p, now))
+		out = append(out, toEnrollmentListItem(p, now))
 	}
 	c.JSON(http.StatusOK, gin.H{"tokens": out})
 }
 
 // Get handles GET /projects/:pid/pat-tokens/:tid. Includes the full
 // redemption event history so auditors can trace activity.
-func (h *PATTokensHandler) Get(c *gin.Context) {
+func (h *EnrollmentTokensHandler) Get(c *gin.Context) {
 	tokenID := c.Param("tid")
 	ctx := c.Request.Context()
-	tok, err := h.db.PATTokens().Get(ctx, tokenID)
+	tok, err := h.db.EnrollmentTokens().Get(ctx, tokenID)
 	if errors.Is(err, storage.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pat not found"})
 		return
@@ -158,7 +163,9 @@ func (h *PATTokensHandler) Get(c *gin.Context) {
 	}
 	// Redemption events now live in the unified activities log. Filter
 	// to this specific token id and the auth category so we surface both
-	// success and failure attempts alongside each other.
+	// success and failure attempts alongside each other. Action / target
+	// strings are kept on the historical "pat.*" / "pat_token" names so
+	// pre-rename audit rows stay queryable.
 	events, _, err := h.db.Activities().List(ctx, storage.ActivityFilter{
 		Actions:    []string{"pat.redeem", "pat.redeem_failed"},
 		TargetType: "pat_token",
@@ -170,20 +177,20 @@ func (h *PATTokensHandler) Get(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"token":  toListItem(tok, time.Now().UTC()),
+		"token":  toEnrollmentListItem(tok, time.Now().UTC()),
 		"events": events,
 	})
 }
 
 // Revoke handles DELETE /projects/:pid/pat-tokens/:tid. Idempotent for
 // convenience — revoking an already-revoked token is a 204.
-func (h *PATTokensHandler) Revoke(c *gin.Context) {
+func (h *EnrollmentTokensHandler) Revoke(c *gin.Context) {
 	projectID := c.Param("pid")
 	tokenID := c.Param("tid")
 	claims, _ := ClaimsFromContext(c)
 
 	reason := c.Query("reason")
-	err := h.enroll.RevokePAT(c.Request.Context(), tokenID, claims.UserID, reason)
+	err := h.enroll.RevokeEnrollmentToken(c.Request.Context(), tokenID, claims.UserID, reason)
 	if errors.Is(err, storage.ErrNotFound) {
 		h.audit(c, "pat.revoke", "pat_token", tokenID, projectID, map[string]string{"reason": reason}, "denied", "not found")
 		c.Status(http.StatusNotFound)
@@ -200,7 +207,7 @@ func (h *PATTokensHandler) Revoke(c *gin.Context) {
 
 // audit writes one row into the unified activities log. Errors during
 // audit do NOT fail the main flow; the recorder logs them itself.
-func (h *PATTokensHandler) audit(c *gin.Context, action, targetType, targetID, projectID string, details interface{}, outcome, errText string) {
+func (h *EnrollmentTokensHandler) audit(c *gin.Context, action, targetType, targetID, projectID string, details interface{}, outcome, errText string) {
 	pid := projectID
 	RecordActivity(c, ActivityInput{
 		ProjectID:   &pid,
@@ -215,10 +222,12 @@ func (h *PATTokensHandler) audit(c *gin.Context, action, targetType, targetID, p
 	})
 }
 
-// RegisterV1PATTokenRoutes mounts the PAT management surface.
-// RequireProjectRole(admin) — project admins (or global admins) can
-// issue tokens; viewers cannot.
-func RegisterV1PATTokenRoutes(engine *gin.Engine, h *PATTokensHandler, rbac *RBAC) {
+// RegisterV1EnrollmentTokenRoutes mounts the enrollment-token admin
+// surface. Wire URL keeps the historical "pat-tokens" segment so
+// existing operator scripts and CI flows don't break. RequireProjectRole
+// (admin) — project admins (or global admins) can issue tokens; viewers
+// cannot.
+func RegisterV1EnrollmentTokenRoutes(engine *gin.Engine, h *EnrollmentTokensHandler, rbac *RBAC) {
 	grp := engine.Group("/api/v1/projects/:pid/pat-tokens")
 	grp.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleAdmin))
 	{

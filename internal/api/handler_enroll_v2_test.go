@@ -63,14 +63,14 @@ func enrollV2TestSetup(t *testing.T) (*gin.Engine, string, *storage.Project) {
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc)
 
 	// Mint a single-use PAT bound to this project.
-	patRes, err := enrollSvc.MintPAT(ctx, enrollment.MintPATInput{
+	patRes, err := enrollSvc.MintEnrollmentToken(ctx, enrollment.MintEnrollmentTokenInput{
 		ProjectID:    proj.ID,
 		MaxUses:      1,
 		TTL:          time.Hour,
 		IssuedByUser: admin.ID,
 	})
 	if err != nil {
-		t.Fatalf("MintPAT: %v", err)
+		t.Fatalf("MintEnrollmentToken: %v", err)
 	}
 
 	h := NewEnrollV2Handler(enrollSvc, pkiSvc)

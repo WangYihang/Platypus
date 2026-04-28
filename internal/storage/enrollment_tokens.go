@@ -9,9 +9,15 @@ import (
 	"time"
 )
 
-// PATToken mirrors one row in pat_tokens. The plaintext secret exists only
-// in memory during the minting flow; the stored value is SHA-256(secret).
-type PATToken struct {
+// EnrollmentToken mirrors one row in enrollment_tokens. The plaintext
+// secret exists only in memory during the minting flow; the stored
+// value is SHA-256(secret).
+//
+// The on-the-wire shape is the historical "PAT" — the row id is
+// `plt_<...>` and the admin REST surface still says /pat-tokens — but
+// these tokens are one-shot agent-enrollment credentials, not
+// long-lived user PATs. The struct name matches the lifecycle.
+type EnrollmentToken struct {
 	TokenID          string
 	SecretHash       []byte
 	ProjectID        string
@@ -29,49 +35,52 @@ type PATToken struct {
 	RevokedReason    string
 }
 
-// PATStatus is a view-only value derived from PATToken at read time. We
-// deliberately don't materialise this column in the database — keeping
-// state in (revoked, expires_at, uses, max_uses) avoids any chance of
-// drift between the derived value and the underlying facts.
-type PATStatus string
+// EnrollmentStatus is a view-only value derived from EnrollmentToken at
+// read time. We deliberately don't materialise this column in the
+// database — keeping state in (revoked, expires_at, uses, max_uses)
+// avoids any chance of drift between the derived value and the
+// underlying facts.
+type EnrollmentStatus string
 
 const (
-	PATStatusPending  PATStatus = "pending"
-	PATStatusConsumed PATStatus = "consumed"
-	PATStatusExpired  PATStatus = "expired"
-	PATStatusRevoked  PATStatus = "revoked"
+	EnrollmentStatusPending  EnrollmentStatus = "pending"
+	EnrollmentStatusConsumed EnrollmentStatus = "consumed"
+	EnrollmentStatusExpired  EnrollmentStatus = "expired"
+	EnrollmentStatusRevoked  EnrollmentStatus = "revoked"
 )
 
 // Status returns the derived status of the token as of `now`.
-func (p *PATToken) Status(now time.Time) PATStatus {
+func (p *EnrollmentToken) Status(now time.Time) EnrollmentStatus {
 	switch {
 	case p.Revoked:
-		return PATStatusRevoked
+		return EnrollmentStatusRevoked
 	case p.Uses >= p.MaxUses:
-		return PATStatusConsumed
+		return EnrollmentStatusConsumed
 	case !p.ExpiresAt.After(now):
-		return PATStatusExpired
+		return EnrollmentStatusExpired
 	default:
-		return PATStatusPending
+		return EnrollmentStatusPending
 	}
 }
 
-// ErrPATAlreadyConsumed is returned by atomic redeem paths when a racing
-// request successfully incremented uses first. It is NOT a CHECK failure
-// on secret or binding — those have their own sentinel values.
-var ErrPATAlreadyConsumed = errors.New("storage: PAT already consumed")
+// ErrEnrollmentTokenAlreadyConsumed is returned by atomic redeem paths
+// when a racing request successfully incremented uses first. It is NOT
+// a CHECK failure on secret or binding — those have their own sentinel
+// values.
+var ErrEnrollmentTokenAlreadyConsumed = errors.New("storage: enrollment token already consumed")
 
-func (db *DB) PATTokens() *PATTokenRepo { return &PATTokenRepo{db: db.DB} }
+func (db *DB) EnrollmentTokens() *EnrollmentTokenRepo { return &EnrollmentTokenRepo{db: db.DB} }
 
-type PATTokenRepo struct {
+type EnrollmentTokenRepo struct {
 	db *sql.DB
 }
 
-// Create inserts a row representing a freshly-minted PAT. The plaintext
-// secret is hashed by the caller — we never want it materialised here.
-func (r *PATTokenRepo) Create(ctx context.Context, p *PATToken) error {
+// Create inserts a row representing a freshly-minted enrollment token.
+// The plaintext secret is hashed by the caller — we never want it
+// materialised here.
+func (r *EnrollmentTokenRepo) Create(ctx context.Context, p *EnrollmentToken) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO pat_tokens (
+		INSERT INTO enrollment_tokens (
 			token_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, max_uses, uses,
 			binding_machine_id, binding_host_alias, description,
@@ -86,22 +95,22 @@ func (r *PATTokenRepo) Create(ctx context.Context, p *PATToken) error {
 	return err
 }
 
-// Get fetches a PAT by its token_id. Returns ErrNotFound if missing.
-func (r *PATTokenRepo) Get(ctx context.Context, tokenID string) (*PATToken, error) {
+// Get fetches an enrollment token by its token_id. Returns ErrNotFound if missing.
+func (r *EnrollmentTokenRepo) Get(ctx context.Context, tokenID string) (*EnrollmentToken, error) {
 	return r.scanOne(ctx, `
 		SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 		       expires_at, max_uses, uses, binding_machine_id,
 		       binding_host_alias, description, revoked, revoked_at,
 		       revoked_by_user, revoked_reason
-		  FROM pat_tokens WHERE token_id = ?`, tokenID)
+		  FROM enrollment_tokens WHERE token_id = ?`, tokenID)
 }
 
-// ListByProject returns all PATs in a project, newest first. Optional
-// statusFilter limits the result at the app layer (filter empty means
-// all). This hits the idx_pat_unrevoked partial index only when the
-// caller filters on unrevoked; for full history we do a full scan,
+// ListByProject returns all enrollment tokens in a project, newest
+// first. Optional includeInactive controls whether revoked rows show
+// up. This hits the idx_enrollment_unrevoked partial index only when
+// the caller filters on unrevoked; for full history we do a full scan,
 // which is fine for projects with thousands of historical tokens.
-func (r *PATTokenRepo) ListByProject(ctx context.Context, projectID string, includeInactive bool) ([]*PATToken, error) {
+func (r *EnrollmentTokenRepo) ListByProject(ctx context.Context, projectID string, includeInactive bool) ([]*EnrollmentToken, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -112,18 +121,18 @@ func (r *PATTokenRepo) ListByProject(ctx context.Context, projectID string, incl
 			       expires_at, max_uses, uses, binding_machine_id,
 			       binding_host_alias, description, revoked, revoked_at,
 			       revoked_by_user, revoked_reason
-			  FROM pat_tokens WHERE project_id = ?
+			  FROM enrollment_tokens WHERE project_id = ?
 			  ORDER BY issued_at DESC`, projectID)
 	} else {
 		// Still returns consumed/expired rows alongside pending ones; callers
-		// filter precisely by status in-app. We rely on idx_pat_unrevoked
+		// filter precisely by status in-app. We rely on idx_enrollment_unrevoked
 		// for the revoked=0 path here.
 		rows, err = r.db.QueryContext(ctx, `
 			SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 			       expires_at, max_uses, uses, binding_machine_id,
 			       binding_host_alias, description, revoked, revoked_at,
 			       revoked_by_user, revoked_reason
-			  FROM pat_tokens
+			  FROM enrollment_tokens
 			 WHERE project_id = ? AND revoked = 0
 			 ORDER BY issued_at DESC`, projectID)
 	}
@@ -131,9 +140,9 @@ func (r *PATTokenRepo) ListByProject(ctx context.Context, projectID string, incl
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []*PATToken
+	var out []*EnrollmentToken
 	for rows.Next() {
-		p, err := scanPATToken(rows)
+		p, err := scanEnrollmentToken(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -157,8 +166,8 @@ func (r *PATTokenRepo) ListByProject(ctx context.Context, projectID string, incl
 //	"max_uses_reached"           — uses >= max_uses
 //	"binding_machine_mismatch"   — binding_machine_id set and ≠ provided
 //
-// On "success" the returned *PATToken reflects post-increment state.
-func (r *PATTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []byte, machineID string, now time.Time) (*PATToken, string, error) {
+// On "success" the returned *EnrollmentToken reflects post-increment state.
+func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []byte, machineID string, now time.Time) (*EnrollmentToken, string, error) {
 	// BEGIN IMMEDIATE grabs a RESERVED lock up-front in SQLite, forcing
 	// concurrent writers to queue. This is how we make the
 	// compare-then-update sequence atomic without FOR UPDATE.
@@ -173,12 +182,12 @@ func (r *PATTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []
 		}
 	}()
 
-	p, err := scanPATTokenSingle(tx.QueryRowContext(ctx, `
+	p, err := scanEnrollmentTokenSingle(tx.QueryRowContext(ctx, `
 		SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 		       expires_at, max_uses, uses, binding_machine_id,
 		       binding_host_alias, description, revoked, revoked_at,
 		       revoked_by_user, revoked_reason
-		  FROM pat_tokens WHERE token_id = ?`, tokenID))
+		  FROM enrollment_tokens WHERE token_id = ?`, tokenID))
 	if errors.Is(err, ErrNotFound) {
 		return nil, "unknown_token", nil
 	}
@@ -211,7 +220,7 @@ func (r *PATTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []
 	// state changed between our read and this write (impossible under
 	// IMMEDIATE but cheap belt-and-braces), RowsAffected will be 0.
 	res, err := tx.ExecContext(ctx, `
-		UPDATE pat_tokens
+		UPDATE enrollment_tokens
 		   SET uses = uses + 1
 		 WHERE token_id = ?
 		   AND revoked = 0
@@ -238,9 +247,9 @@ func (r *PATTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []
 }
 
 // Revoke marks a token revoked. Idempotent — revoking twice is a no-op.
-func (r *PATTokenRepo) Revoke(ctx context.Context, tokenID, byUser, reason string, at time.Time) error {
+func (r *EnrollmentTokenRepo) Revoke(ctx context.Context, tokenID, byUser, reason string, at time.Time) error {
 	res, err := r.db.ExecContext(ctx, `
-		UPDATE pat_tokens
+		UPDATE enrollment_tokens
 		   SET revoked = 1, revoked_at = ?, revoked_by_user = ?, revoked_reason = ?
 		 WHERE token_id = ? AND revoked = 0`,
 		at.UTC(), byUser, nullableString(reason), tokenID)
@@ -263,21 +272,21 @@ func (r *PATTokenRepo) Revoke(ctx context.Context, tokenID, byUser, reason strin
 }
 
 // scanOne runs q, scans a single row, and returns ErrNotFound on empty.
-func (r *PATTokenRepo) scanOne(ctx context.Context, q string, args ...interface{}) (*PATToken, error) {
-	return scanPATTokenSingle(r.db.QueryRowContext(ctx, q, args...))
+func (r *EnrollmentTokenRepo) scanOne(ctx context.Context, q string, args ...interface{}) (*EnrollmentToken, error) {
+	return scanEnrollmentTokenSingle(r.db.QueryRowContext(ctx, q, args...))
 }
 
-func scanPATTokenSingle(row rowScanner) (*PATToken, error) {
-	p, err := scanPATToken(row)
+func scanEnrollmentTokenSingle(row rowScanner) (*EnrollmentToken, error) {
+	p, err := scanEnrollmentToken(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	return p, err
 }
 
-func scanPATToken(row rowScanner) (*PATToken, error) {
+func scanEnrollmentToken(row rowScanner) (*EnrollmentToken, error) {
 	var (
-		p        PATToken
+		p        EnrollmentToken
 		bindMid  sql.NullString
 		bindAlia sql.NullString
 		desc     sql.NullString

@@ -39,7 +39,7 @@ func TestConsumeInstallDownload_HappyPath(t *testing.T) {
 	if res.Outcome != "success" {
 		t.Fatalf("Outcome = %q; want success", res.Outcome)
 	}
-	if res.PATPlaintext == "" || !strings.HasPrefix(res.PATPlaintext, enrollment.PATPrefix) {
+	if res.PATPlaintext == "" || !strings.HasPrefix(res.PATPlaintext, enrollment.EnrollmentTokenPrefix) {
 		t.Fatalf("PATPlaintext missing/malformed: %q", res.PATPlaintext)
 	}
 	if res.ServerEndpoint != "127.0.0.1:13337" {
@@ -47,11 +47,11 @@ func TestConsumeInstallDownload_HappyPath(t *testing.T) {
 	}
 
 	// End-to-end: the minted PAT redeems correctly into an agent session.
-	redeem, err := svc.Svc.RedeemPAT(ctx, res.PATPlaintext, enrollment.RedeemContext{
+	redeem, err := svc.Svc.RedeemEnrollmentToken(ctx, res.PATPlaintext, enrollment.RedeemContext{
 		ClientIP: "10.0.0.5", MachineID: "m1",
 	})
 	if err != nil || redeem.Outcome != "success" {
-		t.Fatalf("RedeemPAT of freshly minted: %v / %q", err, redeem.Outcome)
+		t.Fatalf("RedeemEnrollmentToken of freshly minted: %v / %q", err, redeem.Outcome)
 	}
 
 	// Replay curl: the install token is consumed; a second attempt is logged
@@ -91,7 +91,7 @@ func TestConsumeInstallDownload_HappyPath(t *testing.T) {
 	}
 }
 
-func TestConsumeInstallDownload_InvalidSecret_DoesNotMintPAT(t *testing.T) {
+func TestConsumeInstallDownload_InvalidSecret_DoesNotMintEnrollmentToken(t *testing.T) {
 	svc := newSvc(t)
 	admin, proj := bootstrap(t, svc.DB())
 	ctx := context.Background()

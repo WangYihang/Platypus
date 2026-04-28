@@ -79,7 +79,7 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 		}
 	}
 	if patTTL <= 0 {
-		patTTL = DefaultPATTTL
+		patTTL = DefaultEnrollmentTokenTTL
 	}
 
 	id, _, hash, full, err := generate(InstallPrefix)
@@ -186,7 +186,7 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 	}
 
 	// Now mint the PAT. It inherits TTL + binding from the install token.
-	patRes, err := s.MintPAT(ctx, MintPATInput{
+	patRes, err := s.MintEnrollmentToken(ctx, MintEnrollmentTokenInput{
 		ProjectID:        tok.ProjectID,
 		IssuedByUser:     tok.IssuedByUser,
 		Description:      patDescFor(tok),
@@ -214,7 +214,7 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		// Best-effort: proactively revoke the orphan PAT so it can never
 		// be used. If revoke fails we log and move on — the admin can
 		// still see it in ListByProject and revoke manually.
-		_ = s.RevokePAT(ctx, patRes.TokenID, tok.IssuedByUser,
+		_ = s.RevokeEnrollmentToken(ctx, patRes.TokenID, tok.IssuedByUser,
 			"install download race: "+outcome)
 		return &ConsumeResult{Outcome: outcome}, nil
 	}

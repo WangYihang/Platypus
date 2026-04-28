@@ -49,7 +49,7 @@ func TestKindForPrefix(t *testing.T) {
 	}{
 		{"aat_", optoken.KindAAT, true},
 		{"pst_", optoken.KindUserSession, true},
-		{"plt_", optoken.KindPAT, true},
+		{"plt_", optoken.KindEnrollmentToken, true},
 		{"dl_", optoken.KindInstall, true},
 		{"foo_", "", false},
 		{"", "", false},
@@ -88,7 +88,7 @@ func TestDetectKind(t *testing.T) {
 	cases := []sample{
 		mk("aat_", optoken.KindAAT),
 		mk("pst_", optoken.KindUserSession),
-		mk("plt_", optoken.KindPAT),
+		mk("plt_", optoken.KindEnrollmentToken),
 		mk("dl_", optoken.KindInstall),
 	}
 	for _, c := range cases {

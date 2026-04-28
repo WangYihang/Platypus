@@ -18,21 +18,21 @@ func TestParse_Accepts_PAT(t *testing.T) {
 	svc := newSvc(t)
 	// Mint one to get a real-shaped string.
 	admin, proj := bootstrap(t, svc.DB())
-	res, err := svc.Svc.MintPAT(context.Background(), enrollment.MintPATInput{
+	res, err := svc.Svc.MintEnrollmentToken(context.Background(), enrollment.MintEnrollmentTokenInput{
 		ProjectID: proj.ID, IssuedByUser: admin.ID, MaxUses: 1,
 	})
 	if err != nil {
-		t.Fatalf("MintPAT: %v", err)
+		t.Fatalf("MintEnrollmentToken: %v", err)
 	}
 
 	parsed, err := enrollment.Parse(res.PlaintextToken)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if parsed.Kind != enrollment.KindPAT {
-		t.Fatalf("Kind = %v; want KindPAT", parsed.Kind)
+	if parsed.Kind != enrollment.KindEnrollmentToken {
+		t.Fatalf("Kind = %v; want KindEnrollmentToken", parsed.Kind)
 	}
-	if !strings.HasPrefix(parsed.ID, enrollment.PATPrefix) {
+	if !strings.HasPrefix(parsed.ID, enrollment.EnrollmentTokenPrefix) {
 		t.Fatalf("ID %q missing plt_ prefix", parsed.ID)
 	}
 }
@@ -54,25 +54,25 @@ func TestParse_RejectsMalformed(t *testing.T) {
 	}
 }
 
-// --- MintPAT + RedeemPAT happy path -----------------------------------------
+// --- MintEnrollmentToken + RedeemEnrollmentToken happy path -----------------------------------------
 
 func TestRedeemPAT_HappyPath(t *testing.T) {
 	svc := newSvc(t)
 	admin, proj := bootstrap(t, svc.DB())
 	ctx := context.Background()
 
-	issue, err := svc.Svc.MintPAT(ctx, enrollment.MintPATInput{
+	issue, err := svc.Svc.MintEnrollmentToken(ctx, enrollment.MintEnrollmentTokenInput{
 		ProjectID: proj.ID, IssuedByUser: admin.ID, MaxUses: 1,
 	})
 	if err != nil {
-		t.Fatalf("MintPAT: %v", err)
+		t.Fatalf("MintEnrollmentToken: %v", err)
 	}
 
-	res, err := svc.Svc.RedeemPAT(ctx, issue.PlaintextToken, enrollment.RedeemContext{
+	res, err := svc.Svc.RedeemEnrollmentToken(ctx, issue.PlaintextToken, enrollment.RedeemContext{
 		ClientIP: "10.0.0.1", MachineID: "machine-1", Hostname: "webhost",
 	})
 	if err != nil {
-		t.Fatalf("RedeemPAT: %v", err)
+		t.Fatalf("RedeemEnrollmentToken: %v", err)
 	}
 	if res.Outcome != "success" {
 		t.Fatalf("Outcome = %q; want success", res.Outcome)
@@ -88,9 +88,9 @@ func TestRedeemPAT_HappyPath(t *testing.T) {
 	}
 
 	// PAT is now consumed; a second redemption must fail.
-	again, err := svc.Svc.RedeemPAT(ctx, issue.PlaintextToken, enrollment.RedeemContext{})
+	again, err := svc.Svc.RedeemEnrollmentToken(ctx, issue.PlaintextToken, enrollment.RedeemContext{})
 	if err != nil {
-		t.Fatalf("second RedeemPAT: %v", err)
+		t.Fatalf("second RedeemEnrollmentToken: %v", err)
 	}
 	if again.Outcome != "max_uses_reached" {
 		t.Fatalf("second Outcome = %q; want max_uses_reached", again.Outcome)
@@ -126,11 +126,11 @@ func TestRedeemPAT_HappyPath(t *testing.T) {
 	}
 }
 
-// --- RedeemPAT classifications ----------------------------------------------
+// --- RedeemEnrollmentToken classifications ----------------------------------------------
 
 func TestRedeemPAT_Malformed(t *testing.T) {
 	svc := newSvc(t)
-	res, err := svc.Svc.RedeemPAT(context.Background(), "garbage", enrollment.RedeemContext{})
+	res, err := svc.Svc.RedeemEnrollmentToken(context.Background(), "garbage", enrollment.RedeemContext{})
 	if err != enrollment.ErrMalformed {
 		t.Fatalf("err = %v; want ErrMalformed", err)
 	}

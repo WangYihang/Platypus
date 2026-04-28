@@ -12,7 +12,7 @@ import (
 )
 
 // AAT is the typed view of an auth_tokens row with kind='aat'. SecretHash
-// stays in the struct (mirroring PATToken's shape) but never escapes
+// stays in the struct (mirroring EnrollmentToken's shape) but never escapes
 // past the storage layer — handlers serialise via response DTOs that
 // omit it. Phase 2 will introduce a UserSession sibling type for
 // kind='user_session' rows; the underlying table is the same.
@@ -59,7 +59,7 @@ type UserSession struct {
 	RevokedReason string
 }
 
-// AuthTokens returns the repo accessor. Mirrors the (db *DB).PATTokens()
+// AuthTokens returns the repo accessor. Mirrors the (db *DB).EnrollmentTokens()
 // pattern so callers don't learn about a different access shape per kind.
 func (db *DB) AuthTokens() *AuthTokenRepo { return &AuthTokenRepo{db: db.DB} }
 

@@ -11,11 +11,11 @@ import (
 	"github.com/WangYihang/Platypus/internal/user"
 )
 
-func seedPAT(t *testing.T, db *storage.DB, tokenID string, projectID, userID string,
-	secret []byte, expiresIn time.Duration, maxUses int) *storage.PATToken {
+func seedEnrollmentToken(t *testing.T, db *storage.DB, tokenID string, projectID, userID string,
+	secret []byte, expiresIn time.Duration, maxUses int) *storage.EnrollmentToken {
 	t.Helper()
 	hash := sha256.Sum256(secret)
-	p := &storage.PATToken{
+	p := &storage.EnrollmentToken{
 		TokenID:      tokenID,
 		SecretHash:   hash[:],
 		ProjectID:    projectID,
@@ -24,40 +24,40 @@ func seedPAT(t *testing.T, db *storage.DB, tokenID string, projectID, userID str
 		ExpiresAt:    time.Now().Add(expiresIn).UTC(),
 		MaxUses:      maxUses,
 	}
-	if err := db.PATTokens().Create(context.Background(), p); err != nil {
-		t.Fatalf("seedPAT: %v", err)
+	if err := db.EnrollmentTokens().Create(context.Background(), p); err != nil {
+		t.Fatalf("seedEnrollmentToken: %v", err)
 	}
 	return p
 }
 
-func TestPATTokens_CreateAndGet(t *testing.T) {
+func TestEnrollmentTokens_CreateAndGet(t *testing.T) {
 	db := newTestDB(t)
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 
-	p := seedPAT(t, db, "plt_abc", proj.ID, admin.ID, []byte("shh"), time.Hour, 1)
+	p := seedEnrollmentToken(t, db, "plt_abc", proj.ID, admin.ID, []byte("shh"), time.Hour, 1)
 
-	got, err := db.PATTokens().Get(context.Background(), p.TokenID)
+	got, err := db.EnrollmentTokens().Get(context.Background(), p.TokenID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	if got.Uses != 0 || got.MaxUses != 1 {
 		t.Fatalf("Uses/MaxUses = %d/%d; want 0/1", got.Uses, got.MaxUses)
 	}
-	if got.Status(time.Now()) != storage.PATStatusPending {
+	if got.Status(time.Now()) != storage.EnrollmentStatusPending {
 		t.Fatalf("Status = %v; want pending", got.Status(time.Now()))
 	}
 }
 
-func TestPATTokens_TryConsume_Success(t *testing.T) {
+func TestEnrollmentTokens_TryConsume_Success(t *testing.T) {
 	db := newTestDB(t)
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 
 	secret := []byte("correct-horse")
-	seedPAT(t, db, "plt_good", proj.ID, admin.ID, secret, time.Hour, 1)
+	seedEnrollmentToken(t, db, "plt_good", proj.ID, admin.ID, secret, time.Hour, 1)
 
-	got, outcome, err := db.PATTokens().TryConsume(
+	got, outcome, err := db.EnrollmentTokens().TryConsume(
 		context.Background(), "plt_good", secret, "machine-x", time.Now())
 	if err != nil {
 		t.Fatalf("TryConsume: %v", err)
@@ -68,19 +68,19 @@ func TestPATTokens_TryConsume_Success(t *testing.T) {
 	if got.Uses != 1 {
 		t.Fatalf("Uses = %d; want 1", got.Uses)
 	}
-	if got.Status(time.Now()) != storage.PATStatusConsumed {
+	if got.Status(time.Now()) != storage.EnrollmentStatusConsumed {
 		t.Fatalf("Status = %v; want consumed", got.Status(time.Now()))
 	}
 }
 
-func TestPATTokens_TryConsume_Classifications(t *testing.T) {
+func TestEnrollmentTokens_TryConsume_Classifications(t *testing.T) {
 	db := newTestDB(t)
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 	ctx := context.Background()
 
 	t.Run("unknown_token", func(t *testing.T) {
-		_, outcome, err := db.PATTokens().TryConsume(ctx, "plt_nope", []byte("x"), "", time.Now())
+		_, outcome, err := db.EnrollmentTokens().TryConsume(ctx, "plt_nope", []byte("x"), "", time.Now())
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -90,8 +90,8 @@ func TestPATTokens_TryConsume_Classifications(t *testing.T) {
 	})
 
 	t.Run("invalid_secret", func(t *testing.T) {
-		seedPAT(t, db, "plt_bad_secret", proj.ID, admin.ID, []byte("right"), time.Hour, 1)
-		_, outcome, err := db.PATTokens().TryConsume(ctx, "plt_bad_secret", []byte("wrong"), "", time.Now())
+		seedEnrollmentToken(t, db, "plt_bad_secret", proj.ID, admin.ID, []byte("right"), time.Hour, 1)
+		_, outcome, err := db.EnrollmentTokens().TryConsume(ctx, "plt_bad_secret", []byte("wrong"), "", time.Now())
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -101,8 +101,8 @@ func TestPATTokens_TryConsume_Classifications(t *testing.T) {
 	})
 
 	t.Run("expired", func(t *testing.T) {
-		seedPAT(t, db, "plt_old", proj.ID, admin.ID, []byte("x"), -time.Minute, 1)
-		_, outcome, err := db.PATTokens().TryConsume(ctx, "plt_old", []byte("x"), "", time.Now())
+		seedEnrollmentToken(t, db, "plt_old", proj.ID, admin.ID, []byte("x"), -time.Minute, 1)
+		_, outcome, err := db.EnrollmentTokens().TryConsume(ctx, "plt_old", []byte("x"), "", time.Now())
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -112,11 +112,11 @@ func TestPATTokens_TryConsume_Classifications(t *testing.T) {
 	})
 
 	t.Run("revoked", func(t *testing.T) {
-		seedPAT(t, db, "plt_rev", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
-		if err := db.PATTokens().Revoke(ctx, "plt_rev", admin.ID, "leaked", time.Now()); err != nil {
+		seedEnrollmentToken(t, db, "plt_rev", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
+		if err := db.EnrollmentTokens().Revoke(ctx, "plt_rev", admin.ID, "leaked", time.Now()); err != nil {
 			t.Fatalf("Revoke: %v", err)
 		}
-		_, outcome, err := db.PATTokens().TryConsume(ctx, "plt_rev", []byte("x"), "", time.Now())
+		_, outcome, err := db.EnrollmentTokens().TryConsume(ctx, "plt_rev", []byte("x"), "", time.Now())
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -126,20 +126,20 @@ func TestPATTokens_TryConsume_Classifications(t *testing.T) {
 	})
 
 	t.Run("max_uses_reached", func(t *testing.T) {
-		seedPAT(t, db, "plt_used", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
+		seedEnrollmentToken(t, db, "plt_used", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
 		// consume once
-		_, outcome, _ := db.PATTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
+		_, outcome, _ := db.EnrollmentTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
 		if outcome != "success" {
 			t.Fatalf("first consume outcome = %q", outcome)
 		}
-		_, outcome, _ = db.PATTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
+		_, outcome, _ = db.EnrollmentTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
 		if outcome != "max_uses_reached" {
 			t.Fatalf("second outcome = %q; want max_uses_reached", outcome)
 		}
 	})
 
 	t.Run("binding_machine_mismatch", func(t *testing.T) {
-		p := &storage.PATToken{
+		p := &storage.EnrollmentToken{
 			TokenID:          "plt_bound",
 			SecretHash:       hashBytes([]byte("x")),
 			ProjectID:        proj.ID,
@@ -149,32 +149,33 @@ func TestPATTokens_TryConsume_Classifications(t *testing.T) {
 			MaxUses:          1,
 			BindingMachineID: "host-abc",
 		}
-		if err := db.PATTokens().Create(ctx, p); err != nil {
+		if err := db.EnrollmentTokens().Create(ctx, p); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		_, outcome, _ := db.PATTokens().TryConsume(ctx, "plt_bound", []byte("x"), "host-xyz", time.Now())
+		_, outcome, _ := db.EnrollmentTokens().TryConsume(ctx, "plt_bound", []byte("x"), "host-xyz", time.Now())
 		if outcome != "binding_machine_mismatch" {
 			t.Fatalf("outcome = %q", outcome)
 		}
 		// matching machine_id works
-		_, outcome, _ = db.PATTokens().TryConsume(ctx, "plt_bound", []byte("x"), "host-abc", time.Now())
+		_, outcome, _ = db.EnrollmentTokens().TryConsume(ctx, "plt_bound", []byte("x"), "host-abc", time.Now())
 		if outcome != "success" {
 			t.Fatalf("matched outcome = %q; want success", outcome)
 		}
 	})
 }
 
-// Concurrency safety: N parallel goroutines racing on a single-use PAT;
-// exactly one must succeed and the others must get max_uses_reached.
-// Uses a temp file DB because modernc.org/sqlite's ":memory:" driver
-// creates one database per connection — the shared schema only
-// materialises when all queries go through the same underlying *sqlite.conn.
-func TestPATTokens_TryConsume_Concurrent(t *testing.T) {
+// Concurrency safety: N parallel goroutines racing on a single-use
+// enrollment token; exactly one must succeed and the others must get
+// max_uses_reached. Uses a temp file DB because modernc.org/sqlite's
+// ":memory:" driver creates one database per connection — the shared
+// schema only materialises when all queries go through the same
+// underlying *sqlite.conn.
+func TestEnrollmentTokens_TryConsume_Concurrent(t *testing.T) {
 	db := newTestDBFile(t)
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 	secret := []byte("single-use-secret")
-	seedPAT(t, db, "plt_race", proj.ID, admin.ID, secret, time.Hour, 1)
+	seedEnrollmentToken(t, db, "plt_race", proj.ID, admin.ID, secret, time.Hour, 1)
 
 	const N = 16
 	var wg sync.WaitGroup
@@ -187,7 +188,7 @@ func TestPATTokens_TryConsume_Concurrent(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			<-start
-			_, o, err := db.PATTokens().TryConsume(
+			_, o, err := db.EnrollmentTokens().TryConsume(
 				context.Background(), "plt_race", secret, "machine", time.Now())
 			outcomes[idx] = o
 			errs[idx] = err
@@ -215,10 +216,10 @@ func TestPATTokens_TryConsume_Concurrent(t *testing.T) {
 	}
 }
 
-func TestPATTokens_Revoke_NotFound(t *testing.T) {
+func TestEnrollmentTokens_Revoke_NotFound(t *testing.T) {
 	db := newTestDB(t)
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
-	err := db.PATTokens().Revoke(context.Background(), "plt_ghost", admin.ID, "none", time.Now())
+	err := db.EnrollmentTokens().Revoke(context.Background(), "plt_ghost", admin.ID, "none", time.Now())
 	if err != storage.ErrNotFound {
 		t.Fatalf("err = %v; want ErrNotFound", err)
 	}
