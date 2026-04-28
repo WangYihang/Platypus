@@ -498,13 +498,21 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	if core.Ctx.NotifyWebSocket != nil {
 		archiveBroadcaster = api.NewEventBroadcasterFromMelody(core.Ctx.NotifyWebSocket)
 	}
+	previewSigner, err := api.NewPreviewSigner()
+	if err != nil {
+		// crypto/rand failing at startup means the kernel CSPRNG is
+		// unavailable — there's no useful degraded mode for an HTTP
+		// server in that state, so fail loud.
+		panic(fmt.Errorf("init preview signer: %w", err))
+	}
 	api.RegisterV2FileArchiveRoutes(rest, api.FileArchiveDeps{
-		Service:     agentLinkSvc,
-		RBAC:        rbac,
-		Recorder:    transferRecorder,
-		Broadcaster: archiveBroadcaster,
-		Cancels:     transferCancels,
-		Hosts:       db.Hosts(),
+		Service:       agentLinkSvc,
+		RBAC:          rbac,
+		Recorder:      transferRecorder,
+		Broadcaster:   archiveBroadcaster,
+		Cancels:       transferCancels,
+		Hosts:         db.Hosts(),
+		PreviewSigner: previewSigner,
 	})
 	api.RegisterV1TransferRoutes(rest, api.TransferRoutesDeps{
 		DB:      db,

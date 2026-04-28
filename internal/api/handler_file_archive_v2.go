@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -77,6 +79,12 @@ type FileArchiveDeps struct {
 	// storing the agent_id (legacy behaviour) so tests that don't
 	// care about host scoping aren't forced to seed a host repo.
 	Hosts HostLookup
+	// PreviewSigner mints + verifies the short-lived URL tokens that
+	// browser <video>/<audio>/pdf.js elements use to authenticate
+	// /fs/read without an Authorization header. Optional in tests
+	// that don't exercise the preview-token route, but production
+	// must wire one or the browser-direct preview path stays disabled.
+	PreviewSigner *PreviewSigner
 }
 
 // FileTransferEvent is the wire shape of WS payloads for transfer
@@ -104,6 +112,65 @@ type FileTransferEvent struct {
 // progress + state changes. Frontend subscribers filter on this
 // string.
 const EventTypeFileTransferUpdated = "file_transfer_updated"
+
+// previewTokenRequestBody is the JSON shape POSTed to
+// /fs/preview-token. Only `path` is required; the (pid, agent_id)
+// pair come from the URL.
+type previewTokenRequestBody struct {
+	Path string `json:"path"`
+}
+
+// previewTokenResponse is the wire shape returned to the frontend so
+// it can drop the result straight into a <video src=...>. The URL is
+// the canonical /fs/read path with all three signed query params
+// (path, exp, preview_token) already filled in — the caller doesn't
+// need to know the signing format.
+type previewTokenResponse struct {
+	Token string `json:"token"`
+	Exp   int64  `json:"exp"`
+	URL   string `json:"url"`
+}
+
+// v2FilePreviewTokenMint signs a short-lived URL token authorising
+// browser-direct reads of (project, agent, path). Bearer-auth gated;
+// the gate is what binds the token to a real user (the token itself
+// carries no user identity, only the resource).
+func v2FilePreviewTokenMint(deps FileArchiveDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if deps.PreviewSigner == nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable,
+				gin.H{"error": "preview signer not configured"})
+			return
+		}
+		var body previewTokenRequestBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.String(http.StatusBadRequest, "invalid body: %s", err)
+			return
+		}
+		if body.Path == "" {
+			c.String(http.StatusBadRequest, "path required")
+			return
+		}
+		pid := c.Param("pid")
+		aid := c.Param("agent_id")
+		token, exp := deps.PreviewSigner.Sign(pid, aid, body.Path)
+
+		// Build the full URL the caller can use directly. Path goes
+		// through QueryEscape because filesystem paths legitimately
+		// contain %, &, # and other reserved chars.
+		q := url.Values{}
+		q.Set("path", body.Path)
+		q.Set("exp", strconv.FormatInt(exp, 10))
+		q.Set("preview_token", token)
+		fullURL := "/api/v1/projects/" + pid + "/agents/" + aid + "/fs/read?" + q.Encode()
+
+		c.JSON(http.StatusOK, previewTokenResponse{
+			Token: token,
+			Exp:   exp,
+			URL:   fullURL,
+		})
+	}
+}
 
 // archiveRequestBody is the JSON the frontend POSTs to /fs/archive.
 // All fields optional but a meaningful request will set paths +
@@ -136,27 +203,40 @@ func RegisterV2FileArchiveRoutes(engine *gin.Engine, deps FileArchiveDeps) {
 		deps.Cancels = NewTransferCancelRegistry()
 	}
 	base := engine.Group("/api/v1/projects/:pid/agents/:agent_id")
-	base.Use(deps.RBAC.RequireAuth())
 
-	viewer := base.Group("")
+	// /fs/read is split off because of its dual auth path: the
+	// browser's <video src> / <audio src> / pdf.js URL fetch can't
+	// set an Authorization header, so the route must additionally
+	// accept a short-lived signed-URL token. RequireFsReadAuth
+	// branches on the presence of ?preview_token= and runs either
+	// the bearer chain (Bearer + project role + agent-in-project)
+	// or the token-verification chain inline. The other routes
+	// can't be reached from a browser-native element so they stay
+	// on the standard chain.
+	fsRead := base.Group("")
+	fsRead.Use(deps.RBAC.RequireFsReadAuth(deps.PreviewSigner))
+	fsRead.GET("/fs/read", v2FileDownloadTracked(deps))
+
+	authed := base.Group("")
+	authed.Use(deps.RBAC.RequireAuth())
+
+	viewer := authed.Group("")
 	viewer.Use(
 		deps.RBAC.RequireProjectRole("pid", user.RoleViewer),
 		deps.RBAC.RequireAgentInProject("pid", "agent_id"),
 	)
 	viewer.POST("/fs/scan", v2FileScan(deps))
 	viewer.POST("/fs/archive", v2FileArchive(deps))
-	// /fs/read used to live on RegisterV2FileRoutes as a plain
-	// streaming pass-through. We moved it here so single-file
-	// downloads also get a file_transfers row + progress events.
-	// The route stays at the same URL — only the internals change,
-	// so existing frontends keep working without a wire-shape bump.
-	viewer.GET("/fs/read", v2FileDownloadTracked(deps))
+	// /fs/preview-token mints the signed URL the frontend then drops
+	// into <video src=...>. Bearer-only — anonymous mints would defeat
+	// the point of the token in the first place.
+	viewer.POST("/fs/preview-token", v2FilePreviewTokenMint(deps))
 
 	// /fs/upload is operator-tier — it MUTATES the agent's filesystem.
 	// Same wire shape as /fs/write but threads a file_transfers row,
 	// progress ticks, audit log, and cancel-registry entry through the
 	// same plumbing the /fs/archive download path uses.
-	operator := base.Group("")
+	operator := authed.Group("")
 	operator.Use(
 		deps.RBAC.RequireProjectRole("pid", user.RoleOperator),
 		deps.RBAC.RequireAgentInProject("pid", "agent_id"),

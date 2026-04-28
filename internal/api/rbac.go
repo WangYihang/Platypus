@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -69,44 +70,48 @@ func ClaimsFromContext(c *gin.Context) (*AccessClaims, bool) {
 // same path); anything else is 401.
 func (r *RBAC) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		raw := c.GetHeader("Authorization")
-		if raw == "" {
-			abortUnauthorized(c, "missing authorization header")
-			return
+		if r.bearerCheck(c) {
+			c.Next()
 		}
-		parts := strings.SplitN(raw, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-			abortUnauthorized(c, "authorization header must be Bearer <token>")
-			return
-		}
-		r.authenticate(c, parts[1])
 	}
 }
 
-// authenticate is the shared body of RequireAuth / RequireAuthWS. On
-// success it stamps Principal + AccessClaims and calls c.Next; on
-// failure it aborts with 401.
-func (r *RBAC) authenticate(c *gin.Context, bearer string) {
+// bearerCheck is the inline form of RequireAuth: returns true when the
+// principal is set and false when 401 has already been written. Used
+// by middlewares that need to compose Bearer auth with an alternative
+// (RequireFsReadAuth's preview-token branch) without re-entering the
+// middleware chain via c.Next.
+func (r *RBAC) bearerCheck(c *gin.Context) bool {
+	raw := c.GetHeader("Authorization")
+	if raw == "" {
+		abortUnauthorized(c, "missing authorization header")
+		return false
+	}
+	parts := strings.SplitN(raw, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+		abortUnauthorized(c, "authorization header must be Bearer <token>")
+		return false
+	}
 	if r.verifier == nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth verifier not wired"})
-		return
+		return false
 	}
-	if _, _, isOpaque := optoken.DetectKind(bearer); !isOpaque {
+	if _, _, isOpaque := optoken.DetectKind(parts[1]); !isOpaque {
 		abortUnauthorized(c, "unrecognized token format")
-		return
+		return false
 	}
-	p, reason, err := r.verifier.Verify(c.Request.Context(), bearer)
+	p, reason, err := r.verifier.Verify(c.Request.Context(), parts[1])
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth lookup"})
-		return
+		return false
 	}
 	if reason != "success" || p == nil {
 		abortUnauthorized(c, "invalid token")
-		return
+		return false
 	}
 	SetPrincipal(c, p)
 	c.Set(claimsCtxKey, claimsForPrincipal(p))
-	c.Next()
+	return true
 }
 
 // claimsForPrincipal projects a Principal into the legacy AccessClaims
@@ -291,49 +296,62 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 		}
 	}
 	return func(c *gin.Context) {
-		p, ok := PrincipalFromContext(c)
-		if !ok {
-			abortUnauthorized(c, "no principal on context — RequireAuth missing?")
-			return
-		}
-		projectID := c.Param(projectParam)
-
-		if p.IsGlobalAdmin() {
-			if _, err := r.storage.Projects().GetByID(c.Request.Context(), projectID); err != nil {
-				if errors.Is(err, storage.ErrNotFound) {
-					c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "project not found"})
-					return
-				}
-				c.AbortWithStatusJSON(http.StatusInternalServerError,
-					gin.H{"error": "project lookup"})
-				return
-			}
+		if r.projectRoleCheck(c, projectParam, min) {
 			c.Next()
-			return
 		}
-
-		role, err := r.storage.Projects().MemberRole(c.Request.Context(), projectID, p.UserID)
-		if errors.Is(err, storage.ErrNotFound) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
-			return
-		}
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError,
-				gin.H{"error": "project member lookup"})
-			return
-		}
-		ok2, err := r.roleHasAllOf(c.Request.Context(), string(role), string(min))
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError,
-				gin.H{"error": "role lookup"})
-			return
-		}
-		if !ok2 {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
-			return
-		}
-		c.Next()
 	}
+}
+
+// projectRoleCheck is the inline form of RequireProjectRole: same
+// behaviour, but composable with custom auth chains. Returns true on
+// pass; on fail the response has already been written.
+func (r *RBAC) projectRoleCheck(c *gin.Context, projectParam string, min user.Role) bool {
+	if r.storage == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "RBAC missing storage — constructed without it"})
+		return false
+	}
+	p, ok := PrincipalFromContext(c)
+	if !ok {
+		abortUnauthorized(c, "no principal on context — RequireAuth missing?")
+		return false
+	}
+	projectID := c.Param(projectParam)
+
+	if p.IsGlobalAdmin() {
+		if _, err := r.storage.Projects().GetByID(c.Request.Context(), projectID); err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "project not found"})
+				return false
+			}
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "project lookup"})
+			return false
+		}
+		return true
+	}
+
+	role, err := r.storage.Projects().MemberRole(c.Request.Context(), projectID, p.UserID)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
+		return false
+	}
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "project member lookup"})
+		return false
+	}
+	ok2, err := r.roleHasAllOf(c.Request.Context(), string(role), string(min))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "role lookup"})
+		return false
+	}
+	if !ok2 {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
+		return false
+	}
+	return true
 }
 
 // RequireAgentInProject closes the gap between the project-membership
@@ -356,35 +374,99 @@ func (r *RBAC) RequireAgentInProject(projectParam, agentParam string) gin.Handle
 		}
 	}
 	return func(c *gin.Context) {
-		p, ok := PrincipalFromContext(c)
-		if !ok {
-			abortUnauthorized(c, "no principal on context — RequireAuth missing?")
-			return
+		if r.agentInProjectCheck(c, projectParam, agentParam) {
+			c.Next()
 		}
-		pid := c.Param(projectParam)
-		agentID := c.Param(agentParam)
-		if agentID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "agent_id required"})
-			return
-		}
-		host, err := r.storage.Hosts().GetByAgentID(c.Request.Context(), agentID)
-		if errors.Is(err, storage.ErrNotFound) {
-			if p.IsGlobalAdmin() {
-				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "agent not found"})
+	}
+}
+
+// RequireFsReadAuth gates GET /fs/read with a dual-path auth scheme:
+//
+//  1. Standard Authorization: Bearer ... (everything else uses this).
+//     Falls through the same RequireAuth + RequireProjectRole(viewer)
+//     + RequireAgentInProject chain the rest of the agent routes use,
+//     just inlined so they compose with branch (2) inside one MW.
+//  2. Short-lived signed-URL preview token (?preview_token=, ?exp=).
+//     Used by browser-native <video>/<audio>/pdf.js elements that
+//     can't add a custom Authorization header. The signer is
+//     process-local and rotates on every restart, so leaked URLs
+//     can't outlive their 5-minute TTL or a server bounce.
+//
+// signer may be nil — that disables branch (2) entirely, which keeps
+// the route bearer-only for tests / deployments that don't want to
+// expose the signed-URL surface.
+func (r *RBAC) RequireFsReadAuth(signer *PreviewSigner) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if signer != nil && c.Query("preview_token") != "" {
+			pid := c.Param("pid")
+			aid := c.Param("agent_id")
+			path := c.Query("path")
+			exp, err := strconv.ParseInt(c.Query("exp"), 10, 64)
+			if err != nil {
+				abortUnauthorized(c, "invalid preview-token exp")
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
+			if !signer.Verify(pid, aid, path, exp, c.Query("preview_token")) {
+				abortUnauthorized(c, "invalid preview token")
+				return
+			}
+			// Token already encodes (pid, aid, path) and is bound to a
+			// caller who passed RequireAuth + project/agent gates at
+			// mint time — re-running them here would just produce the
+			// same answer without a useful diagnostic, so skip and let
+			// the handler run.
+			c.Next()
 			return
 		}
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError,
-				gin.H{"error": "agent lookup"})
+		if !r.bearerCheck(c) {
 			return
 		}
-		if host.ProjectID != pid {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
+		if !r.projectRoleCheck(c, "pid", user.RoleViewer) {
+			return
+		}
+		if !r.agentInProjectCheck(c, "pid", "agent_id") {
 			return
 		}
 		c.Next()
 	}
+}
+
+// agentInProjectCheck is the inline form of RequireAgentInProject.
+// Returns true on pass; on fail the response is already written.
+func (r *RBAC) agentInProjectCheck(c *gin.Context, projectParam, agentParam string) bool {
+	if r.storage == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "RBAC missing storage — constructed without it"})
+		return false
+	}
+	p, ok := PrincipalFromContext(c)
+	if !ok {
+		abortUnauthorized(c, "no principal on context — RequireAuth missing?")
+		return false
+	}
+	pid := c.Param(projectParam)
+	agentID := c.Param(agentParam)
+	if agentID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "agent_id required"})
+		return false
+	}
+	host, err := r.storage.Hosts().GetByAgentID(c.Request.Context(), agentID)
+	if errors.Is(err, storage.ErrNotFound) {
+		if p.IsGlobalAdmin() {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "agent not found"})
+			return false
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
+		return false
+	}
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "agent lookup"})
+		return false
+	}
+	if host.ProjectID != pid {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent not in project"})
+		return false
+	}
+	return true
 }
