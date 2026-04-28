@@ -2,18 +2,22 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
+	"github.com/WangYihang/Platypus/internal/storage"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -274,6 +278,90 @@ func TestRPCv2_Exec(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&res)
 	if res.Stdout != "hi" {
 		t.Fatalf("stdout = %q", res.Stdout)
+	}
+}
+
+// TestRPCv2_AuditRowsRecorded covers the audit side-effect of the
+// RPC handlers: every successful call lands one activity row with
+// the expected category/action and a meta payload that mirrors the
+// request parameters. Guards against drift where someone adds a new
+// RPC method but forgets to register it in rpcAuditTable.
+func TestRPCv2_AuditRowsRecorded(t *testing.T) {
+	env := setupRPCAgent(t, "audit-agent", func(req *v2pb.RpcRequest) *v2pb.RpcResponse {
+		switch {
+		case req.GetDelete() != nil:
+			return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Delete{Delete: &v2pb.DeleteResponse{}}}
+		case req.GetExec() != nil:
+			return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_Exec{Exec: &v2pb.ExecResponse{ExitCode: 0}}}
+		}
+		return &v2pb.RpcResponse{Error: "unexpected"}
+	})
+
+	rec := activity.New(env.fixture.DB)
+	activity.SetRecorder(rec)
+	t.Cleanup(func() {
+		rec.Close()
+		activity.SetRecorder(nil)
+	})
+
+	resp := env.do(t, http.MethodDelete, "/fs/remove?path=/etc/hosts&recursive=true", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete status = %d", resp.StatusCode)
+	}
+	resp = env.do(t, http.MethodPost, "/exec", bytes.NewReader([]byte(`{"command":"id"}`)))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("exec status = %d", resp.StatusCode)
+	}
+
+	rows := waitForActivities(t, env.fixture.DB, 2)
+
+	var sawDelete, sawExec bool
+	for _, a := range rows {
+		switch a.Action {
+		case "file.delete":
+			sawDelete = true
+			if a.TargetID != "audit-agent" || a.Category != storage.CategoryFile {
+				t.Errorf("delete row: %+v", a)
+			}
+			if !strings.Contains(a.Meta, `"path":"/etc/hosts"`) || !strings.Contains(a.Meta, `"recursive":true`) {
+				t.Errorf("delete meta missing fields: %s", a.Meta)
+			}
+		case "command.exec":
+			sawExec = true
+			if a.Category != storage.CategoryCommand {
+				t.Errorf("exec category = %s", a.Category)
+			}
+			if !strings.Contains(a.Meta, `"command":"id"`) {
+				t.Errorf("exec meta missing command: %s", a.Meta)
+			}
+			if !strings.Contains(a.Meta, `"exit_code":0`) {
+				t.Errorf("exec meta missing exit_code: %s", a.Meta)
+			}
+		}
+	}
+	if !sawDelete || !sawExec {
+		t.Fatalf("missing audit rows: delete=%v exec=%v rows=%v", sawDelete, sawExec, rows)
+	}
+}
+
+// waitForActivities polls db.Activities().List until at least n rows
+// are present, or the deadline expires. Mirrors the helper used by
+// other audit-aware tests in this package.
+func waitForActivities(t *testing.T, db *storage.DB, n int) []*storage.Activity {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rows, _, err := db.Activities().List(context.Background(), storage.ActivityFilter{})
+		if err != nil {
+			t.Fatalf("Activities.List: %v", err)
+		}
+		if len(rows) >= n {
+			return rows
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d activity rows; have %d", n, len(rows))
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

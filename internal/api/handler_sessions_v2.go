@@ -112,6 +112,8 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		req.Timeout = 3
 	}
 
+	dispatchStart := time.Now().UTC()
+
 	openRows, err := h.db.Sessions().ListLiveForProject(c.Request.Context(), c.Param("pid"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list sessions"})
@@ -121,6 +123,7 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 
 	results := make([]dispatchV2Result, 0, len(openRows))
 	timeout := time.Duration(req.Timeout) * time.Second
+	var errCount int
 	for _, s := range openRows {
 		if !s.GroupDispatch {
 			continue
@@ -148,10 +151,12 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 			results = append(results, dispatchV2Result{
 				SessionHash: s.ID, HostID: s.HostID, Error: msg,
 			})
+			errCount++
 		case resp.Error != "":
 			results = append(results, dispatchV2Result{
 				SessionHash: s.ID, HostID: s.HostID, Error: resp.Error,
 			})
+			errCount++
 		default:
 			e := resp.GetExec()
 			out := ""
@@ -164,6 +169,32 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"count": len(results), "results": results})
+
+	// One audit row covers the whole fan-out. Per-session error
+	// detail lives in the response body and the per-RPC core logs;
+	// the activity row summarises so dashboards can answer "who ran
+	// what against how many hosts?" with a single query.
+	dispatchDur := time.Since(dispatchStart).Milliseconds()
+	outcome := storage.OutcomeSuccess
+	if len(results) > 0 && errCount == len(results) {
+		outcome = storage.OutcomeError
+	}
+	RecordActivity(c, ActivityInput{
+		Category:   storage.CategoryCommand,
+		Action:     "command.dispatch",
+		TargetType: "project",
+		TargetID:   c.Param("pid"),
+		Outcome:    outcome,
+		DurationMs: &dispatchDur,
+		At:         dispatchStart,
+		Meta: map[string]any{
+			"command":      truncateForAudit(req.Command, 256),
+			"timeout_s":    req.Timeout,
+			"dispatched":   len(results),
+			"errors":       errCount,
+			"live_agents":  len(liveAgents),
+		},
+	})
 }
 
 // liveAgentSet snapshots AgentLinkService into a set the handler can

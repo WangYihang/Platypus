@@ -13,9 +13,40 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
+
+// activityMetaKey is the gin.Context key per-RPC handlers use to
+// stash a meta map for the audit row written by logRPCHandler. Kept
+// untyped (a plain string) because gin's context store is a
+// map[string]any and a typed key would require an unexported helper
+// in every caller.
+const activityMetaKey = "rpc.activity_meta"
+
+// rpcAuditMeta is the (category, action) pair logRPCHandler stamps on
+// the activity row for each RPC method. Defined here so the route
+// table at the top of the file stays a one-liner per endpoint.
+type rpcAuditMeta struct {
+	category string
+	action   string
+}
+
+// rpcAuditTable maps the symbolic method name passed to
+// logRPCHandler to the audit category/action recorded for that
+// endpoint. Keeping this in one place means a new RPC method only
+// has to (a) add a route, (b) add an entry here.
+var rpcAuditTable = map[string]rpcAuditMeta{
+	"list_dir": {storage.CategoryFile, "file.list"},
+	"stat":     {storage.CategoryFile, "file.stat"},
+	"delete":   {storage.CategoryFile, "file.delete"},
+	"rename":   {storage.CategoryFile, "file.rename"},
+	"mkdir":    {storage.CategoryFile, "file.mkdir"},
+	"chmod":    {storage.CategoryFile, "file.chmod"},
+	"sys_info": {storage.CategoryAgent, "agent.sysinfo"},
+	"exec":     {storage.CategoryCommand, "command.exec"},
+}
 
 // RegisterV2AgentRPCRoutes wires the one-shot RPC endpoints into
 // the Gin engine. Each route is a thin adapter: parse query/body
@@ -91,11 +122,59 @@ func logRPCHandler(method string, fn gin.HandlerFunc) gin.HandlerFunc {
 		}
 		log.L.Info("http.rpc.start", baseFields...)
 		fn(c)
+		status := c.Writer.Status()
+		elapsed := time.Since(start)
 		log.L.Info("http.rpc.finish", append(baseFields,
-			"http_status", c.Writer.Status(),
-			"elapsed_ms", time.Since(start).Milliseconds(),
+			"http_status", status,
+			"elapsed_ms", elapsed.Milliseconds(),
 		)...)
+		recordRPCActivity(c, method, start, elapsed, status)
 	}
+}
+
+// recordRPCActivity emits the audit row for one RPC HTTP call. Pulls
+// the per-handler meta map (path, mode, command, …) the handler
+// stashed via c.Set(activityMetaKey, …); a missing meta map is fine
+// — the row still records the action and target. Outcome is
+// inferred from the gin response status: 2xx → success, otherwise →
+// error. The error message comes from the body the handler wrote,
+// surfaced through c.Errors when one was appended; otherwise we fall
+// back to the status text.
+func recordRPCActivity(c *gin.Context, method string, start time.Time, elapsed time.Duration, status int) {
+	meta := rpcAuditTable[method]
+	if meta.action == "" {
+		// Unknown method — skip the audit row rather than emit a
+		// half-typed event. Keeping the symbol table the source of
+		// truth means a typo at the call site is loud (no audit row)
+		// instead of a silent miscategorisation.
+		return
+	}
+
+	durMs := elapsed.Milliseconds()
+	in := ActivityInput{
+		Category:   meta.category,
+		Action:     meta.action,
+		TargetType: "agent",
+		TargetID:   c.Param("agent_id"),
+		DurationMs: &durMs,
+		At:         start.UTC(),
+	}
+	if v, ok := c.Get(activityMetaKey); ok {
+		in.Meta = v
+	}
+	if status >= 200 && status < 300 {
+		in.Outcome = storage.OutcomeSuccess
+	} else {
+		in.Outcome = storage.OutcomeError
+		// Surface whatever the handler tried to communicate; falls
+		// back to a generic status note when nothing was attached.
+		if len(c.Errors) > 0 {
+			in.Error = c.Errors.String()
+		} else {
+			in.Error = http.StatusText(status)
+		}
+	}
+	RecordActivity(c, in)
 }
 
 // callOrAbort is the shared plumbing: lookup agent, call the RPC,
@@ -131,6 +210,7 @@ func callOrAbort(c *gin.Context, svc *core.AgentLinkService, req *v2pb.RpcReques
 func v2RPCListDir(svc *core.AgentLinkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Query("path")
+		c.Set(activityMetaKey, map[string]any{"path": path})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_ListDir{ListDir: &v2pb.ListDirRequest{Path: path}},
 		})
@@ -148,8 +228,10 @@ func v2RPCListDir(svc *core.AgentLinkService) gin.HandlerFunc {
 
 func v2RPCStat(svc *core.AgentLinkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		path := c.Query("path")
+		c.Set(activityMetaKey, map[string]any{"path": path})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
-			Payload: &v2pb.RpcRequest_Stat{Stat: &v2pb.StatRequest{Path: c.Query("path")}},
+			Payload: &v2pb.RpcRequest_Stat{Stat: &v2pb.StatRequest{Path: path}},
 		})
 		if resp == nil {
 			return
@@ -165,10 +247,13 @@ func v2RPCStat(svc *core.AgentLinkService) gin.HandlerFunc {
 
 func v2RPCDelete(svc *core.AgentLinkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		path := c.Query("path")
+		recursive := c.Query("recursive") == "true"
+		c.Set(activityMetaKey, map[string]any{"path": path, "recursive": recursive})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Delete{Delete: &v2pb.DeleteRequest{
-				Path:      c.Query("path"),
-				Recursive: c.Query("recursive") == "true",
+				Path:      path,
+				Recursive: recursive,
 			}},
 		})
 		if resp == nil {
@@ -185,9 +270,12 @@ func v2RPCDelete(svc *core.AgentLinkService) gin.HandlerFunc {
 
 func v2RPCRename(svc *core.AgentLinkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		from := c.Query("from")
+		to := c.Query("to")
+		c.Set(activityMetaKey, map[string]any{"from": from, "to": to})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Rename{Rename: &v2pb.RenameRequest{
-				From: c.Query("from"), To: c.Query("to"),
+				From: from, To: to,
 			}},
 		})
 		if resp == nil {
@@ -204,11 +292,18 @@ func v2RPCRename(svc *core.AgentLinkService) gin.HandlerFunc {
 func v2RPCMkdir(svc *core.AgentLinkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		modeU64, _ := strconv.ParseUint(c.Query("mode"), 10, 32)
+		path := c.Query("path")
+		mkdirs := c.Query("mkdirs") == "true"
+		c.Set(activityMetaKey, map[string]any{
+			"path":   path,
+			"mode":   uint32(modeU64),
+			"mkdirs": mkdirs,
+		})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Mkdir{Mkdir: &v2pb.MkdirRequest{
-				Path:   c.Query("path"),
+				Path:   path,
 				Mode:   uint32(modeU64),
-				Mkdirs: c.Query("mkdirs") == "true",
+				Mkdirs: mkdirs,
 			}},
 		})
 		if resp == nil {
@@ -229,9 +324,11 @@ func v2RPCChmod(svc *core.AgentLinkService) gin.HandlerFunc {
 			c.String(http.StatusBadRequest, "mode must be numeric")
 			return
 		}
+		path := c.Query("path")
+		c.Set(activityMetaKey, map[string]any{"path": path, "mode": uint32(modeU64)})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Chmod{Chmod: &v2pb.ChmodRequest{
-				Path: c.Query("path"), Mode: uint32(modeU64),
+				Path: path, Mode: uint32(modeU64),
 			}},
 		})
 		if resp == nil {
@@ -284,6 +381,16 @@ func v2RPCExec(svc *core.AgentLinkService) gin.HandlerFunc {
 			c.String(http.StatusBadRequest, "command required")
 			return
 		}
+		// Stash the meta first so the audit row reflects what the
+		// user attempted, even if the RPC layer aborts. Args go in
+		// truncated form so a "rg foo /" with thousands of paths
+		// doesn't bloat the activity row; full args land in
+		// structured logs at the agent.
+		c.Set(activityMetaKey, map[string]any{
+			"command": truncateForAudit(in.Command, 256),
+			"args":    truncateArgsForAudit(in.Args, 16, 64),
+			"cwd":     in.Cwd,
+		})
 		resp := callOrAbort(c, svc, &v2pb.RpcRequest{
 			Payload: &v2pb.RpcRequest_Exec{Exec: &v2pb.ExecRequest{
 				Command:   in.Command,
@@ -297,6 +404,16 @@ func v2RPCExec(svc *core.AgentLinkService) gin.HandlerFunc {
 			return
 		}
 		e := resp.GetExec()
+		// Augment the meta with the agent-reported result so the
+		// audit row distinguishes "exec ran, exit 0" from "exec ran,
+		// exit 137".
+		c.Set(activityMetaKey, map[string]any{
+			"command":   truncateForAudit(in.Command, 256),
+			"args":      truncateArgsForAudit(in.Args, 16, 64),
+			"cwd":       in.Cwd,
+			"exit_code": e.ExitCode,
+			"agent_err": e.Error,
+		})
 		c.JSON(http.StatusOK, gin.H{
 			"stdout":    string(e.Stdout),
 			"stderr":    string(e.Stderr),
@@ -304,4 +421,28 @@ func v2RPCExec(svc *core.AgentLinkService) gin.HandlerFunc {
 			"error":     e.Error,
 		})
 	}
+}
+
+// truncateForAudit clips a string to n runes with an ellipsis when
+// it overflows. Used to keep the activities.meta column bounded
+// regardless of caller-supplied payload size.
+func truncateForAudit(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+// truncateArgsForAudit caps the slice at maxArgs entries and each
+// entry to maxLen runes. Audit rows summarise; full fidelity lives
+// in the agent-side execution log.
+func truncateArgsForAudit(args []string, maxArgs, maxLen int) []string {
+	if len(args) > maxArgs {
+		args = args[:maxArgs]
+	}
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = truncateForAudit(a, maxLen)
+	}
+	return out
 }

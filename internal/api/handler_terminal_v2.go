@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -72,10 +74,43 @@ func NewV2TerminalHandler(svc *core.AgentLinkService) gin.HandlerFunc {
 		ctx, cancel := context.WithCancel(c.Request.Context())
 		defer cancel()
 
-		if err := runV2Terminal(ctx, ws, sess, agentID); err != nil &&
-			!errors.Is(err, context.Canceled) {
-			log.Debug("v2 terminal %s: %v", agentID, err)
+		// Audit "shell open" up-front so an attempt that drops mid-way
+		// (browser closed before the first frame, agent rejected the
+		// PTY open, …) still leaves a forensic trail. The matching
+		// "shell close" row below carries the wallclock duration so
+		// per-session lifetime queries on the activities table work
+		// without joining transfer-style records.
+		start := time.Now().UTC()
+		RecordActivity(c, ActivityInput{
+			Category:   storage.CategorySession,
+			Action:     "shell.open",
+			TargetType: "agent",
+			TargetID:   agentID,
+			At:         start,
+		})
+
+		runErr := runV2Terminal(ctx, ws, sess, agentID)
+		if runErr != nil && !errors.Is(runErr, context.Canceled) {
+			log.Debug("v2 terminal %s: %v", agentID, runErr)
 		}
+
+		closeOutcome := storage.OutcomeSuccess
+		var closeErr string
+		if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, io.EOF) {
+			closeOutcome = storage.OutcomeError
+			closeErr = runErr.Error()
+		}
+		dur := time.Since(start).Milliseconds()
+		RecordActivity(c, ActivityInput{
+			Category:   storage.CategorySession,
+			Action:     "shell.close",
+			TargetType: "agent",
+			TargetID:   agentID,
+			Outcome:    closeOutcome,
+			Error:      closeErr,
+			DurationMs: &dur,
+			At:         time.Now().UTC(),
+		})
 	}
 }
 

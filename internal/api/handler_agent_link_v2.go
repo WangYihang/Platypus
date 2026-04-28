@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
@@ -187,7 +188,7 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		// disconnected_at on the deferred path below so historical
 		// queries reflect actual disconnect time, not "still live".
 		if sessionID := h.startLiveSession(c, agentID, projectID); sessionID != "" {
-			defer h.endLiveSession(sessionID)
+			defer h.endLiveSession(sessionID, agentID, projectID)
 		}
 	}
 
@@ -271,6 +272,24 @@ func (h *AgentLinkHandler) startLiveSession(c *gin.Context, agentID, projectID s
 		log.Warn("agent link: insert session (agent=%s host=%s): %v", agentID, host.ID, err)
 		return ""
 	}
+	// Audit row: the agent itself is the principal here (no human
+	// user is on the request). Captures connect IP for forensic
+	// review of "which IP did agent X connect from?".
+	pid := projectID
+	activity.Record(activity.Input{
+		ProjectID:   &pid,
+		ActorType:   storage.ActorTypeAgent,
+		ActorUser:   agentID,
+		ActorIP:     c.ClientIP(),
+		ActorUA:     c.Request.UserAgent(),
+		Category:    storage.CategorySession,
+		Action:      "session.start",
+		TargetType:  "agent",
+		TargetID:    agentID,
+		TargetLabel: host.ID,
+		SessionID:   sess.ID,
+		At:          sess.ConnectedAt,
+	})
 	return sess.ID
 }
 
@@ -278,9 +297,10 @@ func (h *AgentLinkHandler) startLiveSession(c *gin.Context, agentID, projectID s
 // startLiveSession. Decoupled from the request context so a quick
 // shutdown (server SIGTERM) still records the disconnect — uses a
 // fresh background context with a short bound.
-func (h *AgentLinkHandler) endLiveSession(sessionID string) {
+func (h *AgentLinkHandler) endLiveSession(sessionID, agentID, projectID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	closedAt := time.Now().UTC()
 	if err := h.db.Sessions().MarkDisconnected(ctx, sessionID); err != nil {
 		log.L.Warn("link.session_record.close_failed",
 			"session_record_id", sessionID,
@@ -291,6 +311,21 @@ func (h *AgentLinkHandler) endLiveSession(sessionID string) {
 	log.L.Info("link.session_record.closed",
 		"session_record_id", sessionID,
 	)
+	// Audit row counterpart to session.start. We deliberately use
+	// the package-level recorder (not RecordSystemActivity, which
+	// needs a gin ctx) because we're past the request lifecycle.
+	pid := projectID
+	activity.RecordWithContext(ctx, activity.Input{
+		ProjectID:  &pid,
+		ActorType:  storage.ActorTypeAgent,
+		ActorUser:  agentID,
+		Category:   storage.CategorySession,
+		Action:     "session.end",
+		TargetType: "agent",
+		TargetID:   agentID,
+		SessionID:  sessionID,
+		At:         closedAt,
+	})
 }
 
 // heartbeatHostLastSeen ticks every hostHeartbeatInterval and bumps
