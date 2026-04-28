@@ -1,19 +1,23 @@
-import { useEffect, useRef, useState } from "react";
-import { Router, Zap } from "lucide-react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 
 import { EventsOff, EventsOn } from "@wails/runtime/runtime";
 import { palette, radius, space } from "../layout/theme";
 import { getSession, onActiveChange, onSessionChange } from "../lib/auth";
 import { getActiveServer, onServersChange } from "../lib/servers";
 import { ServerInfo, getServerInfo } from "../lib/api";
+import { formatBytes, formatUptimeSeconds } from "../lib/format";
 import TerminalsPill from "../terminal/TerminalsPill";
 import Mono from "./Mono";
 import StatusDot from "./StatusDot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-// Refresh cadence: 10s is enough for a status bar — listener/session
-// churn isn't so hot that a tighter interval would noticeably help.
-const POLL_MS = 10_000;
+// Refresh cadence: 1 Hz so memory / goroutines / uptime tick like a
+// proper telemetry strip. The endpoint is small (one cheap COUNT
+// roll-up + one ReadMemStats) so the bandwidth and CPU cost are
+// negligible. If we ever scale past N≈hundreds of concurrent
+// dashboards, bucket the chatty fields onto a separate cheaper
+// endpoint.
+const POLL_MS = 1_000;
 
 // StatusBar is pinned to the bottom of ShellChrome. Three zones:
 //   · left   — local build (app version + commit)
@@ -215,6 +219,14 @@ export default function StatusBar() {
                                 <span className="text-text-muted">Server: </span>
                                 <span className="text-text-primary">{serverHost}</span>
                             </div>
+                            {info?.public_addr && (
+                                <div data-testid="status-bar-ingress-popover">
+                                    <span className="text-text-muted">Ingress: </span>
+                                    <span className="text-text-primary">
+                                        {info.public_addr}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </PopoverContent>
                 </Popover>
@@ -272,41 +284,205 @@ export default function StatusBar() {
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
                 <TerminalsPill />
-                <span
-                    data-testid="status-bar-ingress"
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        minWidth: 0,
-                    }}
-                    title={info?.public_addr || ""}
-                >
-                    <Router className="size-3" />
-                    <span>Ingress</span>
-                    <Mono size={11} color={palette.textPrimary}>
-                        {info?.public_addr || "—"}
-                    </Mono>
-                </span>
-                <span style={{ color: palette.border }}>·</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <Zap className="size-3" />
-                    <span>Sessions</span>
-                    <Mono size={11} color={palette.textPrimary}>
-                        {info?.session_count ?? "—"}
-                    </Mono>
-                </span>
-                <span style={{ color: palette.border }}>·</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span>Server</span>
-                    <Mono size={11} color={palette.textSecondary}>
-                        {info ? `v${info.version}` : "—"}
-                    </Mono>
-                </span>
+                <RuntimePills info={info} />
+                <CountPills info={info} />
+                <VersionLinks info={info} />
             </div>
         </div>
+    );
+}
+
+// --- right-zone sub-components ----------------------------------------
+// Each renders nothing (or "—") until the first /info response lands.
+// They tick at 1 Hz alongside the parent's poll loop because the
+// parent re-renders on every tick.
+
+function RuntimePills({ info }: { info: ServerInfo | null }) {
+    // Uptime needs Date.now(), which would change every tick — we
+    // recompute on each render so the pill counts up live without
+    // a separate timer. Anchored to started_at_unix so the
+    // arithmetic is integer seconds, no Date.parse() drift.
+    const uptimeSecs =
+        info?.started_at_unix !== undefined
+            ? Math.floor(Date.now() / 1000) - info.started_at_unix
+            : null;
+
+    return (
+        <>
+            <Pill
+                testid="status-bar-mem"
+                title="Resident memory (runtime.MemStats.Alloc)"
+            >
+                <span style={{ color: palette.textMuted }}>mem</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {formatBytes(info?.mem_alloc_bytes)}
+                </Mono>
+            </Pill>
+            <Sep />
+            <Pill
+                testid="status-bar-goroutines"
+                title="Active goroutines (runtime.NumGoroutine)"
+            >
+                <span style={{ color: palette.textMuted }}>grtn</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {info?.goroutines ?? "—"}
+                </Mono>
+            </Pill>
+            <Sep />
+            <Pill
+                testid="status-bar-uptime"
+                title={
+                    info?.started_at
+                        ? `Process started at ${info.started_at}`
+                        : "Server uptime"
+                }
+            >
+                <span style={{ color: palette.textMuted }}>up</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {formatUptimeSeconds(uptimeSecs)}
+                </Mono>
+            </Pill>
+        </>
+    );
+}
+
+function CountPills({ info }: { info: ServerInfo | null }) {
+    return (
+        <>
+            <Sep />
+            <Pill
+                testid="status-bar-hosts"
+                title="Live / total hosts (live = last_seen within 60s)"
+            >
+                <span style={{ color: palette.textMuted }}>Hosts</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {info?.live_host_count ?? "—"}
+                </Mono>
+                <span style={{ color: palette.border }}>/</span>
+                <Mono size={11} color={palette.textSecondary}>
+                    {info?.host_count ?? "—"}
+                </Mono>
+            </Pill>
+            <Sep />
+            <Pill
+                testid="status-bar-sessions"
+                title="Live / total sessions (live = no disconnected_at stamp)"
+            >
+                <span style={{ color: palette.textMuted }}>Sessions</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {info?.live_session_count ?? info?.session_count ?? "—"}
+                </Mono>
+                <span style={{ color: palette.border }}>/</span>
+                <Mono size={11} color={palette.textSecondary}>
+                    {info?.total_session_count ?? "—"}
+                </Mono>
+            </Pill>
+        </>
+    );
+}
+
+function VersionLinks({ info }: { info: ServerInfo | null }) {
+    // git_repo defaults to the canonical Platypus repo when the
+    // server doesn't report one — older builds didn't include the
+    // field. The web version comes from vite's __APP_VERSION__
+    // build-time global.
+    const repo = info?.git_repo || "WangYihang/Platypus";
+    const serverVer = info?.version;
+    const webVer = __APP_VERSION__;
+
+    return (
+        <>
+            <Sep />
+            <ReleaseLink
+                testid="status-bar-server-version"
+                repo={repo}
+                version={serverVer}
+                label="server"
+            />
+            <Sep />
+            <ReleaseLink
+                testid="status-bar-web-version"
+                repo={repo}
+                version={webVer}
+                label="web"
+            />
+        </>
+    );
+}
+
+function Pill({
+    testid,
+    title,
+    children,
+}: {
+    testid: string;
+    title?: string;
+    children: ReactNode;
+}) {
+    return (
+        <span
+            data-testid={testid}
+            title={title}
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                whiteSpace: "nowrap",
+            }}
+        >
+            {children}
+        </span>
+    );
+}
+
+function Sep() {
+    return <span style={{ color: palette.border, flexShrink: 0 }}>·</span>;
+}
+
+function ReleaseLink({
+    testid,
+    repo,
+    version,
+    label,
+}: {
+    testid: string;
+    repo: string;
+    version: string | undefined;
+    label: string;
+}) {
+    if (!version) {
+        return (
+            <Pill testid={testid} title={`${label} version unknown`}>
+                <span style={{ color: palette.textMuted }}>{label}</span>
+                <Mono size={11} color={palette.textSecondary}>
+                    —
+                </Mono>
+            </Pill>
+        );
+    }
+    const href = `https://github.com/${repo}/releases/tag/v${version}`;
+    return (
+        <a
+            data-testid={testid}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${label} v${version} release notes on GitHub`}
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                whiteSpace: "nowrap",
+                color: palette.textMuted,
+                textDecoration: "none",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = palette.textPrimary)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = palette.textMuted)}
+        >
+            <span>{label}</span>
+            <Mono size={11} color="inherit">
+                v{version}
+            </Mono>
+        </a>
     );
 }

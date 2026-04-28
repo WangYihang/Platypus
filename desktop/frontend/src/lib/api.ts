@@ -408,12 +408,35 @@ export async function resetSetting(key: string): Promise<void> {
 // from the status bar.
 
 export interface ServerInfo {
+    // Build identity. git_repo is the canonical "<owner>/<name>"
+    // path on GitHub — the status bar formats it into clickable
+    // /releases/tag/v<version> links.
     version: string;
     commit: string;
     date: string;
+    git_repo?: string;
+
+    // Process lifetime. started_at is RFC3339 (kept for backwards
+    // compat); started_at_unix is what the status-bar uptime ticker
+    // does math against because Date.parse() drift is annoying.
     started_at: string;
+    started_at_unix?: number;
+
+    // Runtime stats — sampled per request.
+    goroutines?: number;
+    mem_alloc_bytes?: number;
+
+    // Network identity.
     public_addr: string;
+
+    // Counts. session_count is the legacy "live agent registry"
+    // value; new code reads live_session_count / total_session_count
+    // (DB ground truth) and host_count / live_host_count.
     session_count: number;
+    live_session_count?: number;
+    total_session_count?: number;
+    host_count?: number;
+    live_host_count?: number;
 }
 
 export async function getServerInfo(): Promise<ServerInfo> {

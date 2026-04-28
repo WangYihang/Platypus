@@ -12,6 +12,12 @@ var (
 	Commit = "HEAD"
 	// Date is the build date of the application
 	Date = "1970-01-01T00:00:00Z"
+	// Repo is the canonical "<org>/<repo>" path on GitHub. Frontend
+	// surfaces this in clickable version links so operators can jump
+	// to /releases/tag/v<Version>. Override with -ldflags
+	// -X github.com/WangYihang/Platypus/pkg/version.Repo=<path>
+	// at build time when forking.
+	Repo = "WangYihang/Platypus"
 )
 
 // GetVersion returns the version information of the application

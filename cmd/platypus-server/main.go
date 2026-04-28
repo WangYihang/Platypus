@@ -450,6 +450,15 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// /api/v1/info's session_count reflects actual v2 connections.
 	api.LiveAgentCounter = func() int { return len(agentLinkSvc.All()) }
 
+	// Wire the cross-project counts the status bar polls at 1 Hz.
+	// Online threshold matches the desktop frontend's
+	// lib/time.ts ONLINE_WINDOW_MS (60 s) so a host that's "green"
+	// on the dashboard is also counted in live_host_count.
+	const onlineWindow = 60 * time.Second
+	api.Counts = func(ctx context.Context) (storage.Counts, error) {
+		return db.Counts(ctx, onlineWindow)
+	}
+
 	// Bootstrap-secret handling. The secret is only useful while the
 	// users table is empty (Bootstrap is the one-shot first-admin flow);
 	// after that it's dead weight. Two failure modes the previous code

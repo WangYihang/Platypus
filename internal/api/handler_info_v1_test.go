@@ -1,15 +1,19 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // infoSmokeReq runs a GET with an optional Bearer token.
@@ -68,5 +72,80 @@ func TestInfoV1_Happy(t *testing.T) {
 	// Fresh core.Ctx has no servers or agents.
 	if body.SessionCount != 0 {
 		t.Errorf("session_count=%d, want 0", body.SessionCount)
+	}
+}
+
+// TestInfoV1_RuntimeAndCounts pins the new status-bar telemetry
+// fields:
+//
+//   1. Runtime stats — goroutines (>0), mem_alloc_bytes (>0), and a
+//      stable started_at_unix that doesn't drift between calls.
+//   2. Cross-project counts — host_count / live_host_count /
+//      total_session_count / live_session_count, threaded through
+//      the Counts func var so production main.go can wire it to
+//      db.Counts() without dragging the storage layer into this
+//      handler.
+//   3. The repo path so the frontend can render clickable
+//      release links.
+func TestInfoV1_RuntimeAndCounts(t *testing.T) {
+	r, tok := setupInfoV1Router(t)
+	prev := Counts
+	defer func() { Counts = prev }()
+	Counts = func(_ context.Context) (storage.Counts, error) {
+		return storage.Counts{
+			Hosts: 12, LiveHosts: 9,
+			Sessions: 47, LiveSessions: 3,
+		}, nil
+	}
+
+	w := infoSmokeReq(t, r, "GET", "/api/v1/info", tok)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v (body=%s)", err, w.Body.String())
+	}
+
+	if g, _ := got["goroutines"].(float64); g <= 0 {
+		t.Errorf("goroutines = %v, want > 0", got["goroutines"])
+	}
+	if m, _ := got["mem_alloc_bytes"].(float64); m <= 0 {
+		t.Errorf("mem_alloc_bytes = %v, want > 0", got["mem_alloc_bytes"])
+	}
+	if s, _ := got["started_at_unix"].(float64); s <= 0 {
+		t.Errorf("started_at_unix = %v, want > 0", got["started_at_unix"])
+	}
+	if got["host_count"].(float64) != 12 {
+		t.Errorf("host_count = %v, want 12", got["host_count"])
+	}
+	if got["live_host_count"].(float64) != 9 {
+		t.Errorf("live_host_count = %v, want 9", got["live_host_count"])
+	}
+	if got["total_session_count"].(float64) != 47 {
+		t.Errorf("total_session_count = %v, want 47", got["total_session_count"])
+	}
+	if got["live_session_count"].(float64) != 3 {
+		t.Errorf("live_session_count = %v, want 3", got["live_session_count"])
+	}
+	if repo, _ := got["git_repo"].(string); !strings.Contains(repo, "/") {
+		t.Errorf("git_repo = %q, want owner/repo form", got["git_repo"])
+	}
+}
+
+// TestInfoV1_StableStartedAt — uptime must be stable across calls.
+func TestInfoV1_StableStartedAt(t *testing.T) {
+	r, tok := setupInfoV1Router(t)
+	w1 := infoSmokeReq(t, r, "GET", "/api/v1/info", tok)
+	time.Sleep(10 * time.Millisecond)
+	w2 := infoSmokeReq(t, r, "GET", "/api/v1/info", tok)
+
+	var a, b map[string]any
+	_ = json.Unmarshal(w1.Body.Bytes(), &a)
+	_ = json.Unmarshal(w2.Body.Bytes(), &b)
+	if a["started_at_unix"] != b["started_at_unix"] {
+		t.Errorf("started_at_unix drifted: %v → %v",
+			a["started_at_unix"], b["started_at_unix"])
 	}
 }
