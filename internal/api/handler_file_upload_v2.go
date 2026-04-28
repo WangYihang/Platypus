@@ -205,8 +205,9 @@ func v2FileUploadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 					now := time.Now()
 					if bytesIn-lastFlushBytes >= progressFlushBytes ||
 						now.Sub(lastFlushAt) >= progressFlushInterval {
-						_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesIn, totalBytes)
+						_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesIn, bytesIn, totalBytes)
 						ft.BytesTransferred = bytesIn
+						ft.WireBytes = bytesIn
 						broadcastTransfer(deps, ft, []string{dstPath})
 						lastFlushBytes = bytesIn
 						lastFlushAt = now
@@ -259,9 +260,10 @@ func finalizeUpload(deps FileArchiveDeps, ft *storage.FileTransfer, status strin
 	at := time.Now().UTC()
 	ft.Status = status
 	ft.BytesTransferred = bytes
+	ft.WireBytes = bytes
 	ft.ErrorMessage = errMsg
 	ft.FinishedAt = &at
-	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, errMsg, at); err != nil {
+	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, bytes, errMsg, at); err != nil {
 		log.Warn("file_transfer finish (upload): %v", err)
 	}
 	broadcastTransfer(deps, ft, []string{dst})

@@ -33,7 +33,13 @@ export interface TransferItem {
     format: string;
     paths: string[];
     status: TransferStatus;
+    /** Uncompressed source bytes processed so far. Comparable to
+     *  total_bytes — drives the percentage progress. */
     bytes_transferred: number;
+    /** Bytes written through the HTTP response body (post-gzip /
+     *  deflate for archive transfers, equal to bytes_transferred for
+     *  plain ones). Drives compression ratio + network throughput. */
+    wire_bytes: number;
     total_bytes: number;
     error_message?: string;
     started_at: string;
@@ -176,12 +182,11 @@ export async function cancelTransfer(opts: CancelTransferOptions): Promise<void>
 
 // --- Display helpers --------------------------------------------------
 //
-// Pinned by transfers.test.ts. The header bug from production: archive
-// downloads stream gzip-compressed bodies, so `bytes_transferred` (the
-// compressed wire count) drifts from `total_bytes` (the uncompressed
-// pre-scan total). The status bar / drawer / /transfers page all share
-// these helpers so the UI can never accidentally show "180 / 48 ·
-// 100% · done" again.
+// `bytes_transferred` is the meaningful progress numerator (uncompressed
+// source bytes processed); `wire_bytes` is the post-encoding count
+// (compressed for archive, equal otherwise). The handful of helpers
+// below own every render decision so the status bar, drawer, and
+// /transfers page stay consistent.
 
 const TERMINAL_STATUSES: ReadonlySet<TransferStatus> = new Set([
     "done",
@@ -192,19 +197,82 @@ const TERMINAL_STATUSES: ReadonlySet<TransferStatus> = new Set([
 /**
  * transferProgressPct is the canonical "what does the bar render?"
  * helper. Returns:
- *   * `null` for indeterminate progress (running with no known total)
+ *   * `null` for indeterminate progress (running with no known total —
+ *     happens only when the pre-scan failed)
  *   * `100` for terminal `done` rows regardless of byte mismatch
  *   * the clamped 0..100 percentage otherwise
  *
- * The clamp matters: backends that overshoot (e.g. compressed stream
- * larger than scan total) used to render 375% bars before this lived
- * in one place.
+ * The clamp matters because the agent's source counter is sampled
+ * asynchronously and may briefly exceed the pre-scan total when files
+ * grow during the walk.
  */
 export function transferProgressPct(it: TransferItem): number | null {
     if (it.status === "done") return 100;
     if (it.total_bytes <= 0) return null;
     const raw = (it.bytes_transferred / it.total_bytes) * 100;
     return Math.max(0, Math.min(100, Math.floor(raw)));
+}
+
+/**
+ * transferCompressionRatio returns the ratio of *wire bytes* to *source
+ * bytes* — i.e. how much smaller (or bigger, for tar headers) the
+ * encoded body was than the raw input. Returns `null` when there's
+ * nothing meaningful to display: no source bytes seen yet, or the two
+ * counters are equal (plain transfers). Values <1 mean compression
+ * happened; values >1 mean the encoding added overhead (rare —
+ * uncompressed `tar` of many tiny files).
+ */
+export function transferCompressionRatio(it: TransferItem): number | null {
+    if (it.bytes_transferred <= 0) return null;
+    if (it.wire_bytes === it.bytes_transferred) return null;
+    return it.wire_bytes / it.bytes_transferred;
+}
+
+/**
+ * transferAverageSpeed returns the average source-byte throughput in
+ * bytes per second over the transfer's wall-clock lifetime. We use
+ * source bytes (not wire bytes) because that's what the operator
+ * intuitively cares about — "how fast is my data being processed" —
+ * regardless of the on-the-wire compression ratio.
+ *
+ * Returns `null` for rows that haven't accumulated enough wall time
+ * (<250 ms — speed swings wildly while the first chunk is in flight)
+ * or have no progress yet.
+ */
+export function transferAverageSpeed(it: TransferItem, now: Date = new Date()): number | null {
+    if (it.bytes_transferred <= 0) return null;
+    const started = Date.parse(it.started_at);
+    if (Number.isNaN(started)) return null;
+    let end: number;
+    if (TERMINAL_STATUSES.has(it.status) && it.finished_at) {
+        end = Date.parse(it.finished_at);
+        if (Number.isNaN(end)) end = now.getTime();
+    } else {
+        end = now.getTime();
+    }
+    const elapsedMs = end - started;
+    if (elapsedMs < 250) return null;
+    return (it.bytes_transferred * 1000) / elapsedMs;
+}
+
+/**
+ * formatBytesPerSec turns a bytes/sec number into a short human label
+ * ("1.2 MB/s"). Mirrors formatBytes' unit ladder.
+ */
+export function formatBytesPerSec(n: number | null): string {
+    if (n === null || !Number.isFinite(n) || n <= 0) return "—";
+    return `${formatBytes(n)}/s`;
+}
+
+/**
+ * formatCompressionRatio renders the ratio as a percentage of the
+ * source ("32%" means the wire body was 32% of the source — a 3.1×
+ * shrink). Above 100% means the encoding added overhead, which is
+ * also worth surfacing (uncompressed tar of many tiny files).
+ */
+export function formatCompressionRatio(ratio: number | null): string {
+    if (ratio === null || !Number.isFinite(ratio) || ratio <= 0) return "—";
+    return `${Math.round(ratio * 100)}%`;
 }
 
 function formatBytes(n: number): string {

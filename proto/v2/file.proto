@@ -39,10 +39,20 @@ message FileReadResponse {
 // FileChunk is one chunk of file bytes. Sender emits as many as
 // it likes, setting eof=true on the final chunk. A chunk may have
 // eof=true AND an error to report a mid-transfer failure.
+//
+// source_bytes_so_far is the cumulative count of *uncompressed source
+// bytes* the sender has read from disk by the time it emits this
+// chunk. For archive transfers (tar.gz / zip) the wire bytes are
+// post-compression, so this field is the only meaningful progress
+// numerator — paired with FileScanResponse.total_bytes it produces
+// a real percentage. Senders that don't care (single-file reads
+// where data length already equals progress) leave it zero; the
+// server falls back to wire bytes in that case.
 message FileChunk {
   bytes data = 1;
   bool eof = 2;
   string error = 3;
+  int64 source_bytes_so_far = 4;
 }
 
 // FileWriteRequest opens a STREAM_TYPE_FILE_WRITE stream. The
@@ -128,9 +138,11 @@ enum ArchiveFormat {
 
 // FileArchiveRequest opens a STREAM_TYPE_FILE_ARCHIVE stream. The
 // agent walks the named paths and streams the resulting archive
-// back as FileChunk frames, the last one carrying eof=true. The
-// server tallies bytes on the wire to drive progress reporting —
-// no in-band progress frames are needed.
+// back as FileChunk frames, the last one carrying eof=true. Each
+// chunk carries `source_bytes_so_far` (uncompressed bytes read from
+// disk) so the server can render real percentage progress against
+// the FileScanResponse.total_bytes pre-scan figure even when the
+// body is gzip- or deflate-compressed.
 message FileArchiveRequest {
   repeated string paths = 1;
   ArchiveFormat format = 2;

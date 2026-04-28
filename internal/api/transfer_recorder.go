@@ -24,10 +24,10 @@ func (r *dbTransferRecorder) Create(ctx context.Context, ft *storage.FileTransfe
 	return r.db.FileTransfers().Create(ctx, ft)
 }
 
-func (r *dbTransferRecorder) UpdateProgress(ctx context.Context, id string, bytes, total int64) error {
-	return r.db.FileTransfers().UpdateProgress(ctx, id, bytes, total)
+func (r *dbTransferRecorder) UpdateProgress(ctx context.Context, id string, bytes, wireBytes, total int64) error {
+	return r.db.FileTransfers().UpdateProgress(ctx, id, bytes, wireBytes, total)
 }
 
-func (r *dbTransferRecorder) Finish(ctx context.Context, id, status string, bytes int64, errMsg string, at time.Time) error {
-	return r.db.FileTransfers().Finish(ctx, id, status, bytes, errMsg, at)
+func (r *dbTransferRecorder) Finish(ctx context.Context, id, status string, bytes, wireBytes int64, errMsg string, at time.Time) error {
+	return r.db.FileTransfers().Finish(ctx, id, status, bytes, wireBytes, errMsg, at)
 }

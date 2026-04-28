@@ -34,6 +34,10 @@ import {
     createTransfersStore,
     type TransferItem,
     cancelTransfer,
+    formatBytesPerSec,
+    formatCompressionRatio,
+    transferAverageSpeed,
+    transferCompressionRatio,
     transferDisplaySize,
     transferElapsed,
     transferProgressPct,
@@ -53,6 +57,7 @@ const baseRow: TransferItem = {
     paths: ["/etc"],
     status: "running",
     bytes_transferred: 0,
+    wire_bytes: 0,
     total_bytes: 1024,
     started_at: "2025-01-01T00:00:00Z",
 };
@@ -163,9 +168,11 @@ describe("transferProgressPct", () => {
         ).toBe(100);
     });
 
-    it("returns 100 when bytes overshoot total (compressed stream regression)", () => {
-        // The bug from production: a 48 B file streamed as tar.gz
-        // produced ~180 B out. Pre-fix: 375% bar. Post-fix: clamped + done.
+    it("returns 100 when bytes overshoot total (source counter race)", () => {
+        // bytes_transferred is now uncompressed source bytes (sampled
+        // asynchronously by the agent), so the overshoot path is rare —
+        // a file growing during the walk can briefly push us past the
+        // pre-scan total. The clamp keeps the bar at 100% on done.
         expect(
             transferProgressPct({
                 ...baseRow,
@@ -251,6 +258,97 @@ describe("transferElapsed", () => {
             status: "done" as const,
         };
         expect(transferElapsed(item, now)).toBe("3h 14m");
+    });
+});
+
+// transferCompressionRatio surfaces wire/source so the operator can
+// see how effective the encoding was. Returns null when the two
+// counters are equal (no compression happened) so the UI can hide
+// the column for plain transfers.
+describe("transferCompressionRatio", () => {
+    it("returns null when source bytes are zero", () => {
+        expect(
+            transferCompressionRatio({ ...baseRow, bytes_transferred: 0, wire_bytes: 0 }),
+        ).toBeNull();
+    });
+
+    it("returns null when wire equals source (plain transfer)", () => {
+        expect(
+            transferCompressionRatio({
+                ...baseRow,
+                kind: "file",
+                bytes_transferred: 4096,
+                wire_bytes: 4096,
+            }),
+        ).toBeNull();
+    });
+
+    it("returns wire/source when they diverge", () => {
+        expect(
+            transferCompressionRatio({
+                ...baseRow,
+                bytes_transferred: 1000,
+                wire_bytes: 320,
+            }),
+        ).toBeCloseTo(0.32);
+    });
+
+    it("formatCompressionRatio renders a percentage; null becomes em-dash", () => {
+        expect(formatCompressionRatio(0.32)).toBe("32%");
+        expect(formatCompressionRatio(null)).toBe("—");
+        // tar of many tiny files can overshoot, surface that too.
+        expect(formatCompressionRatio(1.05)).toBe("105%");
+    });
+});
+
+// transferAverageSpeed uses source bytes / wall-clock so it reflects
+// "how fast my data is being processed" — the number a user feels.
+describe("transferAverageSpeed", () => {
+    const start = "2026-01-01T00:00:00Z";
+    const now = new Date("2026-01-01T00:00:10Z"); // +10 s
+
+    it("returns null when no source bytes have been seen", () => {
+        expect(
+            transferAverageSpeed({ ...baseRow, started_at: start, bytes_transferred: 0 }, now),
+        ).toBeNull();
+    });
+
+    it("returns null when elapsed wall-time is too short to be stable", () => {
+        const justStarted = new Date("2026-01-01T00:00:00.100Z");
+        expect(
+            transferAverageSpeed(
+                { ...baseRow, started_at: start, bytes_transferred: 1024 },
+                justStarted,
+            ),
+        ).toBeNull();
+    });
+
+    it("computes bytes / elapsed seconds for running rows", () => {
+        // 1 MiB processed over 10 s → ~104857.6 B/s.
+        const got = transferAverageSpeed(
+            { ...baseRow, started_at: start, bytes_transferred: 1024 * 1024 },
+            now,
+        );
+        expect(got).toBeCloseTo(104857.6, 0);
+    });
+
+    it("uses finished_at instead of now once the row is terminal", () => {
+        const item: TransferItem = {
+            ...baseRow,
+            started_at: start,
+            finished_at: "2026-01-01T00:00:05Z", // +5 s, half the window
+            status: "done",
+            bytes_transferred: 1024 * 1024,
+        };
+        const got = transferAverageSpeed(item, now);
+        // Same source bytes, half the time → twice the throughput.
+        expect(got).toBeCloseTo(209715.2, 0);
+    });
+
+    it("formatBytesPerSec emits a short suffix; null becomes em-dash", () => {
+        expect(formatBytesPerSec(1024 * 1024)).toMatch(/MB\/s/);
+        expect(formatBytesPerSec(null)).toBe("—");
+        expect(formatBytesPerSec(0)).toBe("—");
     });
 });
 

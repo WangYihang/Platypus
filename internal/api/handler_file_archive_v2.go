@@ -39,10 +39,16 @@ const progressFlushInterval = 250 * time.Millisecond
 // archive handler uses to record file_transfers rows. Production
 // implementations write to SQLite + broadcast WS events; tests
 // substitute an in-memory fake (FakeTransferRecorder).
+//
+// `bytes` is the *source* progress (uncompressed bytes processed so
+// far, comparable to the pre-scan total). `wireBytes` is the
+// *post-encoding* count — the bytes actually written to the HTTP
+// response body, used for compression-ratio + network-speed display.
+// For non-archive transfers the two are equal.
 type TransferRecorder interface {
 	Create(ctx context.Context, ft *storage.FileTransfer) error
-	UpdateProgress(ctx context.Context, id string, bytes, total int64) error
-	Finish(ctx context.Context, id, status string, bytes int64, errMsg string, at time.Time) error
+	UpdateProgress(ctx context.Context, id string, bytes, wireBytes, total int64) error
+	Finish(ctx context.Context, id, status string, bytes, wireBytes int64, errMsg string, at time.Time) error
 }
 
 // HostLookup is the slim subset of *storage.HostRepo that the file
@@ -77,20 +83,21 @@ type FileArchiveDeps struct {
 // state changes. Mirrors the storage layer so the frontend can
 // render rows without a separate API round-trip after each event.
 type FileTransferEvent struct {
-	ID               string  `json:"id"`
-	ProjectID        string  `json:"project_id"`
-	HostID           string  `json:"host_id"`
-	UserID           string  `json:"user_id"`
-	Direction        string  `json:"direction"`
-	Kind             string  `json:"kind"`
-	Format           string  `json:"format"`
+	ID               string   `json:"id"`
+	ProjectID        string   `json:"project_id"`
+	HostID           string   `json:"host_id"`
+	UserID           string   `json:"user_id"`
+	Direction        string   `json:"direction"`
+	Kind             string   `json:"kind"`
+	Format           string   `json:"format"`
 	Paths            []string `json:"paths"`
-	Status           string  `json:"status"`
-	BytesTransferred int64   `json:"bytes_transferred"`
-	TotalBytes       int64   `json:"total_bytes"`
-	ErrorMessage     string  `json:"error_message,omitempty"`
-	StartedAt        string  `json:"started_at"`
-	FinishedAt       string  `json:"finished_at,omitempty"`
+	Status           string   `json:"status"`
+	BytesTransferred int64    `json:"bytes_transferred"`
+	WireBytes        int64    `json:"wire_bytes"`
+	TotalBytes       int64    `json:"total_bytes"`
+	ErrorMessage     string   `json:"error_message,omitempty"`
+	StartedAt        string   `json:"started_at"`
+	FinishedAt       string   `json:"finished_at,omitempty"`
 }
 
 // EventTypeFileTransferUpdated is the WS event type for transfer
@@ -252,20 +259,19 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 			userIDStr = claims.UserID
 		}
 
-		// Archive transfers run with indeterminate progress.
-		// The pre-scan returns *uncompressed* bytes, but the
-		// response body is gzip- or deflate-compressed (and even
-		// raw `tar` adds 512-byte block headers per entry), so the
-		// scan total never matches what's streamed. Reporting it
-		// caused the UI to show "180 B / 48 B · 100% · done" — a
-		// useful number that's nonetheless a lie. Operators see
-		// the running byte counter; when it stops, the row is
-		// done. We keep the scan call only as a future hook for
-		// pre-flight checks (size warnings, permission probes).
+		// Pre-scan to size the progress bar. The agent walks the
+		// requested roots once and reports their uncompressed
+		// content size; FileChunk.source_bytes_so_far is in the
+		// same units, so progress = source/total is a real
+		// percentage even for tar.gz / zip downloads. A scan
+		// failure is non-fatal — the transfer just degrades to
+		// indeterminate progress until the chunks start arriving.
 		var totalBytes int64
-		_, _ = runScan(c.Request.Context(), sess, scanRequestBody{
+		if scanResp, err := runScan(c.Request.Context(), sess, scanRequestBody{
 			Paths: body.Paths, FollowSymlinks: body.FollowSymlinks,
-		})
+		}); err == nil && scanResp != nil && scanResp.Error == "" {
+			totalBytes = scanResp.TotalBytes
+		}
 
 		transferID := deps.IDGenerator()
 		pathsJSON, _ := json.Marshal(body.Paths)
@@ -303,7 +309,7 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		})
 		stream, err := sess.Open(v2pb.StreamType_STREAM_TYPE_FILE_ARCHIVE, meta, "fs-arch-"+transferID)
 		if err != nil {
-			finalizeTransfer(deps, ft, storage.TransferStatusFailed, 0, err.Error(), body.Paths)
+			finalizeTransfer(deps, ft, storage.TransferStatusFailed, 0, 0, err.Error(), body.Paths)
 			c.String(http.StatusBadGateway, "open stream: %s", err)
 			return
 		}
@@ -325,12 +331,12 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		var hdr v2pb.FileArchiveResponse
 		if err := link.ReadFrame(stream, &hdr); err != nil {
 			finalizeTransfer(deps, ft, statusFromCtx(streamCtx, storage.TransferStatusFailed),
-				0, err.Error(), body.Paths)
+				0, 0, err.Error(), body.Paths)
 			c.String(http.StatusBadGateway, "read header: %s", err)
 			return
 		}
 		if hdr.Error != "" {
-			finalizeTransfer(deps, ft, storage.TransferStatusFailed, 0, hdr.Error, body.Paths)
+			finalizeTransfer(deps, ft, storage.TransferStatusFailed, 0, 0, hdr.Error, body.Paths)
 			c.String(http.StatusBadGateway, "agent: %s", hdr.Error)
 			return
 		}
@@ -340,16 +346,27 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		c.Writer.Header().Set("Content-Disposition",
 			fmt.Sprintf(`attachment; filename="archive%s"`, ext))
 		c.Writer.Header().Set("X-Transfer-Id", transferID)
-		// Intentionally no X-Total-Bytes: archive bodies are
-		// compressed so we can't know the final size up-front. See
-		// the pre-scan comment above for the full rationale.
-		_ = totalBytes
+		if totalBytes > 0 {
+			// X-Total-Bytes is the *source* total (uncompressed).
+			// The response body's Content-Length is unknown for
+			// tar.gz / zip so we leave that header off; clients
+			// that want a percentage use this header instead.
+			c.Writer.Header().Set("X-Total-Bytes", fmt.Sprintf("%d", totalBytes))
+		}
 		c.Status(http.StatusOK)
 		c.Writer.Flush()
 
-		// Stream chunks while ticking progress on size+time triggers.
-		var bytesOut int64
-		lastFlushBytes := int64(0)
+		// Two counters tick together while we stream chunks:
+		//   wireBytes   — bytes written to the HTTP response (post-
+		//                 gzip / deflate). Drives compression-ratio
+		//                 and network-speed display.
+		//   sourceBytes — uncompressed bytes the agent has read off
+		//                 disk by the time it stamped this chunk;
+		//                 carried in FileChunk.source_bytes_so_far.
+		//                 Drives the progress percentage.
+		var wireBytes int64
+		var sourceBytes int64
+		lastFlushWire := int64(0)
 		lastFlushAt := time.Now()
 		for {
 			var ch v2pb.FileChunk
@@ -365,33 +382,37 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 					errMsg = err.Error()
 					finalStatus = statusFromCtx(streamCtx, storage.TransferStatusFailed)
 				}
-				finalizeTransfer(deps, ft, finalStatus, bytesOut, errMsg, body.Paths)
+				finalizeTransfer(deps, ft, finalStatus, sourceBytes, wireBytes, errMsg, body.Paths)
 				return
+			}
+			if ch.SourceBytesSoFar > sourceBytes {
+				sourceBytes = ch.SourceBytesSoFar
 			}
 			if len(ch.Data) > 0 {
 				if _, werr := c.Writer.Write(ch.Data); werr != nil {
 					// Client disconnect mid-stream — treat as cancel.
-					finalizeTransfer(deps, ft, storage.TransferStatusCanceled, bytesOut, werr.Error(), body.Paths)
+					finalizeTransfer(deps, ft, storage.TransferStatusCanceled, sourceBytes, wireBytes, werr.Error(), body.Paths)
 					return
 				}
-				atomic.AddInt64(&bytesOut, int64(len(ch.Data)))
+				atomic.AddInt64(&wireBytes, int64(len(ch.Data)))
 				now := time.Now()
-				if bytesOut-lastFlushBytes >= progressFlushBytes ||
+				if wireBytes-lastFlushWire >= progressFlushBytes ||
 					now.Sub(lastFlushAt) >= progressFlushInterval {
-					_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesOut, totalBytes)
-					ft.BytesTransferred = bytesOut
+					_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, sourceBytes, wireBytes, totalBytes)
+					ft.BytesTransferred = sourceBytes
+					ft.WireBytes = wireBytes
 					broadcastTransfer(deps, ft, body.Paths)
-					lastFlushBytes = bytesOut
+					lastFlushWire = wireBytes
 					lastFlushAt = now
 					c.Writer.Flush()
 				}
 			}
 			if ch.Eof {
 				if ch.Error != "" {
-					finalizeTransfer(deps, ft, storage.TransferStatusFailed, bytesOut, ch.Error, body.Paths)
+					finalizeTransfer(deps, ft, storage.TransferStatusFailed, sourceBytes, wireBytes, ch.Error, body.Paths)
 					return
 				}
-				finalizeTransfer(deps, ft, storage.TransferStatusDone, bytesOut, "", body.Paths)
+				finalizeTransfer(deps, ft, storage.TransferStatusDone, sourceBytes, wireBytes, "", body.Paths)
 				c.Writer.Flush()
 				return
 			}
@@ -410,13 +431,14 @@ func statusFromCtx(ctx context.Context, fallback string) string {
 	return fallback
 }
 
-func finalizeTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, status string, bytes int64, errMsg string, paths []string) {
+func finalizeTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, status string, bytes, wireBytes int64, errMsg string, paths []string) {
 	at := time.Now().UTC()
 	ft.Status = status
 	ft.BytesTransferred = bytes
+	ft.WireBytes = wireBytes
 	ft.ErrorMessage = errMsg
 	ft.FinishedAt = &at
-	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, errMsg, at); err != nil {
+	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, wireBytes, errMsg, at); err != nil {
 		log.Warn("file_transfer finish: %v", err)
 	}
 	broadcastTransfer(deps, ft, paths)
@@ -440,6 +462,7 @@ func finalizeTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, status str
 				"transfer_id":       ft.ID,
 				"format":            ft.Format,
 				"bytes_transferred": bytes,
+				"wire_bytes":        wireBytes,
 				"status":            status,
 			},
 			At: at,
@@ -462,6 +485,7 @@ func broadcastTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, paths []s
 		Paths:            paths,
 		Status:           ft.Status,
 		BytesTransferred: ft.BytesTransferred,
+		WireBytes:        ft.WireBytes,
 		TotalBytes:       ft.TotalBytes,
 		ErrorMessage:     ft.ErrorMessage,
 		StartedAt:        ft.StartedAt.Format(time.RFC3339Nano),
@@ -592,6 +616,12 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 		}
 		c.Status(http.StatusOK)
 
+		// Single-file downloads pass through unchanged — no
+		// compression on top of FileChunk frames — so wire bytes
+		// equal source bytes (and equal what the client receives).
+		// We track one counter and report it as both fields so the
+		// frontend's compression-ratio + speed math degrades to
+		// 1.0× with no special-casing.
 		var bytesOut int64
 		lastFlushBytes := int64(0)
 		lastFlushAt := time.Now()
@@ -621,8 +651,9 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 				now := time.Now()
 				if ft != nil && (bytesOut-lastFlushBytes >= progressFlushBytes ||
 					now.Sub(lastFlushAt) >= progressFlushInterval) {
-					_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesOut, totalBytes)
+					_ = deps.Recorder.UpdateProgress(c.Request.Context(), transferID, bytesOut, bytesOut, totalBytes)
 					ft.BytesTransferred = bytesOut
+					ft.WireBytes = bytesOut
 					broadcastTransfer(deps, ft, []string{path})
 					lastFlushBytes = bytesOut
 					lastFlushAt = now
@@ -646,9 +677,10 @@ func finalizeFileDownload(deps FileArchiveDeps, ft *storage.FileTransfer, status
 	at := time.Now().UTC()
 	ft.Status = status
 	ft.BytesTransferred = bytes
+	ft.WireBytes = bytes
 	ft.ErrorMessage = errMsg
 	ft.FinishedAt = &at
-	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, errMsg, at); err != nil {
+	if err := deps.Recorder.Finish(context.Background(), ft.ID, status, bytes, bytes, errMsg, at); err != nil {
 		log.Warn("file_transfer finish (download): %v", err)
 	}
 	broadcastTransfer(deps, ft, []string{path})

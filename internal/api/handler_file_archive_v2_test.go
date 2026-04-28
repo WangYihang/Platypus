@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -49,6 +50,7 @@ type FakeTransferRecorder struct {
 type TransferProgressUpdate struct {
 	ID    string
 	Bytes int64
+	Wire  int64
 	Total int64
 }
 
@@ -56,6 +58,7 @@ type TransferFinalUpdate struct {
 	ID     string
 	Status string
 	Bytes  int64
+	Wire   int64
 	Error  string
 }
 
@@ -71,17 +74,17 @@ func (f *FakeTransferRecorder) Create(_ context.Context, ft *storage.FileTransfe
 	return nil
 }
 
-func (f *FakeTransferRecorder) UpdateProgress(_ context.Context, id string, bytes, total int64) error {
+func (f *FakeTransferRecorder) UpdateProgress(_ context.Context, id string, bytes, wireBytes, total int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.updates = append(f.updates, TransferProgressUpdate{ID: id, Bytes: bytes, Total: total})
+	f.updates = append(f.updates, TransferProgressUpdate{ID: id, Bytes: bytes, Wire: wireBytes, Total: total})
 	return nil
 }
 
-func (f *FakeTransferRecorder) Finish(_ context.Context, id, status string, bytes int64, errMsg string, _ time.Time) error {
+func (f *FakeTransferRecorder) Finish(_ context.Context, id, status string, bytes, wireBytes int64, errMsg string, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.finals = append(f.finals, TransferFinalUpdate{ID: id, Status: status, Bytes: bytes, Error: errMsg})
+	f.finals = append(f.finals, TransferFinalUpdate{ID: id, Status: status, Bytes: bytes, Wire: wireBytes, Error: errMsg})
 	return nil
 }
 
@@ -270,10 +273,19 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 		func(req *v2pb.FileArchiveRequest, stream io.ReadWriteCloser) {
 			defer stream.Close()
 			_ = link.WriteFrame(stream, &v2pb.FileArchiveResponse{})
-			// Send in two chunks to exercise the loop.
+			// Send in two chunks to exercise the loop. tar with no
+			// gzip → wire bytes equal source bytes, so we stamp
+			// SourceBytesSoFar with the running wire count.
 			mid := len(want) / 2
-			_ = link.WriteFrame(stream, &v2pb.FileChunk{Data: want[:mid]})
-			_ = link.WriteFrame(stream, &v2pb.FileChunk{Data: want[mid:], Eof: true})
+			_ = link.WriteFrame(stream, &v2pb.FileChunk{
+				Data:             want[:mid],
+				SourceBytesSoFar: int64(mid),
+			})
+			_ = link.WriteFrame(stream, &v2pb.FileChunk{
+				Data:             want[mid:],
+				Eof:              true,
+				SourceBytesSoFar: int64(len(want)),
+			})
 		},
 	)
 	gin.SetMode(gin.TestMode)
@@ -307,10 +319,12 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 	if id := resp.Header.Get("X-Transfer-Id"); id != "ft-test-1" {
 		t.Errorf("X-Transfer-Id = %q; want ft-test-1", id)
 	}
-	// X-Total-Bytes is intentionally NOT set: archive bodies are
-	// compressed so the scan total doesn't match what's streamed.
-	if total := resp.Header.Get("X-Total-Bytes"); total != "" {
-		t.Errorf("X-Total-Bytes = %q; want unset for archives", total)
+	// X-Total-Bytes carries the *source* total from the pre-scan
+	// (uncompressed). Comparable to FileChunk.source_bytes_so_far
+	// the agent stamps on every chunk, so the UI can render a real
+	// percentage even for tar.gz / zip downloads.
+	if total := resp.Header.Get("X-Total-Bytes"); total != fmt.Sprintf("%d", len(want)) {
+		t.Errorf("X-Total-Bytes = %q; want %d", total, len(want))
 	}
 
 	// Verify recorder calls happened: 1 Create, ≥1 progress, 1 Finish.
@@ -320,11 +334,9 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 	if a.recorder.created[0].Status != storage.TransferStatusRunning {
 		t.Errorf("created status = %q; want running", a.recorder.created[0].Status)
 	}
-	// Archive transfers run with indeterminate progress: total_bytes
-	// must be zero so the UI doesn't render a bogus "X / Y" denominator.
-	if a.recorder.created[0].TotalBytes != 0 {
-		t.Errorf("created total_bytes = %d; want 0 for archives",
-			a.recorder.created[0].TotalBytes)
+	if a.recorder.created[0].TotalBytes != int64(len(want)) {
+		t.Errorf("created total_bytes = %d; want %d (from pre-scan)",
+			a.recorder.created[0].TotalBytes, len(want))
 	}
 	if len(a.recorder.finals) != 1 {
 		t.Fatalf("recorder.Finish called %d times; want 1", len(a.recorder.finals))
@@ -332,8 +344,16 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 	if a.recorder.finals[0].Status != storage.TransferStatusDone {
 		t.Errorf("final status = %q; want done", a.recorder.finals[0].Status)
 	}
+	// Source bytes (logical progress) — comes from the agent's
+	// SourceBytesSoFar stamp on the final chunk.
 	if a.recorder.finals[0].Bytes != int64(len(want)) {
-		t.Errorf("final bytes = %d; want %d", a.recorder.finals[0].Bytes, len(want))
+		t.Errorf("final source bytes = %d; want %d", a.recorder.finals[0].Bytes, len(want))
+	}
+	// Wire bytes (HTTP body bytes). For uncompressed tar this
+	// equals the source total — the assertion still pins the
+	// double-counter contract for when gzip / zip diverge.
+	if a.recorder.finals[0].Wire != int64(len(want)) {
+		t.Errorf("final wire bytes = %d; want %d", a.recorder.finals[0].Wire, len(want))
 	}
 }
 

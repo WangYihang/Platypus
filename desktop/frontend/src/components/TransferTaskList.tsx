@@ -6,6 +6,10 @@ import { type Host, listHosts } from "../lib/api";
 import {
     cancelTransfer,
     createTransfersStore,
+    formatBytesPerSec,
+    formatCompressionRatio,
+    transferAverageSpeed,
+    transferCompressionRatio,
     transferDisplaySize,
     transferElapsed,
     transferProgressPct,
@@ -56,12 +60,14 @@ function formatPaths(paths: string[]): string {
  * re-renders as transfers progress + finish + get cancelled.
  *
  * Columns: Host (alias) · Paths · Direction · Format · Progress ·
- * Size · Elapsed · Status · Error · Started · Actions.
+ * Size · Speed · Compression · Elapsed · Status · Error · Started ·
+ * Actions.
  *
- * NOTE: a Session column is intentionally absent — file_transfers'
- * schema doesn't yet carry session_id, so we'd be guessing. Adding
- * it is a follow-up that needs a migration; the column will slot
- * in here once the data lands.
+ * Speed is `bytes_transferred / elapsed` (source throughput); the
+ * compression cell is `wire_bytes / bytes_transferred` and only
+ * shows for archive transfers where the encoder actually shrinks
+ * (or, rarely, inflates) the body — plain transfers render an
+ * em-dash so the column doesn't add noise.
  */
 export default function TransferTaskList({ projectId, hostId }: Props) {
     const store = useMemo(
@@ -168,6 +174,8 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
                         <th style={thStyle}>Format</th>
                         <th style={thStyle}>Progress</th>
                         <th style={thStyle}>Size</th>
+                        <th style={thStyle}>Speed</th>
+                        <th style={thStyle}>Compression</th>
                         <th style={thStyle}>Elapsed</th>
                         <th style={thStyle}>Status</th>
                         <th style={thStyle}>Error</th>
@@ -192,6 +200,12 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
                                 <ProgressBar pct={transferProgressPct(it)} status={it.status} />
                             </td>
                             <td style={tdStyle}>{transferDisplaySize(it)}</td>
+                            <td style={tdStyle} data-testid="transfer-speed-cell">
+                                {formatBytesPerSec(transferAverageSpeed(it, tickNow))}
+                            </td>
+                            <td style={tdStyle} data-testid="transfer-compression-cell">
+                                {formatCompressionRatio(transferCompressionRatio(it))}
+                            </td>
                             <td style={tdStyle} data-testid="transfer-elapsed-cell">
                                 {transferElapsed(it, tickNow)}
                             </td>

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
@@ -66,17 +67,26 @@ func HandleFileArchiveStream(ctx context.Context, stream io.ReadWriteCloser, req
 		return err
 	}
 
+	// sourceBytesSoFar accumulates bytes read off disk (file content
+	// only — tar/zip headers don't count, so the number stays
+	// directly comparable to FileScanResponse.total_bytes). Both
+	// the chunkWriter (when stamping FileChunk.source_bytes_so_far)
+	// and writeTarArchive / writeZipArchive (when copying file
+	// contents) read/write this counter via atomic ops; using a
+	// pointer avoids a second pass through the encoder hierarchy.
+	var sourceBytesSoFar int64
+
 	// chunkWriter buffers output bytes and flushes them as
 	// FileChunk frames whenever it accumulates archiveFlushBytes
 	// or when explicitly flushed. The archive encoders (tar /
 	// gzip / zip) write into this; on EOF we send the final
 	// chunk with eof=true.
-	cw := &chunkWriter{stream: stream, ctx: ctx}
+	cw := &chunkWriter{stream: stream, ctx: ctx, sourceBytesSoFar: &sourceBytesSoFar}
 	defer cw.finish() // sends terminal eof=true on whatever path we exit
 
 	switch req.Format {
 	case v2pb.ArchiveFormat_ARCHIVE_FORMAT_TAR:
-		if err := writeTarArchive(ctx, cw, req); err != nil {
+		if err := writeTarArchive(ctx, cw, req, &sourceBytesSoFar); err != nil {
 			cw.fail(err.Error())
 			return err
 		}
@@ -87,7 +97,7 @@ func HandleFileArchiveStream(ctx context.Context, stream io.ReadWriteCloser, req
 			cw.fail(err.Error())
 			return err
 		}
-		if err := writeTarArchive(ctx, gz, req); err != nil {
+		if err := writeTarArchive(ctx, gz, req, &sourceBytesSoFar); err != nil {
 			_ = gz.Close()
 			cw.fail(err.Error())
 			return err
@@ -104,7 +114,7 @@ func HandleFileArchiveStream(ctx context.Context, stream io.ReadWriteCloser, req
 				return newZipDeflater(out, level)
 			})
 		}
-		if err := writeZipArchive(ctx, zw, req); err != nil {
+		if err := writeZipArchive(ctx, zw, req, &sourceBytesSoFar); err != nil {
 			_ = zw.Close()
 			cw.fail(err.Error())
 			return err
@@ -132,12 +142,19 @@ func writeArchiveHeader(w io.Writer, errMsg string) error {
 // chunkWriter is single-goroutine: archive encoders call Write
 // serially, and finish/fail are called from the same goroutine
 // after the encoder closes.
+//
+// sourceBytesSoFar is a pointer to a counter incremented by
+// streamFileInto as it reads bytes off disk (see archiveSourceCounter).
+// Each FileChunk frame is stamped with the latest value so the server
+// can render real percentage progress against the pre-scan total —
+// the wire bytes (post-gzip) would not be comparable.
 type chunkWriter struct {
-	stream io.Writer
-	ctx    context.Context
-	buf    []byte
-	closed bool
-	err    error
+	stream           io.Writer
+	ctx              context.Context
+	buf              []byte
+	closed           bool
+	err              error
+	sourceBytesSoFar *int64
 }
 
 func (w *chunkWriter) Write(p []byte) (int, error) {
@@ -173,6 +190,9 @@ func (w *chunkWriter) flush(n int) error {
 		Data: append([]byte(nil), w.buf[:n]...),
 		Eof:  false,
 	}
+	if w.sourceBytesSoFar != nil {
+		chunk.SourceBytesSoFar = atomic.LoadInt64(w.sourceBytesSoFar)
+	}
 	if err := link.WriteFrame(w.stream, chunk); err != nil {
 		return err
 	}
@@ -198,7 +218,11 @@ func (w *chunkWriter) finish() {
 	} else if w.err != nil {
 		errMsg = "cancelled: " + w.err.Error()
 	}
-	_ = link.WriteFrame(w.stream, &v2pb.FileChunk{Eof: true, Error: errMsg})
+	final := &v2pb.FileChunk{Eof: true, Error: errMsg}
+	if w.sourceBytesSoFar != nil {
+		final.SourceBytesSoFar = atomic.LoadInt64(w.sourceBytesSoFar)
+	}
+	_ = link.WriteFrame(w.stream, final)
 }
 
 // fail records an error message that finish() will surface in the
@@ -301,7 +325,7 @@ func walkArchive(req *v2pb.FileArchiveRequest) ([]archiveEntry, error) {
 	return out, nil
 }
 
-func writeTarArchive(ctx context.Context, w io.Writer, req *v2pb.FileArchiveRequest) error {
+func writeTarArchive(ctx context.Context, w io.Writer, req *v2pb.FileArchiveRequest, srcBytes *int64) error {
 	entries, err := walkArchive(req)
 	if err != nil {
 		return err
@@ -326,14 +350,14 @@ func writeTarArchive(ctx context.Context, w io.Writer, req *v2pb.FileArchiveRequ
 		if !e.info.Mode().IsRegular() {
 			continue
 		}
-		if err := streamFileInto(ctx, tw, e.src); err != nil {
+		if err := streamFileInto(ctx, tw, e.src, srcBytes); err != nil {
 			return err
 		}
 	}
 	return tw.Close()
 }
 
-func writeZipArchive(ctx context.Context, zw *zip.Writer, req *v2pb.FileArchiveRequest) error {
+func writeZipArchive(ctx context.Context, zw *zip.Writer, req *v2pb.FileArchiveRequest, srcBytes *int64) error {
 	entries, err := walkArchive(req)
 	if err != nil {
 		return err
@@ -361,7 +385,7 @@ func writeZipArchive(ctx context.Context, zw *zip.Writer, req *v2pb.FileArchiveR
 		if !e.info.Mode().IsRegular() {
 			continue
 		}
-		if err := streamFileInto(ctx, fw, e.src); err != nil {
+		if err := streamFileInto(ctx, fw, e.src, srcBytes); err != nil {
 			return err
 		}
 	}
@@ -370,8 +394,11 @@ func writeZipArchive(ctx context.Context, zw *zip.Writer, req *v2pb.FileArchiveR
 
 // streamFileInto opens the file and copies its contents to w in
 // archiveFlushBytes-sized chunks, checking ctx between chunks for
-// prompt cancellation.
-func streamFileInto(ctx context.Context, w io.Writer, path string) error {
+// prompt cancellation. srcBytes is the shared counter the
+// chunkWriter samples when stamping each FileChunk; we increment it
+// after a successful Write so the count never drifts ahead of what
+// the encoder has actually seen.
+func streamFileInto(ctx context.Context, w io.Writer, path string, srcBytes *int64) error {
 	f, err := os.Open(path)
 	if err != nil {
 		// Mid-walk read failure on a single file: log via the
@@ -391,6 +418,9 @@ func streamFileInto(ctx context.Context, w io.Writer, path string) error {
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return werr
+			}
+			if srcBytes != nil {
+				atomic.AddInt64(srcBytes, int64(n))
 			}
 		}
 		if rerr != nil {

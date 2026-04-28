@@ -76,15 +76,16 @@ func TestFileTransfers_UpdateProgress(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := db.FileTransfers().UpdateProgress(ctx, tr.ID, 512, 2048); err != nil {
+	if err := db.FileTransfers().UpdateProgress(ctx, tr.ID, 512, 320, 2048); err != nil {
 		t.Fatalf("UpdateProgress: %v", err)
 	}
 	got, err := db.FileTransfers().Get(ctx, tr.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.BytesTransferred != 512 || got.TotalBytes != 2048 {
-		t.Fatalf("progress = %d/%d; want 512/2048", got.BytesTransferred, got.TotalBytes)
+	if got.BytesTransferred != 512 || got.WireBytes != 320 || got.TotalBytes != 2048 {
+		t.Fatalf("progress = %d/%d (wire %d); want 512/2048 (wire 320)",
+			got.BytesTransferred, got.TotalBytes, got.WireBytes)
 	}
 	if got.Status != storage.TransferStatusRunning {
 		t.Fatalf("Status changed to %q; want still running", got.Status)
@@ -103,7 +104,7 @@ func TestFileTransfers_Finish(t *testing.T) {
 
 	finishedAt := time.Now().UTC().Truncate(time.Millisecond)
 	if err := db.FileTransfers().Finish(ctx, tr.ID,
-		storage.TransferStatusDone, 4096, "", finishedAt); err != nil {
+		storage.TransferStatusDone, 4096, 1234, "", finishedAt); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 	got, err := db.FileTransfers().Get(ctx, tr.ID)
@@ -115,6 +116,9 @@ func TestFileTransfers_Finish(t *testing.T) {
 	}
 	if got.BytesTransferred != 4096 {
 		t.Fatalf("BytesTransferred = %d; want 4096", got.BytesTransferred)
+	}
+	if got.WireBytes != 1234 {
+		t.Fatalf("WireBytes = %d; want 1234", got.WireBytes)
 	}
 	if got.FinishedAt == nil || !got.FinishedAt.Equal(finishedAt) {
 		t.Fatalf("FinishedAt = %v; want %v", got.FinishedAt, finishedAt)
@@ -131,7 +135,7 @@ func TestFileTransfers_FinishWithError(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if err := db.FileTransfers().Finish(ctx, tr.ID,
-		storage.TransferStatusFailed, 100, "permission denied", time.Now().UTC()); err != nil {
+		storage.TransferStatusFailed, 100, 100, "permission denied", time.Now().UTC()); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 	got, err := db.FileTransfers().Get(ctx, tr.ID)
@@ -274,7 +278,7 @@ func TestFileTransfers_CountActive(t *testing.T) {
 		t.Fatalf("Create d1: %v", err)
 	}
 	if err := db.FileTransfers().Finish(ctx, tr2.ID,
-		storage.TransferStatusDone, 0, "", time.Now().UTC()); err != nil {
+		storage.TransferStatusDone, 0, 0, "", time.Now().UTC()); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 
@@ -302,7 +306,7 @@ func TestFileTransfers_Cancel(t *testing.T) {
 
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	if err := db.FileTransfers().Finish(ctx, tr.ID,
-		storage.TransferStatusCanceled, 0, "", at); err != nil {
+		storage.TransferStatusCanceled, 0, 0, "", at); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 	got, err := db.FileTransfers().Get(ctx, tr.ID)

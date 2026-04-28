@@ -30,6 +30,16 @@ const (
 // FileTransfer is one row in file_transfers. PathsJSON stores the
 // source paths as a JSON array; UI renders them, the backend uses
 // them only for display/audit.
+//
+// BytesTransferred and WireBytes split what used to be a single
+// counter:
+//   * BytesTransferred is the *uncompressed source* progress — bytes
+//     read from disk (or written to disk for uploads). Comparable to
+//     TotalBytes, so the UI can render a meaningful percentage.
+//   * WireBytes is the *post-encoding* count — what flowed through
+//     the HTTP response body. For archive downloads this is gzip /
+//     deflate output; for plain transfers it equals BytesTransferred.
+//     The UI uses it to surface compression ratio + network speed.
 type FileTransfer struct {
 	ID               string
 	ProjectID        string
@@ -41,6 +51,7 @@ type FileTransfer struct {
 	PathsJSON        string
 	Status           string
 	BytesTransferred int64
+	WireBytes        int64
 	TotalBytes       int64 // 0 = unknown / scan skipped
 	ErrorMessage     string
 	StartedAt        time.Time
@@ -65,7 +76,7 @@ type FileTransfersRepo struct {
 	db *sql.DB
 }
 
-const fileTransferColumns = "id, project_id, host_id, user_id, direction, kind, format, paths_json, status, bytes_transferred, total_bytes, error_message, started_at, finished_at"
+const fileTransferColumns = "id, project_id, host_id, user_id, direction, kind, format, paths_json, status, bytes_transferred, wire_bytes, total_bytes, error_message, started_at, finished_at"
 
 func scanFileTransfer(scanner interface{ Scan(...any) error }) (*FileTransfer, error) {
 	var (
@@ -84,6 +95,7 @@ func scanFileTransfer(scanner interface{ Scan(...any) error }) (*FileTransfer, e
 		&ft.PathsJSON,
 		&ft.Status,
 		&ft.BytesTransferred,
+		&ft.WireBytes,
 		&totalBytes,
 		&ft.ErrorMessage,
 		&ft.StartedAt,
@@ -111,13 +123,13 @@ func (r *FileTransfersRepo) Create(ctx context.Context, ft *FileTransfer) error 
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO file_transfers (
 			id, project_id, host_id, user_id, direction, kind, format,
-			paths_json, status, bytes_transferred, total_bytes,
+			paths_json, status, bytes_transferred, wire_bytes, total_bytes,
 			error_message, started_at, finished_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 	`,
 		ft.ID, ft.ProjectID, ft.HostID, ft.UserID,
 		ft.Direction, ft.Kind, ft.Format, ft.PathsJSON, ft.Status,
-		ft.BytesTransferred, totalBytes, ft.ErrorMessage, ft.StartedAt,
+		ft.BytesTransferred, ft.WireBytes, totalBytes, ft.ErrorMessage, ft.StartedAt,
 	)
 	return err
 }
@@ -136,31 +148,31 @@ func (r *FileTransfersRepo) Get(ctx context.Context, id string) (*FileTransfer, 
 	return ft, nil
 }
 
-// UpdateProgress overwrites bytes_transferred (and optionally
-// total_bytes when newTotal > 0). Status is unchanged. No-op when
-// the row is missing.
-func (r *FileTransfersRepo) UpdateProgress(ctx context.Context, id string, bytes, newTotal int64) error {
+// UpdateProgress overwrites bytes_transferred + wire_bytes (and
+// optionally total_bytes when newTotal > 0). Status is unchanged.
+// No-op when the row is missing.
+func (r *FileTransfersRepo) UpdateProgress(ctx context.Context, id string, bytes, wireBytes, newTotal int64) error {
 	if newTotal > 0 {
 		_, err := r.db.ExecContext(ctx,
-			"UPDATE file_transfers SET bytes_transferred = ?, total_bytes = ? WHERE id = ?",
-			bytes, newTotal, id)
+			"UPDATE file_transfers SET bytes_transferred = ?, wire_bytes = ?, total_bytes = ? WHERE id = ?",
+			bytes, wireBytes, newTotal, id)
 		return err
 	}
 	_, err := r.db.ExecContext(ctx,
-		"UPDATE file_transfers SET bytes_transferred = ? WHERE id = ?",
-		bytes, id)
+		"UPDATE file_transfers SET bytes_transferred = ?, wire_bytes = ? WHERE id = ?",
+		bytes, wireBytes, id)
 	return err
 }
 
 // Finish transitions a running transfer to a terminal state.
 // status MUST be one of TransferStatusDone / TransferStatusFailed /
 // TransferStatusCanceled. errMsg is populated only on failure.
-func (r *FileTransfersRepo) Finish(ctx context.Context, id, status string, bytes int64, errMsg string, at time.Time) error {
+func (r *FileTransfersRepo) Finish(ctx context.Context, id, status string, bytes, wireBytes int64, errMsg string, at time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE file_transfers
-		   SET status = ?, bytes_transferred = ?, error_message = ?, finished_at = ?
+		   SET status = ?, bytes_transferred = ?, wire_bytes = ?, error_message = ?, finished_at = ?
 		 WHERE id = ?
-	`, status, bytes, errMsg, at, id)
+	`, status, bytes, wireBytes, errMsg, at, id)
 	return err
 }
 

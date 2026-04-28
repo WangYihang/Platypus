@@ -57,20 +57,21 @@ func RegisterV1TransferRoutes(engine *gin.Engine, deps TransferRoutesDeps) {
 // stored PathsJSON is parsed back into a string slice so frontends
 // don't double-decode.
 type transferItem struct {
-	ID               string  `json:"id"`
-	ProjectID        string  `json:"project_id"`
-	HostID           string  `json:"host_id"`
-	UserID           string  `json:"user_id"`
-	Direction        string  `json:"direction"`
-	Kind             string  `json:"kind"`
-	Format           string  `json:"format"`
+	ID               string   `json:"id"`
+	ProjectID        string   `json:"project_id"`
+	HostID           string   `json:"host_id"`
+	UserID           string   `json:"user_id"`
+	Direction        string   `json:"direction"`
+	Kind             string   `json:"kind"`
+	Format           string   `json:"format"`
 	Paths            []string `json:"paths"`
-	Status           string  `json:"status"`
-	BytesTransferred int64   `json:"bytes_transferred"`
-	TotalBytes       int64   `json:"total_bytes"`
-	ErrorMessage     string  `json:"error_message,omitempty"`
-	StartedAt        string  `json:"started_at"`
-	FinishedAt       string  `json:"finished_at,omitempty"`
+	Status           string   `json:"status"`
+	BytesTransferred int64    `json:"bytes_transferred"`
+	WireBytes        int64    `json:"wire_bytes"`
+	TotalBytes       int64    `json:"total_bytes"`
+	ErrorMessage     string   `json:"error_message,omitempty"`
+	StartedAt        string   `json:"started_at"`
+	FinishedAt       string   `json:"finished_at,omitempty"`
 }
 
 func toTransferItem(ft *storage.FileTransfer) transferItem {
@@ -84,6 +85,7 @@ func toTransferItem(ft *storage.FileTransfer) transferItem {
 		Format:           ft.Format,
 		Status:           ft.Status,
 		BytesTransferred: ft.BytesTransferred,
+		WireBytes:        ft.WireBytes,
 		TotalBytes:       ft.TotalBytes,
 		ErrorMessage:     ft.ErrorMessage,
 		StartedAt:        ft.StartedAt.UTC().Format("2006-01-02T15:04:05.000000000Z"),

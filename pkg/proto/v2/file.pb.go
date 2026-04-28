@@ -219,13 +219,23 @@ func (x *FileReadResponse) GetError() string {
 // FileChunk is one chunk of file bytes. Sender emits as many as
 // it likes, setting eof=true on the final chunk. A chunk may have
 // eof=true AND an error to report a mid-transfer failure.
+//
+// source_bytes_so_far is the cumulative count of *uncompressed source
+// bytes* the sender has read from disk by the time it emits this
+// chunk. For archive transfers (tar.gz / zip) the wire bytes are
+// post-compression, so this field is the only meaningful progress
+// numerator — paired with FileScanResponse.total_bytes it produces
+// a real percentage. Senders that don't care (single-file reads
+// where data length already equals progress) leave it zero; the
+// server falls back to wire bytes in that case.
 type FileChunk struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	Eof           bool                   `protobuf:"varint,2,opt,name=eof,proto3" json:"eof,omitempty"`
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Data             []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Eof              bool                   `protobuf:"varint,2,opt,name=eof,proto3" json:"eof,omitempty"`
+	Error            string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	SourceBytesSoFar int64                  `protobuf:"varint,4,opt,name=source_bytes_so_far,json=sourceBytesSoFar,proto3" json:"source_bytes_so_far,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *FileChunk) Reset() {
@@ -277,6 +287,13 @@ func (x *FileChunk) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *FileChunk) GetSourceBytesSoFar() int64 {
+	if x != nil {
+		return x.SourceBytesSoFar
+	}
+	return 0
 }
 
 // FileWriteRequest opens a STREAM_TYPE_FILE_WRITE stream. The
@@ -599,9 +616,11 @@ func (x *FileScanResponse) GetError() string {
 
 // FileArchiveRequest opens a STREAM_TYPE_FILE_ARCHIVE stream. The
 // agent walks the named paths and streams the resulting archive
-// back as FileChunk frames, the last one carrying eof=true. The
-// server tallies bytes on the wire to drive progress reporting —
-// no in-band progress frames are needed.
+// back as FileChunk frames, the last one carrying eof=true. Each
+// chunk carries `source_bytes_so_far` (uncompressed bytes read from
+// disk) so the server can render real percentage progress against
+// the FileScanResponse.total_bytes pre-scan figure even when the
+// body is gzip- or deflate-compressed.
 type FileArchiveRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Paths  []string               `protobuf:"bytes,1,rep,name=paths,proto3" json:"paths,omitempty"`
@@ -737,11 +756,12 @@ const file_file_proto_rawDesc = "" +
 	"\x10FileReadResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\rR\x04mode\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"G\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"v\n" +
 	"\tFileChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x10\n" +
 	"\x03eof\x18\x02 \x01(\bR\x03eof\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"j\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12-\n" +
+	"\x13source_bytes_so_far\x18\x04 \x01(\x03R\x10sourceBytesSoFar\"j\n" +
 	"\x10FileWriteRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
 	"\x06append\x18\x02 \x01(\bR\x06append\x12\x12\n" +

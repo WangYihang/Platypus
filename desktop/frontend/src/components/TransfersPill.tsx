@@ -6,6 +6,10 @@ import { getSession, onSessionChange } from "../lib/auth";
 import {
     cancelTransfer,
     createTransfersStore,
+    formatBytesPerSec,
+    formatCompressionRatio,
+    transferAverageSpeed,
+    transferCompressionRatio,
     transferDisplaySize,
     transferProgressPct,
     type TransferItem,
@@ -271,6 +275,8 @@ function TransferRow({ item }: { item: TransferItem }) {
                     ? palette.success
                     : palette.info;
     const indeterminate = pct === null;
+    const speed = formatBytesPerSec(transferAverageSpeed(item));
+    const compression = formatCompressionRatio(transferCompressionRatio(item));
     return (
         <div
             data-testid="transfers-drawer-row"
@@ -356,9 +362,11 @@ function TransferRow({ item }: { item: TransferItem }) {
                     color: palette.textMuted,
                 }}
             >
-                <span>
+                <span data-testid="transfers-drawer-stats">
                     {transferDisplaySize(item)}
                     {pct !== null ? ` · ${pct}%` : ""}
+                    {speed !== "—" ? ` · ${speed}` : ""}
+                    {compression !== "—" ? ` · ${compression}` : ""}
                 </span>
                 {!TERMINAL.has(item.status) ? (
                     <button
