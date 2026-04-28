@@ -373,3 +373,30 @@ main {
     }
 }
 
+/* ──────────────────────────────────────────────────────────────────────
+   Reusable utility classes for repeated inline-style patterns.
+
+   The audit that drove R4 found two patterns that landed in 10+
+   files each:
+     · `font-size: 12px; color: muted-foreground` — secondary
+       descriptive text (file metadata, status hints, table caption
+       lines). Tailwind's `text-xs` + `text-muted-foreground`
+       expressed it; `pl-text-secondary` packages both into one
+       token.
+     · `display: flex; align-items: center; gap: 8px` — every
+       icon+label cluster in toolbars / table cells / status pills.
+       `pl-row` packages the trio.
+
+   These are the smallest possible utility additions that pull
+   their weight; not every repeated style pattern earns one — only
+   ones that actually clarify intent at the call site.
+   ────────────────────────────────────────────────────────────────────── */
+@layer components {
+    .pl-text-secondary {
+        @apply text-xs text-muted-foreground;
+    }
+    .pl-row {
+        @apply flex items-center gap-2;
+    }
+}
+
