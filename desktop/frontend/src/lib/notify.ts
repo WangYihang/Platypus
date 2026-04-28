@@ -421,6 +421,7 @@ export const NotifyEvent = {
     TopologyMachineStats: "topology.machine_stats",
     TopologyNodeJoined: "topology.node_joined",
     TopologyNodeLeft: "topology.node_left",
+    FileTransferUpdated: "file_transfer_updated",
 } as const;
 
 export interface HostSeenPayload {

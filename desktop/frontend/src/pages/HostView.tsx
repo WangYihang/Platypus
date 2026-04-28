@@ -37,6 +37,7 @@ import { fromNow, isOnline } from "../lib/time";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 import FilesTab from "./host/FilesTab";
 import ProcessesTab from "./host/ProcessesTab";
+import TransferTaskList from "../components/TransferTaskList";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,7 +55,7 @@ interface Props {
     hostID: string;
 }
 
-const TABS = ["info", "files", "sessions", "processes"] as const;
+const TABS = ["info", "files", "sessions", "processes", "transfers"] as const;
 type TabKey = (typeof TABS)[number];
 
 // HostView is the main-panel view when a Host is selected. Four tabs
@@ -234,6 +235,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
                 <TabsTrigger value="processes">Processes</TabsTrigger>
+                <TabsTrigger value="transfers">Transfers</TabsTrigger>
             </TabsList>
         </Tabs>
     );
@@ -334,6 +336,9 @@ export default function HostView({ projectID, hostID }: Props) {
                         hostID={hostID}
                         active={activeTab === "processes"}
                     />
+                </div>
+                <div style={{ display: activeTab === "transfers" ? "block" : "none" }}>
+                    <TransferTaskList projectId={projectID} hostId={hostID} />
                 </div>
             </div>
         </div>

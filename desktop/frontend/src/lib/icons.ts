@@ -10,6 +10,7 @@
 import {
     Activity,
     AppWindow,
+    ArrowDownUp,
     Cable,
     Clock,
     CloudDownload,
@@ -42,6 +43,7 @@ export const icons = {
     project: LayoutGrid,
     fleet: Monitor,
     activity: Clock,
+    transfers: ArrowDownUp,
     enrollment: CloudDownload,
     members: Users,
     settings: Settings2,

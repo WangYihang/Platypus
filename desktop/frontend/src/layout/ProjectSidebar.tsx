@@ -134,6 +134,7 @@ export default function ProjectSidebar({
             label: "Audit",
             items: [
                 { to: "activities", label: "Activities", icon: <I.activity className="size-4" />, requiresProject: true },
+                { to: "transfers", label: "Transfers", icon: <I.transfers className="size-4" />, requiresProject: true },
             ],
         },
         {
