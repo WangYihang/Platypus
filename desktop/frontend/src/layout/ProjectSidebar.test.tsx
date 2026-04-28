@@ -51,6 +51,8 @@ function renderSidebar() {
                 projects={[project]}
                 currentSlug="test-project"
                 onProjectsChanged={() => {}}
+                onAddServer={() => {}}
+                onManageServers={() => {}}
             />
         </MemoryRouter>,
     );

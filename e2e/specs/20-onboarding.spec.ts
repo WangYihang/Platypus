@@ -37,13 +37,15 @@ test.describe("onboarding", () => {
             .fill(ADMIN_PASSWORD);
         await page.getByTestId("onboarding-login").click();
 
-        // Land on the projects grid with the rail visible and one
-        // tile labelled "P" (first char of "Primary").
+        // Land on the projects grid with the server switcher trigger
+        // visible. Open it and confirm one row, labelled "Primary",
+        // shows up as active.
         await expect(page).toHaveURL(/\/projects$/, { timeout: 15_000 });
-        const rail = page.getByTestId("server-rail");
-        await expect(rail).toBeVisible();
-        const tile = page.getByTestId("server-tile-0");
-        await expect(tile).toHaveText(/^P/);
-        await expect(tile).toHaveAttribute("data-active", "true");
+        const trigger = page.getByTestId("server-switcher-trigger");
+        await expect(trigger).toBeVisible();
+        await trigger.click();
+        const row = page.getByTestId("server-row-0");
+        await expect(row).toHaveAttribute("data-active", "true");
+        await expect(row).toContainText("Primary");
     });
 });

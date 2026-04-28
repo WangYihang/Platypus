@@ -16,7 +16,6 @@ import TerminalDrawer from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
 import AddServerDialog from "./AddServerDialog";
 import ManageServersDialog from "./ManageServersDialog";
-import ServerRail from "./ServerRail";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
 import {
@@ -167,21 +166,14 @@ function ShellChrome({
                     overflow: "hidden",
                 }}
             >
-                <ServerRail
-                    onAddServer={() => setAddOpen(true)}
-                    onManageServers={() => setManageOpen(true)}
-                />
                 {/* ResizablePanelGroup owns the sidebar ↔ main split.
-                    ServerRail stays outside the group because it's a
-                    narrow icon column with no interesting resize range
-                    (RAIL_WIDTH constant). The sidebar starts at 200px
-                    to match the 2026-04 density pass; the previous
-                    240px default left fewer than half the file rows
-                    on screen for the typical operator layout. The
-                    persisted layout is keyed under
-                    platypus.layout.shell-sidebar so a user's choice
-                    survives reloads — bumping the default does not
-                    invalidate existing preferences. */}
+                    The previous standalone ServerRail (64 px column)
+                    was folded into the sidebar header as a
+                    `ServerSwitcher` dropdown — see
+                    layout/ServerSwitcher.tsx — so the entire left
+                    chrome lives in one resizable panel now. The sidebar
+                    default of 200px and persisted autoSaveId stay the
+                    same. */}
                 <ResizablePanelGroup
                     direction="horizontal"
                     autoSaveId="shell-sidebar"
@@ -200,6 +192,8 @@ function ShellChrome({
                             projects={projects}
                             currentSlug={currentSlug}
                             onProjectsChanged={() => void refresh()}
+                            onAddServer={() => setAddOpen(true)}
+                            onManageServers={() => setManageOpen(true)}
                         />
                     </ResizablePanel>
                     <ResizableHandle />

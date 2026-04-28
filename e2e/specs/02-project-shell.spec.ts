@@ -14,10 +14,9 @@ test.describe("project shell", () => {
             .click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Server rail is the outermost left column; always rendered.
-        await expect(page.getByTestId("server-rail")).toBeVisible();
-        // Brand (aria-labelled span in components/Brand.tsx).
-        await expect(page.getByLabel("Platypus")).toBeVisible();
+        // Server switcher sits at the top of the sidebar (the
+        // standalone server rail column was retired in 2026-04 IA pass).
+        await expect(page.getByTestId("server-switcher-trigger")).toBeVisible();
         await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
 
         // Current nav surface (desktop/frontend/src/layout/ProjectSidebar.tsx).

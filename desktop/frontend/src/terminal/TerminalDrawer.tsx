@@ -22,8 +22,8 @@ const TAB_BAR_HEIGHT = 36;
 
 // TerminalDrawer is the VSCode-style bottom panel mounted once inside
 // ShellChrome's content column — it sits beneath <main> and beside
-// (not under) ServerRail/ProjectSidebar, so it spans only the project
-// content area.
+// (not under) ProjectSidebar, so it spans only the project content
+// area.
 //
 // Persistence model: as long as any shell exists in the global
 // terminal context, the drawer container stays in the React tree so

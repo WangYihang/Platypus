@@ -92,9 +92,10 @@ export const font = {
 // before the operator could see a single row. Tighter defaults bring
 // that back without forcing every consumer to opt in via a density
 // toggle. The ResizablePanel still lets the user widen the sidebar
-// if their monitor permits.
+// if their monitor permits. `profileRailWidth` was retired when the
+// standalone ServerRail column was folded into ProjectSidebar's
+// header (now ServerSwitcher.tsx).
 export const layout = {
-    profileRailWidth: 56,
     sidebarWidth: 220,
     detailRailWidth: 220,
     mainHeaderHeight: 40,

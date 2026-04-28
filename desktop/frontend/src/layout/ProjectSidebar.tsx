@@ -9,12 +9,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import Brand from "../components/Brand";
 import { Project, createProject } from "../lib/api";
 import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
 import CmdKHint from "./CmdKHint";
 import ProjectSwitcher from "./ProjectSwitcher";
+import ServerSwitcher from "./ServerSwitcher";
 import UserMenu from "./UserMenu";
 
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,11 @@ interface Props {
     projects: Project[];
     currentSlug?: string;
     onProjectsChanged: () => void;
+    // Server switcher actions — forwarded down from ShellChrome,
+    // since the sidebar now hosts the switcher (the standalone
+    // ServerRail column was removed in the 2026-04 IA pass).
+    onAddServer: () => void;
+    onManageServers: () => void;
 }
 
 interface NavItem {
@@ -98,6 +103,8 @@ export default function ProjectSidebar({
     projects,
     currentSlug,
     onProjectsChanged,
+    onAddServer,
+    onManageServers,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const { pathname } = useLocation();
@@ -187,30 +194,29 @@ export default function ProjectSidebar({
                 flexDirection: "column",
             }}
         >
+            {/* Sidebar header: server switcher (was the standalone
+                ServerRail column) on top, project switcher right
+                below. The ⌘K hint sits inline next to the server
+                switcher so the keyboard affordance stays visible
+                without needing its own row. */}
             <div
                 style={{
                     display: "flex",
                     alignItems: "center",
                     gap: space[2],
-                    padding: `${space[3]}px ${space[3]}px ${space[2]}px`,
+                    padding: `${space[2]}px ${space[2]}px ${space[1]}px`,
                 }}
             >
-                <Brand />
-                <span
-                    style={{
-                        fontWeight: 600,
-                        color: palette.textPrimary,
-                        fontSize: 13,
-                        letterSpacing: -0.2,
-                        flex: 1,
-                    }}
-                >
-                    Platypus
-                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <ServerSwitcher
+                        onAddServer={onAddServer}
+                        onManageServers={onManageServers}
+                    />
+                </div>
                 <CmdKHint />
             </div>
 
-            <div style={{ padding: `0 ${space[3]}px ${space[2]}px` }}>
+            <div style={{ padding: `0 ${space[2]}px ${space[2]}px` }}>
                 <ProjectSwitcher
                     projects={projects}
                     currentSlug={currentSlug}

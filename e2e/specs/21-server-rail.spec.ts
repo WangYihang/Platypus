@@ -3,22 +3,31 @@ import { expect, test } from "../fixtures/test";
 import { loginAsAdmin } from "../fixtures/auth";
 import { ADMIN_PASSWORD, ADMIN_USERNAME, backendURL } from "../fixtures/env";
 
-// Slack-style server rail behaviour. Two profiles can point at the
-// same backend URL — ServerProfile ids are per-profile, so adding
-// "Mirror" against the same server is legitimate.
-test.describe("server rail", () => {
+// Server-switcher behaviour (was the standalone Slack-style server
+// rail before the 2026-04 IA pass; the rail collapsed into a dropdown
+// at the top of the sidebar — see layout/ServerSwitcher.tsx). Two
+// profiles can point at the same backend URL — ServerProfile ids are
+// per-profile, so adding "Mirror" against the same server is
+// legitimate. The spec exercises the same intent the rail spec did:
+// add a profile, switch via click + keyboard, remove via the per-row
+// trash button.
+test.describe("server switcher", () => {
     test("add second server, switch via click and keyboard, remove", async ({
         page,
     }) => {
         await loginAsAdmin(page);
         await expect(page).toHaveURL(/\/projects/);
-        await expect(page.getByTestId("server-tile-0")).toBeVisible();
+        // Switcher trigger renders the active server name; opening it
+        // surfaces the per-profile rows.
+        const trigger = page.getByTestId("server-switcher-trigger");
+        await expect(trigger).toBeVisible();
+        await trigger.click();
+        await expect(page.getByTestId("server-row-0")).toBeVisible();
+        // Switcher starts with exactly one row.
+        await expect(page.getByTestId("server-row-1")).toHaveCount(0);
 
-        // Rail starts with exactly one tile.
-        await expect(page.getByTestId("server-tile-1")).toHaveCount(0);
-
-        // Open AddServerDialog and register a second profile.
-        await page.getByTestId("server-rail-add").click();
+        // "+ Add server" item opens AddServerDialog.
+        await page.getByTestId("server-switcher-add").click();
         await page.getByTestId("add-server-url").fill(backendURL);
         await page.getByTestId("add-server-name").fill("Mirror");
         await page.getByRole("button", { name: "Continue" }).click();
@@ -26,41 +35,54 @@ test.describe("server rail", () => {
         await page.getByTestId("add-server-password").fill(ADMIN_PASSWORD);
         await page.getByRole("button", { name: /^Log in$/ }).click();
 
-        // Two tiles; Mirror is the newcomer and becomes active.
-        await expect(page.getByTestId("server-tile-1")).toBeVisible({
+        // Two rows now exist; Mirror is the newcomer and becomes active.
+        await trigger.click();
+        await expect(page.getByTestId("server-row-1")).toBeVisible({
             timeout: 15_000,
         });
-        await expect(page.getByTestId("server-tile-1")).toHaveAttribute(
+        await expect(page.getByTestId("server-row-1")).toHaveAttribute(
             "data-active",
             "true",
         );
 
-        // Ctrl+1 flips to the first tile; Ctrl+2 flips back.
+        // Close the dropdown (focus returns elsewhere) so keyboard
+        // shortcuts hit the document-level handler in ProjectShell.
+        await page.keyboard.press("Escape");
+
+        // Ctrl+1 flips to the first row; Ctrl+2 flips back. The hotkey
+        // is still wired in ProjectShell.useServerSwitchHotkeys and
+        // operates on listServers() — switcher visibility is irrelevant.
         await page.keyboard.press("Control+1");
-        await expect(page.getByTestId("server-tile-0")).toHaveAttribute(
+        await trigger.click();
+        await expect(page.getByTestId("server-row-0")).toHaveAttribute(
             "data-active",
             "true",
         );
+        await page.keyboard.press("Escape");
         await page.keyboard.press("Control+2");
-        await expect(page.getByTestId("server-tile-1")).toHaveAttribute(
+        await trigger.click();
+        await expect(page.getByTestId("server-row-1")).toHaveAttribute(
             "data-active",
             "true",
         );
 
-        // Remove the second profile via the rail's right-click menu.
-        await page.getByTestId("server-tile-1").click({ button: "right" });
-        await page.getByRole("menuitem", { name: /Remove/ }).click();
-        // ContextMenuWrapper now uses an AlertDialog instead of
-        // window.confirm — confirm via the dialog's Remove action.
+        // Remove the second profile via the per-row Remove button.
+        // The button surfaces on hover/focus — Playwright's hover()
+        // makes the action group visible.
+        const row1 = page.getByTestId("server-row-1");
+        await row1.hover();
+        await row1.getByRole("button", { name: "Remove" }).click();
         await page
             .getByRole("alertdialog")
             .getByRole("button", { name: /^Remove$/ })
             .click();
-        // Rail is back to one tile; active flips to the remaining
+
+        // Switcher is back to one row; active flips to the remaining
         // profile as removeServer reassigns the active pointer.
-        await expect(page.getByTestId("server-tile-1")).toHaveCount(0);
-        await expect(page.getByTestId("server-tile-0")).toBeVisible();
-        await expect(page.getByTestId("server-tile-0")).toHaveAttribute(
+        await trigger.click();
+        await expect(page.getByTestId("server-row-1")).toHaveCount(0);
+        await expect(page.getByTestId("server-row-0")).toBeVisible();
+        await expect(page.getByTestId("server-row-0")).toHaveAttribute(
             "data-active",
             "true",
         );
