@@ -226,7 +226,7 @@ export default function FileTable({
                     "[&_th]:h-7 [&_th]:py-0 [&_th]:text-xs [&_td]:py-1 [&_td]:text-xs",
             )}
         >
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b">
                 {table.getHeaderGroups().map((hg) => (
                     <TableRow key={hg.id}>
                         {hg.headers.map((header) => {
@@ -237,7 +237,10 @@ export default function FileTable({
                                     key={header.id}
                                     style={{ width: header.getSize() || undefined }}
                                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
-                                    className={canSort ? "cursor-pointer select-none" : ""}
+                                    className={cn(
+                                        "bg-background",
+                                        canSort && "cursor-pointer select-none",
+                                    )}
                                 >
                                     <div className="flex items-center gap-1">
                                         {flexRender(header.column.columnDef.header, header.getContext())}

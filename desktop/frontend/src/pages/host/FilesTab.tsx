@@ -23,9 +23,11 @@ export default function FilesTab({ projectID, sessionHash, host }: Props) {
     // 24px gutter visibly chops the available rows on common laptop
     // viewports. Pull half of it back with a negative margin so the
     // browser can stretch to the panel edges without disturbing the
-    // other tabs' layouts.
+    // other tabs' layouts. flex+min-h-0 makes the browser share the
+    // remaining viewport with the bottom terminal drawer — when the
+    // drawer grows, this region shrinks instead of forcing scroll.
     return (
-        <div className="-mx-3 -my-3 h-full">
+        <div className="-mx-3 -my-3 flex min-h-0 w-auto flex-1 flex-col">
             <FileBrowser
                 projectID={projectID}
                 sessionHash={sessionHash}

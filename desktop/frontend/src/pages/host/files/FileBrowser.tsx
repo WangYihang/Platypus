@@ -527,7 +527,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
     return (
         <DndContext sensors={sensors}>
-            <div className="flex h-full min-h-[520px] flex-col gap-1.5">
+            <div className="flex h-full min-h-0 flex-col gap-1.5">
                 {/* Single chrome row: ↑ + ⟳ + breadcrumb on the left,
                     QuickPaths chips on the right. Every other action
                     (New file / folder, Upload, Download, Rename, Chmod,
@@ -595,10 +595,58 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         })}
                     </div>
                     <QuickPaths host={host} onSelect={dir.cd} />
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded-md border">
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={density === "compact" ? "secondary" : "ghost"}
+                                aria-label="Compact density"
+                                aria-pressed={density === "compact"}
+                                onClick={() => setDensity("compact")}
+                                title="Compact rows"
+                            >
+                                <Rows3 className="size-3.5" />
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={density === "comfortable" ? "secondary" : "ghost"}
+                                aria-label="Comfortable density"
+                                aria-pressed={density === "comfortable"}
+                                onClick={() => setDensity("comfortable")}
+                                title="Comfortable rows"
+                            >
+                                <Rows2 className="size-3.5" />
+                            </Button>
+                        </div>
+                        <div className="flex items-center rounded-md border">
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "list" ? "secondary" : "ghost"}
+                                aria-label="List view"
+                                aria-pressed={viewMode === "list"}
+                                onClick={() => setViewMode("list")}
+                            >
+                                <LayoutList className="size-3.5" />
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                                aria-label="Grid view"
+                                aria-pressed={viewMode === "grid"}
+                                onClick={() => setViewMode("grid")}
+                            >
+                                <LayoutGrid className="size-3.5" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Browser + editor split */}
-                <div className="flex flex-1 gap-2 overflow-hidden">
+                <div className="flex min-h-0 flex-1 gap-2 overflow-hidden">
                     <FileContextMenu
                         variant={{ kind: "empty" }}
                         onNewFile={() => setShowNewFile(true)}
@@ -785,14 +833,13 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     )}
                 </div>
 
-                {/* Bottom status strip — Finder-style. "X items / Y
-                    selected" on the left, density + view-mode toggles
-                    on the right. Kept flush against the file pane with
-                    no top padding so the chrome footprint stays minimal
-                    even on shorter windows. */}
+                {/* Bottom status strip — "X items / Y selected" only.
+                    The density + view-mode toggles moved up to the
+                    chrome row so they stay pinned while the file list
+                    scrolls. */}
                 <div
                     data-testid="files-status-strip"
-                    className="flex items-center justify-between border-t pt-0.5 text-[11px] text-muted-foreground"
+                    className="flex items-center border-t pt-0.5 text-[11px] text-muted-foreground"
                 >
                     <span>
                         {dir.entries.length} item
@@ -804,54 +851,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         {!dir.eof &&
                             ` · showing first ${dir.entries.length} of ${dir.total}`}
                     </span>
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-md border">
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={density === "compact" ? "secondary" : "ghost"}
-                                aria-label="Compact density"
-                                aria-pressed={density === "compact"}
-                                onClick={() => setDensity("compact")}
-                                title="Compact rows"
-                            >
-                                <Rows3 className="size-3.5" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={density === "comfortable" ? "secondary" : "ghost"}
-                                aria-label="Comfortable density"
-                                aria-pressed={density === "comfortable"}
-                                onClick={() => setDensity("comfortable")}
-                                title="Comfortable rows"
-                            >
-                                <Rows2 className="size-3.5" />
-                            </Button>
-                        </div>
-                        <div className="flex items-center rounded-md border">
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "list" ? "secondary" : "ghost"}
-                                aria-label="List view"
-                                aria-pressed={viewMode === "list"}
-                                onClick={() => setViewMode("list")}
-                            >
-                                <LayoutList className="size-3.5" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                                aria-label="Grid view"
-                                aria-pressed={viewMode === "grid"}
-                                onClick={() => setViewMode("grid")}
-                            >
-                                <LayoutGrid className="size-3.5" />
-                            </Button>
-                        </div>
-                    </div>
                 </div>
             </div>
 

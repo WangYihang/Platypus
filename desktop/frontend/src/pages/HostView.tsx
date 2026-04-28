@@ -336,14 +336,30 @@ export default function HostView({ projectID, hostID }: Props) {
                 ref={scrollRef}
                 style={{
                     flex: 1,
-                    overflow: "auto",
-                    padding: space[6],
+                    minHeight: 0,
+                    // Files tab manages its own internal scroll (file
+                    // list and preview each scroll independently), so
+                    // the outer container must not also scroll — that
+                    // would race with the inner regions and trap the
+                    // toggle/breadcrumb chrome below the fold. Other
+                    // tabs are card stacks that need outer scroll.
+                    overflow: activeTab === "files" ? "hidden" : "auto",
+                    display: "flex",
+                    flexDirection: "column",
                 }}
             >
                 {/* Each tab panel stays mounted (via display:none) so
                     expensive children (Files tree, Processes poller,
                     etc.) don't rebuild state on tab switch. */}
-                <div style={{ display: activeTab === "files" ? "block" : "none" }}>
+                <div
+                    style={{
+                        display: activeTab === "files" ? "flex" : "none",
+                        flexDirection: "column",
+                        flex: 1,
+                        minHeight: 0,
+                        padding: space[6],
+                    }}
+                >
                     {pickedSessionID ? (
                         <FilesTab
                             projectID={projectID}
@@ -354,10 +370,20 @@ export default function HostView({ projectID, hostID }: Props) {
                         <NoLiveSessionNote />
                     )}
                 </div>
-                <div style={{ display: activeTab === "sessions" ? "block" : "none" }}>
+                <div
+                    style={{
+                        display: activeTab === "sessions" ? "block" : "none",
+                        padding: space[6],
+                    }}
+                >
                     <SessionsPanel sessions={sessions} />
                 </div>
-                <div style={{ display: activeTab === "info" ? "block" : "none" }}>
+                <div
+                    style={{
+                        display: activeTab === "info" ? "block" : "none",
+                        padding: space[6],
+                    }}
+                >
                     <InfoPanel
                         host={host}
                         sysInfo={sysInfo}
@@ -366,7 +392,12 @@ export default function HostView({ projectID, hostID }: Props) {
                         onRefreshSysInfo={refreshSysInfo}
                     />
                 </div>
-                <div style={{ display: activeTab === "processes" ? "block" : "none" }}>
+                <div
+                    style={{
+                        display: activeTab === "processes" ? "block" : "none",
+                        padding: space[6],
+                    }}
+                >
                     <ProcessesTab
                         projectID={projectID}
                         hostID={hostID}
