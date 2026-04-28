@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
 import Mono from "../../components/Mono";
 import RefreshButton from "../../components/RefreshButton";
 import { palette, space } from "../../layout/theme";
 import {
     HostProcess,
-    HostProcessList,
     ListHostProcessesOpts,
     listHostProcesses,
 } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 import { fromNow } from "../../lib/time";
 
 import {
@@ -38,45 +40,26 @@ type SortKey = NonNullable<ListHostProcessesOpts["sort"]>;
 export default function ProcessesTab({ projectID, hostID, active }: Props) {
     const [sort, setSort] = useState<SortKey>("cpu");
     const [top, setTop] = useState<number>(100);
-    const [data, setData] = useState<HostProcessList | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState("");
-    const abortRef = useRef<AbortController | null>(null);
 
-    const refresh = useCallback(async () => {
-        abortRef.current?.abort();
-        const ac = new AbortController();
-        abortRef.current = ac;
-        setLoading(true);
-        try {
-            const resp = await listHostProcesses(projectID, hostID, { top, sort });
-            if (ac.signal.aborted) return;
-            setData(resp);
-            setError(null);
-        } catch (e) {
-            if (!ac.signal.aborted) {
-                setData(null);
-                setError(String(e));
-            }
-        } finally {
-            if (!ac.signal.aborted) setLoading(false);
-        }
-    }, [projectID, hostID, top, sort]);
-
-    // Auto-refresh on tab-active / param change; cancel when the tab
-    // goes dormant or the component unmounts.
-    useEffect(() => {
-        if (!active) return;
-        void refresh();
-        const id = setInterval(() => {
-            void refresh();
-        }, 5000);
-        return () => {
-            clearInterval(id);
-            abortRef.current?.abort();
-        };
-    }, [active, refresh]);
+    // react-query handles the abort-on-unmount, dedup, and retry
+    // wiring we used to spell out by hand. `enabled: active` pauses
+    // the query while the Processes tab is dormant; `refetchInterval:
+    // active ? 5000 : false` matches the previous setInterval gate.
+    // When the tab comes back active, the query automatically
+    // refetches and resumes polling — no explicit wake-up needed.
+    const {
+        data,
+        isFetching: loading,
+        error,
+        refetch,
+    } = useQuery({
+        queryKey: [...qk.hostProcesses(projectID, hostID), { top, sort }] as const,
+        queryFn: () => listHostProcesses(projectID, hostID, { top, sort }),
+        enabled: active,
+        refetchInterval: active ? 5000 : false,
+        refetchIntervalInBackground: false,
+    });
 
     const procs = data?.processes || [];
     const filtered = useMemo(() => {
@@ -165,7 +148,7 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
                         ))}
                     </select>
                 </label>
-                <RefreshButton loading={loading} onClick={() => void refresh()} />
+                <RefreshButton loading={loading} onClick={() => void refetch()} />
                 <span style={{ fontSize: 12, color: palette.textSecondary }}>
                     {data?.total_count !== undefined
                         ? `${filtered.length} of ${data.total_count}`
@@ -185,7 +168,7 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
                         fontSize: 12,
                     }}
                 >
-                    {error}
+                    {String(error)}
                 </div>
             )}
 
