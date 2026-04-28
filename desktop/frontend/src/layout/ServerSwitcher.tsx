@@ -66,7 +66,6 @@ import {
     ServerProfile,
     avatarFor,
     getActiveServerId,
-    getActiveServer,
     listServers,
     onServersChange,
     renameServer,
@@ -518,10 +517,20 @@ function useActiveServerId(): string | null {
 }
 
 function useActiveServer(): ServerProfile | null {
-    return useSyncExternalStore(
-        (fn) => onServersChange(fn),
-        () => getActiveServer(),
-        () => getActiveServer(),
+    // Derive the active profile from the already-stable list +
+    // active-id hooks rather than subscribing again. A naïve
+    // `useSyncExternalStore(..., getActiveServer, ...)` infinite-loops
+    // because `getActiveServer()` parses localStorage and returns a
+    // fresh object reference on every call — React thinks the
+    // snapshot changed and re-renders forever (Minified React error
+    // #185 → "Maximum update depth exceeded"). The list snapshot is
+    // already keyed on `serverListVersion` and the id snapshot is a
+    // primitive string, so this derivation is stable across renders.
+    const id = useActiveServerId();
+    const profiles = useServerList();
+    return useMemo(
+        () => (id ? profiles.find((p) => p.id === id) ?? null : null),
+        [id, profiles],
     );
 }
 
