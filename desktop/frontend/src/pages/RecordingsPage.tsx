@@ -9,6 +9,7 @@ import {
     RotateCw,
     Search,
     Trash2,
+    X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -368,48 +369,14 @@ export default function RecordingsPage() {
                 )}
             </div>
 
-            <Dialog open={previewing !== null} onOpenChange={(o) => !o && setPreviewing(null)}>
-                <DialogContent className="sm:max-w-[920px]">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {previewing?.title || (
-                                <Mono>{previewing?.id.slice(0, 12) ?? ""}</Mono>
-                            )}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {previewing?.username
-                                ? `${previewing.username} on `
-                                : ""}
-                            {previewing?.host_alias ||
-                                previewing?.host_hostname ||
-                                previewing?.host_id ||
-                                "—"}
-                            {previewing &&
-                                ` · ${formatDuration(previewing.duration_ms)} · ${formatBytes(
-                                    previewing.size_bytes,
-                                )}`}
-                        </DialogDescription>
-                    </DialogHeader>
-                    {previewing && (
-                        <RecordingPlayer
-                            projectId={project.id}
-                            recordingId={previewing.id}
-                            cols={previewing.cols}
-                            rows={previewing.rows}
-                            autoPlay={false}
-                        />
-                    )}
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => previewing && downloadRecording(previewing)}
-                        >
-                            <Download className="size-3.5" /> Download .cast
-                        </Button>
-                        <Button onClick={() => setPreviewing(null)}>Close</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {previewing && (
+                <PreviewOverlay
+                    rec={previewing}
+                    projectId={project.id}
+                    onClose={() => setPreviewing(null)}
+                    onDownload={() => downloadRecording(previewing)}
+                />
+            )}
 
             <Dialog open={renaming !== null} onOpenChange={(o) => !o && setRenaming(null)}>
                 <DialogContent className="sm:max-w-[420px]">
@@ -459,6 +426,141 @@ export default function RecordingsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+        </div>
+    );
+}
+
+// PreviewOverlay is a vanilla fixed-position modal for the asciinema
+// player. We deliberately avoid Radix Dialog here — its focus trap +
+// aria-hidden machinery interacted with the player's keyboard handler
+// and made the page completely unresponsive once playback started.
+// This component manages just the two things a player modal needs:
+// an Escape-to-close handler and body scroll lock while open.
+function PreviewOverlay({
+    rec,
+    projectId,
+    onClose,
+    onDownload,
+}: {
+    rec: TerminalRecording;
+    projectId: string;
+    onClose: () => void;
+    onDownload: () => void;
+}) {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        document.addEventListener("keydown", onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.removeEventListener("keydown", onKey);
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [onClose]);
+
+    const hostLabel = rec.host_alias || rec.host_hostname || rec.host_id || "—";
+
+    return (
+        <div
+            onClick={onClose}
+            style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.7)",
+                zIndex: 50,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: space[6],
+            }}
+        >
+            <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    width: "min(960px, 100%)",
+                    maxHeight: "90vh",
+                    overflow: "auto",
+                    background: palette.surface,
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: radius.md,
+                    display: "flex",
+                    flexDirection: "column",
+                }}
+            >
+                <div
+                    style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: space[3],
+                        padding: `${space[4]}px ${space[5]}px`,
+                        borderBottom: `1px solid ${palette.border}`,
+                    }}
+                >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                            style={{
+                                fontWeight: 600,
+                                fontSize: 14,
+                                color: palette.textPrimary,
+                                marginBottom: 4,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            }}
+                            title={rec.title || rec.id}
+                        >
+                            {rec.title || <Mono>{rec.id.slice(0, 12)}</Mono>}
+                        </div>
+                        <div style={{ fontSize: 12, color: palette.textSecondary }}>
+                            {rec.username ? `${rec.username} on ` : ""}
+                            <Mono>{hostLabel}</Mono>
+                            {` · ${formatDuration(rec.duration_ms)} · ${formatBytes(rec.size_bytes)}`}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            border: "none",
+                            background: "transparent",
+                            color: palette.textSecondary,
+                            cursor: "pointer",
+                        }}
+                    >
+                        <X className="size-4" />
+                    </button>
+                </div>
+                <div style={{ padding: space[4] }}>
+                    <RecordingPlayer
+                        projectId={projectId}
+                        recordingId={rec.id}
+                        autoPlay={false}
+                    />
+                </div>
+                <div
+                    style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        gap: space[2],
+                        padding: `${space[3]}px ${space[5]}px`,
+                        borderTop: `1px solid ${palette.border}`,
+                    }}
+                >
+                    <Button variant="outline" onClick={onDownload}>
+                        <Download className="size-3.5" /> Download .cast
+                    </Button>
+                    <Button onClick={onClose}>Close</Button>
+                </div>
+            </div>
         </div>
     );
 }

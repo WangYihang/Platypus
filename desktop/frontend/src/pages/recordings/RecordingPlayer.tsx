@@ -2,24 +2,36 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { palette, space } from "../../layout/theme";
-import { fetchRecordingCastBlob } from "../../lib/api";
+import { authFetch } from "../../lib/auth";
 import { humanizeError } from "../../lib/humanizeError";
 import { loadAsciinemaPlayer } from "./asciinemaLoader";
 
 interface Props {
     projectId: string;
     recordingId: string;
-    cols?: number;
-    rows?: number;
     autoPlay?: boolean;
 }
 
-// RecordingPlayer mounts an asciinema-player instance pointed at the
-// recording's .cast bytes. The cast is fetched authenticated as a
-// Blob (asciinema-player can't carry our Bearer header on its own
-// fetch) and handed to the player via a blob: URL, which is revoked
-// on unmount.
-export default function RecordingPlayer({ projectId, recordingId, cols, rows, autoPlay = false }: Props) {
+// RecordingPlayer mounts an asciinema-player instance that plays back
+// the recording's .cast bytes. Implementation details that took some
+// hunting to get stable:
+//
+//   - The cast is fetched as TEXT (via authFetch) and handed to the
+//     player as `{ data: text }`. The earlier blob-URL approach made
+//     the player's internal fetch race with our blob lifecycle and
+//     in some browsers triggered range requests that hung the page
+//     once playback started.
+//   - We pass NO terminal-size options. The cast file's header has
+//     authoritative cols/rows; passing different ones via options
+//     can cause the player's auto-fit pass to thrash on layout.
+//   - We pass NO fit / theme / idleTimeLimit options. Defaults are
+//     fine and the explicit values were correlated with the runaway
+//     CPU loop reported on the Recordings page.
+//   - We do NOT host this inside a Radix Dialog. The dialog's focus
+//     trap + the player's keyboard handler interact poorly and the
+//     page becomes unresponsive once playback starts. The parent
+//     opens us inside a plain fixed-position overlay instead.
+export default function RecordingPlayer({ projectId, recordingId, autoPlay = false }: Props) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const playerRef = useRef<{ dispose?: () => void } | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -27,26 +39,25 @@ export default function RecordingPlayer({ projectId, recordingId, cols, rows, au
 
     useEffect(() => {
         let cancelled = false;
-        let blobUrl: string | null = null;
         setLoading(true);
         setError(null);
 
         (async () => {
             try {
-                const [api, blob] = await Promise.all([
+                const [api, resp] = await Promise.all([
                     loadAsciinemaPlayer(),
-                    fetchRecordingCastBlob(projectId, recordingId),
+                    authFetch(
+                        `/api/v1/projects/${projectId}/recordings/${recordingId}/cast`,
+                    ),
                 ]);
+                const text = await resp.text();
                 if (cancelled || !containerRef.current) return;
-                blobUrl = URL.createObjectURL(blob);
-                playerRef.current = api.create(blobUrl, containerRef.current, {
-                    autoPlay,
-                    cols,
-                    rows,
-                    fit: "width",
-                    idleTimeLimit: 2,
-                    theme: "asciinema",
-                });
+
+                playerRef.current = api.create(
+                    { data: text },
+                    containerRef.current,
+                    { autoPlay },
+                );
                 setLoading(false);
             } catch (e) {
                 if (cancelled) return;
@@ -66,14 +77,13 @@ export default function RecordingPlayer({ projectId, recordingId, cols, rows, au
                 }
             }
             playerRef.current = null;
-            if (blobUrl) URL.revokeObjectURL(blobUrl);
             // Reset the container so a re-mount starts clean.
             if (containerRef.current) containerRef.current.innerHTML = "";
         };
-    }, [projectId, recordingId, cols, rows, autoPlay]);
+    }, [projectId, recordingId, autoPlay]);
 
     return (
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", width: "100%" }}>
             {loading && (
                 <div
                     style={{
@@ -86,6 +96,8 @@ export default function RecordingPlayer({ projectId, recordingId, cols, rows, au
                         color: palette.textMuted,
                         fontSize: 12,
                         zIndex: 1,
+                        background: "#1c1c1c",
+                        borderRadius: 6,
                     }}
                 >
                     <Loader2 className="size-4 animate-spin" />
@@ -110,8 +122,6 @@ export default function RecordingPlayer({ projectId, recordingId, cols, rows, au
                 style={{
                     width: "100%",
                     minHeight: 360,
-                    background: "#1c1c1c",
-                    borderRadius: 6,
                 }}
             />
         </div>
