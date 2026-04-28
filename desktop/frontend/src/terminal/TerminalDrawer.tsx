@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Plus, TerminalSquare, X } from "lucide-react";
 
@@ -17,8 +17,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ShellEntry, useGlobalTerminal } from "./GlobalTerminalContext";
 
-const HANDLE_HEIGHT = 6;
-const TAB_BAR_HEIGHT = 36;
+// Tab bar height constant is exported because ShellChrome needs to size
+// the resizable drawer panel to exactly the tab bar when the operator
+// "collapses" the drawer (Ctrl+`) — the body slab hides but the tabs
+// stay visible so they can click an existing tab to expand again.
+export const TAB_BAR_HEIGHT = 36;
 
 // TerminalDrawer is the VSCode-style bottom panel mounted once inside
 // ShellChrome's content column — it sits beneath <main> and beside
@@ -46,12 +49,10 @@ export default function TerminalDrawer() {
         shells,
         activeId,
         drawerOpen,
-        drawerHeight,
         closeShell,
         setActive,
         openDrawer,
         closeDrawer,
-        setDrawerHeight,
     } = useGlobalTerminal();
 
     const { hostId: routeHostId } = useParams<{
@@ -73,8 +74,9 @@ export default function TerminalDrawer() {
         return visibleShells.length > 0 ? visibleShells[0].id : null;
     }, [visibleShells, activeId]);
 
-    // Nothing to keep alive: no terminals anywhere. Skip rendering
-    // entirely so the drawer doesn't reserve any space.
+    // Nothing to keep alive: no terminals anywhere. The parent
+    // PanelGroup's drawer panel is sized to 0 in this case so no
+    // empty chrome leaks through.
     if (shells.length === 0) {
         return null;
     }
@@ -82,18 +84,10 @@ export default function TerminalDrawer() {
     // Drawer is "active" — i.e. visually present — only on a host
     // detail page that has at least one shell on that host. When
     // inactive, we still render the container (so <Terminal>
-    // children stay mounted) but collapse it to zero height and
-    // hide it.
+    // children stay mounted) but the parent panel collapses us to
+    // zero height; visibility:hidden keeps the unrendered chrome
+    // from peeking through during the resize transition.
     const drawerActive = !!routeHostId && visibleShells.length > 0;
-
-    // Collapsed: render only the tab strip so users can see what's
-    // running and click to expand. Terminal content slabs are still
-    // mounted (display:none) below so xterm buffers survive.
-    const containerHeight = !drawerActive
-        ? 0
-        : drawerOpen
-            ? drawerHeight
-            : TAB_BAR_HEIGHT;
 
     // Host indicator colour — every tab in this drawer belongs to
     // the same host (we filtered by routeHostId), so a single
@@ -109,8 +103,8 @@ export default function TerminalDrawer() {
             data-host-id={routeHostId ?? ""}
             style={{
                 position: "relative",
-                height: containerHeight,
-                flexShrink: 0,
+                height: "100%",
+                width: "100%",
                 borderTop: drawerActive ? `2px solid ${hostAccent}` : "none",
                 background: palette.main,
                 display: "flex",
@@ -119,9 +113,6 @@ export default function TerminalDrawer() {
                 overflow: "hidden",
             }}
         >
-            {drawerActive && drawerOpen && (
-                <ResizeHandle height={drawerHeight} onResize={setDrawerHeight} />
-            )}
             {drawerActive && (
                 <TabBar
                     shells={visibleShells}
@@ -171,69 +162,6 @@ export default function TerminalDrawer() {
                 })}
             </div>
         </div>
-    );
-}
-
-interface ResizeHandleProps {
-    height: number;
-    onResize: (h: number) => void;
-}
-
-// ResizeHandle is a 6px-tall strip sitting on top of the drawer. It
-// captures pointer events, switches the cursor to ns-resize, and
-// forwards drag deltas as new drawer heights.
-function ResizeHandle({ height, onResize }: ResizeHandleProps) {
-    const startYRef = useRef<number | null>(null);
-    const startHeightRef = useRef<number>(height);
-    const [dragging, setDragging] = useState(false);
-
-    const onPointerMove = useCallback(
-        (e: PointerEvent) => {
-            if (startYRef.current === null) return;
-            const dy = startYRef.current - e.clientY;
-            onResize(startHeightRef.current + dy);
-        },
-        [onResize],
-    );
-
-    const onPointerUp = useCallback(() => {
-        startYRef.current = null;
-        setDragging(false);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }, [onPointerMove]);
-
-    const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-        startYRef.current = e.clientY;
-        startHeightRef.current = height;
-        setDragging(true);
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    };
-
-    useEffect(() => {
-        return () => {
-            window.removeEventListener("pointermove", onPointerMove);
-            window.removeEventListener("pointerup", onPointerUp);
-        };
-    }, [onPointerMove, onPointerUp]);
-
-    return (
-        <div
-            onPointerDown={onPointerDown}
-            style={{
-                position: "absolute",
-                top: -HANDLE_HEIGHT / 2,
-                left: 0,
-                right: 0,
-                height: HANDLE_HEIGHT,
-                cursor: "ns-resize",
-                background: dragging ? palette.borderStrong : "transparent",
-                zIndex: 2,
-                transition: dragging ? "none" : "background 120ms ease",
-            }}
-            title="Drag to resize"
-        />
     );
 }
 

@@ -191,9 +191,12 @@ describe("<TerminalDrawer> host scoping", () => {
         // children survive a route change away from the host page.
         expect(drawer).not.toBeNull();
         // …but it is visually hidden so the bottom of the screen
-        // is free for the page itself.
+        // is free for the page itself. Height is owned by the
+        // parent ResizablePanel now (collapsed to 0 by ShellChrome's
+        // imperative effect when drawerActive=false), so the test
+        // checks the visible-state markers the drawer still owns:
+        // the data-active flag and the visibility lock.
         expect(drawer!.dataset.active).toBe("false");
-        expect(drawer!.style.height).toBe("0px");
         expect(drawer!.style.visibility).toBe("hidden");
         // Tab bar is suppressed so off-host shells don't leak into
         // the chrome of an unrelated page.
