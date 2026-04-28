@@ -251,3 +251,12 @@ export function useGlobalTerminal(): GlobalTerminalContextValue {
     if (!ctx) throw new Error("useGlobalTerminal must be used inside GlobalTerminalProvider");
     return ctx;
 }
+
+// useGlobalTerminalSafe returns null when no provider is mounted
+// instead of throwing. Used by surfaces that may render outside the
+// project shell (e.g. StatusBar on the login screen, or in unit
+// tests) where "no terminals" is the correct answer rather than a
+// crash.
+export function useGlobalTerminalSafe(): GlobalTerminalContextValue | null {
+    return useContext(GlobalTerminalContext);
+}

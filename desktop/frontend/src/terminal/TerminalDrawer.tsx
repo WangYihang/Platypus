@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Plus, TerminalSquare, X } from "lucide-react";
 
 import Terminal from "../pages/Terminal";
 import { palette, radius, space } from "../layout/theme";
 import { Host, listHosts } from "../lib/api";
 import { useShell } from "../layout/ProjectShell";
+import { colorForId } from "../lib/colors";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -44,8 +45,31 @@ export default function TerminalDrawer() {
         setDrawerHeight,
     } = useGlobalTerminal();
 
+    // The drawer is scoped to the host detail page. Off-host the
+    // drawer is invisible — operators see only host shells when
+    // they're looking at that host. Cross-host visibility lives in
+    // the status-bar terminals popover.
+    const { hostId: routeHostId } = useParams<{
+        projectSlug?: string;
+        hostId?: string;
+        tab?: string;
+    }>();
+
+    const visibleShells = useMemo(
+        () => shells.filter((s) => s.hostId === routeHostId),
+        [shells, routeHostId],
+    );
+
+    // If the active shell isn't on this host (e.g. user just
+    // navigated in), fall back to the first visible shell so the
+    // tab bar always has something selected.
+    const visibleActiveId = useMemo(() => {
+        if (visibleShells.some((s) => s.id === activeId)) return activeId;
+        return visibleShells.length > 0 ? visibleShells[0].id : null;
+    }, [visibleShells, activeId]);
+
     // Nothing to show: don't reserve a row in the shell flexbox.
-    if (shells.length === 0) {
+    if (!routeHostId || visibleShells.length === 0) {
         return null;
     }
 
@@ -56,15 +80,22 @@ export default function TerminalDrawer() {
         ? drawerHeight
         : TAB_BAR_HEIGHT;
 
+    // Host indicator colour — every tab in this drawer belongs to
+    // the same host (we filtered by routeHostId), so a single
+    // accent stripe along the top of the drawer reads as "this is
+    // host X" without needing a per-tab dot.
+    const hostAccent = colorForId(routeHostId);
+
     return (
         <div
             data-testid="terminal-drawer"
             data-collapsed={drawerOpen ? "false" : "true"}
+            data-host-id={routeHostId}
             style={{
                 position: "relative",
                 height: containerHeight,
                 flexShrink: 0,
-                borderTop: `1px solid ${palette.border}`,
+                borderTop: `2px solid ${hostAccent}`,
                 background: palette.main,
                 display: "flex",
                 flexDirection: "column",
@@ -74,8 +105,8 @@ export default function TerminalDrawer() {
                 <ResizeHandle height={drawerHeight} onResize={setDrawerHeight} />
             )}
             <TabBar
-                shells={shells}
-                activeId={activeId}
+                shells={visibleShells}
+                activeId={visibleActiveId}
                 onActivate={setActive}
                 onClose={closeShell}
                 onToggleDrawer={drawerOpen ? closeDrawer : openDrawer}
@@ -89,13 +120,13 @@ export default function TerminalDrawer() {
                     display: drawerOpen ? "block" : "none",
                 }}
             >
-                {shells.map((s) => (
+                {visibleShells.map((s) => (
                     <div
                         key={s.id}
                         style={{
                             position: "absolute",
                             inset: 0,
-                            display: s.id === activeId ? "block" : "none",
+                            display: s.id === visibleActiveId ? "block" : "none",
                         }}
                     >
                         <Terminal
@@ -336,6 +367,7 @@ interface NewShellButtonProps {
 function NewShellButton({ activeShell }: NewShellButtonProps) {
     const { openShell } = useGlobalTerminal();
     const { project } = useShell();
+    const navigate = useNavigate();
     const [menuOpen, setMenuOpen] = useState(false);
     const [hosts, setHosts] = useState<Host[] | null>(null);
     const [loading, setLoading] = useState(false);
@@ -448,6 +480,16 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
                                                 sessionHash: h.agent_id,
                                                 label,
                                             });
+                                            // The drawer is now host-scoped — the
+                                            // newly-opened shell only becomes
+                                            // visible when the operator is on
+                                            // that host's detail page, so
+                                            // navigate there instead of just
+                                            // dropping a shell into a hidden
+                                            // bucket.
+                                            navigate(
+                                                `/projects/${project.slug}/hosts/${h.id}/info`,
+                                            );
                                         }}
                                     >
                                         {label}

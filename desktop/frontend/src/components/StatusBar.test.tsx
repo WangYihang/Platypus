@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../lib/auth", () => ({
     getSession: () => ({
@@ -42,7 +43,11 @@ import StatusBar from "./StatusBar";
 
 describe("<StatusBar>", () => {
     it("clips overflowing public_addr to keep the right zone tidy", () => {
-        const { container } = render(<StatusBar />);
+        const { container } = render(
+            <MemoryRouter>
+                <StatusBar />
+            </MemoryRouter>,
+        );
         const ingress = container.querySelector('[data-testid="status-bar-ingress"]');
         expect(ingress).not.toBeNull();
         const style = (ingress as HTMLElement).getAttribute("style") ?? "";
@@ -52,7 +57,11 @@ describe("<StatusBar>", () => {
     });
 
     it("clips overflowing username so it can't push adjacent items out", () => {
-        const { container } = render(<StatusBar />);
+        const { container } = render(
+            <MemoryRouter>
+                <StatusBar />
+            </MemoryRouter>,
+        );
         const user = container.querySelector('[data-testid="status-bar-user"]');
         expect(user).not.toBeNull();
         const style = (user as HTMLElement).getAttribute("style") ?? "";

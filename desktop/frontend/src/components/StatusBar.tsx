@@ -6,6 +6,7 @@ import { palette, radius, space } from "../layout/theme";
 import { getSession, onActiveChange, onSessionChange } from "../lib/auth";
 import { getActiveServer, onServersChange } from "../lib/servers";
 import { ServerInfo, getServerInfo } from "../lib/api";
+import TerminalsPill from "../terminal/TerminalsPill";
 import Mono from "./Mono";
 import StatusDot from "./StatusDot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -270,6 +271,7 @@ export default function StatusBar() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
+                <TerminalsPill />
                 <span
                     data-testid="status-bar-ingress"
                     style={{
