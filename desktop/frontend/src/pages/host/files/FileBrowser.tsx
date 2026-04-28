@@ -174,7 +174,7 @@ function PreviewPaneShell({
 }) {
     return (
         <div
-            className="flex h-full w-full flex-col overflow-hidden rounded-md border"
+            className="absolute inset-0 flex flex-col overflow-hidden rounded-md border"
             data-testid="preview-pane"
         >
             <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
@@ -939,7 +939,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         autoSaveId="files-preview-split"
                         className="min-h-0 flex-1"
                     >
-                        <ResizablePanel id="files-list" defaultSize={62} minSize={30} className="flex">
+                        <ResizablePanel id="files-list" defaultSize={62} minSize={30} className="relative">
                             <FileContextMenu
                                 variant={{ kind: "empty" }}
                                 onNewFile={() => setShowNewFile(true)}
@@ -949,7 +949,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             >
                                 <div
                                     className={cn(
-                                        "h-full w-full overflow-auto rounded-md border",
+                                        "absolute inset-0 overflow-auto rounded-md border",
                                         dragOver && "bg-accent/40 outline outline-2 outline-primary",
                                     )}
                                     {...dropHandlers}
@@ -993,7 +993,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             defaultSize={38}
                             minSize={20}
                             maxSize={70}
-                            className="flex"
+                            className="relative"
                         >
                             <PreviewPaneShell
                                 entry={previewEntry}

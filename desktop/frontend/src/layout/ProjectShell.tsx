@@ -1,4 +1,12 @@
-import { ReactNode, createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+    ReactNode,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -12,7 +20,7 @@ import {
     GlobalTerminalProvider,
     useGlobalTerminal,
 } from "../terminal/GlobalTerminalContext";
-import TerminalDrawer from "../terminal/TerminalDrawer";
+import TerminalDrawer, { TAB_BAR_HEIGHT } from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
 import AddServerDialog from "./AddServerDialog";
 import ManageServersDialog from "./ManageServersDialog";
@@ -22,6 +30,7 @@ import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
+    usePanelRef,
 } from "@/components/ui/resizable";
 
 interface ShellState {
@@ -184,35 +193,111 @@ function ShellChrome({
                         defaultSize="200px"
                         minSize="168px"
                         maxSize="480px"
-                        className="flex"
+                        className="relative"
                     >
-                        <ProjectSidebar
-                            user={user}
-                            serverURL={serverURL}
-                            projects={projects}
-                            currentSlug={currentSlug}
-                            onProjectsChanged={() => void refresh()}
-                            onAddServer={() => setAddOpen(true)}
-                            onManageServers={() => setManageOpen(true)}
-                        />
+                        <div className="absolute inset-0 flex flex-col">
+                            <ProjectSidebar
+                                user={user}
+                                serverURL={serverURL}
+                                projects={projects}
+                                currentSlug={currentSlug}
+                                onProjectsChanged={() => void refresh()}
+                                onAddServer={() => setAddOpen(true)}
+                                onManageServers={() => setManageOpen(true)}
+                            />
+                        </div>
                     </ResizablePanel>
                     <ResizableHandle />
-                    <ResizablePanel id="main" minSize="40%" className="flex">
-                        <div
-                            style={{
-                                flex: 1,
-                                minWidth: 0,
-                                minHeight: 0,
-                                display: "flex",
-                                flexDirection: "column",
-                                // position: relative anchors the absolutely
-                                // positioned TransfersDrawer to the main pane
-                                // so it slides in from the right edge of the
-                                // outlet (not the viewport).
-                                position: "relative",
-                            }}
-                        >
-                    <main style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}>
+                    <ResizablePanel id="main" minSize="40%" className="relative">
+                        <div className="absolute inset-0">
+                            <MainColumn>{children}</MainColumn>
+                        </div>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
+            </div>
+            <StatusBar />
+            <CommandPalette
+                onAddServer={() => setAddOpen(true)}
+                onManageServers={() => setManageOpen(true)}
+            />
+            <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
+            <ManageServersDialog
+                open={manageOpen}
+                onOpenChange={setManageOpen}
+                onAddServer={() => setAddOpen(true)}
+            />
+        </div>
+    );
+}
+
+// MainColumn is the right-hand pane that stacks the main content area
+// on top of the global terminal drawer. The vertical ResizablePanelGroup
+// owns the seam: dragging it grows / shrinks the drawer, and the
+// drawer panel is sized imperatively in three regimes —
+//   · no shells visible on this host  → 0 px (drawer hidden)
+//   · drawer collapsed (Ctrl+`)        → TAB_BAR_HEIGHT (tab strip only)
+//   · drawer open                      → drawerHeight (operator-chosen)
+// drawerHeight is owned by GlobalTerminalContext (per-server localStorage)
+// so we don't add a second persistence layer here; onResize feeds drag
+// gestures straight back into setDrawerHeight.
+function MainColumn({ children }: { children: ReactNode }) {
+    const { shells, drawerOpen, drawerHeight, setDrawerHeight } = useGlobalTerminal();
+    const { hostId: routeHostId } = useParams<{
+        projectSlug?: string;
+        hostId?: string;
+        tab?: string;
+    }>();
+    const visibleShells = useMemo(
+        () => shells.filter((s) => s.hostId === routeHostId),
+        [shells, routeHostId],
+    );
+    const drawerActive = !!routeHostId && visibleShells.length > 0;
+
+    const drawerPanelRef = usePanelRef();
+
+    // Sync external drawer state (open / collapse / activate) back to
+    // the panel's pixel size. We skip the resize() call when the panel
+    // is already at the target so user-driven onResize ticks don't
+    // rebound through this effect.
+    useEffect(() => {
+        const panel = drawerPanelRef.current;
+        if (!panel) return;
+        const targetPx = !drawerActive
+            ? 0
+            : drawerOpen
+                ? drawerHeight
+                : TAB_BAR_HEIGHT;
+        const current = panel.getSize();
+        if (Math.abs(current.inPixels - targetPx) <= 1) return;
+        panel.resize(`${targetPx}px`);
+    }, [drawerActive, drawerOpen, drawerHeight, drawerPanelRef]);
+
+    return (
+        <div
+            style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                // position: relative anchors the absolutely positioned
+                // TransfersDrawer to the main column so it slides in
+                // from the right edge of the outlet (not the viewport).
+                position: "relative",
+            }}
+        >
+            <ResizablePanelGroup
+                direction="vertical"
+                style={{ flex: 1, minHeight: 0 }}
+            >
+                <ResizablePanel id="main-content" minSize="20%" className="relative">
+                    <main
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            overflow: "auto",
+                        }}
+                    >
                         {/* P3: cap the rendered content width on wide
                             displays. Without the cap, KPI cards, tables
                             and member lists stretched 1500+ px wide on
@@ -241,23 +326,41 @@ function ShellChrome({
                             {children}
                         </div>
                     </main>
-                    <TerminalDrawer />
-                    <TransfersDrawer />
-                        </div>
-                    </ResizablePanel>
-                </ResizablePanelGroup>
-            </div>
-            <StatusBar />
-            <CommandPalette
-                onAddServer={() => setAddOpen(true)}
-                onManageServers={() => setManageOpen(true)}
-            />
-            <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
-            <ManageServersDialog
-                open={manageOpen}
-                onOpenChange={setManageOpen}
-                onAddServer={() => setAddOpen(true)}
-            />
+                </ResizablePanel>
+                <ResizableHandle
+                    disabled={!drawerActive || !drawerOpen}
+                    className={!drawerActive ? "invisible" : undefined}
+                />
+                <ResizablePanel
+                    id="terminal-drawer"
+                    panelRef={drawerPanelRef}
+                    defaultSize={
+                        drawerActive
+                            ? drawerOpen
+                                ? `${drawerHeight}px`
+                                : `${TAB_BAR_HEIGHT}px`
+                            : "0px"
+                    }
+                    minSize="0px"
+                    maxSize="85%"
+                    className="relative"
+                    onResize={(size) => {
+                        // Only let the drag persist a new height when
+                        // the drawer is meant to be open and active —
+                        // otherwise toggle-induced resize() calls would
+                        // overwrite the remembered open height with
+                        // TAB_BAR_HEIGHT or 0.
+                        if (drawerActive && drawerOpen && size.inPixels >= TAB_BAR_HEIGHT) {
+                            setDrawerHeight(size.inPixels);
+                        }
+                    }}
+                >
+                    <div className="absolute inset-0">
+                        <TerminalDrawer />
+                    </div>
+                </ResizablePanel>
+            </ResizablePanelGroup>
+            <TransfersDrawer />
         </div>
     );
 }
