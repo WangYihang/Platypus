@@ -307,7 +307,11 @@ export default function HostView({ projectID, hostID }: Props) {
                     etc.) don't rebuild state on tab switch. */}
                 <div style={{ display: activeTab === "files" ? "block" : "none" }}>
                     {pickedSessionID ? (
-                        <FilesTab projectID={projectID} sessionHash={pickedSessionID} />
+                        <FilesTab
+                            projectID={projectID}
+                            sessionHash={pickedSessionID}
+                            host={host}
+                        />
                     ) : (
                         <NoLiveSessionNote />
                     )}

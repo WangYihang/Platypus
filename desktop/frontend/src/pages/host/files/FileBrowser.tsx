@@ -42,6 +42,8 @@ import {
     suggestedArchiveFilename,
 } from "./archive";
 import FolderArchiveDialog from "./FolderArchiveDialog";
+import QuickPaths from "./QuickPaths";
+import type { Host } from "../../../lib/api";
 import {
     ChmodDialog,
     DeleteConfirmDialog,
@@ -67,6 +69,11 @@ const SMALL_FILE_LIMIT = 5 * 1024 * 1024;
 interface Props {
     projectID: string;
     sessionHash: string;
+    // The agent-reported host descriptor. Forwarded down to the
+    // QuickPaths chip row so it can pick platform-appropriate
+    // roots (Linux: /, ~, /etc, …; Windows: C:\, …). Null while
+    // HostView is still loading the host fetch.
+    host?: Host | null;
 }
 
 // CrumbDroppable is a breadcrumb segment that accepts internal drops —
@@ -102,7 +109,7 @@ function CrumbDroppable({
     );
 }
 
-export default function FileBrowser({ projectID, sessionHash }: Props) {
+export default function FileBrowser({ projectID, sessionHash, host = null }: Props) {
     const dir = useDirectory(projectID, sessionHash);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
@@ -365,6 +372,9 @@ export default function FileBrowser({ projectID, sessionHash }: Props) {
     return (
         <DndContext sensors={sensors}>
             <div className="flex h-full min-h-[520px] flex-col gap-3">
+                {/* Quick-jump chip row, sits above the breadcrumb so
+                    teleporting to a common root is one click away. */}
+                <QuickPaths host={host} onSelect={dir.cd} />
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-1 overflow-x-auto">
                     <Button
