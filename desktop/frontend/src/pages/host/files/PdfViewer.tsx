@@ -5,15 +5,18 @@ import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReadFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
+// Absolute import (rather than "./pdfWorkerSrc") so vitest's alias
+// table can swap in a stub — vitest aliases only match against the
+// import specifier as written, before relative-path resolution.
+import workerSrc from "@/pages/host/files/pdfWorkerSrc";
 
-// react-pdf needs an explicit worker URL. Resolved relative to this
-// module so Vite bundles the worker alongside the rest of the assets;
-// without it pdfjs falls back to fake-worker mode which is single-
-// threaded and stalls on heavy docs.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url,
-).toString();
+// react-pdf needs an explicit worker URL. The URL comes from a
+// dedicated module so Vite can rewrite the `?url` import to the
+// emitted asset path; doing it inline here would confuse vitest's
+// import-analysis. Without a real URL pdfjs falls back to the
+// in-thread "fake worker" path and fetches a 404, which is what
+// produced "Setting up fake worker failed" in dev.
+pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 interface Props {
     projectID: string;

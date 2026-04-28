@@ -20,6 +20,16 @@ export default defineConfig({
                 find: "@wails/runtime/runtime",
                 replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
             },
+            // pdfWorkerSrc.ts uses a Vite-only `?url` import that
+            // vitest's import-analysis can't resolve. Swap in a stub
+            // — the real worker URL is never read in tests because
+            // every PdfViewer test mocks react-pdf wholesale. The
+            // exact-string match must precede the `@` prefix alias
+            // below, otherwise the broader rule wins.
+            {
+                find: "@/pages/host/files/pdfWorkerSrc",
+                replacement: path.resolve(__dirname, "src/test/pdfWorkerSrc.stub.ts"),
+            },
             { find: "@", replacement: path.resolve(__dirname, "src") },
         ],
     },

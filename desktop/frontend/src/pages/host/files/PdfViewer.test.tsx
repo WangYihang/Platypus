@@ -53,6 +53,18 @@ afterEach(() => {
 });
 
 describe("<PdfViewer>", () => {
+    it("sets pdfjs.GlobalWorkerOptions.workerSrc at module load", async () => {
+        // Regression for the dev-mode "Setting up fake worker failed"
+        // crash: importing PdfViewer must populate workerSrc with a
+        // non-empty string. Under the vitest alias the value is the
+        // stub URL rather than a real asset, but the assignment must
+        // still happen — that's the contract the runtime relies on.
+        const { pdfjs } = await import("react-pdf");
+        await import("./PdfViewer");
+        expect(pdfjs.GlobalWorkerOptions.workerSrc).toBeTruthy();
+        expect(typeof pdfjs.GlobalWorkerOptions.workerSrc).toBe("string");
+    });
+
     it("loads bytes and renders the first page once load succeeds", async () => {
         vi.mocked(ReadFile).mockResolvedValueOnce(PDF_BYTES);
 
