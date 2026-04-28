@@ -61,6 +61,8 @@ import { useDragDrop } from "./useDragDrop";
 // unless the user actually opens a file to view or edit.
 const FileEditor = lazy(() => import("./FileEditor"));
 const FileViewerPaged = lazy(() => import("./FileViewerPaged"));
+const ImageViewer = lazy(() => import("./ImageViewer"));
+import { pickViewerKind } from "./viewerKind";
 
 // Files larger than this open in the read-only paged viewer. Anything
 // below is loaded whole into CodeMirror. 5 MiB is empirically the
@@ -543,23 +545,41 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                     </div>
                                 }
                             >
-                                {openingEntry.size > SMALL_FILE_LIMIT ? (
-                                    <FileViewerPaged
-                                        projectID={projectID}
-                                        sessionHash={sessionHash}
-                                        path={joinPath(dir.path, openingEntry.name)}
-                                        size={openingEntry.size}
-                                        onDownload={handleDownloadClick}
-                                    />
-                                ) : (
-                                    <FileEditor
-                                        projectID={projectID}
-                                        sessionHash={sessionHash}
-                                        path={joinPath(dir.path, openingEntry.name)}
-                                        size={openingEntry.size}
-                                        onSaved={dir.reload}
-                                    />
-                                )}
+                                {(() => {
+                                    const fullPath = joinPath(dir.path, openingEntry.name);
+                                    const kind = pickViewerKind(openingEntry.mime, openingEntry.name);
+                                    if (kind === "image") {
+                                        return (
+                                            <ImageViewer
+                                                projectID={projectID}
+                                                sessionHash={sessionHash}
+                                                path={fullPath}
+                                                size={openingEntry.size}
+                                                mime={openingEntry.mime}
+                                            />
+                                        );
+                                    }
+                                    if (openingEntry.size > SMALL_FILE_LIMIT) {
+                                        return (
+                                            <FileViewerPaged
+                                                projectID={projectID}
+                                                sessionHash={sessionHash}
+                                                path={fullPath}
+                                                size={openingEntry.size}
+                                                onDownload={handleDownloadClick}
+                                            />
+                                        );
+                                    }
+                                    return (
+                                        <FileEditor
+                                            projectID={projectID}
+                                            sessionHash={sessionHash}
+                                            path={fullPath}
+                                            size={openingEntry.size}
+                                            onSaved={dir.reload}
+                                        />
+                                    );
+                                })()}
                             </Suspense>
                         </div>
                     )}
