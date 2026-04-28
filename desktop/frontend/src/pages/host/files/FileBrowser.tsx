@@ -8,6 +8,8 @@ import {
     FilePlus,
     FolderDown,
     FolderPlus,
+    LayoutGrid,
+    LayoutList,
     Loader2,
     Lock,
     RefreshCw,
@@ -36,6 +38,8 @@ import type { FileEntryDTO } from "@wails/go/app/App";
 import { basename } from "../../../lib/format";
 
 import FileTable from "./FileTable";
+import FileGrid from "./FileGrid";
+import { useViewMode } from "./useViewMode";
 import {
     ArchiveFormat,
     archiveExtension,
@@ -129,6 +133,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [showDelete, setShowDelete] = useState(false);
     const [bulkDownloading, setBulkDownloading] = useState(false);
     const [showArchive, setShowArchive] = useState(false);
+    const [viewMode, setViewMode] = useViewMode();
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -503,10 +508,34 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         <Trash2 className="size-3.5" />
                         Delete
                     </Button>
-                    <div className="ml-auto text-xs text-muted-foreground">
-                        {selectedEntries.length > 0 && `${selectedEntries.length} selected · `}
-                        {dir.entries.length} entries
-                        {!dir.eof && ` (showing first ${dir.entries.length} of ${dir.total})`}
+                    <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                            {selectedEntries.length > 0 && `${selectedEntries.length} selected · `}
+                            {dir.entries.length} entries
+                            {!dir.eof && ` (showing first ${dir.entries.length} of ${dir.total})`}
+                        </span>
+                        <div className="flex items-center rounded-md border">
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "list" ? "secondary" : "ghost"}
+                                aria-label="List view"
+                                aria-pressed={viewMode === "list"}
+                                onClick={() => setViewMode("list")}
+                            >
+                                <LayoutList className="size-3.5" />
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                                aria-label="Grid view"
+                                aria-pressed={viewMode === "grid"}
+                                onClick={() => setViewMode("grid")}
+                            >
+                                <LayoutGrid className="size-3.5" />
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -523,6 +552,17 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             <div className="p-6 text-sm text-red-500">
                                 Load error: {dir.error}
                             </div>
+                        ) : viewMode === "grid" ? (
+                            <FileGrid
+                                entries={dir.entries}
+                                currentPath={dir.path}
+                                selectedNames={selected}
+                                setSelectedNames={setSelected}
+                                onOpen={openEntry}
+                                onInternalMove={handleInternalMove}
+                                projectID={projectID}
+                                sessionHash={sessionHash}
+                            />
                         ) : (
                             <FileTable
                                 entries={dir.entries}

@@ -51,4 +51,40 @@ if (typeof window !== "undefined") {
         (window as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
             ResizeObserverStub;
     }
+    if (!("IntersectionObserver" in window)) {
+        // Fires the callback eagerly with `isIntersecting: true` so any
+        // component gated on visibility (e.g. Thumbnail) loads in tests
+        // without the test having to scroll a fake viewport.
+        class IntersectionObserverStub {
+            constructor(private cb: IntersectionObserverCallback) {}
+            observe(target: Element) {
+                queueMicrotask(() => {
+                    this.cb(
+                        [
+                            {
+                                isIntersecting: true,
+                                target,
+                                intersectionRatio: 1,
+                                time: 0,
+                                boundingClientRect: {} as DOMRectReadOnly,
+                                intersectionRect: {} as DOMRectReadOnly,
+                                rootBounds: null,
+                            },
+                        ],
+                        this as unknown as IntersectionObserver,
+                    );
+                });
+            }
+            unobserve() {}
+            disconnect() {}
+            takeRecords(): IntersectionObserverEntry[] {
+                return [];
+            }
+            root = null;
+            rootMargin = "";
+            thresholds = [];
+        }
+        (window as unknown as { IntersectionObserver: typeof IntersectionObserverStub }).IntersectionObserver =
+            IntersectionObserverStub;
+    }
 }
