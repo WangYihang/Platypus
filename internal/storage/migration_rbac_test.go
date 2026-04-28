@@ -23,7 +23,7 @@ func TestMigration_RBAC_Tables(t *testing.T) {
 			want,
 		).Scan(&name)
 		if err != nil {
-			t.Errorf("expected table %q after migration 18: %v", want, err)
+			t.Errorf("expected table %q after migration 19: %v", want, err)
 		}
 	}
 }
@@ -181,7 +181,7 @@ func TestMigration_RBAC_PermissionsCatalog(t *testing.T) {
 }
 
 // TestMigration_RBAC_UsersRoleFK pins the rebuild of users and
-// project_members in migration 18: the role column now FKs to
+// project_members in migration 19: the role column now FKs to
 // roles.slug, so an INSERT with an unknown slug fails and a known
 // slug succeeds. PRAGMA foreign_key_check stays clean — the rebuild
 // preserved every cross-table FK pointing at users(id) /

@@ -49,7 +49,7 @@ func makeProject(t *testing.T, db *storage.DB, id string) {
 // The kind-agnostic auth_tokens behaviour (Verify dispatch, Revoke
 // idempotency, TouchLastUsed) is exercised against the user-session
 // shape because that's the only kind currently stored in this table.
-// AAT was retired in migration 16.
+// AAT was retired in migration 17.
 
 func TestVerify_UnknownToken(t *testing.T) {
 	t.Parallel()

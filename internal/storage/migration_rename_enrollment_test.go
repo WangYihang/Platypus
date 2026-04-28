@@ -31,13 +31,13 @@ func TestMigration_EnrollmentTokensRenamed(t *testing.T) {
 		`SELECT name FROM sqlite_master WHERE type='table' AND name='enrollment_tokens'`,
 	).Scan(&name)
 	if err != nil {
-		t.Errorf("expected table enrollment_tokens after migration 15: %v", err)
+		t.Errorf("expected table enrollment_tokens after migration 16: %v", err)
 	}
 	err = db.QueryRow(
 		`SELECT name FROM sqlite_master WHERE type='table' AND name='pat_tokens'`,
 	).Scan(&name)
 	if err == nil {
-		t.Errorf("legacy table pat_tokens still present after migration 15")
+		t.Errorf("legacy table pat_tokens still present after migration 16")
 	}
 }
 

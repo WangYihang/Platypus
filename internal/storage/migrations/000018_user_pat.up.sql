@@ -1,10 +1,10 @@
--- 000017_user_pat.up.sql — rebuild auth_tokens to (a) drop 'aat' from
+-- 000018_user_pat.up.sql — rebuild auth_tokens to (a) drop 'aat' from
 -- the CHECK kind enum and (b) add the new 'pat' kind for user-issued
 -- personal access tokens.
 --
 -- SQLite cannot ALTER a CHECK constraint in place, so the standard
 -- table-rebuild dance applies: create the new shape, copy rows over,
--- drop the original, rename. Because migration 16 already deleted
+-- drop the original, rename. Because migration 17 already deleted
 -- every kind='aat' row, the INSERT...SELECT moves only user_session
 -- rows (and any pre-existing PAT rows, of which there should be none
 -- on a freshly-migrated DB).

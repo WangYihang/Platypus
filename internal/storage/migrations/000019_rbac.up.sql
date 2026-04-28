@@ -1,4 +1,4 @@
--- 000018_rbac.up.sql — replace the hard-coded role enum on
+-- 000019_rbac.up.sql — replace the hard-coded role enum on
 -- users.role / project_members.role with a real RBAC model: a
 -- permission catalogue, a roles table that names a permission set,
 -- and a role_permissions join.
@@ -155,7 +155,7 @@ END;
 -- ships) automatically rewrites cross-table FKs (refresh_tokens,
 -- auth_tokens, projects, project_members → users and project_members
 -- → projects) when the parent table is dropped+renamed inside one
--- transaction with foreign_keys=ON; migration 15's
+-- transaction with foreign_keys=ON; migration 16's
 -- migration_rename_enrollment_test pinned that behaviour for the
 -- enrollment-token rename and the same guarantee carries through
 -- here. A migration_rbac_users_fk test asserts foreign_key_check

@@ -1,4 +1,4 @@
--- 000015_rename_enrollment_tokens.up.sql — rename the legacy `pat_tokens`
+-- 000016_rename_enrollment_tokens.up.sql — rename the legacy `pat_tokens`
 -- table to reflect what its rows really are: one-shot agent-enrollment
 -- credentials.
 --

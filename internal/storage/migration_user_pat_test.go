@@ -46,7 +46,7 @@ func TestMigration_UserPAT_Schema(t *testing.T) {
 		          'should-fail', 'admin', 'hosts:read', ?, ?)`,
 		time.Now().UTC(), time.Now().Add(24*time.Hour).UTC())
 	if err == nil {
-		t.Fatal("INSERT with kind='aat' must be rejected after migration 17")
+		t.Fatal("INSERT with kind='aat' must be rejected after migration 18")
 	}
 
 	// PAT row with project_id set must be rejected — PATs bind to a
@@ -77,7 +77,7 @@ func TestMigration_UserPAT_Schema(t *testing.T) {
 }
 
 // TestMigration_UserPAT_PreservesSessions makes sure the
-// CREATE-NEW/INSERT-SELECT/DROP/RENAME table swap that migration 17
+// CREATE-NEW/INSERT-SELECT/DROP/RENAME table swap that migration 18
 // performs preserves any pre-existing user_session rows untouched.
 func TestMigration_UserPAT_PreservesSessions(t *testing.T) {
 	db, err := Open(":memory:")
@@ -86,7 +86,7 @@ func TestMigration_UserPAT_PreservesSessions(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	// At this point migration 17 has already run (Open() applies all
+	// At this point migration 18 has already run (Open() applies all
 	// migrations). We can still validate that a user_session insert
 	// with the original column shape goes through, which exercises
 	// the rebuilt CHECK from the user-session side.
@@ -106,6 +106,6 @@ func TestMigration_UserPAT_PreservesSessions(t *testing.T) {
 		time.Now().Add(30*24*time.Hour).UTC(),
 		time.Now().Add(time.Hour).UTC())
 	if err != nil {
-		t.Fatalf("insert user_session row after migration 17: %v", err)
+		t.Fatalf("insert user_session row after migration 18: %v", err)
 	}
 }

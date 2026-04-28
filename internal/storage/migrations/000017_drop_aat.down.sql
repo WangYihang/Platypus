@@ -1,5 +1,5 @@
 -- Reverse of 000016: recreate the project-scoped active-AAT partial
--- index that migration 16 dropped. Row-level data isn't restored —
+-- index that migration 17 dropped. Row-level data isn't restored —
 -- the up migration's DELETE is destructive by design (no production
 -- AAT users existed) so a downgrade only puts the index back so the
 -- pre-16 schema lines up byte-for-byte.
