@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { Outlet, RouterProvider, createMemoryRouter } from "react-router-dom";
+
+import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
 // Step 1 of the settings reorg: Enrollment moves from a standalone
 // /projects/<slug>/enrollment surface into the FLEET sub-tree. The
@@ -55,7 +57,7 @@ import { routeTree } from "../routes";
 
 function renderAt(path: string) {
     const r = createMemoryRouter(routeTree, { initialEntries: [path] });
-    return { router: r, ...render(<RouterProvider router={r} />) };
+    return { router: r, ...renderWithQueryClient(<RouterProvider router={r} />) };
 }
 
 describe("enrollment routing — moved under /fleet/enroll", () => {

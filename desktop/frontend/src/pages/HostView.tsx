@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
@@ -36,6 +37,7 @@ import {
     listHostSessions,
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
+import { qk } from "../lib/queryKeys";
 import { fromNow, isOnline } from "../lib/time";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 import FilesTab from "./host/FilesTab";
@@ -67,13 +69,32 @@ type TabKey = (typeof TABS)[number];
 // this page into the global bottom drawer; operators open it via the
 // "Open terminal" action in the header.
 export default function HostView({ projectID, hostID }: Props) {
-    const [host, setHost] = useState<Host | null>(null);
-    const [sessions, setSessions] = useState<SessionRow[]>([]);
-    const [sysInfo, setSysInfo] = useState<HostSysInfo | null>(null);
-    const [sysInfoError, setSysInfoError] = useState<string | null>(null);
-    const [sysInfoLoading, setSysInfoLoading] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+    const hostQuery = useQuery({
+        queryKey: qk.host(projectID, hostID),
+        queryFn: () => getHost(projectID, hostID),
+    });
+    const sessionsQuery = useQuery({
+        queryKey: qk.hostSessions(projectID, hostID),
+        queryFn: () => listHostSessions(projectID, hostID),
+    });
+    const sysInfoQuery = useQuery({
+        queryKey: qk.hostSysInfo(projectID, hostID),
+        queryFn: () => getHostSysInfo(projectID, hostID),
+    });
+
+    const host: Host | null = hostQuery.data ?? null;
+    const sessions: SessionRow[] = sessionsQuery.data ?? [];
+    const sysInfo: HostSysInfo | null = sysInfoQuery.data ?? null;
+    const sysInfoError: string | null = sysInfoQuery.error
+        ? String(sysInfoQuery.error)
+        : null;
+    const sysInfoLoading = sysInfoQuery.isFetching;
+    const loading = hostQuery.isFetching || sessionsQuery.isFetching;
+    const error: string | null =
+        hostQuery.error ? String(hostQuery.error)
+        : sessionsQuery.error ? String(sessionsQuery.error)
+        : null;
     // pickedSessionID drives which session Terminal / Files operate
     // on. Despite the name, the value is the host's agent_id, not the
     // sessions-row UUID — every per-host RPC route on the server
@@ -120,53 +141,19 @@ export default function HostView({ projectID, hostID }: Props) {
         prevTabRef.current = activeTab;
     }, [activeTab]);
 
-    const refreshSysInfo = useCallback(async () => {
-        setSysInfoLoading(true);
-        try {
-            const s = await getHostSysInfo(projectID, hostID);
-            setSysInfo(s);
-            setSysInfoError(null);
-        } catch (e) {
-            // Expected when the agent is offline; surface without
-            // clobbering the rest of the page.
-            setSysInfo(null);
-            setSysInfoError(String(e));
-        } finally {
-            setSysInfoLoading(false);
-        }
-    }, [projectID, hostID]);
+    const refresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: qk.host(projectID, hostID) });
+        queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
+        queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
+    }, [queryClient, projectID, hostID]);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [h, s] = await Promise.all([
-                getHost(projectID, hostID),
-                listHostSessions(projectID, hostID),
-            ]);
-            setHost(h);
-            setSessions(s);
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-        // Fire sysinfo refresh in parallel but don't block the UI
-        // on a potentially-offline agent.
-        void refreshSysInfo();
-    }, [projectID, hostID, refreshSysInfo]);
+    const refreshSysInfo = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
+    }, [queryClient, projectID, hostID]);
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
-
-    const refetchSessions = useCallback(async () => {
-        try {
-            setSessions(await listHostSessions(projectID, hostID));
-        } catch {
-            // ignored; the next explicit refresh will recover
-        }
-    }, [projectID, hostID]);
+    const refetchSessions = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
+    }, [queryClient, projectID, hostID]);
 
     useEffect(() => {
         const matches = (p: SessionEventPayload) =>

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Boxes,
     HelpCircle,
@@ -21,6 +22,7 @@ import Toolbar from "../../components/Toolbar";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, space } from "../../layout/theme";
 import { Host, listHosts } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 import { fromNow, isOnline } from "../../lib/time";
 
 import { Button } from "@/components/ui/button";
@@ -43,27 +45,25 @@ import {
 export default function HostsPanel() {
     const project = useCurrentProject();
     const navigate = useNavigate();
-    const [hosts, setHosts] = useState<Host[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [query, setQuery] = useState("");
+    const {
+        data: hosts = null,
+        error,
+        isFetching: loading,
+    } = useQuery({
+        queryKey: qk.hosts(project.id),
+        queryFn: () => listHosts(project.id),
+    });
+    const refresh = () =>
+        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            setHosts(await listHosts(project.id));
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-            toast.error(`load hosts: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [project.id]);
-
+    // Surface fetch errors as a toast on the way in (the panel
+    // continues to render the previous data underneath). Replicates
+    // the previous setError + toast.error block.
     useEffect(() => {
-        refresh();
-    }, [refresh]);
+        if (error) toast.error(`load hosts: ${humanizeError(error)}`);
+    }, [error]);
 
     const filtered = useMemo(() => {
         if (!hosts) return null;
@@ -118,7 +118,7 @@ export default function HostsPanel() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {hosts && hosts.length === 0 ? (

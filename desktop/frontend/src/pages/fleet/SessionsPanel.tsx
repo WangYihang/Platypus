@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../lib/humanizeError";
@@ -17,6 +18,7 @@ import {
     listHosts,
     listProjectSessions,
 } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 import { fromNow } from "../../lib/time";
 
 import { Input } from "@/components/ui/input";
@@ -39,37 +41,37 @@ type FilterMode = "live" | "all";
 export default function SessionsPanel() {
     const project = useCurrentProject();
     const navigate = useNavigate();
-    const [sessions, setSessions] = useState<SessionRow[] | null>(null);
-    const [hostsByID, setHostsByID] = useState<Record<string, Host>>({});
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [filter, setFilter] = useState<FilterMode>("live");
     const [query, setQuery] = useState("");
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const opts = filter === "live" ? { live: true } : {};
-            const [s, h] = await Promise.all([
-                listProjectSessions(project.id, opts),
-                listHosts(project.id),
-            ]);
-            setSessions(s);
-            const hMap: Record<string, Host> = {};
-            for (const x of h) hMap[x.id] = x;
-            setHostsByID(hMap);
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-            toast.error(`load sessions: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [project.id, filter]);
+    const sessionsKey = ["projectSessions", project.id, { live: filter === "live" }] as const;
+    const sessionsQuery = useQuery({
+        queryKey: sessionsKey,
+        queryFn: () =>
+            listProjectSessions(project.id, filter === "live" ? { live: true } : {}),
+    });
+    const hostsQuery = useQuery({
+        queryKey: qk.hosts(project.id),
+        queryFn: () => listHosts(project.id),
+    });
+
+    const sessions: SessionRow[] | null = sessionsQuery.data ?? null;
+    const hostsByID = useMemo(() => {
+        const m: Record<string, Host> = {};
+        for (const x of hostsQuery.data ?? []) m[x.id] = x;
+        return m;
+    }, [hostsQuery.data]);
+    const error = sessionsQuery.error ?? hostsQuery.error ?? null;
+    const loading = sessionsQuery.isFetching || hostsQuery.isFetching;
+    const refresh = () => {
+        queryClient.invalidateQueries({ queryKey: sessionsKey });
+        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+    };
 
     useEffect(() => {
-        refresh();
-    }, [refresh]);
+        if (error) toast.error(`load sessions: ${humanizeError(error)}`);
+    }, [error]);
 
     const filtered = useMemo(() => {
         if (!sessions) return null;
@@ -146,7 +148,7 @@ export default function SessionsPanel() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {!sessions && (

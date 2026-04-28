@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, Plus, Trash2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -188,31 +189,30 @@ function InstallPanel({
     projectID: string;
     projectSlug: string;
 }) {
-    const [rows, setRows] = useState<InstallArtifactListItem[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [filter, setFilter] = useState<"active" | "all">("active");
     const [issueOpen, setIssueOpen] = useState(false);
     const [lastIssued, setLastIssued] = useState<IssueInstallResponse | null>(null);
     const [pendingRevoke, setPendingRevoke] = useState<InstallArtifactListItem | null>(null);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await listInstallArtifacts(projectID, filter === "all");
-            setRows(data);
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-            toast.error(`Couldn't load install commands: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [projectID, filter]);
+    const installArtifactsKey = ["installArtifacts", projectID, filter] as const;
+    const {
+        data: rows = null,
+        error,
+        isFetching: loading,
+    } = useQuery({
+        queryKey: installArtifactsKey,
+        queryFn: () => listInstallArtifacts(projectID, filter === "all"),
+    });
+    const refresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: installArtifactsKey });
+    }, [queryClient, installArtifactsKey]);
 
     useEffect(() => {
-        refresh();
-    }, [refresh]);
+        if (error) {
+            toast.error(`Couldn't load install commands: ${humanizeError(error)}`);
+        }
+    }, [error]);
 
     async function confirmRevoke() {
         if (!pendingRevoke) return;
@@ -265,7 +265,7 @@ function InstallPanel({
                         fontSize: 13,
                     }}
                 >
-                    {error}
+                    {String(error)}
                 </div>
             )}
             <Card padding={0}>
@@ -731,31 +731,30 @@ function IssuedInstallDialog({
 // --- PAT tokens tab ---------------------------------------------------
 
 function PATPanel({ projectID }: { projectID: string }) {
-    const [rows, setRows] = useState<EnrollmentTokenListItem[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [filter, setFilter] = useState<"active" | "all">("active");
     const [issueOpen, setIssueOpen] = useState(false);
     const [lastIssued, setLastIssued] = useState<IssueEnrollmentTokenResponse | null>(null);
     const [pendingRevoke, setPendingRevoke] = useState<EnrollmentTokenListItem | null>(null);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await listEnrollmentTokens(projectID, filter === "all");
-            setRows(data);
-            setError(null);
-        } catch (e) {
-            setError(humanizeError(e));
-            toast.error(`Couldn't load enrollment tokens: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [projectID, filter]);
+    const enrollmentTokensKey = ["enrollmentTokens", projectID, filter] as const;
+    const {
+        data: rows = null,
+        error,
+        isFetching: loading,
+    } = useQuery({
+        queryKey: enrollmentTokensKey,
+        queryFn: () => listEnrollmentTokens(projectID, filter === "all"),
+    });
+    const refresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: enrollmentTokensKey });
+    }, [queryClient, enrollmentTokensKey]);
 
     useEffect(() => {
-        refresh();
-    }, [refresh]);
+        if (error) {
+            toast.error(`Couldn't load enrollment tokens: ${humanizeError(error)}`);
+        }
+    }, [error]);
 
     async function confirmRevoke() {
         if (!pendingRevoke) return;
@@ -808,7 +807,7 @@ function PATPanel({ projectID }: { projectID: string }) {
                         fontSize: 13,
                     }}
                 >
-                    {error}
+                    {String(error)}
                 </div>
             )}
             <Card padding={0}>

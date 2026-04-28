@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Boxes,
     Cpu,
@@ -20,6 +21,7 @@ import Toolbar from "../../components/Toolbar";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, radius, space } from "../../layout/theme";
 import { Host, listHosts } from "../../lib/api";
+import { qk } from "../../lib/queryKeys";
 import { humanizeError } from "../../lib/humanizeError";
 import { fromNow, isOnline } from "../../lib/time";
 
@@ -35,27 +37,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function HostsCardPanel() {
     const project = useCurrentProject();
     const navigate = useNavigate();
-    const [hosts, setHosts] = useState<Host[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const queryClient = useQueryClient();
     const [query, setQuery] = useState("");
-
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            setHosts(await listHosts(project.id));
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-            toast.error(`load hosts: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [project.id]);
+    const {
+        data: hosts = null,
+        error,
+        isFetching: loading,
+    } = useQuery({
+        queryKey: qk.hosts(project.id),
+        queryFn: () => listHosts(project.id),
+    });
+    const refresh = () =>
+        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
 
     useEffect(() => {
-        refresh();
-    }, [refresh]);
+        if (error) toast.error(`load hosts: ${humanizeError(error)}`);
+    }, [error]);
 
     const filtered = useMemo(() => {
         if (!hosts) return null;
@@ -110,7 +107,7 @@ export default function HostsCardPanel() {
                             fontSize: 13,
                         }}
                     >
-                        {error}
+                        {String(error)}
                     </div>
                 )}
                 {hosts && hosts.length === 0 ? (

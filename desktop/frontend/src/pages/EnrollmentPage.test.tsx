@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+
+import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
 // EnrollmentPage's user-facing copy was rewritten to drop the bare "PAT"
 // acronym and the "access token" framing. The token tab now reads as
@@ -46,7 +48,7 @@ vi.mock("../lib/api", () => ({
 import EnrollmentPage from "./EnrollmentPage";
 
 function renderPage() {
-    return render(
+    return renderWithQueryClient(
         <MemoryRouter>
             <EnrollmentPage />
         </MemoryRouter>,
