@@ -456,7 +456,7 @@ export async function getServerInfo(): Promise<ServerInfo> {
 // to POST; every subsequent list / get strips it and returns just
 // metadata.
 
-export interface PATTokenListItem {
+export interface EnrollmentTokenListItem {
     token_id: string;
     description?: string;
     issued_by_user: string;
@@ -472,7 +472,7 @@ export interface PATTokenListItem {
     status: "pending" | "consumed" | "expired" | "revoked";
 }
 
-export interface IssuePATResponse {
+export interface IssueEnrollmentTokenResponse {
     token_id: string;
     token: string; // plt_<id>.<secret> — only time plaintext is exposed
     expires_at: string;
@@ -481,7 +481,7 @@ export interface IssuePATResponse {
     description?: string;
 }
 
-export interface IssuePATRequest {
+export interface IssueEnrollmentTokenRequest {
     description?: string;
     ttl_seconds?: number;
     max_uses?: number;
@@ -489,21 +489,21 @@ export interface IssuePATRequest {
     binding_host_alias?: string;
 }
 
-export async function listPATTokens(pid: string, includeInactive = false): Promise<PATTokenListItem[]> {
+export async function listEnrollmentTokens(pid: string, includeInactive = false): Promise<EnrollmentTokenListItem[]> {
     const q = includeInactive ? "?include_inactive=true" : "";
-    const j = await authJSON<{ tokens: PATTokenListItem[] }>(`/api/v1/projects/${pid}/pat-tokens${q}`);
+    const j = await authJSON<{ tokens: EnrollmentTokenListItem[] }>(`/api/v1/projects/${pid}/pat-tokens${q}`);
     return j.tokens ?? [];
 }
 
-export async function issuePAT(pid: string, req: IssuePATRequest): Promise<IssuePATResponse> {
-    return authJSON<IssuePATResponse>(`/api/v1/projects/${pid}/pat-tokens`, {
+export async function issueEnrollmentToken(pid: string, req: IssueEnrollmentTokenRequest): Promise<IssueEnrollmentTokenResponse> {
+    return authJSON<IssueEnrollmentTokenResponse>(`/api/v1/projects/${pid}/pat-tokens`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req),
     });
 }
 
-export async function revokePAT(pid: string, tokenID: string, reason?: string): Promise<void> {
+export async function revokeEnrollmentToken(pid: string, tokenID: string, reason?: string): Promise<void> {
     const q = reason ? `?reason=${encodeURIComponent(reason)}` : "";
     const r = await authFetch(`/api/v1/projects/${pid}/pat-tokens/${tokenID}${q}`, { method: "DELETE" });
     if (!r.ok && r.status !== 404) throw new Error(`${r.status}: ${await r.text()}`);

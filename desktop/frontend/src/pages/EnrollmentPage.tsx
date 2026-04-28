@@ -18,16 +18,16 @@ import {
     InstallArtifactListItem,
     InstallPlatform,
     IssueInstallResponse,
-    IssuePATResponse,
-    PATTokenListItem,
+    IssueEnrollmentTokenResponse,
+    EnrollmentTokenListItem,
     getServerInfo,
     issueInstallArtifact,
-    issuePAT,
+    issueEnrollmentToken,
     listInstallArtifacts,
     listInstallPlatforms,
-    listPATTokens,
+    listEnrollmentTokens,
     revokeInstallArtifact,
-    revokePAT,
+    revokeEnrollmentToken,
 } from "../lib/api";
 import { formatSeconds, fromNow } from "../lib/time";
 import { humanizeError } from "../lib/humanizeError";
@@ -737,18 +737,18 @@ function IssuedInstallDialog({
 // --- PAT tokens tab ---------------------------------------------------
 
 function PATPanel({ projectID }: { projectID: string }) {
-    const [rows, setRows] = useState<PATTokenListItem[] | null>(null);
+    const [rows, setRows] = useState<EnrollmentTokenListItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<"active" | "all">("active");
     const [issueOpen, setIssueOpen] = useState(false);
-    const [lastIssued, setLastIssued] = useState<IssuePATResponse | null>(null);
-    const [pendingRevoke, setPendingRevoke] = useState<PATTokenListItem | null>(null);
+    const [lastIssued, setLastIssued] = useState<IssueEnrollmentTokenResponse | null>(null);
+    const [pendingRevoke, setPendingRevoke] = useState<EnrollmentTokenListItem | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await listPATTokens(projectID, filter === "all");
+            const data = await listEnrollmentTokens(projectID, filter === "all");
             setRows(data);
             setError(null);
         } catch (e) {
@@ -768,7 +768,7 @@ function PATPanel({ projectID }: { projectID: string }) {
         const r = pendingRevoke;
         setPendingRevoke(null);
         try {
-            await revokePAT(projectID, r.token_id);
+            await revokeEnrollmentToken(projectID, r.token_id);
             toast.success("Enrollment token revoked");
             refresh();
         } catch (e) {
@@ -932,7 +932,7 @@ function IssuePATDialog({
 }: {
     open: boolean;
     onOpenChange: (o: boolean) => void;
-    onIssued: (r: IssuePATResponse) => void;
+    onIssued: (r: IssueEnrollmentTokenResponse) => void;
     projectID: string;
 }) {
     const form = useForm<PATFormValues>({
@@ -945,7 +945,7 @@ function IssuePATDialog({
 
     async function submit(v: PATFormValues) {
         try {
-            const r = await issuePAT(projectID, v);
+            const r = await issueEnrollmentToken(projectID, v);
             onIssued(r);
             form.reset({ description: "", binding_machine_id: "" });
         } catch (e) {
@@ -1099,7 +1099,7 @@ function IssuedPATDialog({
     result,
     onClose,
 }: {
-    result: IssuePATResponse | null;
+    result: IssueEnrollmentTokenResponse | null;
     onClose: () => void;
 }) {
     async function copy() {
