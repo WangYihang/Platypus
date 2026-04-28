@@ -268,9 +268,12 @@ export default function HostView({ projectID, hostID }: Props) {
     );
 
     const canOpenShell = liveCount > 0 && !!host.agent_id;
+    // Icon-only buttons here so the page header doesn't grow with the
+    // host alias — the tooltip + aria-label keep the action discoverable
+    // without bloating the chrome.
     const openTerminalAction = (
         <Button
-            size="sm"
+            size="icon-sm"
             variant="outline"
             disabled={!canOpenShell}
             onClick={() => {
@@ -283,10 +286,10 @@ export default function HostView({ projectID, hostID }: Props) {
                     label: primary,
                 });
             }}
+            aria-label="Open terminal"
             title={canOpenShell ? "Open a shell in the bottom panel" : "No live agent session"}
         >
             <TerminalSquare className="size-3.5" />
-            Open terminal
         </Button>
     );
 
@@ -311,13 +314,19 @@ export default function HostView({ projectID, hostID }: Props) {
                 actions={
                     <span style={{ display: "inline-flex", gap: space[2] }}>
                         {openTerminalAction}
-                        <Button size="sm" variant="outline" disabled={loading} onClick={refresh}>
+                        <Button
+                            size="icon-sm"
+                            variant="outline"
+                            disabled={loading}
+                            onClick={refresh}
+                            aria-label="Refresh"
+                            title="Refresh host"
+                        >
                             {loading ? (
                                 <Loader2 className="size-3.5 animate-spin" />
                             ) : (
                                 <RotateCw className="size-3.5" />
                             )}
-                            Refresh
                         </Button>
                     </span>
                 }

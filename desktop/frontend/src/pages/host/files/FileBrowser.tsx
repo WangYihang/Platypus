@@ -15,6 +15,8 @@ import {
     Lock,
     MoreHorizontal,
     RefreshCw,
+    Rows2,
+    Rows3,
     Trash2,
     Upload,
     X,
@@ -46,7 +48,7 @@ import {
     WriteFile,
 } from "@wails/go/app/App";
 import type { FileEntryDTO } from "@wails/go/app/App";
-import { basename } from "../../../lib/format";
+import { basename, humanize } from "../../../lib/format";
 
 import FileTable from "./FileTable";
 import FileGrid from "./FileGrid";
@@ -69,6 +71,7 @@ import {
 } from "./dialogs";
 import { joinPath, parentPath, splitCrumbs } from "./paths";
 import { shouldSkipBrowserShortcut } from "./keymap";
+import { useDensity } from "./useDensity";
 import { useDirectory } from "./useDirectory";
 import { useDragDrop } from "./useDragDrop";
 import { usePreviewPane } from "./usePreviewPane";
@@ -152,6 +155,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [bulkDownloading, setBulkDownloading] = useState(false);
     const [showArchive, setShowArchive] = useState(false);
     const [viewMode, setViewMode] = useViewMode();
+    const [density, setDensity] = useDensity();
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -496,32 +500,39 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     return (
         <DndContext sensors={sensors}>
             <div className="flex h-full min-h-[520px] flex-col gap-3">
-                {/* Quick-jump chip row, sits above the breadcrumb so
-                    teleporting to a common root is one click away. */}
-                <QuickPaths host={host} onSelect={dir.cd} />
-                {/* Breadcrumb */}
-                <div className="flex items-center gap-1 overflow-x-auto">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={goUp}
-                        disabled={dir.path === "/"}
-                        title="Up"
-                    >
-                        <ChevronUp className="size-3.5" />
-                    </Button>
-                    {crumbs.map((c, idx) => (
-                        <div key={c.path} className="flex items-center gap-1">
-                            {idx > 0 && <span className="text-muted-foreground">/</span>}
-                            <CrumbDroppable
-                                path={c.path}
-                                label={c.label}
-                                onClick={() => dir.cd(c.path)}
-                                isLast={idx === crumbs.length - 1}
-                            />
-                        </div>
-                    ))}
+                {/* Single chrome row: ↑ + breadcrumb on the left,
+                    quick-paths chips floated to the right. Saves a
+                    full row vs. the previous two-stack layout (the
+                    five chrome rows above the file list were a
+                    common complaint). */}
+                <div
+                    data-testid="files-breadcrumb-row"
+                    className="flex items-center gap-2"
+                >
+                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={goUp}
+                            disabled={dir.path === "/"}
+                            title="Up"
+                        >
+                            <ChevronUp className="size-3.5" />
+                        </Button>
+                        {crumbs.map((c, idx) => (
+                            <div key={c.path} className="flex items-center gap-1">
+                                {idx > 0 && <span className="text-muted-foreground">/</span>}
+                                <CrumbDroppable
+                                    path={c.path}
+                                    label={c.label}
+                                    onClick={() => dir.cd(c.path)}
+                                    isLast={idx === crumbs.length - 1}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <QuickPaths host={host} onSelect={dir.cd} />
                 </div>
 
                 {/* Toolbar */}
@@ -633,35 +644,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>
-                            {selectedEntries.length > 0 && `${selectedEntries.length} selected · `}
-                            {dir.entries.length} entries
-                            {!dir.eof && ` (showing first ${dir.entries.length} of ${dir.total})`}
-                        </span>
-                        <div className="flex items-center rounded-md border">
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "list" ? "secondary" : "ghost"}
-                                aria-label="List view"
-                                aria-pressed={viewMode === "list"}
-                                onClick={() => setViewMode("list")}
-                            >
-                                <LayoutList className="size-3.5" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                                aria-label="Grid view"
-                                aria-pressed={viewMode === "grid"}
-                                onClick={() => setViewMode("grid")}
-                            >
-                                <LayoutGrid className="size-3.5" />
-                            </Button>
-                        </div>
-                    </div>
                 </div>
 
                 {/* Browser + editor split */}
@@ -707,6 +689,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                     setSorting={setSorting}
                                     onInternalMove={handleInternalMove}
                                     wrapRow={wrapRowWithContextMenu}
+                                    density={density}
                                 />
                             )}
                         </div>
@@ -817,6 +800,74 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             </div>
                         </div>
                     )}
+                </div>
+
+                {/* Bottom status strip — Finder-style. Frees a row up
+                    top by moving "X items / Y selected" + the view-
+                    mode + density toggles to a thin footer that sits
+                    flush with the file pane. */}
+                <div
+                    data-testid="files-status-strip"
+                    className="flex items-center justify-between border-t pt-1 text-xs text-muted-foreground"
+                >
+                    <span>
+                        {dir.entries.length} item
+                        {dir.entries.length === 1 ? "" : "s"}
+                        {selectedEntries.length > 0 &&
+                            ` · ${selectedEntries.length} selected · ${humanize(
+                                selectedEntries.reduce((acc, e) => acc + (e.size || 0), 0),
+                            )}`}
+                        {!dir.eof &&
+                            ` · showing first ${dir.entries.length} of ${dir.total}`}
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded-md border">
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={density === "compact" ? "secondary" : "ghost"}
+                                aria-label="Compact density"
+                                aria-pressed={density === "compact"}
+                                onClick={() => setDensity("compact")}
+                                title="Compact rows"
+                            >
+                                <Rows3 className="size-3.5" />
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={density === "comfortable" ? "secondary" : "ghost"}
+                                aria-label="Comfortable density"
+                                aria-pressed={density === "comfortable"}
+                                onClick={() => setDensity("comfortable")}
+                                title="Comfortable rows"
+                            >
+                                <Rows2 className="size-3.5" />
+                            </Button>
+                        </div>
+                        <div className="flex items-center rounded-md border">
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "list" ? "secondary" : "ghost"}
+                                aria-label="List view"
+                                aria-pressed={viewMode === "list"}
+                                onClick={() => setViewMode("list")}
+                            >
+                                <LayoutList className="size-3.5" />
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon-sm"
+                                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                                aria-label="Grid view"
+                                aria-pressed={viewMode === "grid"}
+                                onClick={() => setViewMode("grid")}
+                            >
+                                <LayoutGrid className="size-3.5" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

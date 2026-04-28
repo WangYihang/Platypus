@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/cn";
 
 import type { FileEntryDTO } from "../../../platform/App.web";
+import type { Density } from "./useDensity";
 import { formatMode } from "./paths";
 import { humanize } from "../../../lib/format";
 
@@ -44,6 +45,10 @@ interface Props {
     // returns a node — usually the <tr> wrapped in a primitive that
     // attaches its own listeners via Radix's `asChild` pattern.
     wrapRow?: (entry: FileEntryDTO, node: React.ReactNode) => React.ReactNode;
+    // Row-height density. "comfortable" preserves the historical
+    // padding; "compact" tightens cell padding + drops the font size
+    // a step so a denser screen fits more rows without scroll.
+    density?: Density;
 }
 
 // DraggableRow wires dnd-kit's drag source to a single entry row. We
@@ -108,6 +113,7 @@ export default function FileTable({
     setSorting,
     onInternalMove,
     wrapRow,
+    density = "comfortable",
 }: Props) {
     useDndMonitor({
         onDragEnd(event) {
@@ -208,7 +214,13 @@ export default function FileTable({
     }
 
     return (
-        <Table>
+        <Table
+            data-density={density}
+            className={cn(
+                density === "compact" &&
+                    "[&_td]:py-1 [&_td]:text-xs [&_th]:py-1 [&_th]:text-xs",
+            )}
+        >
             <TableHeader>
                 {table.getHeaderGroups().map((hg) => (
                     <TableRow key={hg.id}>
