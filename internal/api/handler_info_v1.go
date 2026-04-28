@@ -53,8 +53,9 @@ type serverInfoResponse struct {
 	StartedAtUnix int64  `json:"started_at_unix"`
 
 	// Runtime stats — sampled per request.
-	Goroutines    int    `json:"goroutines"`
-	MemAllocBytes uint64 `json:"mem_alloc_bytes"`
+	Goroutines    int     `json:"goroutines"`
+	MemAllocBytes uint64  `json:"mem_alloc_bytes"`
+	CPUPercent    float64 `json:"cpu_percent"`
 
 	// Network identity.
 	PublicAddr string `json:"public_addr"`
@@ -104,6 +105,7 @@ func GetServerInfoV1(c *gin.Context) {
 
 		Goroutines:    runtime.NumGoroutine(),
 		MemAllocBytes: ms.Alloc,
+		CPUPercent:    CPUPercent(),
 
 		PublicAddr: PublicAddr,
 

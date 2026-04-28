@@ -57,6 +57,7 @@ export default function StatusBar() {
     const [lastError, setLastError] = useState<string | null>(null);
     const [memHistory, setMemHistory] = useState<number[]>([]);
     const [grtnHistory, setGrtnHistory] = useState<number[]>([]);
+    const [cpuHistory, setCpuHistory] = useState<number[]>([]);
     const timerRef = useRef<number | null>(null);
 
     // Keep local session / active-profile state in sync with login,
@@ -80,6 +81,7 @@ export default function StatusBar() {
             setOnline("offline");
             setMemHistory([]);
             setGrtnHistory([]);
+            setCpuHistory([]);
             return;
         }
 
@@ -99,6 +101,9 @@ export default function StatusBar() {
                 }
                 if (fresh.goroutines !== undefined) {
                     setGrtnHistory((prev) => pushBounded(prev, fresh.goroutines!));
+                }
+                if (fresh.cpu_percent !== undefined) {
+                    setCpuHistory((prev) => pushBounded(prev, fresh.cpu_percent!));
                 }
             } catch (err) {
                 if (cancelled) return;
@@ -299,7 +304,12 @@ export default function StatusBar() {
                 <TerminalsPill />
                 <TransfersPill />
                 <TransferThroughputPill />
-                <RuntimePills info={info} memHistory={memHistory} grtnHistory={grtnHistory} />
+                <RuntimePills
+                    info={info}
+                    memHistory={memHistory}
+                    grtnHistory={grtnHistory}
+                    cpuHistory={cpuHistory}
+                />
                 <CountPills info={info} />
                 <VersionLinks info={info} />
             </div>
@@ -323,10 +333,12 @@ function RuntimePills({
     info,
     memHistory,
     grtnHistory,
+    cpuHistory,
 }: {
     info: ServerInfo | null;
     memHistory: number[];
     grtnHistory: number[];
+    cpuHistory: number[];
 }) {
     // Uptime needs Date.now(), which would change every tick — we
     // recompute on each render so the pill counts up live without
@@ -366,6 +378,27 @@ function RuntimePills({
                     values={grtnHistory}
                     title="goroutines, last 60 s"
                     color={palette.success}
+                />
+            </Pill>
+            <Sep />
+            {/* Process CPU% — gopsutil's per-core normalised value
+                (matches *nix `top`). Values >100% mean multi-core
+                busy; the title spells that out so the chip doesn't
+                read as a bug. */}
+            <Pill
+                testid="status-bar-cpu"
+                title="Process CPU% — per-core normalised (>100% means multi-core busy across cores). Last 60 s."
+            >
+                <span style={{ color: palette.textMuted }}>cpu</span>
+                <Mono size={11} color={palette.textPrimary}>
+                    {info?.cpu_percent !== undefined
+                        ? `${Math.round(info.cpu_percent)}%`
+                        : "—"}
+                </Mono>
+                <Sparkline
+                    values={cpuHistory}
+                    title="cpu%, last 60 s"
+                    color={palette.warning}
                 />
             </Pill>
             <Sep />

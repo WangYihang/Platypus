@@ -428,6 +428,10 @@ export interface ServerInfo {
     // Runtime stats — sampled per request.
     goroutines?: number;
     mem_alloc_bytes?: number;
+    /** Process CPU%, per-core normalised by gopsutil — values
+     *  above 100 mean multi-core busy. The status bar tooltip
+     *  explains that so it doesn't read as a bug. */
+    cpu_percent?: number;
 
     // Network identity.
     public_addr: string;

@@ -536,6 +536,19 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 		return db.Counts(ctx, onlineWindow)
 	}
 
+	// Sample the server process's CPU% in the background so the
+	// /api/v1/info handler doesn't pay the gopsutil-blocks-1s tax
+	// on every poll. Uses the same ctx as the rest of main so it
+	// stops cleanly on shutdown. NewCPUSampler can technically
+	// fail; we degrade by leaving api.CPUPercent at its no-op
+	// default rather than aborting startup over a status-bar field.
+	if cpu, err := api.NewCPUSampler(); err != nil {
+		log.Warn("server.cpu_sampler_init_failed: %v", err)
+	} else {
+		cpu.Start(ctx)
+		api.CPUPercent = cpu.Percent
+	}
+
 	// Bootstrap-secret handling. The secret is only useful while the
 	// users table is empty (Bootstrap is the one-shot first-admin flow);
 	// after that it's dead weight. Two failure modes the previous code
