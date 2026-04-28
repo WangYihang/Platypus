@@ -209,7 +209,16 @@ function ShellChrome({
                     </ResizablePanel>
                     <ResizableHandle />
                     <ResizablePanel id="main" minSize="40%" className="relative">
-                        <div className="absolute inset-0">
+                        {/* The absolute-inset wrapper needs `flex flex-col`
+                            so MainColumn's outer div (which has `flex: 1`)
+                            actually grows to fill the panel. Without
+                            display:flex on this wrapper, MainColumn lays
+                            out as a normal block at `height: auto` and
+                            collapses to 0 — the inner vertical
+                            ResizablePanelGroup then has nothing to
+                            distribute, so `<main>` renders empty and the
+                            entire content area looks blank. */}
+                        <div className="absolute inset-0 flex flex-col">
                             <MainColumn>{children}</MainColumn>
                         </div>
                     </ResizablePanel>
