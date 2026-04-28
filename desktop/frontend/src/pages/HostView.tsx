@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import AutoGrid from "../components/AutoGrid";
 import Card from "../components/Card";
 import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
@@ -458,14 +459,11 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[4], maxWidth: 1100 }}>
             <InfoKPIStrip host={host} sysInfo={sysInfo} />
-            <div
+            <AutoGrid
+                minSize={380}
+                gap={3}
+                style={{ alignItems: "start" }}
                 data-testid="host-info-detail-grid"
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",
-                    gap: space[3],
-                    alignItems: "start",
-                }}
             >
             <Card
                 header={
@@ -744,7 +742,7 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                     </Table>
                 </Card>
             )}
-            </div>
+            </AutoGrid>
         </div>
     );
 }
@@ -854,14 +852,7 @@ function InfoKPIStrip({
     if (tiles.length === 0) return null;
 
     return (
-        <div
-            data-testid="host-info-kpi-strip"
-            style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                gap: space[3],
-            }}
-        >
+        <AutoGrid minSize={140} gap={3} data-testid="host-info-kpi-strip">
             {tiles.map((t) => (
                 <MetricCard
                     key={t.key}
@@ -871,7 +862,7 @@ function InfoKPIStrip({
                     accent={t.accent}
                 />
             ))}
-        </div>
+        </AutoGrid>
     );
 }
 

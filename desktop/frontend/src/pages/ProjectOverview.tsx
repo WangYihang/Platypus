@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 import ActivityFeed, { ActivityItem } from "../components/ActivityFeed";
+import AutoGrid from "../components/AutoGrid";
 import BarChartCard, { BarPoint } from "../components/charts/BarChartCard";
 import Card from "../components/Card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -162,14 +163,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                     <ProjectOverviewSkeleton />
                 ) : (
                 <>
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                        gap: space[3],
-                        marginBottom: space[6],
-                    }}
-                >
+                <AutoGrid minSize={220} gap={3} style={{ marginBottom: space[6] }}>
                     <MetricCard label="Hosts" value={hosts?.length ?? "—"} />
                     <MetricCard
                         label="Online now"
@@ -190,7 +184,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                         value={liveSessionsCount}
                         accent={liveSessionsCount > 0 ? "success" : "default"}
                     />
-                </div>
+                </AutoGrid>
 
                 <div
                     style={{
@@ -249,13 +243,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 </div>
 
                 <Card header="Quick actions">
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                            gap: space[3],
-                        }}
-                    >
+                    <AutoGrid minSize={240} gap={3}>
                         <QuickAction
                             icon={<Monitor className="size-4" />}
                             title="Open Fleet"
@@ -270,7 +258,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                                 onClick={onOpenMembers}
                             />
                         )}
-                    </div>
+                    </AutoGrid>
                 </Card>
                 </>
                 )}
@@ -287,14 +275,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
 function ProjectOverviewSkeleton() {
     return (
         <>
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: space[3],
-                    marginBottom: space[6],
-                }}
-            >
+            <AutoGrid minSize={220} gap={3} style={{ marginBottom: space[6] }}>
                 {Array.from({ length: 3 }).map((_, i) => (
                     <Card key={i} padding={5} data-testid="overview-skeleton">
                         <div style={{ display: "flex", flexDirection: "column", gap: space[2] }}>
@@ -304,7 +285,7 @@ function ProjectOverviewSkeleton() {
                         </div>
                     </Card>
                 ))}
-            </div>
+            </AutoGrid>
             <div
                 style={{
                     display: "grid",
