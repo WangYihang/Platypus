@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
-import PageHeader from "../components/PageHeader";
+import PageShell from "../components/PageShell";
 import RefreshButton from "../components/RefreshButton";
 import RoleHelpIcon from "../components/RoleHelpIcon";
 import StatusPill from "../components/StatusPill";
@@ -181,23 +181,23 @@ export default function ProjectMembers({ project }: Props) {
     const availableCandidates = (candidates ?? []).filter((u) => !existingIds.has(u.id));
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title={`${project.name} · members`}
-                subtitle={`${members?.length ?? 0} member(s)`}
-                actions={
-                    <>
-                        <RefreshButton loading={loading} onClick={refresh} />
-                        {canAdd && (
-                            <Button size="sm" onClick={openAddDialog}>
-                                <Plus className="size-3.5" />
-                                Add member
-                            </Button>
-                        )}
-                    </>
-                }
-            />
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+        <>
+        <PageShell
+            title={`${project.name} · members`}
+            subtitle={`${members?.length ?? 0} member(s)`}
+            actions={
+                <>
+                    <RefreshButton loading={loading} onClick={refresh} />
+                    {canAdd && (
+                        <Button size="sm" onClick={openAddDialog}>
+                            <Plus className="size-3.5" />
+                            Add member
+                        </Button>
+                    )}
+                </>
+            }
+            bodyPadding={8}
+        >
                 {error && (
                     <div
                         style={{
@@ -295,7 +295,7 @@ export default function ProjectMembers({ project }: Props) {
                         </Table>
                     </Card>
                 )}
-            </div>
+        </PageShell>
 
             {/* Add member */}
             <Dialog
@@ -464,6 +464,6 @@ export default function ProjectMembers({ project }: Props) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 }
