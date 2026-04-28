@@ -114,6 +114,17 @@ func (n *Node) currentBrowseInterval() time.Duration {
 }
 
 func (n *Node) doBrowse(ctx context.Context) {
+	// Per-cycle context so zeroconf's internal goroutines (mainloop,
+	// periodicQuery, two recv pumps for ipv4/ipv6) shut down at the
+	// end of every browse window. Without this they ride the parent
+	// ctx — which lives for the entire mesh node — and every cycle
+	// (every 30s by default) leaks ~4 goroutines plus the multicast
+	// socket handlers behind them. Over a day that turns into
+	// thousands of stuck goroutines, which was the symptom we were
+	// chasing.
+	browseCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		n.logger.Error("mdns resolver", slog.String("error", err.Error()))
@@ -121,12 +132,10 @@ func (n *Node) doBrowse(ctx context.Context) {
 	}
 
 	entries := make(chan *zeroconf.ServiceEntry)
-	go func() {
-		err := resolver.Browse(ctx, mdnsService, mdnsDomain, entries)
-		if err != nil {
-			n.logger.Error("mdns browse", slog.String("error", err.Error()))
-		}
-	}()
+	if err := resolver.Browse(browseCtx, mdnsService, mdnsDomain, entries); err != nil {
+		n.logger.Error("mdns browse", slog.String("error", err.Error()))
+		return
+	}
 
 	// Give it some time to collect results (mDNS is somewhat asynchronous)
 	timeout := time.After(5 * time.Second)
@@ -134,16 +143,24 @@ func (n *Node) doBrowse(ctx context.Context) {
 loop:
 	for {
 		select {
-		case entry := <-entries:
-			if entry == nil {
-				break loop
+		case entry, ok := <-entries:
+			if !ok {
+				return
 			}
 			n.handleDiscoveryEntry(entry)
 		case <-timeout:
 			break loop
 		case <-ctx.Done():
-			return
+			break loop
 		}
+	}
+
+	// Cancel zeroconf so its mainloop closes `entries` and tears down
+	// the periodicQuery + recv goroutines. Drain `entries` until it
+	// closes — mainloop may be blocked on a final send that won't
+	// observe ctx.Done() until we read.
+	cancel()
+	for range entries {
 	}
 }
 
