@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { ReadFile } from "@wails/go/app/App";
+import { fsReadPreviewURL } from "@/lib/fs-preview";
 import { humanize } from "../../../lib/format";
 
 interface Props {
@@ -19,11 +20,14 @@ function bytesFromWailsRead(raw: unknown): Uint8Array {
     throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
 }
 
-// MediaViewer fetches the bytes via the existing ReadFile pipe, builds
-// a blob URL, and hands it to the native <video> / <audio> element.
-// Whole-file load is fine for the file sizes the operator typically
-// browses; a follow-up could move to a Range-supporting endpoint for
-// streaming if multi-GB media becomes a regular case.
+// MediaViewer renders <video> / <audio> for video and audio files. In
+// web mode it mints a short-lived preview URL and hands it to the
+// native element so the browser can issue Range requests directly —
+// scrubbing past the first KB doesn't force a full re-download. In
+// desktop / non-web mode (no preview-token endpoint over Wails IPC)
+// it falls back to the legacy "load all bytes via ReadFile + Blob URL"
+// path; that's still acceptable because desktop file access is local
+// and a full read is cheap.
 export default function MediaViewer({
     projectID,
     sessionHash,
@@ -37,9 +41,29 @@ export default function MediaViewer({
 
     useEffect(() => {
         let cancelled = false;
-        let createdURL: string | null = null;
         setUrl(null);
         setError(null);
+
+        if (import.meta.env.MODE === "web") {
+            // Web path: mint a signed URL and let the browser stream
+            // it natively. No bytes flow through React's render loop.
+            (async () => {
+                try {
+                    const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
+                    if (!cancelled) setUrl(previewURL);
+                } catch (err) {
+                    if (!cancelled) {
+                        setError(err instanceof Error ? err.message : String(err));
+                    }
+                }
+            })();
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        // Desktop fallback: existing blob-URL path.
+        let createdURL: string | null = null;
         (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
@@ -88,9 +112,23 @@ export default function MediaViewer({
             </div>
             <div className="flex flex-1 items-center justify-center overflow-auto bg-[color:var(--muted)] p-4">
                 {kind === "video" ? (
-                    <video src={url} controls className="max-h-full max-w-full" />
+                    // preload="metadata" pulls just the head/MOOV so
+                    // duration + dimensions render without
+                    // downloading the whole payload — the Range
+                    // pipeline does the rest as the user seeks.
+                    <video
+                        src={url}
+                        controls
+                        preload="metadata"
+                        className="max-h-full max-w-full"
+                    />
                 ) : (
-                    <audio src={url} controls className="w-full max-w-xl" />
+                    <audio
+                        src={url}
+                        controls
+                        preload="metadata"
+                        className="w-full max-w-xl"
+                    />
                 )}
             </div>
         </div>

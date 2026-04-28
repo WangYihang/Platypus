@@ -73,6 +73,26 @@ describe("<ImageViewer>", () => {
         expect(createdURLs[0]).toMatch(/^blob:test\/0-/);
     });
 
+    it("refuses to inline images larger than the size limit", async () => {
+        // 17 MiB > the 16 MiB image guard. The viewer must NOT call
+        // ReadFile at all (a multi-GB image would take minutes to
+        // base64 through React state) and must surface a "too large
+        // to preview" placeholder so the user knows to use the
+        // toolbar's Download action instead.
+        render(
+            <ImageViewer
+                projectID="p"
+                sessionHash="s"
+                path="/tmp/huge.png"
+                size={17 * 1024 * 1024}
+                mime="image/png"
+            />,
+        );
+
+        expect(await screen.findByText(/too large/i)).toBeInTheDocument();
+        expect(ReadFile).not.toHaveBeenCalled();
+    });
+
     it("shows a load error when ReadFile rejects", async () => {
         vi.mocked(ReadFile).mockRejectedValueOnce(new Error("boom"));
 

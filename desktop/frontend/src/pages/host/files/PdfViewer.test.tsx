@@ -5,6 +5,10 @@ vi.mock("@wails/go/app/App", () => ({
     ReadFile: vi.fn(),
 }));
 
+vi.mock("@/lib/fs-preview", () => ({
+    fsReadPreviewURL: vi.fn(),
+}));
+
 // Stub react-pdf so the test never has to touch pdfjs / canvas. The mock
 // renders a page-N marker instead of the real glyphs but exposes the
 // same `numPages` plumbing PdfViewer relies on. Captures every `file`
@@ -41,6 +45,7 @@ vi.mock("react-pdf", () => {
 });
 
 import { ReadFile } from "@wails/go/app/App";
+import { fsReadPreviewURL } from "@/lib/fs-preview";
 import PdfViewer from "./PdfViewer";
 
 const PDF_BYTES = [37, 80, 68, 70]; // "%PDF" — payload doesn't matter, the mock ignores it.
@@ -53,6 +58,8 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.mocked(ReadFile).mockReset();
+    vi.mocked(fsReadPreviewURL).mockReset();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
@@ -162,6 +169,64 @@ describe("<PdfViewer>", () => {
 
         await waitFor(() => {
             expect(screen.getByText(/nope/i)).toBeInTheDocument();
+        });
+    });
+});
+
+// In web mode pdf.js is fed a server-minted preview URL instead of a
+// local Blob URL — that lets pdfjs do its own Range fetches against
+// /fs/read for lazy-page rendering, so opening a 50 MB PDF doesn't
+// download the whole file before the first page paints.
+describe("<PdfViewer> (web / preview-URL path)", () => {
+    beforeEach(() => {
+        vi.stubEnv("MODE", "web");
+    });
+
+    it("hands <Document> the preview URL and skips ReadFile", async () => {
+        vi.mocked(fsReadPreviewURL).mockResolvedValueOnce(
+            "https://platypus.example/api/v1/projects/p/agents/a/fs/read?path=%2Ftmp%2Fspec.pdf&exp=1&preview_token=t",
+        );
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="a"
+                path="/tmp/spec.pdf"
+                size={9001}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId("pdf-page-1")).toBeInTheDocument();
+        });
+
+        const seen = fileProps.filter((f) => f != null);
+        expect(seen.length).toBeGreaterThan(0);
+        for (const f of seen) {
+            // Preview URL is an absolute https URL, not a blob:.
+            expect(typeof f).toBe("string");
+            expect(f as string).toMatch(/^https:/);
+            expect(f as string).toContain("preview_token=");
+        }
+
+        expect(ReadFile).not.toHaveBeenCalled();
+        expect(fsReadPreviewURL).toHaveBeenCalledWith("p", "a", "/tmp/spec.pdf");
+    });
+
+    it("surfaces a mint failure as a load error", async () => {
+        vi.mocked(fsReadPreviewURL).mockRejectedValueOnce(new Error("mint failed"));
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="a"
+                path="/tmp/spec.pdf"
+                size={4}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/mint failed/i)).toBeInTheDocument();
         });
     });
 });

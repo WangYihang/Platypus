@@ -66,6 +66,25 @@ describe("<MarkdownViewer>", () => {
         expect((boxes[1] as HTMLInputElement).checked).toBe(false);
     });
 
+    it("refuses to inline files larger than the size limit", async () => {
+        // 5 MiB > the 4 MiB markdown guard. Loading multi-MB
+        // markdown into a single React state slot melts the parser
+        // and the rendered DOM, so the viewer falls back to a
+        // placeholder; the user can still use the toolbar's
+        // Download action.
+        render(
+            <MarkdownViewer
+                projectID="p"
+                sessionHash="s"
+                path="/x/huge.md"
+                size={5 * 1024 * 1024}
+            />,
+        );
+
+        expect(await screen.findByText(/too large/i)).toBeInTheDocument();
+        expect(ReadFile).not.toHaveBeenCalled();
+    });
+
     it("surfaces ReadFile errors", async () => {
         vi.mocked(ReadFile).mockRejectedValueOnce(new Error("nope"));
 

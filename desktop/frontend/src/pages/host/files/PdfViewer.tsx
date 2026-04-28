@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ReadFile } from "@wails/go/app/App";
+import { fsReadPreviewURL } from "@/lib/fs-preview";
 import { humanize } from "../../../lib/format";
 // Absolute import (rather than "./pdfWorkerSrc") so vitest's alias
 // table can swap in a stub — vitest aliases only match against the
@@ -45,11 +46,35 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
 
     useEffect(() => {
         let cancelled = false;
-        let createdURL: string | null = null;
         setUrl(null);
         setError(null);
         setPageNumber(1);
         setNumPages(0);
+
+        if (import.meta.env.MODE === "web") {
+            // Web mode: hand pdf.js a preview URL so it can issue its
+            // own Range fetches against /fs/read for lazy-page
+            // rendering. Opening a 50 MB PDF doesn't have to download
+            // the whole file before the first page paints.
+            (async () => {
+                try {
+                    const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
+                    if (!cancelled) setUrl(previewURL);
+                } catch (err) {
+                    if (!cancelled) {
+                        setError(err instanceof Error ? err.message : String(err));
+                    }
+                }
+            })();
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        // Desktop fallback: full-file read into a stable Blob URL.
+        // pdf.js can't Range-fetch over Wails IPC anyway, so this is
+        // the same behaviour the desktop binary has always had.
+        let createdURL: string | null = null;
         (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
