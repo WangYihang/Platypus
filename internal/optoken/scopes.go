@@ -13,6 +13,7 @@ type Kind string
 
 const (
 	KindUserSession     Kind = "user_session"
+	KindPAT             Kind = "pat"
 	KindEnrollmentToken Kind = "enrollment"
 	KindInstall         Kind = "install"
 )
@@ -24,9 +25,12 @@ const (
 //
 // EnrollmentTokenPrefix keeps the historical literal "plt_" so that
 // already-deployed agents and operator scripts (which pasted the prefix
-// into config files) continue to work unchanged.
+// into config files) continue to work unchanged. PATPrefix follows the
+// GitHub `ghp_` convention so leak scanners (TruffleHog, gitleaks,
+// GitHub's own secret scanning) can match it without a custom rule.
 const (
 	UserSessionPrefix     = "pst_"
+	PATPrefix             = "pat_"
 	EnrollmentTokenPrefix = "plt_"
 	InstallPrefix         = "dl_"
 )
@@ -36,6 +40,7 @@ const (
 // constant; nothing else in this package needs touching.
 var kindByPrefix = map[string]Kind{
 	UserSessionPrefix:     KindUserSession,
+	PATPrefix:             KindPAT,
 	EnrollmentTokenPrefix: KindEnrollmentToken,
 	InstallPrefix:         KindInstall,
 }
@@ -139,6 +144,30 @@ func HasScope(granted []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// IntersectScopes returns the scopes present in both a and b,
+// preserving a's ordering. Used by the verifier to enforce that a
+// scoped token (issued at time T1 with scope set S) cannot exceed the
+// holder's role-derived scope set at time T2 if the role was
+// downgraded between T1 and T2 — the cap shrinks but never grows.
+//
+// Returns a fresh slice; callers can safely retain it.
+func IntersectScopes(a, b []string) []string {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	bset := make(map[string]struct{}, len(b))
+	for _, s := range b {
+		bset[s] = struct{}{}
+	}
+	out := make([]string, 0, len(a))
+	for _, s := range a {
+		if _, ok := bset[s]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // ParseList splits a stored scope string into individual scopes,

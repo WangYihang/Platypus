@@ -8,16 +8,16 @@ import (
 )
 
 // PrincipalKind tags the credential the request was authenticated with.
-// User-kind principals are humans (browser session today). PrincipalAATKind
-// is reserved for any non-session opaque token that lands in this slot —
-// today it's unreachable because no scoped-token surface is wired up,
-// and the constant is preserved so a follow-up rename to PrincipalPATKind
-// stays a single-token edit.
+// User-kind principals are humans (browser session today). PrincipalPATKind
+// is the scoped-opaque-token shape for any non-session bearer — today
+// it covers user-issued personal access tokens; the constant is shared
+// so future scoped-token kinds can flow through the same code path
+// without each adding their own enum value.
 type PrincipalKind int
 
 const (
 	PrincipalUser PrincipalKind = iota
-	PrincipalAATKind
+	PrincipalPATKind
 )
 
 // Principal is the authenticated subject of a request. RBAC and audit
@@ -54,8 +54,8 @@ func (p *Principal) IsGlobalAdmin() bool {
 
 // PrincipalFromVerified builds a Principal from a successful optoken
 // Verify result. user_session rows produce a PrincipalUser; any other
-// kind defaults to PrincipalAATKind so a future scoped-token wiring
-// flows through the same codepath.
+// kind (today: PAT) maps to PrincipalPATKind so the scope-checking
+// path in RBAC fires.
 func PrincipalFromVerified(v *optoken.Verified) *Principal {
 	p := &Principal{
 		UserID:    v.UserID,
@@ -69,7 +69,7 @@ func PrincipalFromVerified(v *optoken.Verified) *Principal {
 	case optoken.KindUserSession:
 		p.Kind = PrincipalUser
 	default:
-		p.Kind = PrincipalAATKind
+		p.Kind = PrincipalPATKind
 	}
 	return p
 }

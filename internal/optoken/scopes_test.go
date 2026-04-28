@@ -48,6 +48,7 @@ func TestKindForPrefix(t *testing.T) {
 		wantOK   bool
 	}{
 		{"pst_", optoken.KindUserSession, true},
+		{"pat_", optoken.KindPAT, true},
 		{"plt_", optoken.KindEnrollmentToken, true},
 		{"dl_", optoken.KindInstall, true},
 		{"foo_", "", false},
@@ -86,6 +87,7 @@ func TestDetectKind(t *testing.T) {
 	}
 	cases := []sample{
 		mk("pst_", optoken.KindUserSession),
+		mk("pat_", optoken.KindPAT),
 		mk("plt_", optoken.KindEnrollmentToken),
 		mk("dl_", optoken.KindInstall),
 	}
