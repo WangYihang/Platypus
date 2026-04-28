@@ -147,6 +147,12 @@ func recordingMetaFromContext(c *gin.Context, agentID string, start time.Time) r
 //  4. Open a recording session (no-op when recMgr is disabled).
 //  5. Run two pumps: WS → stream, stream → WS.
 func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, agentID string, recMgr *recording.Manager, recMeta recording.BeginInput) error {
+	// Child context so closeDone (below) can cancel the WS-read pump
+	// when the stream-side pump is the one that exits first. The
+	// parent ctx still propagates cancellation in the other direction.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	firstType, firstData, err := ws.Read(ctx)
 	if err != nil {
 		return err
@@ -229,10 +235,20 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 		return ws.Write(ctx, websocket.MessageBinary, buf)
 	}
 
-	// WS → stream pump.
+	// WS → stream pump. closeDone tears down both pumps: closing the
+	// stream unblocks link.ReadFrame on the main pump (so a silent
+	// browser disconnect can no longer leak the goroutine + the
+	// agent-side PTY); cancelling ctx unblocks ws.Read on this pump
+	// when the main pump is the one that exits first.
 	done := make(chan struct{})
 	var once sync.Once
-	closeDone := func() { once.Do(func() { close(done) }) }
+	closeDone := func() {
+		once.Do(func() {
+			close(done)
+			_ = stream.Close()
+			cancel()
+		})
+	}
 
 	go func() {
 		defer closeDone()
