@@ -129,12 +129,14 @@ func (w *Writer) WriteInput(data []byte) error {
 
 // WriteResize appends a resize event ("r") with the new pty
 // dimensions. cols/rows must be positive; zero-or-negative values are
-// silently dropped.
+// silently dropped. Payload format is `<cols>x<rows>` per asciicast v2
+// spec — `asciinema play` rejects space-separated dimensions with
+// "invalid size value in resize event".
 func (w *Writer) WriteResize(cols, rows uint32) error {
 	if cols == 0 || rows == 0 {
 		return nil
 	}
-	return w.writeEvent(time.Now(), "r", fmt.Sprintf("%d %d", cols, rows))
+	return w.writeEvent(time.Now(), "r", fmt.Sprintf("%dx%d", cols, rows))
 }
 
 // writeEvent serialises one event tuple. asciinema uses a top-level

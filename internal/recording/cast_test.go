@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -97,10 +96,12 @@ func TestWriter_HeaderAndEvents(t *testing.T) {
 		}
 	}
 
-	// Resize payload format: "cols rows".
+	// Resize payload must be `<cols>x<rows>` per asciicast v2 spec —
+	// space-separated dimensions trip "invalid size value in resize
+	// event" in the asciinema CLI.
 	resizeData, _ := events[2][2].(string)
-	if !strings.Contains(resizeData, "80 24") {
-		t.Errorf("resize data = %q, want '80 24'", resizeData)
+	if resizeData != "80x24" {
+		t.Errorf("resize data = %q, want '80x24'", resizeData)
 	}
 }
 
