@@ -315,6 +315,9 @@ export interface FileEntryDTO {
     isSymlink: boolean;
     symlinkTarget?: string;
     error?: string;
+    // Server-derived MIME type. Optional because older agents won't
+    // include it; viewers fall back to extension sniffing in that case.
+    mime?: string;
 }
 
 export interface ListDirResult {
@@ -326,12 +329,13 @@ export interface ListDirResult {
 // v2 wire shape for FileEntry (proto json tags from pkg/proto/v2/rpc.proto).
 // Directory / symlink type bits are encoded in the Go FileMode; we derive
 // the booleans the UI expects here so existing call sites keep working.
-interface V2FileEntry {
+export interface V2FileEntry {
     name: string;
     mode: number;
     size: number;
     mtime_unix_nano: number;
     symlink_target?: string;
+    mime?: string;
 }
 
 // Go os.FileMode type bits (see src/os/types.go in the Go source):
@@ -340,7 +344,7 @@ interface V2FileEntry {
 const GO_MODE_DIR = 1 << 31;
 const GO_MODE_SYMLINK = 1 << 27;
 
-function adaptEntry(e: V2FileEntry): FileEntryDTO {
+export function adaptEntry(e: V2FileEntry): FileEntryDTO {
     return {
         name: e.name,
         size: e.size ?? 0,
@@ -349,6 +353,7 @@ function adaptEntry(e: V2FileEntry): FileEntryDTO {
         isDir: ((e.mode ?? 0) & GO_MODE_DIR) !== 0,
         isSymlink: ((e.mode ?? 0) & GO_MODE_SYMLINK) !== 0,
         symlinkTarget: e.symlink_target,
+        mime: e.mime,
     };
 }
 

@@ -222,7 +222,7 @@ func v2RPCListDir(svc *core.AgentLinkService) gin.HandlerFunc {
 			c.String(http.StatusBadGateway, "%s", ld.Error)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"entries": ld.Entries})
+		c.JSON(http.StatusOK, gin.H{"entries": EnrichFileEntries(ld.Entries)})
 	}
 }
 
@@ -241,7 +241,7 @@ func v2RPCStat(svc *core.AgentLinkService) gin.HandlerFunc {
 			c.String(http.StatusBadGateway, "%s", s.Error)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"entry": s.Entry})
+		c.JSON(http.StatusOK, gin.H{"entry": EnrichFileEntry(s.Entry)})
 	}
 }
 
