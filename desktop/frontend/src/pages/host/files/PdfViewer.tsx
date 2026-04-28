@@ -32,14 +32,21 @@ function bytesFromWailsRead(raw: unknown): Uint8Array {
 }
 
 export default function PdfViewer({ projectID, sessionHash, path, size }: Props) {
-    const [data, setData] = useState<Uint8Array | null>(null);
+    // Blob URL, not raw bytes. Passing { data: Uint8Array } made pdfjs
+    // postMessage the underlying ArrayBuffer to its worker as a
+    // transferable, which detached the buffer; the next render then
+    // crashed with "ArrayBuffer is already detached". A Blob URL is
+    // stable under React re-renders, lets pdfjs fetch the document
+    // however it likes internally, and revokes cleanly on unmount.
+    const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [numPages, setNumPages] = useState(0);
     const [pageNumber, setPageNumber] = useState(1);
 
     useEffect(() => {
         let cancelled = false;
-        setData(null);
+        let createdURL: string | null = null;
+        setUrl(null);
         setError(null);
         setPageNumber(1);
         setNumPages(0);
@@ -47,7 +54,10 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled) return;
-                setData(bytesFromWailsRead(raw));
+                const bytes = bytesFromWailsRead(raw);
+                const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+                createdURL = URL.createObjectURL(blob);
+                setUrl(createdURL);
             } catch (err) {
                 if (cancelled) return;
                 setError(err instanceof Error ? err.message : String(err));
@@ -55,6 +65,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
         })();
         return () => {
             cancelled = true;
+            if (createdURL) URL.revokeObjectURL(createdURL);
         };
     }, [projectID, sessionHash, path]);
 
@@ -66,7 +77,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
         );
     }
 
-    if (!data) {
+    if (!url) {
         return (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
@@ -115,7 +126,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
             </div>
             <div className="flex flex-1 items-center justify-center overflow-auto bg-[color:var(--muted)] p-4">
                 <Document
-                    file={{ data }}
+                    file={url}
                     onLoadSuccess={(info) => setNumPages(info.numPages)}
                     onLoadError={(err) => setError(err instanceof Error ? err.message : String(err))}
                     loading={

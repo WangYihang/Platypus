@@ -7,7 +7,11 @@ vi.mock("@wails/go/app/App", () => ({
 
 // Stub react-pdf so the test never has to touch pdfjs / canvas. The mock
 // renders a page-N marker instead of the real glyphs but exposes the
-// same `numPages` plumbing PdfViewer relies on.
+// same `numPages` plumbing PdfViewer relies on. Captures every `file`
+// prop value so tests can assert what kind of payload PdfViewer hands
+// to the worker (regression for the ArrayBuffer-detached crash).
+const fileProps: unknown[] = [];
+
 vi.mock("react-pdf", () => {
     type DocProps = {
         file: unknown;
@@ -18,8 +22,7 @@ vi.mock("react-pdf", () => {
     type PageProps = { pageNumber: number };
 
     const Document = ({ file, onLoadSuccess, onLoadError, children }: DocProps) => {
-        // Defer to a microtask so consumers always see a render cycle
-        // between mount and onLoadSuccess. Mirrors the real library.
+        fileProps.push(file);
         Promise.resolve().then(() => {
             try {
                 if (file == null) throw new Error("missing file");
@@ -43,6 +46,7 @@ import PdfViewer from "./PdfViewer";
 const PDF_BYTES = [37, 80, 68, 70]; // "%PDF" — payload doesn't matter, the mock ignores it.
 
 beforeEach(() => {
+    fileProps.length = 0;
     vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:test/pdf");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 });
@@ -113,6 +117,35 @@ describe("<PdfViewer>", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /prev/i }));
         expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument();
+    });
+
+    it("hands <Document> a Blob URL string, not a raw Uint8Array", async () => {
+        // Regression: passing { data: Uint8Array } made pdfjs transfer
+        // the underlying ArrayBuffer to its worker; the second render
+        // then crashed with "ArrayBuffer is already detached". The
+        // contract is now a stable Blob URL string — re-renders reuse
+        // the same URL, no transferables involved.
+        vi.mocked(ReadFile).mockResolvedValueOnce(PDF_BYTES);
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="s"
+                path="/tmp/spec.pdf"
+                size={PDF_BYTES.length}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId("pdf-page-1")).toBeInTheDocument();
+        });
+
+        const seen = fileProps.filter((f) => f != null);
+        expect(seen.length).toBeGreaterThan(0);
+        for (const f of seen) {
+            expect(typeof f).toBe("string");
+            expect(f as string).toMatch(/^blob:/);
+        }
     });
 
     it("surfaces a load error when ReadFile rejects", async () => {
