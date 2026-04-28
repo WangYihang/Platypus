@@ -19,9 +19,6 @@ import {
 import {
     DndContext,
     DragEndEvent,
-    PointerSensor,
-    useSensor,
-    useSensors,
 } from "@dnd-kit/core";
 import {
     SortableContext,
@@ -61,6 +58,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 
+import { useDragSensors } from "../lib/dnd";
 import { palette, radius } from "./theme";
 import {
     ServerProfile,
@@ -108,13 +106,7 @@ export default function ServerSwitcher({ onAddServer, onManageServers }: Props) 
     const location = useLocation();
     const [open, setOpen] = useState(false);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            // 6 px activation distance keeps a plain click on the
-            // row firing as `select` instead of starting a drag.
-            activationConstraint: { distance: 6 },
-        }),
-    );
+    const sensors = useDragSensors();
 
     const handleDragEnd = (e: DragEndEvent) => {
         const { active: from, over } = e;

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
-import { DndContext, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, useDroppable } from "@dnd-kit/core";
 import type { SortingState } from "@tanstack/react-table";
 import {
     ChevronUp,
@@ -21,6 +21,7 @@ import { humanizeError } from "../../../lib/humanizeError";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import RefreshButton from "../../../components/RefreshButton";
+import { useDragSensors } from "../../../lib/dnd";
 import FileContextMenu from "./FileContextMenu";
 
 import {
@@ -334,9 +335,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     // viewer for that file's kind.
     const [editMode, setEditMode] = useState(false);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    );
+    const sensors = useDragSensors(5);
 
     // Reset selection whenever we navigate — avoids stale selections
     // carrying across directories. Preview-open / width state is
