@@ -150,6 +150,97 @@ func TestHandleFileArchiveStream_Tar(t *testing.T) {
 	}
 }
 
+// Each FileChunk frame must carry the cumulative count of source
+// (uncompressed) bytes the agent has read off disk by the time it
+// emitted that chunk. The server uses this to drive a real
+// percentage progress bar even for gzip-compressed archive bodies —
+// without it, the bar reads 0% throughout and jumps to 100% on
+// completion.
+func TestHandleFileArchiveStream_StampsSourceBytesSoFar(t *testing.T) {
+	dir := t.TempDir()
+	// 2 MiB total split across two files so we get >1 chunk and can
+	// verify both monotonic growth and the terminal frame.
+	payload := bytes.Repeat([]byte("platypus\n"), 128*1024)
+	if err := os.WriteFile(filepath.Join(dir, "a"), payload, 0o644); err != nil {
+		t.Fatalf("seed a: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b"), payload, 0o644); err != nil {
+		t.Fatalf("seed b: %v", err)
+	}
+	wantTotal := int64(2 * len(payload))
+
+	client, server := pairedProcessStreams(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- HandleFileArchiveStream(ctx, server, &v2pb.FileArchiveRequest{
+			Paths:  []string{dir},
+			Format: v2pb.ArchiveFormat_ARCHIVE_FORMAT_TAR_GZ,
+		})
+	}()
+
+	var hdr v2pb.FileArchiveResponse
+	if err := link.ReadFrame(client, &hdr); err != nil {
+		t.Fatalf("read header: %v", err)
+	}
+
+	var stamps []int64
+	var finalStamp int64
+	sawData := false
+	for {
+		var ch v2pb.FileChunk
+		if err := link.ReadFrame(client, &ch); err != nil {
+			t.Fatalf("read chunk: %v", err)
+		}
+		if len(ch.Data) > 0 {
+			sawData = true
+		}
+		stamps = append(stamps, ch.SourceBytesSoFar)
+		if ch.Eof {
+			finalStamp = ch.SourceBytesSoFar
+			break
+		}
+	}
+	if !sawData {
+		t.Fatal("no data frames before eof — agent likely returned an error")
+	}
+
+	// The terminal frame must report the full uncompressed total.
+	if finalStamp != wantTotal {
+		t.Errorf("final source_bytes_so_far = %d; want %d", finalStamp, wantTotal)
+	}
+	// At least one mid-stream stamp must be non-zero — otherwise
+	// the progress bar would only ever move on completion.
+	var midStreamMax int64
+	for _, s := range stamps[:len(stamps)-1] {
+		if s > midStreamMax {
+			midStreamMax = s
+		}
+	}
+	if midStreamMax == 0 {
+		t.Errorf("every mid-stream frame had source_bytes_so_far=0; got stamps=%v", stamps)
+	}
+	// Stamps must be monotonically non-decreasing.
+	for i := 1; i < len(stamps); i++ {
+		if stamps[i] < stamps[i-1] {
+			t.Errorf("source_bytes_so_far went backwards at chunk %d: %d → %d (full series=%v)",
+				i, stamps[i-1], stamps[i], stamps)
+			break
+		}
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("handler returned: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("handler did not return")
+	}
+}
+
 // Happy path: tar.gz round-trips and decompresses to the same
 // content.
 func TestHandleFileArchiveStream_TarGz(t *testing.T) {
