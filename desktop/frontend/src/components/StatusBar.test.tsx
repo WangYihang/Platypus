@@ -48,10 +48,16 @@ const transfersStore = {
 vi.mock("../lib/api", () => ({
     getServerInfo: () => getServerInfoMock(),
 }));
-vi.mock("../lib/transfers", () => ({
-    createTransfersStore: () => transfersStore,
-    cancelTransfer: vi.fn(),
-}));
+vi.mock("../lib/transfers", async () => {
+    const actual = await vi.importActual<typeof import("../lib/transfers")>(
+        "../lib/transfers",
+    );
+    return {
+        ...actual,
+        createTransfersStore: () => transfersStore,
+        cancelTransfer: vi.fn(),
+    };
+});
 
 vi.mock("@wails/runtime/runtime", () => ({
     EventsOn: () => {},

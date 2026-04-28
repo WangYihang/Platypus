@@ -45,6 +45,7 @@ vi.mock("../lib/transfers", async () => {
 vi.mock("../lib/auth", () => ({
     getSession: () => ({ sessionToken: "tok" }),
     onSessionChange: () => () => {},
+    onActiveChange: () => () => {},
 }));
 
 import { TransfersDrawerProvider } from "./TransfersPill";
@@ -53,12 +54,23 @@ import TransferThroughputPill from "./TransferThroughputPill";
 beforeEach(() => {
     fakeStore.rows = [];
     fakeStore.subscribers.clear();
-    vi.useFakeTimers({ now: 0 });
+    // Mock Date.now() only — leave timers real so React's
+    // useEffect / state-update cycle keeps flowing and Radix's
+    // pointer-event handlers can flush. The pill reads Date.now()
+    // directly to stamp samples, so this is sufficient to drive
+    // the rate calculation.
+    vi.spyOn(Date, "now").mockReturnValue(0);
 });
 
 afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
 });
+
+function setNow(ms: number) {
+    (Date.now as unknown as { mockReturnValue: (n: number) => void }).mockReturnValue(
+        ms,
+    );
+}
 
 function renderPill() {
     return render(
@@ -75,7 +87,7 @@ function renderPill() {
 describe("<TransferThroughputPill>", () => {
     it("renders idle when there are no running transfers", async () => {
         renderPill();
-        const pill = await screen.findByTestId("transfer-throughput-pill");
+        const pill = screen.getByTestId("transfer-throughput-pill");
         expect(pill.getAttribute("data-active")).toBe("false");
         expect(pill.textContent).toMatch(/—/);
     });
@@ -85,6 +97,7 @@ describe("<TransferThroughputPill>", () => {
         // Snapshot 1 at t=0 with 0 source bytes — establishes the
         // baseline sample.
         act(() => {
+            setNow(0);
             fakeStore.push([
                 {
                     id: "ft-1",
@@ -98,10 +111,10 @@ describe("<TransferThroughputPill>", () => {
                 },
             ]);
         });
-        // Advance fake clock by 1 s; emit snapshot 2 with 1 MiB
+        // Advance the wall clock by 1 s; emit snapshot 2 with 1 MiB
         // transferred.
         act(() => {
-            vi.setSystemTime(1000);
+            setNow(1000);
             fakeStore.push([
                 {
                     id: "ft-1",
@@ -116,7 +129,7 @@ describe("<TransferThroughputPill>", () => {
             ]);
         });
 
-        const pill = await screen.findByTestId("transfer-throughput-pill");
+        const pill = screen.getByTestId("transfer-throughput-pill");
         await waitFor(() => expect(pill.textContent).toMatch(/MB\/s/));
         // 1 MiB in 1 s ≈ 1.0 MB/s after the formatter rounds.
         expect(pill.textContent).toMatch(/1\.0\s*MB\/s/);
@@ -148,12 +161,7 @@ describe("<TransferThroughputPill>", () => {
                 },
             ]);
         });
-        // Click the trigger to open the popover (Radix's onOpenChange
-        // still fires inside fake timers — Radix doesn't use a setTimeout).
-        const trigger = await screen.findByTestId("transfer-throughput-pill");
-        // Real timers are required so userEvent's internal pointer
-        // animation queue can flush.
-        vi.useRealTimers();
+        const trigger = screen.getByTestId("transfer-throughput-pill");
         await userEvent.click(trigger);
         const rows = await screen.findAllByTestId("throughput-row");
         expect(rows.length).toBe(2);

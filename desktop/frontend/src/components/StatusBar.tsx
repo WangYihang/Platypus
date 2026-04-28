@@ -8,6 +8,7 @@ import { ServerInfo, getServerInfo } from "../lib/api";
 import { formatBytes, formatUptimeSeconds } from "../lib/format";
 import TerminalsPill from "../terminal/TerminalsPill";
 import TransfersPill from "./TransfersPill";
+import TransferThroughputPill from "./TransferThroughputPill";
 import Mono from "./Mono";
 import Sparkline from "./Sparkline";
 import StatusDot from "./StatusDot";
@@ -297,6 +298,7 @@ export default function StatusBar() {
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
                 <TerminalsPill />
                 <TransfersPill />
+                <TransferThroughputPill />
                 <RuntimePills info={info} memHistory={memHistory} grtnHistory={grtnHistory} />
                 <CountPills info={info} />
                 <VersionLinks info={info} />

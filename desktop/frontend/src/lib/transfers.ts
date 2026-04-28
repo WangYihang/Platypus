@@ -180,6 +180,56 @@ export async function cancelTransfer(opts: CancelTransferOptions): Promise<void>
     throw new Error(body || `cancel: HTTP ${resp.status}`);
 }
 
+// --- Throughput-pill helpers ----------------------------------------
+//
+// The status-bar throughput pill diffs the *total* uncompressed bytes
+// across all transfers between two points in time. Both functions are
+// pure so the rate maths is testable without DOM, and so the pill
+// component stays focused on rendering.
+
+export interface ThroughputSample {
+    /** wall-clock millisecond timestamp the sample was taken at */
+    ts: number;
+    /** sum of bytes_transferred across all rows at `ts` */
+    bytes: number;
+}
+
+/**
+ * computeInstantaneousRate returns the byte-rate in B/s implied by
+ * the supplied window of samples (oldest vs. newest). Returns null
+ * when fewer than 2 samples have landed (we can't draw a slope from
+ * a single point); clamps negative deltas to 0 so a counter reset —
+ * e.g. the operator reloaded the page mid-transfer — surfaces as
+ * "no rate" rather than a confusing negative value.
+ */
+export function computeInstantaneousRate(
+    samples: ThroughputSample[],
+): number | null {
+    if (samples.length < 2) return null;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const deltaMs = last.ts - first.ts;
+    if (deltaMs <= 0) return null;
+    const deltaBytes = last.bytes - first.bytes;
+    if (deltaBytes < 0) return 0;
+    return (deltaBytes * 1000) / deltaMs;
+}
+
+/**
+ * pruneSamplesOlderThan returns the subset of `samples` whose
+ * timestamps lie within `[now - windowMs, now]`. Used to keep the
+ * sample ring bounded so the rate is "instantaneous" — i.e. only
+ * reflects the last `windowMs` of activity.
+ */
+export function pruneSamplesOlderThan(
+    samples: ThroughputSample[],
+    now: number,
+    windowMs: number,
+): ThroughputSample[] {
+    const cutoff = now - windowMs;
+    return samples.filter((s) => s.ts >= cutoff && s.ts <= now);
+}
+
 // --- Display helpers --------------------------------------------------
 //
 // `bytes_transferred` is the meaningful progress numerator (uncompressed
