@@ -113,6 +113,80 @@ func TestRequireProjectRole_UnknownProject_Admin404(t *testing.T) {
 	}
 }
 
+// TestRequireProjectRole_CustomRoleWithOperatorPerms locks in the
+// new RBAC contract: a user whose project_members.role is a CUSTOM
+// role (not in the builtin viewer<operator<admin chain) passes
+// RequireProjectRole(operator) iff its permission set is a superset
+// of the builtin operator role's permissions. This is the
+// "permission-superset, not enum hierarchy" rule that lets an admin
+// design custom roles like "incident-responder" without rewriting
+// every gated route.
+func TestRequireProjectRole_CustomRoleWithOperatorPerms(t *testing.T) {
+	r, db := projectRBACSetup(t)
+	owner := seedUserForAPITest(t, db, "owner", user.RoleAdmin)
+	donna := seedUserForAPITest(t, db, "donna", user.RoleViewer)
+	earl := seedUserForAPITest(t, db, "earl", user.RoleViewer)
+	p := seedProjectForAPITest(t, db, "prod", owner)
+
+	// Pull operator's seeded permissions so we can mirror them.
+	opRole, err := db.Roles().Get(context.Background(), "operator")
+	if err != nil {
+		t.Fatalf("Roles.Get operator: %v", err)
+	}
+
+	// "responder": superset of operator's perms (passes).
+	now := time.Now().UTC()
+	if err := db.Roles().Create(context.Background(),
+		&storage.Role{
+			Slug:      "responder",
+			Name:      "Incident Responder",
+			IsProject: true,
+			IsGlobal:  false,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		opRole.Permissions,
+	); err != nil {
+		t.Fatalf("Roles.Create responder: %v", err)
+	}
+
+	// "support": missing rpc:invoke from operator's set (fails).
+	missing := []string{}
+	for _, perm := range opRole.Permissions {
+		if perm != optoken.ScopeRPCInvoke {
+			missing = append(missing, perm)
+		}
+	}
+	if err := db.Roles().Create(context.Background(),
+		&storage.Role{
+			Slug:      "support",
+			Name:      "Support",
+			IsProject: true,
+			IsGlobal:  false,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		missing,
+	); err != nil {
+		t.Fatalf("Roles.Create support: %v", err)
+	}
+
+	_ = db.Projects().AddMember(context.Background(), p.ID, donna.ID, user.Role("responder"))
+	_ = db.Projects().AddMember(context.Background(), p.ID, earl.ID, user.Role("support"))
+
+	donnaTok := mintBearerForUserID(t, db, donna.ID, user.RoleViewer)
+	w := probeReqWithPath(r, "GET", "/projects/"+p.ID+"/probe", donnaTok, nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("donna (responder ⊇ operator) status=%d; want 200", w.Code)
+	}
+
+	earlTok := mintBearerForUserID(t, db, earl.ID, user.RoleViewer)
+	w = probeReqWithPath(r, "GET", "/projects/"+p.ID+"/probe", earlTok, nil)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("earl (support missing rpc:invoke) status=%d; want 403", w.Code)
+	}
+}
+
 // Local test helpers that avoid importing storage_test (cross-package).
 
 func seedUserForAPITest(t *testing.T, db *storage.DB, username string, role user.Role) *user.User {

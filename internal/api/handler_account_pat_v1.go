@@ -116,8 +116,16 @@ func (h *AccountPATHandler) Issue(c *gin.Context) {
 
 	// Scope check: requested scopes must be a subset of what the
 	// caller's current role grants. Empty scopes default to that full
-	// ceiling (the UI also defaults that way).
-	roleCeiling := optoken.ScopesFromRole(p.Role)
+	// ceiling (the UI also defaults that way). The ceiling comes from
+	// the LIVE roles table — if an admin has shrunk the caller's role
+	// since their session started, they can only mint a token with
+	// the new (smaller) permission set.
+	role, err := h.db.Roles().Get(c.Request.Context(), string(p.Role))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup role"})
+		return
+	}
+	roleCeiling := role.Permissions
 	scopes := req.Scopes
 	if len(scopes) == 0 {
 		scopes = roleCeiling

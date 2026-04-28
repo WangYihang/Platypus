@@ -92,28 +92,37 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 	// Sessions inherit role/username from the live users row so a
 	// demote takes effect within one cache TTL (≤30s). PATs do the
 	// same role refresh AND intersect their stored scope set against
-	// the user's current role-derived ceiling — so a token issued at
-	// admin time loses write scopes the moment the holder is demoted
-	// to viewer, even though the on-row scopes still claim them.
-	// A users row deleted out from under a token yields auth failure
-	// (treated as revoked).
+	// the user's current role-permission ceiling — so a token issued
+	// when its issuer was admin loses write scopes the moment the
+	// holder is demoted to viewer, AND a PAT loses scopes the moment
+	// an admin removes the corresponding permission from the role.
+	// A users row deleted out from under a token, or a missing role
+	// row, yields auth failure (treated as revoked).
 	switch kind {
 	case optoken.KindUserSession:
 		u, err := v.db.Users().GetByID(ctx, verified.UserID)
 		if err != nil {
 			return nil, "revoked", nil
 		}
-		verified.Role = u.Role
-		verified.Username = u.Username
-		verified.Scopes = optoken.ScopesFromRole(u.Role)
-	case optoken.KindPAT:
-		u, err := v.db.Users().GetByID(ctx, verified.UserID)
+		ceiling, err := v.rolePermissions(ctx, string(u.Role))
 		if err != nil {
 			return nil, "revoked", nil
 		}
 		verified.Role = u.Role
 		verified.Username = u.Username
-		verified.Scopes = optoken.IntersectScopes(verified.Scopes, optoken.ScopesFromRole(u.Role))
+		verified.Scopes = ceiling
+	case optoken.KindPAT:
+		u, err := v.db.Users().GetByID(ctx, verified.UserID)
+		if err != nil {
+			return nil, "revoked", nil
+		}
+		ceiling, err := v.rolePermissions(ctx, string(u.Role))
+		if err != nil {
+			return nil, "revoked", nil
+		}
+		verified.Role = u.Role
+		verified.Username = u.Username
+		verified.Scopes = optoken.IntersectScopes(verified.Scopes, ceiling)
 	}
 
 	v.cache.Put(id, verified)
@@ -145,4 +154,17 @@ func (v *TokenVerifier) Verify(ctx context.Context, raw string) (*Principal, str
 // node invalidation is out of scope until Platypus runs multi-node.)
 func (v *TokenVerifier) Invalidate(tokenID string) {
 	v.cache.Invalidate(tokenID)
+}
+
+// rolePermissions returns the live permission set for a role slug.
+// Driven off the roles / role_permissions tables so admin edits to
+// a role take effect on the next Verify, no token reissue required.
+// An unknown slug is propagated as ErrNotFound; callers map that to
+// "revoked" to avoid running with a stale (admin-edited-out) role.
+func (v *TokenVerifier) rolePermissions(ctx context.Context, slug string) ([]string, error) {
+	role, err := v.db.Roles().Get(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return role.Permissions, nil
 }

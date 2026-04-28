@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -179,17 +180,35 @@ func (r *RBAC) tryAuthenticateWS(c *gin.Context, bearer string) bool {
 	return true
 }
 
-// RequireGlobalRole gates a route behind a minimum global role. Role
-// ordering is admin > operator > viewer; higher roles implicitly
-// satisfy lower requirements. Must run downstream of RequireAuth.
+// RequireGlobalRole gates a route behind a "minimum" global role.
+// "Minimum" used to mean enum hierarchy (admin > operator > viewer);
+// post-RBAC it means permission superset — the caller's role must
+// hold every permission the named min role holds. For builtin roles
+// the two definitions coincide, so existing routes don't shift
+// behaviour. Custom roles work too: a role "support" with operator's
+// full permission set passes RequireGlobalRole(operator); one missing
+// any of operator's perms is rejected. Must run downstream of
+// RequireAuth.
 func (r *RBAC) RequireGlobalRole(min user.Role) gin.HandlerFunc {
+	if r.storage == nil {
+		return func(c *gin.Context) {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "RBAC missing storage — constructed without it"})
+		}
+	}
 	return func(c *gin.Context) {
 		p, ok := PrincipalFromContext(c)
 		if !ok {
 			abortUnauthorized(c, "no principal on context — RequireAuth missing?")
 			return
 		}
-		if !roleAtLeast(p.Role, min) {
+		ok, err := r.roleHasAllOf(c.Request.Context(), string(p.Role), string(min))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "role lookup"})
+			return
+		}
+		if !ok {
 			c.AbortWithStatusJSON(http.StatusForbidden,
 				gin.H{"error": "insufficient role"})
 			return
@@ -221,22 +240,35 @@ func (r *RBAC) RequireScope(scope string) gin.HandlerFunc {
 	}
 }
 
-// roleAtLeast encodes the role ordering. Kept as a switch rather than
-// a map so the compiler catches typos on Role renames.
-func roleAtLeast(got, min user.Role) bool {
-	rank := func(r user.Role) int {
-		switch r {
-		case user.RoleAdmin:
-			return 3
-		case user.RoleOperator:
-			return 2
-		case user.RoleViewer:
-			return 1
-		default:
-			return 0
+// roleHasAllOf reports whether the role at userRoleSlug holds every
+// permission of the role at minRoleSlug. The "permission superset"
+// rule — a custom role passes a builtin-min gate iff it has all the
+// builtin's perms. Returns (false, nil) when the user role is
+// unknown (e.g. dropped after a migration); (false, err) only on a
+// real DB failure so the caller can distinguish 403 from 500.
+func (r *RBAC) roleHasAllOf(ctx context.Context, userRoleSlug, minRoleSlug string) (bool, error) {
+	if userRoleSlug == "" {
+		return false, nil
+	}
+	minRole, err := r.storage.Roles().Get(ctx, minRoleSlug)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			// A min role removed at runtime is a misconfiguration —
+			// fail closed (deny everyone) rather than fail open.
+			return false, nil
+		}
+		return false, err
+	}
+	for _, perm := range minRole.Permissions {
+		ok, err := r.storage.Roles().HasPermission(ctx, userRoleSlug, perm)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
 		}
 	}
-	return rank(got) >= rank(min)
+	return true, nil
 }
 
 func abortUnauthorized(c *gin.Context, reason string) {
@@ -290,7 +322,13 @@ func (r *RBAC) RequireProjectRole(projectParam string, min user.Role) gin.Handle
 				gin.H{"error": "project member lookup"})
 			return
 		}
-		if !roleAtLeast(role, min) {
+		ok2, err := r.roleHasAllOf(c.Request.Context(), string(role), string(min))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "role lookup"})
+			return
+		}
+		if !ok2 {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient project role"})
 			return
 		}
