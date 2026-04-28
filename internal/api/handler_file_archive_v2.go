@@ -124,6 +124,17 @@ func RegisterV2FileArchiveRoutes(engine *gin.Engine, deps FileArchiveDeps) {
 	)
 	viewer.POST("/fs/scan", v2FileScan(deps))
 	viewer.POST("/fs/archive", v2FileArchive(deps))
+
+	// /fs/upload is operator-tier — it MUTATES the agent's filesystem.
+	// Same wire shape as /fs/write but threads a file_transfers row,
+	// progress ticks, audit log, and cancel-registry entry through the
+	// same plumbing the /fs/archive download path uses.
+	operator := base.Group("")
+	operator.Use(
+		deps.RBAC.RequireProjectRole("pid", user.RoleOperator),
+		deps.RBAC.RequireAgentInProject("pid", "agent_id"),
+	)
+	operator.PUT("/fs/upload", v2FileUploadTracked(deps))
 }
 
 // v2FileScan opens a STREAM_TYPE_FILE_SCAN stream and returns the
