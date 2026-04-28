@@ -14,13 +14,13 @@ vi.mock("@wails/runtime/runtime", () => ({
     },
 }));
 
+// Both UploadFile and UploadBrowserFile resolve to src/platform/App.web.ts
+// under the vitest alias map (see vitest.config.ts), so we mock that
+// module once with both names.
 const uploadFileMock = vi.fn().mockResolvedValue(undefined);
-vi.mock("@wails/go/app/App", () => ({
-    UploadFile: (...args: unknown[]) => uploadFileMock(...args),
-}));
-
 const uploadBrowserFileMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/platform/App.web", () => ({
+    UploadFile: (...args: unknown[]) => uploadFileMock(...args),
     UploadBrowserFile: (...args: unknown[]) => uploadBrowserFileMock(...args),
 }));
 

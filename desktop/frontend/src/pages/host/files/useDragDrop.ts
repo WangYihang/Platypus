@@ -24,6 +24,13 @@ interface UseDragDropOpts {
     projectID: string;
     sessionHash: string;
     currentPath: string;
+    /** Fires once at the start of every non-empty drop sequence,
+     *  before the first UploadFile / UploadBrowserFile call. The
+     *  Files toolbar wires this to setTransfersDrawerOpen(true) so
+     *  the drawer auto-opens for drag-drop the same way it already
+     *  does for the Upload button. Skipped on empty drops so the
+     *  drawer doesn't pop on a no-op gesture. */
+    onStart?: () => void;
     onFinished?: () => void;
     onError?: (err: string) => void;
     onProgress?: (p: UploadProgress) => void;
@@ -33,6 +40,7 @@ export function useDragDrop({
     projectID,
     sessionHash,
     currentPath,
+    onStart,
     onFinished,
     onError,
     onProgress,
@@ -49,6 +57,7 @@ export function useDragDrop({
         const handler = async (payload: { paths?: string[] }) => {
             const paths = payload?.paths || [];
             if (paths.length === 0) return;
+            onStart?.();
             for (let i = 0; i < paths.length; i++) {
                 const p = paths[i];
                 const filename = basenameOSPath(p);
@@ -69,7 +78,7 @@ export function useDragDrop({
         return () => {
             EventsOff("files:os-drop");
         };
-    }, [projectID, sessionHash, onFinished, onError, onProgress]);
+    }, [projectID, sessionHash, onStart, onFinished, onError, onProgress]);
 
     // --- Web: HTML5 drop handlers — returned so a container element
     // can spread them on.
@@ -88,6 +97,7 @@ export function useDragDrop({
             setDragOver(false);
             const files = Array.from(e.dataTransfer?.files || []);
             if (files.length === 0) return;
+            onStart?.();
             for (let i = 0; i < files.length; i++) {
                 const f = files[i];
                 onProgress?.({ filename: f.name, done: i, total: files.length });

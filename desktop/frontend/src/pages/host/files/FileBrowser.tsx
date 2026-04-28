@@ -159,6 +159,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         projectID,
         sessionHash,
         currentPath: dir.path,
+        // Mirror handleUploadClick: pop the drawer open the moment a
+        // drop sequence begins so the operator immediately sees
+        // progress regardless of which entry point they used.
+        onStart: () => setTransfersDrawerOpen(true),
         onFinished: () => {
             dir.reload();
             toast.success("Upload finished");
