@@ -10,6 +10,13 @@ describe("pickViewerKind", () => {
         expect(pickViewerKind("image/webp", "y.webp")).toBe("image");
     });
 
+    it("returns pdf for application/pdf and .pdf names", () => {
+        expect(pickViewerKind("application/pdf", "spec.pdf")).toBe("pdf");
+        // mime missing — extension fallback still picks pdf.
+        expect(pickViewerKind(undefined, "spec.PDF")).toBe("pdf");
+        expect(pickViewerKind("application/octet-stream", "x.pdf")).toBe("pdf");
+    });
+
     it("returns image when mime is missing but extension is an image", () => {
         // Older agents may not populate mime; fall back to extension.
         expect(pickViewerKind(undefined, "vacation.PNG")).toBe("image");

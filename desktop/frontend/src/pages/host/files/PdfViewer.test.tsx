@@ -1,0 +1,122 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@wails/go/app/App", () => ({
+    ReadFile: vi.fn(),
+}));
+
+// Stub react-pdf so the test never has to touch pdfjs / canvas. The mock
+// renders a page-N marker instead of the real glyphs but exposes the
+// same `numPages` plumbing PdfViewer relies on.
+vi.mock("react-pdf", () => {
+    type DocProps = {
+        file: unknown;
+        onLoadSuccess?: (info: { numPages: number }) => void;
+        onLoadError?: (err: unknown) => void;
+        children?: React.ReactNode;
+    };
+    type PageProps = { pageNumber: number };
+
+    const Document = ({ file, onLoadSuccess, onLoadError, children }: DocProps) => {
+        // Defer to a microtask so consumers always see a render cycle
+        // between mount and onLoadSuccess. Mirrors the real library.
+        Promise.resolve().then(() => {
+            try {
+                if (file == null) throw new Error("missing file");
+                onLoadSuccess?.({ numPages: 3 });
+            } catch (err) {
+                onLoadError?.(err);
+            }
+        });
+        return <div data-testid="pdf-document">{children}</div>;
+    };
+    const Page = ({ pageNumber }: PageProps) => (
+        <div data-testid={`pdf-page-${pageNumber}`}>page-{pageNumber}</div>
+    );
+    const pdfjs = { GlobalWorkerOptions: { workerSrc: "" } };
+    return { Document, Page, pdfjs };
+});
+
+import { ReadFile } from "@wails/go/app/App";
+import PdfViewer from "./PdfViewer";
+
+const PDF_BYTES = [37, 80, 68, 70]; // "%PDF" — payload doesn't matter, the mock ignores it.
+
+beforeEach(() => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:test/pdf");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+});
+
+afterEach(() => {
+    vi.mocked(ReadFile).mockReset();
+    vi.restoreAllMocks();
+});
+
+describe("<PdfViewer>", () => {
+    it("loads bytes and renders the first page once load succeeds", async () => {
+        vi.mocked(ReadFile).mockResolvedValueOnce(PDF_BYTES);
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="s"
+                path="/tmp/spec.pdf"
+                size={PDF_BYTES.length}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId("pdf-page-1")).toBeInTheDocument();
+        });
+        expect(ReadFile).toHaveBeenCalledWith("p", "s", "/tmp/spec.pdf", 0, 0);
+    });
+
+    it("paginates with next/prev controls bounded to numPages", async () => {
+        vi.mocked(ReadFile).mockResolvedValueOnce(PDF_BYTES);
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="s"
+                path="/tmp/spec.pdf"
+                size={PDF_BYTES.length}
+            />,
+        );
+
+        await waitFor(() => {
+            // Wait for "Page 1 of 3" status to be visible.
+            expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /next/i }));
+        expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument();
+        expect(screen.getByTestId("pdf-page-2")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /next/i }));
+        expect(screen.getByText(/page 3 of 3/i)).toBeInTheDocument();
+
+        // Clamp at the upper bound.
+        fireEvent.click(screen.getByRole("button", { name: /next/i }));
+        expect(screen.getByText(/page 3 of 3/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /prev/i }));
+        expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument();
+    });
+
+    it("surfaces a load error when ReadFile rejects", async () => {
+        vi.mocked(ReadFile).mockRejectedValueOnce(new Error("nope"));
+
+        render(
+            <PdfViewer
+                projectID="p"
+                sessionHash="s"
+                path="/tmp/spec.pdf"
+                size={4}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/nope/i)).toBeInTheDocument();
+        });
+    });
+});

@@ -62,6 +62,7 @@ import { useDragDrop } from "./useDragDrop";
 const FileEditor = lazy(() => import("./FileEditor"));
 const FileViewerPaged = lazy(() => import("./FileViewerPaged"));
 const ImageViewer = lazy(() => import("./ImageViewer"));
+const PdfViewer = lazy(() => import("./PdfViewer"));
 import { pickViewerKind } from "./viewerKind";
 
 // Files larger than this open in the read-only paged viewer. Anything
@@ -556,6 +557,16 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                                                 path={fullPath}
                                                 size={openingEntry.size}
                                                 mime={openingEntry.mime}
+                                            />
+                                        );
+                                    }
+                                    if (kind === "pdf") {
+                                        return (
+                                            <PdfViewer
+                                                projectID={projectID}
+                                                sessionHash={sessionHash}
+                                                path={fullPath}
+                                                size={openingEntry.size}
                                             />
                                         );
                                     }

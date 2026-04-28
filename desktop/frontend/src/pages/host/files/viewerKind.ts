@@ -6,7 +6,7 @@
 // their mime prefixes / extension lists below; the dispatcher in
 // FileBrowser branches on the returned kind.
 
-export type ViewerKind = "image" | "text";
+export type ViewerKind = "image" | "pdf" | "text";
 
 const IMAGE_EXT = new Set([
     "png",
@@ -30,11 +30,13 @@ function extOf(name: string): string {
 }
 
 export function pickViewerKind(mime: string | undefined, name: string): ViewerKind {
+    if (mime === "application/pdf") return "pdf";
     if (mime && mime.startsWith("image/")) return "image";
 
     // Server didn't classify (older agent or unknown ext on the server) —
     // fall back to extension sniffing for the cases viewers care about.
     const ext = extOf(name);
+    if (ext === "pdf") return "pdf";
     if (IMAGE_EXT.has(ext)) return "image";
 
     return "text";
