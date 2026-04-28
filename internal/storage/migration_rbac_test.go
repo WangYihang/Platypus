@@ -180,6 +180,52 @@ func TestMigration_RBAC_PermissionsCatalog(t *testing.T) {
 	}
 }
 
+// TestMigration_RBAC_UsersRoleFK pins the rebuild of users and
+// project_members in migration 18: the role column now FKs to
+// roles.slug, so an INSERT with an unknown slug fails and a known
+// slug succeeds. PRAGMA foreign_key_check stays clean — the rebuild
+// preserved every cross-table FK pointing at users(id) /
+// project_members(project_id, user_id).
+func TestMigration_RBAC_UsersRoleFK(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO users (id, username, password_hash, role, created_at)
+		VALUES ('u-fk', 'u-fk', 'x', 'viewer', CURRENT_TIMESTAMP)`,
+	); err != nil {
+		t.Fatalf("INSERT with valid role slug failed: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO users (id, username, password_hash, role, created_at)
+		VALUES ('u-bad', 'u-bad', 'x', 'no-such-role', CURRENT_TIMESTAMP)`,
+	)
+	if err == nil {
+		t.Fatal("INSERT with unknown role slug succeeded; FK should reject it")
+	}
+
+	rows, err := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatalf("foreign_key_check: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var table, parent string
+		var rowid int64
+		var fkid int
+		if err := rows.Scan(&table, &rowid, &parent, &fkid); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		t.Errorf("foreign_key_check violation: table=%s rowid=%d parent=%s fkid=%d",
+			table, rowid, parent, fkid)
+	}
+}
+
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
