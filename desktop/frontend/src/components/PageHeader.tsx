@@ -6,83 +6,107 @@ interface Props {
     title: ReactNode;
     subtitle?: ReactNode;
     actions?: ReactNode;
-    // Optional sub-tab bar rendered directly under the title row, sharing
-    // the same header surface. When set, the bottom hairline is suppressed
-    // so the Antd underline tab ink-bar serves as the divider.
+    // Optional sub-tab bar rendered on the same row as the title (right
+    // of the title cluster, left of `actions`). HostView is the only
+    // current consumer; the slot is here so future tabbed pages don't
+    // need a parallel layout component.
     tabs?: ReactNode;
 }
 
 // PageHeader is the page-identity strip at the top of every main-panel
-// view. Round 1 sized this at 28/600 title + 14 subtitle + 32px
-// horizontal padding — "大气", but ate ~150 px of vertical chrome on
-// host pages once the tab bar landed. The 2026-04 density pass
-// shrinks the title to 18/600, the subtitle to 12, and inlines the
-// title row at minHeight 36 so the whole header (incl. tabs) sits
-// well under 80 px while still reading as a page identity strip.
+// view. The single-row layout collapses title + inline subtitle + tabs
+// + actions into one ~36 px band — earlier iterations stacked them on
+// two or three rows and ate up to 150 px of vertical chrome before any
+// content rendered.
+//
+// Layout (left → right):
+//
+//   [title  · muted-subtitle]   [tabs (right-aligned, flex-1)]   [actions]
+//
+// Title and subtitle live on the same line; the subtitle drops off on
+// narrow viewports (< 720 px) so the title and actions stay legible.
+// The bottom hairline is always drawn; consumers with `tabs` lean on
+// the tab underline as a secondary divider but the page-level border
+// stays so non-tab pages don't look open at the bottom.
 export default function PageHeader({ title, subtitle, actions, tabs }: Props) {
     return (
         <header
             style={{
                 background: palette.main,
-                borderBottom: tabs ? "none" : `1px solid ${palette.border}`,
-                padding: `0 ${space[5]}px`,
+                borderBottom: `1px solid ${palette.border}`,
+                padding: `0 ${space[4]}px`,
+                minHeight: 36,
+                display: "flex",
+                alignItems: "center",
+                gap: space[3],
             }}
         >
             <div
                 style={{
-                    minHeight: 36,
-                    paddingTop: space[2],
-                    paddingBottom: tabs ? space[1] : space[2],
+                    minWidth: 0,
                     display: "flex",
-                    alignItems: "flex-start",
-                    gap: space[3],
+                    alignItems: "baseline",
+                    gap: space[2],
+                    flexShrink: 1,
                 }}
             >
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div
+                    style={{
+                        color: palette.textPrimary,
+                        fontFamily: font.sans,
+                        fontWeight: 600,
+                        fontSize: 14,
+                        lineHeight: 1.3,
+                        letterSpacing: -0.1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                    }}
+                >
+                    {title}
+                </div>
+                {subtitle && (
                     <div
+                        className="hidden md:block"
                         style={{
-                            color: palette.textPrimary,
-                            fontFamily: font.sans,
-                            fontWeight: 600,
-                            fontSize: 18,
-                            lineHeight: 1.2,
-                            letterSpacing: -0.1,
+                            color: palette.textSecondary,
+                            fontSize: 12,
+                            lineHeight: 1.35,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
                         }}
                     >
-                        {title}
-                    </div>
-                    {subtitle && (
-                        <div
-                            style={{
-                                color: palette.textSecondary,
-                                fontSize: 12,
-                                lineHeight: 1.35,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                        >
-                            {subtitle}
-                        </div>
-                    )}
-                </div>
-                {actions && (
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: space[2],
-                            flexShrink: 0,
-                        }}
-                    >
-                        {actions}
+                        · {subtitle}
                     </div>
                 )}
             </div>
-            {tabs}
+            {tabs && (
+                <div
+                    style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        overflow: "hidden",
+                    }}
+                >
+                    {tabs}
+                </div>
+            )}
+            {actions && (
+                <div
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: space[2],
+                        flexShrink: 0,
+                        marginLeft: tabs ? 0 : "auto",
+                    }}
+                >
+                    {actions}
+                </div>
+            )}
         </header>
     );
 }

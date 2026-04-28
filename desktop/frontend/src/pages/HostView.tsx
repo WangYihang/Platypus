@@ -259,7 +259,7 @@ export default function HostView({ projectID, hostID }: Props) {
 
     const tabBar = (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="h-9">
+            <TabsList className="h-7">
                 <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
@@ -298,17 +298,14 @@ export default function HostView({ projectID, hostID }: Props) {
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <PageHeader
                 title={
-                    <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
                         <StatusDot status={online ? "online" : "offline"} />
                         <span>{primary}</span>
                     </span>
                 }
                 subtitle={
                     <span>
-                        <Mono size={12} color={palette.textSecondary}>
-                            {liveCount}
-                        </Mono>{" "}
-                        active · {host.os || "unknown OS"}
+                        {liveCount} active · {host.os || "unknown OS"}
                         {host.fingerprint_fallback && " · fp-fallback"}
                     </span>
                 }
