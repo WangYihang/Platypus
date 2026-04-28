@@ -195,6 +195,23 @@ const TERMINAL_STATUSES: ReadonlySet<TransferStatus> = new Set([
 ]);
 
 /**
+ * transferDirectionTone returns a tone token for the leading icon
+ * shared between the /transfers table and the drawer:
+ *   * download → "success" (green) — bytes are arriving from the host
+ *   * upload   → "info"    (blue)  — bytes are leaving to the host
+ *
+ * Pinned in transfers.test.ts so the two surfaces never drift. Both
+ * call sites map the tone to a `palette.<tone>` colour locally; a
+ * tone string instead of a colour value keeps the helper independent
+ * of the theme module.
+ */
+export type TransferDirectionTone = "success" | "info";
+
+export function transferDirectionTone(it: TransferItem): TransferDirectionTone {
+    return it.direction === "upload" ? "info" : "success";
+}
+
+/**
  * transferProgressPct is the canonical "what does the bar render?"
  * helper. Returns:
  *   * `null` for indeterminate progress (running with no known total —

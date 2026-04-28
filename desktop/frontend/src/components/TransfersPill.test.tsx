@@ -44,6 +44,8 @@ vi.mock("../lib/transfers", async () => {
         transferCompressionRatio: () => null,
         formatBytesPerSec: () => "—",
         formatCompressionRatio: () => "—",
+        transferDirectionTone: (it: { direction: string }) =>
+            it.direction === "upload" ? "info" : "success",
     };
 });
 

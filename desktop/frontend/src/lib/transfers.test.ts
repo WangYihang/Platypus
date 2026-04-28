@@ -38,6 +38,7 @@ import {
     formatCompressionRatio,
     transferAverageSpeed,
     transferCompressionRatio,
+    transferDirectionTone,
     transferDisplaySize,
     transferElapsed,
     transferProgressPct,
@@ -349,6 +350,22 @@ describe("transferAverageSpeed", () => {
         expect(formatBytesPerSec(1024 * 1024)).toMatch(/MB\/s/);
         expect(formatBytesPerSec(null)).toBe("—");
         expect(formatBytesPerSec(0)).toBe("—");
+    });
+});
+
+// transferDirectionTone is the single source of truth for the
+// drawer + table direction icon colour. Both surfaces use it; if it
+// drifts, the visual contract drifts on both at once.
+describe("transferDirectionTone", () => {
+    it("returns 'success' for downloads (bytes arriving)", () => {
+        expect(transferDirectionTone({ ...baseRow, direction: "download" })).toBe(
+            "success",
+        );
+    });
+    it("returns 'info' for uploads (bytes leaving)", () => {
+        expect(transferDirectionTone({ ...baseRow, direction: "upload" })).toBe(
+            "info",
+        );
     });
 });
 

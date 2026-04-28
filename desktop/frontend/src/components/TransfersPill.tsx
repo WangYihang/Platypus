@@ -10,6 +10,7 @@ import {
     formatCompressionRatio,
     transferAverageSpeed,
     transferCompressionRatio,
+    transferDirectionTone,
     transferDisplaySize,
     transferProgressPct,
     type TransferItem,
@@ -277,6 +278,12 @@ function TransferRow({ item }: { item: TransferItem }) {
     const indeterminate = pct === null;
     const speed = formatBytesPerSec(transferAverageSpeed(item));
     const compression = formatCompressionRatio(transferCompressionRatio(item));
+    // Direction tone lights up the leading icon green for downloads
+    // and blue for uploads — the only at-a-glance differentiator
+    // between the two flows in the drawer.
+    const directionTone = transferDirectionTone(item);
+    const directionColor =
+        directionTone === "info" ? palette.info : palette.success;
     return (
         <div
             data-testid="transfers-drawer-row"
@@ -300,7 +307,9 @@ function TransferRow({ item }: { item: TransferItem }) {
             >
                 <Icon
                     className="size-3.5"
-                    style={{ color: palette.textMuted, flexShrink: 0 }}
+                    data-testid="transfers-direction-icon"
+                    data-direction-tone={directionTone}
+                    style={{ color: directionColor, flexShrink: 0 }}
                 />
                 <span
                     title={item.paths.join("\n")}

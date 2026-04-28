@@ -11,6 +11,7 @@ import {
     formatCompressionRatio,
     transferAverageSpeed,
     transferCompressionRatio,
+    transferDirectionTone,
     transferDisplaySize,
     transferElapsed,
     transferProgressPct,
@@ -237,9 +238,9 @@ interface RowProps {
 }
 
 function Row({ it, expanded, tickNow, onToggle, onCancel }: RowProps) {
-    const directionTone = it.direction === "upload" ? "info" : "success";
+    const directionTone = transferDirectionTone(it);
     const directionColor =
-        it.direction === "upload" ? palette.info : palette.success;
+        directionTone === "info" ? palette.info : palette.success;
     const DirectionIcon =
         it.direction === "upload" ? ArrowUpFromLine : ArrowDownToLine;
     const isCompressed =
