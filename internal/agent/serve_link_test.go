@@ -90,6 +90,67 @@ func TestServeLink_DispatchesRPC(t *testing.T) {
 	}
 }
 
+// ServeLink must wait for in-flight per-stream handlers to finish
+// before returning. Without the join, the agent's reconnect loop
+// (cmd/platypus-agent/main.go) would race a fresh Bootstrap/Serve
+// against a previous session's still-draining handlers — process /
+// file write handlers can block in synchronous cleanup (fsync, kill
+// + wait), causing goroutines to overlap across reconnects and grow
+// over time on flapping links.
+func TestServeLink_WaitsForInflightHandlers(t *testing.T) {
+	clientSess, agentSess := pairedAgentSessions(t)
+
+	handlerEntered := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	deps := AgentHandlerDeps{
+		Process: func(ctx context.Context, stream io.ReadWriteCloser, _ *v2pb.ProcessOpenRequest) error {
+			close(handlerEntered)
+			<-releaseHandler
+			return nil
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- ServeLink(ctx, agentSess, deps)
+	}()
+
+	// Open a stream so a Process handler enters its critical section.
+	stream, err := clientSess.Open(v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN, nil, "stuck-corr")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer stream.Close()
+
+	select {
+	case <-handlerEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler never entered")
+	}
+
+	// Trigger ServeLink to want to return. Our handler is still
+	// blocked on releaseHandler — ServeLink must NOT return yet.
+	cancel()
+	agentSess.Close()
+
+	select {
+	case err := <-serveErr:
+		t.Fatalf("ServeLink returned before in-flight handler finished: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	// Release the handler. ServeLink should now return promptly.
+	close(releaseHandler)
+	select {
+	case <-serveErr:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ServeLink did not return after handler completed")
+	}
+}
+
 // Unknown stream type: agent sends a StreamReject frame and closes.
 // Peer opening such a stream observes the close with no payload.
 func TestServeLink_RejectsUnknownStreamType(t *testing.T) {

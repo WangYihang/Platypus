@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"google.golang.org/protobuf/proto"
 
@@ -77,6 +78,15 @@ func ServeLink(ctx context.Context, sess *link.Session, deps AgentHandlerDeps) e
 		}
 	}()
 
+	// Join in-flight per-stream handlers before returning so the
+	// reconnect loop in cmd/platypus-agent doesn't race a fresh
+	// Bootstrap/Serve cycle against goroutines from the previous
+	// session that are still in synchronous cleanup (fsync on a
+	// file write, kill+wait on a process). Without this, repeated
+	// reconnects on a flapping link compound goroutines over time.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
 	for {
 		hdr, stream, err := sess.Accept()
 		if err != nil {
@@ -94,7 +104,11 @@ func ServeLink(ctx context.Context, sess *link.Session, deps AgentHandlerDeps) e
 			// than treating it as success and exiting the process.
 			return fmt.Errorf("agent: ServeLink accept: %w", err)
 		}
-		go dispatchAgentStream(ctx, hdr, stream, deps)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			dispatchAgentStream(ctx, hdr, stream, deps)
+		}()
 	}
 }
 
