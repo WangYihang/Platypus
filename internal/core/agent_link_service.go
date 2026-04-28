@@ -130,6 +130,21 @@ func (s *AgentLinkService) All() map[string]*link.Session {
 	return out
 }
 
+// CloseAll closes every registered session and empties the registry.
+// Server shutdown calls this before http.Server.Shutdown so the
+// hijacked-WS accept loops in handler_agent_link_v2 unblock —
+// otherwise the 30s grace window expires waiting on yamux Accepts
+// that nothing else would ever unblock. Idempotent.
+func (s *AgentLinkService) CloseAll() {
+	s.mu.Lock()
+	links := s.links
+	s.links = make(map[string]*linkRecord)
+	s.mu.Unlock()
+	for _, rec := range links {
+		_ = rec.sess.Close()
+	}
+}
+
 // IDs returns a snapshot of every agent_id with a live link. Cheap
 // alternative to All() when callers only need the set of identifiers
 // — typically to build a `map[string]bool` for SQL-result intersection
