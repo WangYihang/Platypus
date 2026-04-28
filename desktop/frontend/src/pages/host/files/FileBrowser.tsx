@@ -44,6 +44,7 @@ import {
 import FolderArchiveDialog from "./FolderArchiveDialog";
 import QuickPaths from "./QuickPaths";
 import type { Host } from "../../../lib/api";
+import { useTransfersDrawer } from "../../../components/TransfersPill";
 import {
     ChmodDialog,
     DeleteConfirmDialog,
@@ -111,6 +112,10 @@ function CrumbDroppable({
 
 export default function FileBrowser({ projectID, sessionHash, host = null }: Props) {
     const dir = useDirectory(projectID, sessionHash);
+    // Surface progress immediately when the user kicks off a transfer.
+    // The drawer provider lives at the shell root so the hook is
+    // always reachable from any host page.
+    const { setOpen: setTransfersDrawerOpen } = useTransfersDrawer();
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
     const [openingEntry, setOpeningEntry] = useState<FileEntryDTO | null>(null);
@@ -178,6 +183,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         const src = await PickFileToUpload("Choose local file");
         if (!src) return;
         const name = basename(src);
+        // Pop the transfers drawer so the operator can watch progress
+        // tick. Doing this before await keeps the UI responsive even
+        // on a slow upstream.
+        setTransfersDrawerOpen(true);
         try {
             await UploadFile(projectID, sessionHash, joinPath(dir.path, name), src);
             toast.success(`Uploaded ${name}`);
@@ -198,6 +207,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             const entry = selectedEntries[0];
             const dst = await PickSaveLocation("Save to", entry.name);
             if (!dst) return;
+            setTransfersDrawerOpen(true);
             try {
                 await DownloadFile(projectID, sessionHash, joinPath(dir.path, entry.name), dst);
                 toast.success(`Downloaded ${entry.name}`);
@@ -229,6 +239,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         }
         setShowArchive(false);
         setBulkDownloading(true);
+        setTransfersDrawerOpen(true);
         try {
             const remotePaths = selectedEntries.map((e) => joinPath(dir.path, e.name));
             await DownloadArchive(projectID, sessionHash, remotePaths, dst, format);

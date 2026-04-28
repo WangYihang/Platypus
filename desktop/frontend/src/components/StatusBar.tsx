@@ -299,7 +299,7 @@ export default function StatusBar() {
                 <TransfersPill />
                 <RuntimePills info={info} memHistory={memHistory} grtnHistory={grtnHistory} />
                 <CountPills info={info} />
-                <VersionLink info={info} />
+                <VersionLinks info={info} />
             </div>
         </div>
     );
@@ -419,14 +419,19 @@ function CountPills({ info }: { info: ServerInfo | null }) {
     );
 }
 
-// VersionLink renders a single "vX.Y" link to the matching GitHub
-// release. We dropped the standalone "web v…" pill: vite reads the
-// package.json version (which we don't bump in dev) so the chip was
-// always "v0.0.0", redundant with the server pill, and visually noisy.
-// One source of truth — the server's reported version — is enough.
-function VersionLink({ info }: { info: ServerInfo | null }) {
+// VersionLinks renders BOTH the server build version and the web
+// build commit. The previous round dropped the web pill because
+// __APP_VERSION__ (vite reads package.json) was always "0.0.0" in dev
+// and looked broken. The replacement here uses __APP_COMMIT__ (set
+// from the GIT_COMMIT env var by the Makefile / CI; falls back to
+// "dev" for local builds), which is the actually-meaningful identifier
+// for "what JS is the operator looking at?". The web pill renders as
+// plain text — there's no GitHub release page for a commit hash, and
+// "v0.0.0" was never a release anyway.
+function VersionLinks({ info }: { info: ServerInfo | null }) {
     const repo = info?.git_repo || "WangYihang/Platypus";
     const serverVer = info?.version;
+    const webCommit = __APP_COMMIT__;
 
     return (
         <>
@@ -437,6 +442,16 @@ function VersionLink({ info }: { info: ServerInfo | null }) {
                 version={serverVer}
                 label="server"
             />
+            <Sep />
+            <Pill
+                testid="status-bar-web-version"
+                title={`web bundle commit ${webCommit}`}
+            >
+                <span style={{ color: palette.textMuted }}>web</span>
+                <Mono size={11} color={palette.textSecondary}>
+                    {webCommit.slice(0, 7)}
+                </Mono>
+            </Pill>
         </>
     );
 }

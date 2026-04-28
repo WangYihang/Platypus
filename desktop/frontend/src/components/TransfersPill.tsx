@@ -6,6 +6,8 @@ import { getSession, onSessionChange } from "../lib/auth";
 import {
     cancelTransfer,
     createTransfersStore,
+    transferDisplaySize,
+    transferProgressPct,
     type TransferItem,
     type TransferStatus,
 } from "../lib/transfers";
@@ -108,51 +110,40 @@ const TERMINAL: ReadonlySet<TransferStatus> = new Set([
     "canceled",
 ]);
 
-function formatBytes(n: number): string {
-    if (!Number.isFinite(n) || n <= 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let idx = 0;
-    let v = n;
-    while (v >= 1024 && idx < units.length - 1) {
-        v /= 1024;
-        idx++;
-    }
-    return `${v.toFixed(v >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`;
-}
-
 function formatPaths(paths: string[]): string {
     if (paths.length === 0) return "";
     if (paths.length === 1) return paths[0];
     return `${paths[0]} (+${paths.length - 1} more)`;
 }
 
-function progressPct(it: TransferItem): number {
-    if (it.total_bytes <= 0) return it.status === "done" ? 100 : 0;
-    return Math.min(100, Math.round((it.bytes_transferred / it.total_bytes) * 100));
-}
-
 // TransfersPill is the status-bar trigger for the right drawer.
-// Mirrors TerminalsPill: a tiny chip that shows the count of active
+// Mirrors TerminalsPill: a chip that shows the count of active
 // transfers; clicking it toggles the drawer. We keep it visible even
 // at zero so operators have a discoverable place to find historical
 // transfers (matches the "always-on right drawer" UX the user asked
 // for, without forcing a giant panel onto the layout when the log
 // is empty).
+//
+// Active styling (count > 0): translucent info-coloured background,
+// info-coloured border, semibold count, leading info dot. Operator
+// feedback was that the previous pill was invisible against the rail.
 export default function TransfersPill() {
     const { rows, activeCount, open, setOpen } = useTransfersDrawer();
     const total = rows.length;
+    const active = activeCount > 0;
     return (
         <button
             type="button"
             data-testid="transfers-pill"
+            data-active={active ? "true" : "false"}
             aria-label={
-                activeCount > 0
+                active
                     ? `${activeCount} transfer${activeCount === 1 ? "" : "s"} in progress`
                     : "Open transfers drawer"
             }
             aria-pressed={open}
             title={
-                activeCount > 0
+                active
                     ? `${activeCount} active · ${total} total — click to open the transfers drawer`
                     : "Open transfers drawer"
             }
@@ -160,18 +151,34 @@ export default function TransfersPill() {
             style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 4,
-                padding: "1px 8px",
-                background: open ? palette.surfaceHover : palette.surface,
-                border: `1px solid ${palette.border}`,
+                gap: 5,
+                padding: "2px 10px",
+                background: active
+                    ? palette.infoSoft
+                    : open
+                        ? palette.surfaceHover
+                        : palette.surface,
+                border: `1px solid ${active ? palette.info : palette.border}`,
                 borderRadius: radius.pill,
-                color: activeCount > 0 ? palette.info : palette.textSecondary,
-                fontSize: 11,
+                color: active ? palette.info : palette.textSecondary,
+                fontSize: 12,
+                fontWeight: active ? 600 : 400,
                 cursor: "pointer",
             }}
         >
-            <ArrowDownToLine className="size-3" />
-            <span>{activeCount > 0 ? `${activeCount}` : total > 0 ? `${total}` : "0"}</span>
+            {active ? (
+                <span
+                    aria-hidden
+                    style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: palette.info,
+                    }}
+                />
+            ) : null}
+            <ArrowDownToLine className="size-3.5" />
+            <span>{active ? `${activeCount}` : total > 0 ? `${total}` : "0"}</span>
         </button>
     );
 }
@@ -254,7 +261,7 @@ export function TransfersDrawer() {
 
 function TransferRow({ item }: { item: TransferItem }) {
     const Icon = item.direction === "download" ? ArrowDownToLine : ArrowUpFromLine;
-    const pct = progressPct(item);
+    const pct = transferProgressPct(item);
     const fill =
         item.status === "failed"
             ? palette.danger
@@ -263,9 +270,11 @@ function TransferRow({ item }: { item: TransferItem }) {
                 : item.status === "done"
                     ? palette.success
                     : palette.info;
+    const indeterminate = pct === null;
     return (
         <div
             data-testid="transfers-drawer-row"
+            data-progress={indeterminate ? "indeterminate" : String(pct)}
             style={{
                 padding: `${space[3]}px ${space[3]}px`,
                 borderBottom: `1px solid ${palette.border}`,
@@ -311,14 +320,33 @@ function TransferRow({ item }: { item: TransferItem }) {
                     overflow: "hidden",
                 }}
             >
-                <div
-                    style={{
-                        width: `${pct}%`,
-                        height: "100%",
-                        background: fill,
-                        transition: "width 200ms ease-out",
-                    }}
-                />
+                {indeterminate ? (
+                    // Animated stripe segment slides across to indicate
+                    // progress is happening but the total is unknown.
+                    // Defined inline so we don't have to wire a new
+                    // global @keyframes; the important contract is the
+                    // data-progress attribute the test asserts on.
+                    <div
+                        className="transfers-indeterminate"
+                        style={{
+                            position: "absolute",
+                            top: 0,
+                            bottom: 0,
+                            width: "30%",
+                            background: fill,
+                            borderRadius: radius.pill,
+                        }}
+                    />
+                ) : (
+                    <div
+                        style={{
+                            width: `${pct}%`,
+                            height: "100%",
+                            background: fill,
+                            transition: "width 200ms ease-out",
+                        }}
+                    />
+                )}
             </div>
             <div
                 style={{
@@ -329,12 +357,8 @@ function TransferRow({ item }: { item: TransferItem }) {
                 }}
             >
                 <span>
-                    {formatBytes(item.bytes_transferred)}
-                    {item.total_bytes > 0
-                        ? ` / ${formatBytes(item.total_bytes)}`
-                        : ""}
-                    {" · "}
-                    {pct}%
+                    {transferDisplaySize(item)}
+                    {pct !== null ? ` · ${pct}%` : ""}
                 </span>
                 {!TERMINAL.has(item.status) ? (
                     <button

@@ -56,6 +56,11 @@ export const palette = {
     // -dot suffix.
     success: "#3ECF8E",
     info: "#0070f3",
+    // infoSoft is the translucent companion of info, used by the
+    // status-bar pills to "light up" without changing layout when a
+    // count > 0 (operator: "太不显眼"). Same hue, ~12% alpha, sits
+    // happily over the rail without bleeding into adjacent text.
+    infoSoft: "rgba(0, 112, 243, 0.18)",
     danger: "#ee0000",
     warning: "#f5a623",
 

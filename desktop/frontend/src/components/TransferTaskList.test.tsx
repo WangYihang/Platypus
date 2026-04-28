@@ -48,6 +48,22 @@ function makeRow(over: Partial<TransferItem>): TransferItem {
     };
 }
 
+// queueResponses wires up authJSON to return the supplied transfers
+// list AND a host roster so the Host column can resolve aliases
+// without each test having to spell that out. Tests pass the rows
+// they care about; hosts default to a single seed under id "h1"
+// with primary_alias "host-one" so an assertion can pin the alias
+// rendering.
+function queueResponses(rows: TransferItem[], hosts: Array<{ id: string; primary_alias?: string; hostname?: string }> = [
+    { id: "h1", primary_alias: "host-one" },
+]) {
+    authJSONMock.mockImplementation(async (url: string) => {
+        if (url.includes("/transfers")) return { items: rows };
+        if (url.includes("/hosts")) return { hosts };
+        throw new Error(`unexpected authJSON call: ${url}`);
+    });
+}
+
 beforeEach(() => {
     authJSONMock.mockReset();
     authFetchMock.mockReset();
@@ -55,7 +71,7 @@ beforeEach(() => {
 
 describe("TransferTaskList", () => {
     it("renders an empty-state when there are no transfers", async () => {
-        authJSONMock.mockResolvedValueOnce({ items: [] });
+        queueResponses([]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() =>
             expect(screen.getByText(/no transfers/i)).toBeInTheDocument(),
@@ -63,12 +79,10 @@ describe("TransferTaskList", () => {
     });
 
     it("renders rows from the REST snapshot", async () => {
-        authJSONMock.mockResolvedValueOnce({
-            items: [
-                makeRow({ id: "ft-1", paths: ["/etc"] }),
-                makeRow({ id: "ft-2", paths: ["/var/log", "/opt"], status: "done" }),
-            ],
-        });
+        queueResponses([
+            makeRow({ id: "ft-1", paths: ["/etc"] }),
+            makeRow({ id: "ft-2", paths: ["/var/log", "/opt"], status: "done" }),
+        ]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() => expect(screen.getByText("/etc")).toBeInTheDocument());
         // Multi-path rows render the count.
@@ -79,17 +93,32 @@ describe("TransferTaskList", () => {
     });
 
     it("shows a progress percentage for running transfers", async () => {
-        authJSONMock.mockResolvedValueOnce({
-            items: [makeRow({ bytes_transferred: 256, total_bytes: 1024 })],
-        });
+        queueResponses([makeRow({ bytes_transferred: 256, total_bytes: 1024 })]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() => expect(screen.getByText(/25\s*%/)).toBeInTheDocument());
     });
 
-    it("updates a row in place when a WS event arrives", async () => {
-        authJSONMock.mockResolvedValueOnce({
-            items: [makeRow({ bytes_transferred: 0, total_bytes: 1000 })],
+    it("renders an indeterminate progress bar when total_bytes is zero (compressed archive)", async () => {
+        queueResponses([
+            makeRow({
+                id: "ft-arch",
+                bytes_transferred: 180,
+                total_bytes: 0,
+                status: "running",
+            }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() => {
+            const bar = screen.getByTestId("transfer-progress-bar");
+            expect(bar.getAttribute("data-progress")).toBe("indeterminate");
         });
+        // The misleading "180 / 48" denominator must NOT appear.
+        // (the row's only number is the 180-byte transferred count).
+        expect(screen.queryByText(/100\s*%/)).toBeNull();
+    });
+
+    it("updates a row in place when a WS event arrives", async () => {
+        queueResponses([makeRow({ bytes_transferred: 0, total_bytes: 1000 })]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() => expect(screen.getByText(/0\s*%/)).toBeInTheDocument());
 
@@ -101,7 +130,7 @@ describe("TransferTaskList", () => {
     });
 
     it("cancels a running transfer when the cancel button is clicked", async () => {
-        authJSONMock.mockResolvedValueOnce({ items: [makeRow({ id: "ft-c" })] });
+        queueResponses([makeRow({ id: "ft-c" })]);
         authFetchMock.mockResolvedValueOnce(new Response("", { status: 202 }));
 
         render(<TransferTaskList projectId="p1" />);
@@ -119,15 +148,56 @@ describe("TransferTaskList", () => {
     });
 
     it("does NOT show a cancel button on terminal rows", async () => {
-        authJSONMock.mockResolvedValueOnce({
-            items: [
-                makeRow({ id: "ft-d", status: "done" }),
-                makeRow({ id: "ft-f", status: "failed" }),
-                makeRow({ id: "ft-c", status: "canceled" }),
-            ],
-        });
+        queueResponses([
+            makeRow({ id: "ft-d", status: "done" }),
+            makeRow({ id: "ft-f", status: "failed" }),
+            makeRow({ id: "ft-c", status: "canceled" }),
+        ]);
         render(<TransferTaskList projectId="p1" />);
         await waitFor(() => expect(screen.getAllByText(/\/etc\/hosts/).length).toBeGreaterThan(0));
         expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+    });
+
+    // G — richer columns: Host alias, Elapsed, Error.
+    it("resolves host_id to the host's primary alias", async () => {
+        queueResponses(
+            [makeRow({ host_id: "h1" })],
+            [{ id: "h1", primary_alias: "production-shell" }],
+        );
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() =>
+            expect(screen.getByTestId("transfer-host-cell").textContent).toMatch(/production-shell/),
+        );
+    });
+
+    it("renders the error_message in its own column when present", async () => {
+        queueResponses([
+            makeRow({
+                id: "ft-err",
+                status: "failed",
+                error_message: "permission denied: /root/secret",
+            }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() =>
+            expect(screen.getByTestId("transfer-error-cell").textContent).toMatch(
+                /permission denied/,
+            ),
+        );
+    });
+
+    it("renders an Elapsed cell that formats the wall-clock duration", async () => {
+        queueResponses([
+            makeRow({
+                id: "ft-el",
+                status: "done",
+                started_at: "2025-01-01T00:00:00Z",
+                finished_at: "2025-01-01T00:01:30Z",
+            }),
+        ]);
+        render(<TransferTaskList projectId="p1" />);
+        await waitFor(() =>
+            expect(screen.getByTestId("transfer-elapsed-cell").textContent).toMatch(/1m 30s/),
+        );
     });
 });

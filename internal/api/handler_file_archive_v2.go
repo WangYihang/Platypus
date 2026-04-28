@@ -45,6 +45,14 @@ type TransferRecorder interface {
 	Finish(ctx context.Context, id, status string, bytes int64, errMsg string, at time.Time) error
 }
 
+// HostLookup is the slim subset of *storage.HostRepo that the file
+// transfer handlers need: just the agent_id → host translation. We
+// take an interface (instead of the full repo) so tests can stub
+// with a 5-line fake; production wires `db.Hosts()`.
+type HostLookup interface {
+	GetByAgentID(ctx context.Context, agentID string) (*storage.Host, error)
+}
+
 // FileArchiveDeps is the set of collaborators
 // RegisterV2FileArchiveRoutes needs. Bundling them keeps the call
 // site readable as we add more (cancellation registry, ID
@@ -57,6 +65,12 @@ type FileArchiveDeps struct {
 	Activity    *activity.Recorder // optional; nil to skip audit logging
 	Cancels     *TransferCancelRegistry
 	IDGenerator func() string // optional; defaults to uuid.NewString
+	// Hosts resolves an agent_id to its host UUID so file_transfers
+	// rows hold the real host_id (matching the column's name) instead
+	// of the agent id. Optional: when nil, transfers fall back to
+	// storing the agent_id (legacy behaviour) so tests that don't
+	// care about host scoping aren't forced to seed a host repo.
+	Hosts HostLookup
 }
 
 // FileTransferEvent is the wire shape of WS payloads for transfer
@@ -238,15 +252,20 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 			userIDStr = claims.UserID
 		}
 
-		// Best-effort pre-scan to size progress. We don't fail the
-		// download on scan errors; progress just becomes
-		// indeterminate (TotalBytes=0) when the scan can't run.
+		// Archive transfers run with indeterminate progress.
+		// The pre-scan returns *uncompressed* bytes, but the
+		// response body is gzip- or deflate-compressed (and even
+		// raw `tar` adds 512-byte block headers per entry), so the
+		// scan total never matches what's streamed. Reporting it
+		// caused the UI to show "180 B / 48 B · 100% · done" — a
+		// useful number that's nonetheless a lie. Operators see
+		// the running byte counter; when it stops, the row is
+		// done. We keep the scan call only as a future hook for
+		// pre-flight checks (size warnings, permission probes).
 		var totalBytes int64
-		if scan, err := runScan(c.Request.Context(), sess, scanRequestBody{
+		_, _ = runScan(c.Request.Context(), sess, scanRequestBody{
 			Paths: body.Paths, FollowSymlinks: body.FollowSymlinks,
-		}); err == nil && scan.Error == "" {
-			totalBytes = scan.TotalBytes
-		}
+		})
 
 		transferID := deps.IDGenerator()
 		pathsJSON, _ := json.Marshal(body.Paths)
@@ -254,7 +273,7 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		ft := &storage.FileTransfer{
 			ID:         transferID,
 			ProjectID:  projectID,
-			HostID:     agentID,
+			HostID:     resolveHostID(c.Request.Context(), deps, agentID),
 			UserID:     userIDStr,
 			Direction:  storage.TransferDirectionDownload,
 			Kind:       storage.TransferKindArchive,
@@ -321,9 +340,10 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		c.Writer.Header().Set("Content-Disposition",
 			fmt.Sprintf(`attachment; filename="archive%s"`, ext))
 		c.Writer.Header().Set("X-Transfer-Id", transferID)
-		if totalBytes > 0 {
-			c.Writer.Header().Set("X-Total-Bytes", fmt.Sprintf("%d", totalBytes))
-		}
+		// Intentionally no X-Total-Bytes: archive bodies are
+		// compressed so we can't know the final size up-front. See
+		// the pre-scan comment above for the full rationale.
+		_ = totalBytes
 		c.Status(http.StatusOK)
 		c.Writer.Flush()
 
@@ -531,7 +551,7 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 			ft = &storage.FileTransfer{
 				ID:         transferID,
 				ProjectID:  projectID,
-				HostID:     agentID,
+				HostID:     resolveHostID(c.Request.Context(), deps, agentID),
 				UserID:     userIDStr,
 				Direction:  storage.TransferDirectionDownload,
 				Kind:       storage.TransferKindFile,
@@ -692,6 +712,30 @@ func resolveArchiveFormat(s string) (v2pb.ArchiveFormat, string, string, bool) {
 
 func extWithoutDot(s string) string {
 	return strings.TrimPrefix(s, ".")
+}
+
+// resolveHostID maps an agentID to its host UUID via the optional
+// HostLookup. file_transfers.host_id used to (incorrectly) hold the
+// agent_id, which broke the per-host filter on the API. With the
+// lookup wired in production this returns the real host UUID; when
+// the lookup isn't available (legacy callers, tests that don't care
+// about host scoping) we keep storing the agent_id so the column
+// stays non-empty.
+//
+// On lookup error we log and fall back to the agent_id rather than
+// 500'ing the download — a missing host row is recoverable later
+// and the operator's transfer shouldn't be aborted by a metadata
+// inconsistency.
+func resolveHostID(ctx context.Context, deps FileArchiveDeps, agentID string) string {
+	if deps.Hosts == nil {
+		return agentID
+	}
+	host, err := deps.Hosts.GetByAgentID(ctx, agentID)
+	if err != nil || host == nil {
+		log.Warn("file_transfer host_id resolve: agent_id=%s err=%v", agentID, err)
+		return agentID
+	}
+	return host.ID
 }
 
 func strPtr(s string) *string {

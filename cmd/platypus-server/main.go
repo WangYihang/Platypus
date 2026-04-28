@@ -459,6 +459,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 		Recorder:    transferRecorder,
 		Broadcaster: archiveBroadcaster,
 		Cancels:     transferCancels,
+		Hosts:       db.Hosts(),
 	})
 	api.RegisterV1TransferRoutes(rest, api.TransferRoutesDeps{
 		DB:      db,

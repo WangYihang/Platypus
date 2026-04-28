@@ -173,3 +173,88 @@ export async function cancelTransfer(opts: CancelTransferOptions): Promise<void>
     const body = await resp.text().catch(() => "");
     throw new Error(body || `cancel: HTTP ${resp.status}`);
 }
+
+// --- Display helpers --------------------------------------------------
+//
+// Pinned by transfers.test.ts. The header bug from production: archive
+// downloads stream gzip-compressed bodies, so `bytes_transferred` (the
+// compressed wire count) drifts from `total_bytes` (the uncompressed
+// pre-scan total). The status bar / drawer / /transfers page all share
+// these helpers so the UI can never accidentally show "180 / 48 ·
+// 100% · done" again.
+
+const TERMINAL_STATUSES: ReadonlySet<TransferStatus> = new Set([
+    "done",
+    "failed",
+    "canceled",
+]);
+
+/**
+ * transferProgressPct is the canonical "what does the bar render?"
+ * helper. Returns:
+ *   * `null` for indeterminate progress (running with no known total)
+ *   * `100` for terminal `done` rows regardless of byte mismatch
+ *   * the clamped 0..100 percentage otherwise
+ *
+ * The clamp matters: backends that overshoot (e.g. compressed stream
+ * larger than scan total) used to render 375% bars before this lived
+ * in one place.
+ */
+export function transferProgressPct(it: TransferItem): number | null {
+    if (it.status === "done") return 100;
+    if (it.total_bytes <= 0) return null;
+    const raw = (it.bytes_transferred / it.total_bytes) * 100;
+    return Math.max(0, Math.min(100, Math.floor(raw)));
+}
+
+function formatBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let idx = 0;
+    let v = n;
+    while (v >= 1024 && idx < units.length - 1) {
+        v /= 1024;
+        idx++;
+    }
+    return `${v.toFixed(v >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+}
+
+/**
+ * transferDisplaySize formats the size cell. Hides the denominator
+ * when total is unknown OR when the numerator overshoots — so the
+ * operator sees a monotonically growing number rather than a fake
+ * "X / Y" mismatch.
+ */
+export function transferDisplaySize(it: TransferItem): string {
+    const transferred = formatBytes(it.bytes_transferred);
+    const knownTotal = it.total_bytes > 0;
+    const overshoot = knownTotal && it.bytes_transferred > it.total_bytes;
+    if (!knownTotal || overshoot) return transferred;
+    return `${transferred} / ${formatBytes(it.total_bytes)}`;
+}
+
+/**
+ * transferElapsed returns a short wall-clock duration. For terminal
+ * rows we use `finished_at - started_at`; for running rows we tick
+ * against `now` (injected so tests don't have to fake Date).
+ *
+ * Format follows the existing host uptime convention:
+ *   "Xs" / "Mm Ss" / "Hh Mm" — sub-minute precision drops past 1h.
+ */
+export function transferElapsed(it: TransferItem, now: Date = new Date()): string {
+    const started = Date.parse(it.started_at);
+    if (Number.isNaN(started)) return "—";
+    let end: number;
+    if (TERMINAL_STATUSES.has(it.status) && it.finished_at) {
+        end = Date.parse(it.finished_at);
+        if (Number.isNaN(end)) end = now.getTime();
+    } else {
+        end = now.getTime();
+    }
+    const secs = Math.max(0, Math.floor((end - started) / 1000));
+    if (secs < 60) return `${secs}s`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ${secs % 60}s`;
+    const hours = Math.floor(mins / 60);
+    return `${hours}h ${mins % 60}m`;
+}

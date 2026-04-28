@@ -123,7 +123,7 @@ describe("<StatusBar> telemetry pills", () => {
         ).not.toBeNull();
     });
 
-    it("renders a single clickable server version link, not a separate web pill", async () => {
+    it("renders both server (linked) and web (commit) version pills", async () => {
         const { container } = renderBar();
         await waitFor(() => {
             expect(
@@ -137,11 +137,16 @@ describe("<StatusBar> telemetry pills", () => {
         expect(server.getAttribute("href")).toBe(
             "https://github.com/WangYihang/Platypus/releases/tag/v0.4.2",
         );
-        // The old standalone web version chip is gone — it always
-        // rendered as v0.0.0 and crowded the layout with no signal.
-        expect(
-            container.querySelector('[data-testid="status-bar-web-version"]'),
-        ).toBeNull();
+        // Web pill is restored — uses __APP_COMMIT__ (vite-injected,
+        // "test" in vitest.config.ts) since __APP_VERSION__ is always
+        // 0.0.0 in dev. It's plain text, not a link (no commit page).
+        const web = container.querySelector(
+            '[data-testid="status-bar-web-version"]',
+        );
+        expect(web).not.toBeNull();
+        expect(web!.tagName).not.toBe("A");
+        expect(web!.textContent).toMatch(/web/);
+        expect(web!.textContent).toMatch(/test/); // __APP_COMMIT__ in tests
     });
 
     it("does not render the username inline — it lives in the status-dot popover", async () => {

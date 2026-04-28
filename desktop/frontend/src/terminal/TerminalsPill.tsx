@@ -44,28 +44,42 @@ export default function TerminalsPill() {
         navigate(`/projects/${s.projectSlug}/hosts/${s.hostId}/info`);
     }
 
+    // Pill renders only when shells.length > 0, so it's always
+    // "active". Mirrors TransfersPill's active styling so the two
+    // chips read as the same family in the status bar.
     return (
         <Popover>
             <PopoverTrigger asChild>
                 <button
                     type="button"
                     data-testid="terminals-pill"
+                    data-active="true"
                     aria-label={`${shells.length} open terminal${shells.length === 1 ? "" : "s"}`}
                     title="Open terminals across hosts"
                     style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: 4,
-                        padding: "1px 8px",
-                        background: palette.surface,
-                        border: `1px solid ${palette.border}`,
+                        gap: 5,
+                        padding: "2px 10px",
+                        background: palette.infoSoft,
+                        border: `1px solid ${palette.info}`,
                         borderRadius: radius.pill,
-                        color: palette.textSecondary,
-                        fontSize: 11,
+                        color: palette.info,
+                        fontSize: 12,
+                        fontWeight: 600,
                         cursor: "pointer",
                     }}
                 >
-                    <TerminalSquare className="size-3" />
+                    <span
+                        aria-hidden
+                        style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 999,
+                            background: palette.info,
+                        }}
+                    />
+                    <TerminalSquare className="size-3.5" />
                     <span>{shells.length}</span>
                 </button>
             </PopoverTrigger>

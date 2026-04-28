@@ -33,6 +33,7 @@ type archiveTestAgent struct {
 	fixture  *agentRouteFixture
 	cancels  *TransferCancelRegistry
 	recorder *FakeTransferRecorder
+	hosts    *fakeHostLookup // nil unless a test seeds host rows
 }
 
 // FakeTransferRecorder swaps in for the production recorder during
@@ -153,14 +154,38 @@ func setupArchiveAgent(t *testing.T, agentID string,
 }
 
 func (a *archiveTestAgent) registerArchiveRoutes(r *gin.Engine) {
-	RegisterV2FileArchiveRoutes(r, FileArchiveDeps{
-		Service:    a.svc,
-		RBAC:       a.fixture.RBAC,
-		Recorder:   a.recorder,
+	deps := FileArchiveDeps{
+		Service:     a.svc,
+		RBAC:        a.fixture.RBAC,
+		Recorder:    a.recorder,
 		Broadcaster: nil,
-		Cancels:    a.cancels,
+		Cancels:     a.cancels,
 		IDGenerator: func() string { return "ft-test-1" },
-	})
+	}
+	// Assigning a typed-nil *fakeHostLookup directly to the
+	// HostLookup interface yields a non-nil interface value, so
+	// resolveHostID's `deps.Hosts == nil` check would miss and we'd
+	// dereference the nil pointer. Only attach the lookup when the
+	// test seeded one.
+	if a.hosts != nil {
+		deps.Hosts = a.hosts
+	}
+	RegisterV2FileArchiveRoutes(r, deps)
+}
+
+// fakeHostLookup is the in-memory stub of HostLookup. Tests that
+// care about the agent_id → host_id translation seed it via
+// archiveTestAgent.hosts; tests that don't leave it nil so the
+// handler falls back to the legacy "store agent_id" branch.
+type fakeHostLookup struct {
+	byAgentID map[string]*storage.Host
+}
+
+func (f *fakeHostLookup) GetByAgentID(_ context.Context, agentID string) (*storage.Host, error) {
+	if h, ok := f.byAgentID[agentID]; ok {
+		return h, nil
+	}
+	return nil, nil
 }
 
 func (a *archiveTestAgent) authedPost(t *testing.T, srvURL, suffix string, body any) *http.Response {
@@ -282,8 +307,10 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 	if id := resp.Header.Get("X-Transfer-Id"); id != "ft-test-1" {
 		t.Errorf("X-Transfer-Id = %q; want ft-test-1", id)
 	}
-	if total := resp.Header.Get("X-Total-Bytes"); total == "" {
-		t.Errorf("X-Total-Bytes header missing")
+	// X-Total-Bytes is intentionally NOT set: archive bodies are
+	// compressed so the scan total doesn't match what's streamed.
+	if total := resp.Header.Get("X-Total-Bytes"); total != "" {
+		t.Errorf("X-Total-Bytes = %q; want unset for archives", total)
 	}
 
 	// Verify recorder calls happened: 1 Create, ≥1 progress, 1 Finish.
@@ -292,6 +319,12 @@ func TestFileV2_ArchiveHappy(t *testing.T) {
 	}
 	if a.recorder.created[0].Status != storage.TransferStatusRunning {
 		t.Errorf("created status = %q; want running", a.recorder.created[0].Status)
+	}
+	// Archive transfers run with indeterminate progress: total_bytes
+	// must be zero so the UI doesn't render a bogus "X / Y" denominator.
+	if a.recorder.created[0].TotalBytes != 0 {
+		t.Errorf("created total_bytes = %d; want 0 for archives",
+			a.recorder.created[0].TotalBytes)
 	}
 	if len(a.recorder.finals) != 1 {
 		t.Fatalf("recorder.Finish called %d times; want 1", len(a.recorder.finals))
@@ -475,6 +508,91 @@ func TestFileV2_DownloadTracked(t *testing.T) {
 	}
 	if finals[0].Bytes != int64(len(want)) {
 		t.Errorf("final bytes = %d; want %d", finals[0].Bytes, len(want))
+	}
+}
+
+// TestFileV2_ArchiveStoresRealHostID is the matching pin for the
+// archive download path: the file_transfers row must record the
+// host UUID, not the agent id, so the global drawer + /transfers
+// nav route can resolve back to the host's primary alias.
+func TestFileV2_ArchiveStoresRealHostID(t *testing.T) {
+	a := setupArchiveAgent(t, "agent-arch-host-id",
+		func(_ *v2pb.FileScanRequest, stream io.ReadWriteCloser) {
+			defer stream.Close()
+			_ = link.WriteFrame(stream, &v2pb.FileScanResponse{FileCount: 1, TotalBytes: 5})
+		},
+		func(_ *v2pb.FileArchiveRequest, stream io.ReadWriteCloser) {
+			defer stream.Close()
+			_ = link.WriteFrame(stream, &v2pb.FileArchiveResponse{})
+			_ = link.WriteFrame(stream, &v2pb.FileChunk{Data: []byte("hello"), Eof: true})
+		},
+	)
+	a.hosts = &fakeHostLookup{
+		byAgentID: map[string]*storage.Host{
+			"agent-arch-host-id": {ID: "host-uuid-archive"},
+		},
+	}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	a.registerArchiveRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp := a.authedPost(t, srv.URL, "/fs/archive", map[string]any{
+		"paths":  []string{"/etc"},
+		"format": "tar.gz",
+	})
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+
+	a.recorder.mu.Lock()
+	created := append([]*storage.FileTransfer(nil), a.recorder.created...)
+	a.recorder.mu.Unlock()
+	if len(created) != 1 {
+		t.Fatalf("created = %d; want 1", len(created))
+	}
+	if created[0].HostID != "host-uuid-archive" {
+		t.Errorf("host_id = %q; want %q", created[0].HostID, "host-uuid-archive")
+	}
+}
+
+// TestFileV2_DownloadStoresRealHostID pins the F bug fix: the
+// file_transfers.host_id column must hold the host UUID, not the
+// agent_id. Before the fix the same column lied — it stored the
+// agent identifier, which broke per-host filtering.
+func TestFileV2_DownloadStoresRealHostID(t *testing.T) {
+	want := []byte("contents")
+	a := setupArchiveAgentWithRead(t, "agent-host-id", want)
+	a.hosts = &fakeHostLookup{
+		byAgentID: map[string]*storage.Host{
+			"agent-host-id": {ID: "host-uuid-9001"},
+		},
+	}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	a.registerArchiveRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet,
+		srv.URL+a.fixture.URL("/fs/read?path=/x"), nil)
+	req.Header.Set("Authorization", "Bearer "+a.fixture.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+
+	a.recorder.mu.Lock()
+	created := append([]*storage.FileTransfer(nil), a.recorder.created...)
+	a.recorder.mu.Unlock()
+	if len(created) != 1 {
+		t.Fatalf("created = %d; want 1", len(created))
+	}
+	if created[0].HostID != "host-uuid-9001" {
+		t.Errorf("host_id = %q; want %q (the host UUID, not the agent id)",
+			created[0].HostID, "host-uuid-9001")
 	}
 }
 

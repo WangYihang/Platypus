@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { palette, radius, space } from "../layout/theme";
 import { humanizeError } from "../lib/humanizeError";
+import { type Host, listHosts } from "../lib/api";
 import {
     cancelTransfer,
     createTransfersStore,
+    transferDisplaySize,
+    transferElapsed,
+    transferProgressPct,
     type TransferItem,
     type TransferStatus,
 } from "../lib/transfers";
@@ -38,35 +42,26 @@ const TERMINAL: ReadonlySet<TransferStatus> = new Set([
     "canceled",
 ]);
 
-function formatBytes(n: number): string {
-    if (!Number.isFinite(n) || n <= 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let idx = 0;
-    let v = n;
-    while (v >= 1024 && idx < units.length - 1) {
-        v /= 1024;
-        idx++;
-    }
-    return `${v.toFixed(v >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`;
-}
-
 function formatPaths(paths: string[]): string {
     if (paths.length === 0) return "";
     if (paths.length === 1) return paths[0];
     return `${paths[0]} (+${paths.length - 1} more)`;
 }
 
-function progressPct(it: TransferItem): number {
-    if (it.total_bytes <= 0) return 0;
-    return Math.min(100, Math.round((it.bytes_transferred / it.total_bytes) * 100));
-}
-
 /**
  * TransferTaskList renders the file_transfers list as a dense table.
- * Used on the per-host transfers tab AND the global /transfers route;
- * the only difference is which scope the embedded store is created
- * with. Subscribes to /notify so the table re-renders as transfers
- * progress + finish + get cancelled.
+ * Today this only powers the global /transfers nav route — the
+ * per-host tab in HostView was removed because it duplicated the
+ * always-on TransfersDrawer. Subscribes to /notify so the table
+ * re-renders as transfers progress + finish + get cancelled.
+ *
+ * Columns: Host (alias) · Paths · Direction · Format · Progress ·
+ * Size · Elapsed · Status · Error · Started · Actions.
+ *
+ * NOTE: a Session column is intentionally absent — file_transfers'
+ * schema doesn't yet carry session_id, so we'd be guessing. Adding
+ * it is a follow-up that needs a migration; the column will slot
+ * in here once the data lands.
  */
 export default function TransferTaskList({ projectId, hostId }: Props) {
     const store = useMemo(
@@ -76,6 +71,7 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
     const [rows, setRows] = useState<TransferItem[]>(() => store.snapshot());
     const [loaded, setLoaded] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [hostsByID, setHostsByID] = useState<Record<string, Host>>({});
 
     useEffect(() => {
         let cancelled = false;
@@ -94,6 +90,41 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
             store.dispose();
         };
     }, [store]);
+
+    // Resolve host_id → primary alias / hostname so the Host column
+    // is human-readable. Cached at mount; the project's host list
+    // changes slowly enough that a one-shot fetch is fine. Failures
+    // fall back silently to the raw id.
+    useEffect(() => {
+        if (!projectId) return;
+        let cancelled = false;
+        listHosts(projectId)
+            .then((list) => {
+                if (cancelled) return;
+                const byID: Record<string, Host> = {};
+                for (const h of list) byID[h.id] = h;
+                setHostsByID(byID);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [projectId]);
+
+    // Tick once a second so the Elapsed column for in-flight rows
+    // updates live. We re-render the whole table — fine for the
+    // dozens-of-rows case the page surfaces.
+    const [tickNow, setTickNow] = useState(() => new Date());
+    useEffect(() => {
+        const id = window.setInterval(() => setTickNow(new Date()), 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    function hostLabel(it: TransferItem): string {
+        const h = hostsByID[it.host_id];
+        if (!h) return it.host_id ? `${it.host_id.slice(0, 8)}…` : "—";
+        return h.primary_alias || h.hostname || `${h.id.slice(0, 8)}…`;
+    }
 
     async function onCancel(it: TransferItem) {
         try {
@@ -131,19 +162,25 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
             <table style={tableStyle}>
                 <thead>
                     <tr>
+                        <th style={thStyle}>Host</th>
                         <th style={thStyle}>Paths</th>
                         <th style={thStyle}>Direction</th>
                         <th style={thStyle}>Format</th>
                         <th style={thStyle}>Progress</th>
                         <th style={thStyle}>Size</th>
+                        <th style={thStyle}>Elapsed</th>
                         <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Error</th>
                         <th style={thStyle}>Started</th>
                         <th style={thStyle}>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map((it) => (
-                        <tr key={it.id} style={trStyle}>
+                        <tr key={it.id} style={trStyle} data-testid="transfer-row">
+                            <td style={tdStyle} data-testid="transfer-host-cell" title={it.host_id}>
+                                {hostLabel(it)}
+                            </td>
                             <td style={tdMonoStyle} title={it.paths.join("\n")}>
                                 {formatPaths(it.paths)}
                             </td>
@@ -152,25 +189,27 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
                             </td>
                             <td style={tdStyle}>{it.format || "—"}</td>
                             <td style={tdStyle}>
-                                <ProgressBar pct={progressPct(it)} status={it.status} />
+                                <ProgressBar pct={transferProgressPct(it)} status={it.status} />
                             </td>
-                            <td style={tdStyle}>
-                                {formatBytes(it.bytes_transferred)}
-                                {it.total_bytes > 0 && it.total_bytes !== it.bytes_transferred ? (
-                                    <span style={{ color: palette.textMuted }}>
-                                        {" "}/ {formatBytes(it.total_bytes)}
-                                    </span>
-                                ) : null}
+                            <td style={tdStyle}>{transferDisplaySize(it)}</td>
+                            <td style={tdStyle} data-testid="transfer-elapsed-cell">
+                                {transferElapsed(it, tickNow)}
                             </td>
                             <td style={tdStyle}>
                                 <StatusPill tone={STATUS_TONES[it.status]}>
                                     {it.status}
                                 </StatusPill>
+                            </td>
+                            <td
+                                style={tdStyle}
+                                data-testid="transfer-error-cell"
+                                title={it.error_message || undefined}
+                            >
                                 {it.error_message ? (
-                                    <span style={errorTextStyle} title={it.error_message}>
-                                        {" "}{it.error_message}
-                                    </span>
-                                ) : null}
+                                    <span style={errorTextStyle}>{it.error_message}</span>
+                                ) : (
+                                    "—"
+                                )}
                             </td>
                             <td style={tdStyle}>
                                 {new Date(it.started_at).toLocaleString()}
@@ -195,7 +234,7 @@ export default function TransferTaskList({ projectId, hostId }: Props) {
 }
 
 interface ProgressBarProps {
-    pct: number;
+    pct: number | null;
     status: TransferStatus;
 }
 
@@ -208,18 +247,36 @@ function ProgressBar({ pct, status }: ProgressBarProps) {
                 : status === "done"
                     ? palette.success
                     : palette.info;
+    const indeterminate = pct === null;
     return (
-        <div style={progressTrackStyle}>
-            <div
-                style={{
-                    width: `${pct}%`,
-                    height: "100%",
-                    background: fill,
-                    borderRadius: radius.pill,
-                    transition: "width 200ms ease-out",
-                }}
-            />
-            <span style={progressLabelStyle}>{pct}%</span>
+        <div
+            style={progressTrackStyle}
+            data-testid="transfer-progress-bar"
+            data-progress={indeterminate ? "indeterminate" : String(pct)}
+        >
+            {indeterminate ? (
+                <div
+                    style={{
+                        position: "absolute",
+                        top: 0,
+                        bottom: 0,
+                        width: "30%",
+                        background: fill,
+                        borderRadius: radius.pill,
+                    }}
+                />
+            ) : (
+                <div
+                    style={{
+                        width: `${pct}%`,
+                        height: "100%",
+                        background: fill,
+                        borderRadius: radius.pill,
+                        transition: "width 200ms ease-out",
+                    }}
+                />
+            )}
+            <span style={progressLabelStyle}>{indeterminate ? "…" : `${pct}%`}</span>
         </div>
     );
 }

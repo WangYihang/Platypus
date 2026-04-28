@@ -41,6 +41,7 @@ type uploadTestAgent struct {
 	fixture  *agentRouteFixture
 	cancels  *TransferCancelRegistry
 	recorder *FakeTransferRecorder
+	hosts    *fakeHostLookup // nil unless a test seeds host rows
 }
 
 func setupUploadAgent(
@@ -97,14 +98,18 @@ func setupUploadAgent(
 }
 
 func (a *uploadTestAgent) registerRoutes(r *gin.Engine) {
-	RegisterV2FileArchiveRoutes(r, FileArchiveDeps{
+	deps := FileArchiveDeps{
 		Service:     a.svc,
 		RBAC:        a.fixture.RBAC,
 		Recorder:    a.recorder,
 		Broadcaster: nil,
 		Cancels:     a.cancels,
 		IDGenerator: func() string { return "ft-up-1" },
-	})
+	}
+	if a.hosts != nil {
+		deps.Hosts = a.hosts
+	}
+	RegisterV2FileArchiveRoutes(r, deps)
 }
 
 func (a *uploadTestAgent) authedPut(t *testing.T, srvURL, suffix string, body []byte) *http.Response {
@@ -301,6 +306,53 @@ func TestFileV2_UploadEndpointCancel(t *testing.T) {
 }
 
 // Missing path query → 400, no transfer recorded.
+// TestFileV2_UploadStoresRealHostID pins the F bug fix on the
+// upload side: file_transfers.host_id must hold the host UUID, not
+// the agent_id, so the per-host filter and host-name resolution on
+// /transfers both work.
+func TestFileV2_UploadStoresRealHostID(t *testing.T) {
+	a := setupUploadAgent(t, "agent-up-host-id",
+		func(_ *v2pb.FileWriteRequest, stream io.ReadWriteCloser) {
+			defer stream.Close()
+			_ = link.WriteFrame(stream, &v2pb.FileWriteResponse{})
+			for {
+				var ch v2pb.FileChunk
+				if err := link.ReadFrame(stream, &ch); err != nil {
+					break
+				}
+				if ch.Eof {
+					break
+				}
+			}
+			_ = link.WriteFrame(stream, &v2pb.FileWriteResult{BytesWritten: 4})
+		},
+	)
+	a.hosts = &fakeHostLookup{
+		byAgentID: map[string]*storage.Host{
+			"agent-up-host-id": {ID: "host-uuid-upload"},
+		},
+	}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	a.registerRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp := a.authedPut(t, srv.URL, "/fs/upload?path=/dst", []byte("data"))
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+
+	a.recorder.mu.Lock()
+	created := append([]*storage.FileTransfer(nil), a.recorder.created...)
+	a.recorder.mu.Unlock()
+	if len(created) != 1 {
+		t.Fatalf("created = %d; want 1", len(created))
+	}
+	if created[0].HostID != "host-uuid-upload" {
+		t.Errorf("host_id = %q; want %q", created[0].HostID, "host-uuid-upload")
+	}
+}
+
 func TestFileV2_UploadEndpointMissingPath(t *testing.T) {
 	a := setupUploadAgent(t, "agent-up-mp", func(_ *v2pb.FileWriteRequest, s io.ReadWriteCloser) {
 		s.Close()

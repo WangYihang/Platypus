@@ -66,7 +66,7 @@ func v2FileUploadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 		ft := &storage.FileTransfer{
 			ID:         transferID,
 			ProjectID:  projectID,
-			HostID:     agentID,
+			HostID:     resolveHostID(c.Request.Context(), deps, agentID),
 			UserID:     userIDStr,
 			Direction:  storage.TransferDirectionUpload,
 			Kind:       storage.TransferKindFile,

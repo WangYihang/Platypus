@@ -34,6 +34,9 @@ import {
     createTransfersStore,
     type TransferItem,
     cancelTransfer,
+    transferDisplaySize,
+    transferElapsed,
+    transferProgressPct,
 } from "./transfers";
 
 const authJSONMock = vi.mocked(authJSON);
@@ -138,6 +141,116 @@ describe("transfers store", () => {
         const last = calls[calls.length - 1] || [];
         expect(last.find((r) => r.id === "ft-x")).toBeUndefined();
         expect(last.find((r) => r.id === "ft-y")).toBeDefined();
+    });
+});
+
+// transferProgressPct is the single source of truth for the bar's
+// fill ratio. Three contracts pinned here:
+//   1. null while running with no known total → indeterminate UI.
+//   2. 100 on terminal `done`, regardless of byte mismatch.
+//   3. clamped to [0,100] for partial transfers so a compressed
+//      stream that overshoots the scan total never lies as 375%.
+describe("transferProgressPct", () => {
+    it("returns null while running with no known total", () => {
+        expect(
+            transferProgressPct({ ...baseRow, status: "running", bytes_transferred: 200, total_bytes: 0 }),
+        ).toBeNull();
+    });
+
+    it("returns 100 when status is done even if total is unknown", () => {
+        expect(
+            transferProgressPct({ ...baseRow, status: "done", bytes_transferred: 200, total_bytes: 0 }),
+        ).toBe(100);
+    });
+
+    it("returns 100 when bytes overshoot total (compressed stream regression)", () => {
+        // The bug from production: a 48 B file streamed as tar.gz
+        // produced ~180 B out. Pre-fix: 375% bar. Post-fix: clamped + done.
+        expect(
+            transferProgressPct({
+                ...baseRow,
+                status: "done",
+                total_bytes: 48,
+                bytes_transferred: 180,
+            }),
+        ).toBe(100);
+    });
+
+    it("returns the floor of the running ratio for partial transfers", () => {
+        expect(
+            transferProgressPct({
+                ...baseRow,
+                status: "running",
+                total_bytes: 200,
+                bytes_transferred: 50,
+            }),
+        ).toBe(25);
+    });
+});
+
+// transferDisplaySize hides the denominator when the wire numbers
+// can't be trusted (total unknown OR transferred overshoots) so the
+// operator never sees the "180 / 48" mismatch.
+describe("transferDisplaySize", () => {
+    it("hides the denominator when total_bytes is zero", () => {
+        const out = transferDisplaySize({
+            ...baseRow,
+            bytes_transferred: 200,
+            total_bytes: 0,
+        });
+        expect(out).not.toMatch(/\//);
+    });
+
+    it("hides the denominator when transferred overshoots total", () => {
+        const out = transferDisplaySize({
+            ...baseRow,
+            bytes_transferred: 180,
+            total_bytes: 48,
+            status: "done",
+        });
+        expect(out).not.toMatch(/\//);
+        expect(out).toMatch(/180/);
+    });
+
+    it("shows X / Y for a known-size single-file transfer", () => {
+        const out = transferDisplaySize({
+            ...baseRow,
+            kind: "file",
+            bytes_transferred: 1024,
+            total_bytes: 4096,
+            status: "running",
+        });
+        expect(out).toMatch(/\//);
+    });
+});
+
+// transferElapsed is `now`-injectable so tests don't fake Date.
+describe("transferElapsed", () => {
+    const now = new Date("2026-01-01T00:00:30Z");
+
+    it("uses now when the transfer is still running", () => {
+        const item = { ...baseRow, started_at: "2026-01-01T00:00:00Z", status: "running" as const };
+        expect(transferElapsed(item, now)).toBe("30s");
+    });
+
+    it("uses finished_at when the transfer is terminal", () => {
+        const item = {
+            ...baseRow,
+            started_at: "2026-01-01T00:00:00Z",
+            finished_at: "2026-01-01T00:02:05Z",
+            status: "done" as const,
+        };
+        expect(transferElapsed(item, now)).toBe("2m 5s");
+    });
+
+    it("formats hour-scale durations with h/m", () => {
+        const item = {
+            ...baseRow,
+            started_at: "2026-01-01T00:00:00Z",
+            finished_at: "2026-01-01T03:14:00Z",
+            status: "done" as const,
+        };
+        expect(transferElapsed(item, now)).toBe("3h 14m");
     });
 });
 
