@@ -38,6 +38,7 @@ describe("applyQuickFilter", () => {
             query: "",
             range: "7d",
             categories: [],
+            sources: [],
         });
     });
 });

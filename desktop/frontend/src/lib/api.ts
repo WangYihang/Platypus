@@ -626,12 +626,22 @@ export interface ActivityItem {
     meta?: Record<string, unknown> | string;
 }
 
+// ActivitySource is the high-level "where did this row come from"
+// bucket the activities page exposes as a segment control. Each
+// value maps to one or more raw actor_type values on the server (see
+// expandSourceAlias in handler_activities_v1.go); keeping the alias
+// here means dashboards and the URL can stay stable when we add a
+// new actor type.
+export type ActivitySource = "human" | "agent" | "system";
+
 export interface ListActivitiesOpts {
     from?: Date;
     to?: Date;
     category?: string[];
     action?: string[];
     actor?: string;
+    actorType?: string[];
+    sources?: ActivitySource[];
     outcome?: ActivityOutcome;
     sessionId?: string;
     targetType?: string;
@@ -660,6 +670,8 @@ function buildActivityParams(opts: ListActivitiesOpts): URLSearchParams {
         for (const a of opts.action) p.append("action", a);
     }
     if (opts.actor) p.set("actor", opts.actor);
+    if (opts.actorType && opts.actorType.length) p.set("actor_type", opts.actorType.join(","));
+    if (opts.sources && opts.sources.length) p.set("source", opts.sources.join(","));
     if (opts.outcome) p.set("outcome", opts.outcome);
     if (opts.sessionId) p.set("session_id", opts.sessionId);
     if (opts.targetType) p.set("target_type", opts.targetType);

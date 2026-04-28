@@ -1,4 +1,4 @@
-import type { ActivityOutcome } from "../../lib/api";
+import type { ActivityOutcome, ActivitySource } from "../../lib/api";
 
 export type ActivitiesTimeRange = "24h" | "7d" | "30d" | "all";
 
@@ -15,6 +15,7 @@ export interface QuickFilterPatch {
     query?: string;
     range?: ActivitiesTimeRange;
     categories?: string[];
+    sources?: ActivitySource[];
 }
 
 export interface QuickFilterContext {
@@ -39,6 +40,7 @@ export function applyQuickFilter(
                 query: "",
                 range: "7d",
                 categories: [],
+                sources: [],
             };
     }
 }

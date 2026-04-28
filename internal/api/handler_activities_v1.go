@@ -65,6 +65,15 @@ type listActivitiesResponse struct {
 //	category        comma-separated list
 //	action          repeated
 //	actor           actor_user exact match
+//	actor_type      comma-separated list of raw actor types
+//	                (user|api_token|agent|system|anonymous)
+//	source          high-level alias mapping to actor_type sets:
+//	                  human  → user, api_token
+//	                  agent  → agent
+//	                  system → system, anonymous
+//	                Multiple values may be comma-separated; combined
+//	                with actor_type they union. Powers the
+//	                "Users / Agents / System" segment in the UI.
 //	outcome         success|denied|error
 //	session_id      exact match on session_id
 //	target_type     exact match
@@ -296,6 +305,34 @@ func parseActivityListQuery(c *gin.Context) (storage.ActivityFilter, error) {
 			}
 		}
 	}
+	// actor_type and source merge into the same dimension. We
+	// dedupe so a caller passing both ?source=human&actor_type=user
+	// doesn't end up with `actor_type IN ('user','user')` and a
+	// confusing query plan.
+	seenActor := make(map[string]struct{})
+	addActorType := func(t string) {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			return
+		}
+		if _, ok := seenActor[t]; ok {
+			return
+		}
+		seenActor[t] = struct{}{}
+		f.ActorTypes = append(f.ActorTypes, t)
+	}
+	if s := c.Query("actor_type"); s != "" {
+		for _, p := range strings.Split(s, ",") {
+			addActorType(p)
+		}
+	}
+	if s := c.Query("source"); s != "" {
+		for _, p := range strings.Split(s, ",") {
+			for _, t := range expandSourceAlias(p) {
+				addActorType(t)
+			}
+		}
+	}
 	if s := c.Query("limit"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 0 {
@@ -304,6 +341,32 @@ func parseActivityListQuery(c *gin.Context) (storage.ActivityFilter, error) {
 		f.Limit = n
 	}
 	return f, nil
+}
+
+// expandSourceAlias maps a high-level source bucket to the raw
+// actor_type values stored on the row. Unknown aliases yield nil so
+// they're skipped silently — the caller-side behaviour matches an
+// "all sources" query, which is the safer fallback than 400'ing on a
+// typo. Buckets:
+//
+//   - human  → user, api_token   (anything a person initiated, directly
+//     or via an automation token issued to them)
+//   - agent  → agent             (link lifecycle and agent-side
+//     handshake events)
+//   - system → system, anonymous (server lifecycle, retention sweeps,
+//     and pre-auth events whose origin couldn't be attributed to any
+//     principal)
+func expandSourceAlias(alias string) []string {
+	switch strings.ToLower(strings.TrimSpace(alias)) {
+	case "human", "users", "user":
+		return []string{storage.ActorTypeUser, storage.ActorTypeAPIToken}
+	case "agent", "agents", "link":
+		return []string{storage.ActorTypeAgent}
+	case "system":
+		return []string{storage.ActorTypeSystem, storage.ActorTypeAnonymous}
+	default:
+		return nil
+	}
 }
 
 // parseTimeFlexible accepts RFC3339 or unix seconds. RFC3339 is preferred
@@ -372,15 +435,16 @@ func toActivityItem(a *storage.Activity) activityItem {
 // effort — the export serves regardless of audit success.
 func recordExportAudit(c *gin.Context, projectID string, f storage.ActivityFilter, format string) {
 	meta := map[string]any{
-		"format":     format,
-		"from":       nullableTime(f.From),
-		"to":         nullableTime(f.To),
-		"categories": f.Categories,
-		"actions":    f.Actions,
-		"actor":      f.ActorUser,
-		"outcome":    f.Outcome,
-		"session_id": f.SessionID,
-		"search":     f.Search,
+		"format":      format,
+		"from":        nullableTime(f.From),
+		"to":          nullableTime(f.To),
+		"categories":  f.Categories,
+		"actions":     f.Actions,
+		"actor_types": f.ActorTypes,
+		"actor":       f.ActorUser,
+		"outcome":     f.Outcome,
+		"session_id":  f.SessionID,
+		"search":      f.Search,
 	}
 	targetID := projectID
 	if projectID == "" {

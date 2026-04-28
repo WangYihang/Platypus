@@ -155,16 +155,24 @@ type ActivityFilter struct {
 	IncludeGlobal bool // when ProjectID is set, also include project_id IS NULL rows
 	Categories    []string
 	Actions       []string
-	ActorUser     string
-	Outcome       string
-	SessionID     string
-	TargetType    string
-	TargetID      string
-	Search        string // free-text LIKE against action / target_label / meta
-	From          time.Time
-	To            time.Time
-	Limit         int
-	Cursor        string // opaque keyset cursor from a prior page
+	// ActorTypes narrows by the originating principal class:
+	// "user"/"api_token" → human-driven, "agent" → link lifecycle
+	// emitted by an agent, "system" → server-side background work,
+	// "anonymous" → pre-auth events. Empty slice means no filter.
+	// The dimension is what powers the "Users / Agents / System"
+	// segment on the activities page — keep that mapping in sync
+	// when introducing a new actor type.
+	ActorTypes []string
+	ActorUser  string
+	Outcome    string
+	SessionID  string
+	TargetType string
+	TargetID   string
+	Search     string // free-text LIKE against action / target_label / meta
+	From       time.Time
+	To         time.Time
+	Limit      int
+	Cursor     string // opaque keyset cursor from a prior page
 }
 
 // DefaultActivityListLimit is applied when Filter.Limit <= 0.
@@ -217,6 +225,13 @@ func (r *ActivityRepo) List(ctx context.Context, f ActivityFilter) ([]*Activity,
 		where = append(where, `action IN (`+placeholders+`)`)
 		for _, a := range f.Actions {
 			args = append(args, a)
+		}
+	}
+	if len(f.ActorTypes) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(f.ActorTypes)), ",")
+		where = append(where, `actor_type IN (`+placeholders+`)`)
+		for _, t := range f.ActorTypes {
+			args = append(args, t)
 		}
 	}
 	if f.ActorUser != "" {
@@ -344,6 +359,13 @@ func (r *ActivityRepo) Count(ctx context.Context, f ActivityFilter) (int64, erro
 		where = append(where, `action IN (`+placeholders+`)`)
 		for _, a := range f.Actions {
 			args = append(args, a)
+		}
+	}
+	if len(f.ActorTypes) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(f.ActorTypes)), ",")
+		where = append(where, `actor_type IN (`+placeholders+`)`)
+		for _, t := range f.ActorTypes {
+			args = append(args, t)
 		}
 	}
 	if f.ActorUser != "" {

@@ -26,6 +26,7 @@ import { palette, radius, space } from "../layout/theme";
 import {
     ActivityItem,
     ActivityOutcome,
+    ActivitySource,
     exportProjectActivitiesBlob,
     listProjectActivities,
     ListActivitiesOpts,
@@ -107,6 +108,11 @@ export default function ActivitiesPage() {
 
     const [range, setRange] = useState<TimeRange>("7d");
     const [categories, setCategories] = useState<string[]>([]);
+    // sources is the "who originated this row" segment. Empty means
+    // "all"; the toggle group lets users narrow to one bucket. We keep
+    // it as an array on the wire so a future "human + system" combo
+    // doesn't need a new endpoint shape.
+    const [sources, setSources] = useState<ActivitySource[]>([]);
     const [actor, setActor] = useState("");
     const [outcome, setOutcome] = useState<ActivityOutcome | "">("");
     const [query, setQuery] = useState("");
@@ -125,6 +131,7 @@ export default function ActivitiesPage() {
             if (patch.query !== undefined) setQuery(patch.query);
             if (patch.range !== undefined) setRange(patch.range);
             if (patch.categories !== undefined) setCategories(patch.categories);
+            if (patch.sources !== undefined) setSources(patch.sources);
         },
         [me?.username],
     );
@@ -135,6 +142,7 @@ export default function ActivitiesPage() {
         (cursor?: string): ListActivitiesOpts => ({
             from: fromDate ?? undefined,
             category: categories.length ? categories : undefined,
+            sources: sources.length ? sources : undefined,
             actor: actor.trim() || undefined,
             outcome: outcome || undefined,
             q: query.trim() || undefined,
@@ -143,7 +151,7 @@ export default function ActivitiesPage() {
             cursor,
             includeTotal: !cursor, // only fetch total on page 1
         }),
-        [fromDate, categories, actor, outcome, query, includeGlobal],
+        [fromDate, categories, sources, actor, outcome, query, includeGlobal],
     );
 
     const refresh = useCallback(async () => {
@@ -285,6 +293,38 @@ export default function ActivitiesPage() {
             <Toolbar
                 left={
                     <>
+                        {/*
+                          Source segment: one tap to narrow the log to
+                          human actions, agent link events, or system
+                          background work. "" = no filter; the
+                          ToggleGroup uses a single-select model and
+                          maps an explicit "all" sentinel to clearing
+                          the array so deselecting still has a target.
+                        */}
+                        <ToggleGroup
+                            type="single"
+                            value={sources[0] ?? "all"}
+                            variant="outline"
+                            size="sm"
+                            onValueChange={(v) => {
+                                if (!v || v === "all") setSources([]);
+                                else setSources([v as ActivitySource]);
+                            }}
+                        >
+                            <ToggleGroupItem value="all" title="All sources">
+                                All
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="human" title="Actions initiated by a user or API token">
+                                Users
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="agent" title="Agent link lifecycle events">
+                                Agents
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="system" title="Server-side background events">
+                                System
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+
                         <ToggleGroup
                             type="single"
                             value={range}

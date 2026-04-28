@@ -170,3 +170,67 @@ func TestActivities_Recorder_FillsContext(t *testing.T) {
 		t.Fatalf("actor_ip was not auto-filled")
 	}
 }
+
+// TestActivities_ListProject_SourceFilter covers the source/actor_type
+// segment that powers the activities page: ?source=human surfaces user
+// + api_token rows; ?source=agent surfaces agent rows only; the
+// explicit ?actor_type= override hits the raw column. Catches drift
+// between expandSourceAlias and the storage filter.
+func TestActivities_ListProject_SourceFilter(t *testing.T) {
+	r, db, adminID, pid := activitiesTestSetup(t)
+	ctx := context.Background()
+
+	rows := []struct {
+		actorType string
+		actor     string
+		action    string
+	}{
+		{storage.ActorTypeUser, adminID, "file.delete"},
+		{storage.ActorTypeAPIToken, "tok-1", "command.exec"},
+		{storage.ActorTypeAgent, "agent-1", "session.start"},
+		{storage.ActorTypeSystem, "", "server.start"},
+	}
+	for i, r := range rows {
+		if err := db.Activities().Record(ctx, &storage.Activity{
+			At:        time.Now().UTC().Add(time.Duration(i) * time.Second),
+			ProjectID: &pid,
+			ActorType: r.actorType,
+			ActorUser: r.actor,
+			Category:  storage.CategoryCommand,
+			Action:    r.action,
+			Outcome:   storage.OutcomeSuccess,
+		}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+
+	token := mintBearerForUserID(t, db, adminID, user.RoleAdmin)
+
+	cases := []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{"source=human", "?source=human", 2},
+		{"source=agent", "?source=agent", 1},
+		{"source=system", "?source=system", 1},
+		{"actor_type=user", "?actor_type=user", 1},
+		{"actor_type=user,agent", "?actor_type=user,agent", 2},
+		{"unknown source falls through to all", "?source=mystery", 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := probeReqWithPath(r, "GET", "/api/v1/projects/"+pid+"/activities"+tc.query, token, nil)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+			var resp listActivitiesResponse
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if len(resp.Items) != tc.want {
+				t.Fatalf("items=%d; want %d (rows=%+v)", len(resp.Items), tc.want, resp.Items)
+			}
+		})
+	}
+}

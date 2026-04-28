@@ -186,6 +186,74 @@ func TestActivities_Filter_Combinations(t *testing.T) {
 	}
 }
 
+// TestActivities_Filter_ActorTypes covers the ActorTypes IN (...)
+// branch — the dimension the activities page exposes as a "Users /
+// Agents / System" segment. Mixed actor types are the realistic
+// case (a project's audit log has user actions, agent link events,
+// and a server lifecycle row), so we seed each and confirm the
+// filter narrows correctly and the union case still works.
+func TestActivities_Filter_ActorTypes(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	pid := "proj-1"
+
+	rows := []struct {
+		actor     string
+		actorType string
+		action    string
+	}{
+		{"alice", storage.ActorTypeUser, "file.delete"},
+		{"alice", storage.ActorTypeUser, "command.exec"},
+		{"agent-1", storage.ActorTypeAgent, "session.start"},
+		{"agent-1", storage.ActorTypeAgent, "session.end"},
+		{"", storage.ActorTypeSystem, "server.start"},
+		{"token-1", storage.ActorTypeAPIToken, "command.exec"},
+	}
+	for _, r := range rows {
+		proj := pid
+		if err := db.Activities().Record(ctx, &storage.Activity{
+			ProjectID: &proj,
+			ActorUser: r.actor,
+			ActorType: r.actorType,
+			Category:  storage.CategoryCommand,
+			Action:    r.action,
+		}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+
+	got, _, _ := db.Activities().List(ctx, storage.ActivityFilter{
+		ProjectID:  &pid,
+		ActorTypes: []string{storage.ActorTypeAgent},
+	})
+	if len(got) != 2 {
+		t.Fatalf("agent-only: got %d; want 2", len(got))
+	}
+
+	// "Human" union: user + api_token. Lets the UI's source=human
+	// alias map cleanly to one query.
+	got, _, _ = db.Activities().List(ctx, storage.ActivityFilter{
+		ProjectID:  &pid,
+		ActorTypes: []string{storage.ActorTypeUser, storage.ActorTypeAPIToken},
+	})
+	if len(got) != 3 {
+		t.Fatalf("human union: got %d; want 3", len(got))
+	}
+
+	// Count must apply the same predicate so include_total matches
+	// the listing.
+	n, err := db.Activities().Count(ctx, storage.ActivityFilter{
+		ProjectID:  &pid,
+		ActorTypes: []string{storage.ActorTypeSystem},
+	})
+	if err != nil {
+		t.Fatalf("Count: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("system count: got %d; want 1", n)
+	}
+}
+
 // Time range filter enforces [From, To] inclusively.
 func TestActivities_TimeRange(t *testing.T) {
 	db := newTestDB(t)
