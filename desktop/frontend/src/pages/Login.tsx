@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import WizardCard from "../components/WizardCard";
 import { bootstrap, login } from "../lib/auth";
-import { getServer, listServers } from "../lib/servers";
+import { defaultServerURL, getServer, listServers } from "../lib/servers";
 import { font, palette, space } from "../layout/theme";
 
 import { Button } from "@/components/ui/button";
@@ -64,10 +64,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
     // Standalone-preview flows (`make web-ui-serve` on :7777 talking to a
     // server on :9443) need the user to overwrite this once; the value
     // persists in the saved server profile after that.
-    const defaultURL =
-        pinnedProfile?.url ||
-        initialURL ||
-        (typeof window !== "undefined" ? window.location.origin : "");
+    const defaultURL = pinnedProfile?.url || initialURL || defaultServerURL();
     const hasSavedServers = listServers().length > 0;
 
     const loginForm = useForm<LoginFormValues>({

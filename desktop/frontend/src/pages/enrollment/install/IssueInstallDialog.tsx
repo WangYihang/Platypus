@@ -77,17 +77,24 @@ export default function IssueInstallDialog({
 
     // Pre-fill server_endpoint with the server's public_addr and load
     // the platform list whenever the dialog opens. Both are best-effort
-    // — failures fall back to a usable empty state.
+    // — when /info or public_addr are unavailable we fall back to the
+    // current page's host:port so the user isn't staring at an empty
+    // field. They can still edit it before submitting.
     useEffect(() => {
         if (!open) return;
+        const browserFallback =
+            typeof window !== "undefined" && window.location.host
+                ? window.location.host
+                : "";
         getServerInfo()
             .then((info) => {
-                if (info.public_addr) {
-                    form.setValue("server_endpoint", info.public_addr);
-                }
+                const endpoint = info.public_addr || browserFallback;
+                if (endpoint) form.setValue("server_endpoint", endpoint);
             })
             .catch(() => {
-                /* best-effort — the field stays blank if /info fails */
+                if (browserFallback) {
+                    form.setValue("server_endpoint", browserFallback);
+                }
             });
         setPlatforms({ status: "loading" });
         listInstallPlatforms()

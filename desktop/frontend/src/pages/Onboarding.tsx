@@ -9,6 +9,7 @@ import { humanizeError } from "../lib/humanizeError";
 import {
     ServerProfile,
     addServer,
+    defaultServerURL,
     hostnameFromURL,
 } from "../lib/servers";
 import {
@@ -34,7 +35,7 @@ export default function Onboarding() {
     const navigate = useNavigate();
     const [step, setStep] = useState<Step>("welcome");
 
-    const [url, setUrl] = useState("http://127.0.0.1:7331");
+    const [url, setUrl] = useState(defaultServerURL());
     const [name, setName] = useState("");
     const [probing, setProbing] = useState(false);
     const [probeInfo, setProbeInfo] = useState<PublicServerInfo | null>(null);

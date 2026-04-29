@@ -19,6 +19,7 @@ import { palette, space } from "./theme";
 import {
     ServerProfile,
     addServer,
+    defaultServerURL,
     hostnameFromURL,
     normaliseURL,
 } from "../lib/servers";
@@ -47,7 +48,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
     const [phase, setPhase] = useState<Phase>("probe");
 
     // Shared fields across phases
-    const [url, setUrl] = useState("http://127.0.0.1:7331");
+    const [url, setUrl] = useState(defaultServerURL());
     const [name, setName] = useState("");
     const [probing, setProbing] = useState(false);
     const [probeInfo, setProbeInfo] = useState<PublicServerInfo | null>(null);

@@ -57,6 +57,24 @@ export function hostnameFromURL(url: string): string {
     }
 }
 
+// Hard-coded fallback for non-browser / non-http origins (Wails desktop
+// shell, SSR, tests). Matches the historical placeholder so existing
+// dev workflows keep working when window.location isn't a real URL.
+const FALLBACK_SERVER_URL = "http://127.0.0.1:7331";
+
+// defaultServerURL is the placeholder we pre-fill into "Server URL"
+// fields on Onboarding / Login / AddServerDialog. When the UI is
+// served by the platypus-server itself (the common case) this is just
+// `window.location.origin`, so the user doesn't have to retype it. In
+// the Wails desktop shell the origin is `wails://app` (or similar) —
+// not a usable Platypus URL — so we fall back to the loopback default.
+export function defaultServerURL(): string {
+    if (typeof window === "undefined") return FALLBACK_SERVER_URL;
+    const { protocol, origin } = window.location;
+    if (protocol === "http:" || protocol === "https:") return origin;
+    return FALLBACK_SERVER_URL;
+}
+
 // uid generates a short, unique id for profiles. We don't need real
 // UUID rigor here — collision probability at 16 profiles is zero —
 // but prefer crypto.randomUUID when available for consistency with

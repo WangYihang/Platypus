@@ -6,6 +6,7 @@ import {
     addServer,
     avatarBg,
     avatarFor,
+    defaultServerURL,
     getActiveServer,
     getActiveServerId,
     getServer,
@@ -64,6 +65,32 @@ describe("servers — pure helpers", () => {
 
     it("avatarBg is stable for the same URL", () => {
         expect(avatarBg("https://a")).toBe(avatarBg("https://a"));
+    });
+
+    it("defaultServerURL returns window.location.origin on http(s)", () => {
+        // jsdom default is http://localhost:3000 — anything starting
+        // with http:/https: is reflected verbatim.
+        const got = defaultServerURL();
+        expect(got).toMatch(/^https?:\/\//);
+        expect(got).toBe(window.location.origin);
+    });
+
+    it("defaultServerURL falls back to loopback on non-http origins", () => {
+        const original = window.location;
+        // Re-define location with a wails:// protocol; jsdom's default
+        // location object isn't writable, so swap it through defineProperty.
+        Object.defineProperty(window, "location", {
+            configurable: true,
+            value: { ...original, protocol: "wails:", origin: "wails://app" },
+        });
+        try {
+            expect(defaultServerURL()).toBe("http://127.0.0.1:7331");
+        } finally {
+            Object.defineProperty(window, "location", {
+                configurable: true,
+                value: original,
+            });
+        }
     });
 
     it("avatarFor uses the name's first uppercase letter", () => {
