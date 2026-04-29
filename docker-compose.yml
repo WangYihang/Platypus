@@ -8,9 +8,9 @@ services:
     volumes:
       - platypus_data:/app/data
     environment:
-      PLATYPUS_EXTERNAL_ADDR: "localhost:9443"
-      PLATYPUS_DATA_DIR: "/app/data"
-      PLATYPUS_DEV: "1"
+      - PLATYPUS_EXTERNAL_ADDR={PLATYPUS_EXTERNAL_ADDR:-localhost:9443}
+      - PLATYPUS_DATA_DIR=/app/data
+      - PLATYPUS_DEV=1
     restart: always
     depends_on:
       agent-publisher:
