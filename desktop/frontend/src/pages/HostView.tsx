@@ -1,107 +1,43 @@
-import * as React from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-
-import { decideAutoOpenShell } from "./host/autoOpenShell";
-import { computeScrollSwap } from "./host/scrollPreservation";
 import {
-    Boxes,
-    HelpCircle,
-    Laptop,
-    Layers,
-    Loader2,
-    Monitor,
-    Server,
-    TerminalSquare,
-} from "lucide-react";
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, TerminalSquare } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import AutoGrid from "../components/AutoGrid";
-import Card from "../components/Card";
-import InlineBar from "../components/InlineBar";
-import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
-import MetricCard from "../components/MetricCard";
-import Mono from "../components/Mono";
+import PageHeader from "../components/PageHeader";
 import RefreshButton from "../components/RefreshButton";
 import StatusDot from "../components/StatusDot";
-import StatusPill from "../components/StatusPill";
-
-// ApprovalStatusPill renders the host's approval_status on the host
-// detail KPI strip. Each status maps to a tone in the existing
-// vocabulary so it visually clusters with the other badges (online /
-// offline / fingerprint fallback) on the same row.
-function ApprovalStatusPill({ status }: { status: "pending" | "approved" | "rejected" }) {
-    if (status === "approved") {
-        return <StatusPill tone="success">approved</StatusPill>;
-    }
-    if (status === "rejected") {
-        return <StatusPill tone="danger">rejected</StatusPill>;
-    }
-    return <StatusPill tone="warning">pending approval</StatusPill>;
-}
-
-// BuildVersionValue renders the host's running agent build_version
-// alongside an outdated/up-to-date indicator. Three visual states:
-//
-//   1. "—"        host hasn't reported a build_version yet (pre-
-//                  versioning agent or not enrolled)
-//   2. "1.6.0" + green "up to date" — host matches manifest head
-//   3. "1.5.1" + amber "outdated · latest 1.6.0" — host trails
-//
-// `latest` is the current channel head from /v1/install/platforms;
-// when it's empty (no manifest published, distributor disabled) we
-// can't compare and just render the version with no pill.
-function BuildVersionValue({
-    version,
-    latest,
-}: {
-    version: string | undefined;
-    latest: string | undefined;
-}) {
-    if (!version) return <span style={{ color: palette.textSecondary }}>—</span>;
-    const cmp = !latest ? "unknown" : version === latest ? "match" : "mismatch";
-    return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
-            <Mono>{version}</Mono>
-            {cmp === "match" && <StatusPill tone="success">up to date</StatusPill>}
-            {cmp === "mismatch" && (
-                <StatusPill tone="warning">{`outdated · latest ${latest}`}</StatusPill>
-            )}
-        </span>
-    );
-}
-import PageHeader from "../components/PageHeader";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
     Host,
     HostSysInfo,
-    InstallPlatformsResponse,
     SessionRow,
     getHost,
     getHostSysInfo,
     listHostSessions,
-    listInstallPlatforms,
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { qk } from "../lib/queryKeys";
-import { fromNow, isOnline } from "../lib/time";
+import { isOnline } from "../lib/time";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
+
+import { decideAutoOpenShell } from "./host/autoOpenShell";
+import { computeScrollSwap } from "./host/scrollPreservation";
 import FilesTab from "./host/FilesTab";
+import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
+import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 
 interface Props {
     projectID: string;
@@ -111,20 +47,24 @@ interface Props {
 // HostView's tab order matches the VS Code mental model the R3
 // redesign adopts: file browser is the centerpiece (this is a
 // remote-shell client, the file system is what operators come here
-// to explore), so Files leads. Info / Sessions / Processes /
-// Tunnels follow as auxiliary panels. The route default
+// to explore), so Files leads. Info / Sessions / Processes / Tunnels
+// follow as auxiliary panels. The route default
 // (`/hosts/:id` → `/hosts/:id/files`) reflects that — landing on a
 // system-info data dump was useful for debugging the agent but
 // less useful for the day-to-day operator workflow.
 const TABS = ["files", "info", "sessions", "processes", "tunnels"] as const;
 type TabKey = (typeof TABS)[number];
 
-// HostView is the main-panel view when a Host is selected. Four tabs
-// (Info, Files, Sessions, Processes) live under the page header —
-// shadcn Tabs for the bar, but the panels render ourselves so each
-// tab stays mounted across switches. The shell surface moved out of
-// this page into the global bottom drawer; operators open it via the
-// "Open terminal" action in the header.
+// HostView is the main-panel view when a Host is selected. After the
+// 2026-04 split, this file is just the tab orchestrator — each tab's
+// rendering lives in pages/host/<Tab>.tsx so this surface stays
+// focused on:
+//
+//   1. Fetching host / sysInfo / sessions and threading them down
+//   2. Tab routing (URL-driven, deep-link friendly)
+//   3. Per-tab scroll preservation
+//   4. The auto-open-terminal heuristic
+//   5. The page-level header chrome
 export default function HostView({ projectID, hostID }: Props) {
     const queryClient = useQueryClient();
     const hostQuery = useQuery({
@@ -148,10 +88,12 @@ export default function HostView({ projectID, hostID }: Props) {
         : null;
     const sysInfoLoading = sysInfoQuery.isFetching;
     const loading = hostQuery.isFetching || sessionsQuery.isFetching;
-    const error: string | null =
-        hostQuery.error ? String(hostQuery.error)
-        : sessionsQuery.error ? String(sessionsQuery.error)
-        : null;
+    const error: string | null = hostQuery.error
+        ? String(hostQuery.error)
+        : sessionsQuery.error
+          ? String(sessionsQuery.error)
+          : null;
+
     // pickedSessionID drives which session Terminal / Files operate
     // on. Despite the name, the value is the host's agent_id, not the
     // sessions-row UUID — every per-host RPC route on the server
@@ -174,10 +116,10 @@ export default function HostView({ projectID, hostID }: Props) {
         navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
 
     // Per-tab scroll preservation. Each tab panel shares one scroll
-    // container; without help every tab change resets scrollTop to
-    // 0. computeScrollSwap is the pure brain — we read scrollTop off
-    // the container before the tab swap, hand it the leaving tab,
-    // and write back the restored value for the new tab.
+    // container; without help every tab change resets scrollTop to 0.
+    // computeScrollSwap is the pure brain — we read scrollTop off the
+    // container before the tab swap, hand it the leaving tab, and
+    // write back the restored value for the new tab.
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const scrollMapRef = useRef(new Map<string, number>());
     const prevTabRef = useRef<string | null>(null);
@@ -413,7 +355,7 @@ export default function HostView({ projectID, hostID }: Props) {
                         padding: space[4],
                     }}
                 >
-                    <SessionsPanel sessions={sessions} />
+                    <SessionsTab sessions={sessions} />
                 </div>
                 <div
                     style={{
@@ -421,7 +363,7 @@ export default function HostView({ projectID, hostID }: Props) {
                         padding: space[4],
                     }}
                 >
-                    <InfoPanel
+                    <InfoTab
                         host={host}
                         sysInfo={sysInfo}
                         sysInfoError={sysInfoError}
@@ -461,797 +403,5 @@ function NoLiveSessionNote() {
             title="No live session"
             description="Start or reconnect an agent to use this tab."
         />
-    );
-}
-
-interface InfoPanelProps {
-    host: Host;
-    sysInfo: HostSysInfo | null;
-    sysInfoError: string | null;
-    sysInfoLoading: boolean;
-    onRefreshSysInfo: () => void;
-}
-
-// InfoPanel renders the host Info tab. Three regions, top-down:
-//   1. KPI strip — five live metrics (CPU %, mem %, load1, disk %,
-//      uptime) in a `auto-fit` MetricCard grid; cells hide when their
-//      underlying field is missing so the strip degrades gracefully
-//      when the agent is offline rather than rendering "—" placeholders.
-//   2. Detail grid — Identity / System / Hardware / Network / Storage /
-//      Logged-in users laid out in a two-column CSS grid (System spans
-//      two rows because it carries the most data).
-//   3. Inline cached-fallback note when the live sysInfo fetch failed.
-// We prefer live SysInfo values when available and fall through to
-// the DB-cached Host columns; that fallback is centralised in the
-// individual cards.
-function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysInfo }: InfoPanelProps) {
-    // Prefer live sysInfo values; fall through to DB-cached Host.
-    const kernel = sysInfo?.kernel_version || host.kernel_version;
-    const platform = sysInfo?.platform || host.platform;
-    const platformVersion = sysInfo?.platform_version || host.platform_version;
-    const platformFamily = sysInfo?.platform_family || host.platform_family;
-    const arch = sysInfo?.arch || host.arch;
-    const cpuModel = sysInfo?.cpu_model || host.cpu_model;
-    const numCPU = sysInfo?.num_cpu || host.num_cpu;
-    const numCPUPhysical = sysInfo?.num_cpu_physical;
-    const memTotal = sysInfo?.mem_total || host.mem_total_bytes;
-    const currentUser = sysInfo?.current_user || host.current_user;
-    const timezone = sysInfo?.timezone || host.timezone;
-    const primaryIP = sysInfo?.primary_ip || host.primary_ip;
-    const primaryMAC = sysInfo?.primary_mac || host.primary_mac;
-    const bootTime = sysInfo?.boot_time_unix || host.boot_time_unix;
-    const buildVersion = sysInfo?.build_version || host.build_version;
-    const buildCommit = sysInfo?.build_commit || host.build_commit;
-    const buildDate = sysInfo?.build_date || host.build_date;
-    const protocolVersion = sysInfo?.protocol_version ?? host.protocol_version;
-
-    // Latest channel head from the distributor manifest. Used to flag
-    // outdated agents in the build-version row. Refresh-cadence is
-    // generous (5min stale time) — manifest changes only when an
-    // operator publishes a release, so polling tightly buys nothing.
-    // 404 / distributor-disabled returns no data; the row falls back
-    // to "no comparison available".
-    const installPlatformsQuery = useQuery<InstallPlatformsResponse>({
-        queryKey: qk.installPlatforms(),
-        queryFn: () => listInstallPlatforms(),
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-        retry: false,
-    });
-    const latestVersion = installPlatformsQuery.data?.version || undefined;
-
-    const liveBadge = sysInfoLoading ? (
-        <StatusPill tone="neutral">refreshing…</StatusPill>
-    ) : sysInfo ? (
-        <StatusPill tone="success">live</StatusPill>
-    ) : (
-        <StatusPill tone="warning">cached</StatusPill>
-    );
-
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: space[4], maxWidth: 1100 }}>
-            <InfoKPIStrip host={host} sysInfo={sysInfo} />
-            <AutoGrid
-                minSize={380}
-                gap={3}
-                style={{ alignItems: "start" }}
-                data-testid="host-info-detail-grid"
-            >
-            <Card
-                header={
-                    <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
-                        <span>Identity</span>
-                    </span>
-                }
-                padding={5}
-            >
-                <DataList
-                    items={[
-                        { label: "hostname", value: host.hostname || sysInfo?.hostname || "—" },
-                        {
-                            label: "machine type",
-                            value: <MachineTypePill type={sysInfo?.machine_type || host.machine_type} />,
-                        },
-                        { label: "primary alias", value: host.primary_alias || "—" },
-                        {
-                            label: "agent id",
-                            value: host.agent_id ? <Mono size={11}>{host.agent_id}</Mono> : "—",
-                        },
-                        {
-                            label: "machine_id",
-                            value: host.machine_id ? (
-                                <Mono>{host.machine_id}</Mono>
-                            ) : (
-                                <StatusPill tone="warning">fingerprint fallback</StatusPill>
-                            ),
-                        },
-                        {
-                            label: "fingerprint",
-                            value: <Mono size={11}>{host.fingerprint}</Mono>,
-                        },
-                        { label: "first seen", value: fromNow(host.first_seen_at) },
-                        { label: "last seen", value: fromNow(host.last_seen_at) },
-                        {
-                            label: "approval",
-                            value: <ApprovalStatusPill status={host.approval_status} />,
-                        },
-                    ]}
-                />
-            </Card>
-
-            <Card
-                header={
-                    <span
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: space[2],
-                            justifyContent: "space-between",
-                            width: "100%",
-                        }}
-                    >
-                        <span style={{ display: "flex", alignItems: "center", gap: space[2] }}>
-                            <span>System</span>
-                            {liveBadge}
-                        </span>
-                        <RefreshButton
-                            variant="ghost"
-                            loading={sysInfoLoading}
-                            onClick={onRefreshSysInfo}
-                        />
-                    </span>
-                }
-                padding={5}
-            >
-                <DataList
-                    items={[
-                        {
-                            label: "OS / arch",
-                            value: (
-                                <span>
-                                    {host.os || sysInfo?.os || "—"}
-                                    {arch ? ` · ${arch}` : ""}
-                                </span>
-                            ),
-                        },
-                        {
-                            label: "platform",
-                            value: (
-                                <span>
-                                    {platform || "—"}
-                                    {platformVersion ? ` ${platformVersion}` : ""}
-                                    {platformFamily ? ` (${platformFamily})` : ""}
-                                </span>
-                            ),
-                        },
-                        { label: "kernel", value: kernel ? <Mono>{kernel}</Mono> : "—" },
-                        {
-                            label: "virtualization",
-                            value: sysInfo?.virtualization ? <Mono>{sysInfo.virtualization}</Mono> : "—",
-                        },
-                        {
-                            label: "CPU",
-                            value: (
-                                <span>
-                                    {cpuModel || "—"}
-                                    {numCPU ? ` · ${numCPU}` : ""}
-                                    {numCPU ? " logical" : ""}
-                                    {numCPUPhysical ? ` / ${numCPUPhysical} physical` : ""}
-                                    {sysInfo?.cpu_mhz ? ` · ${Math.round(sysInfo.cpu_mhz)} MHz` : ""}
-                                </span>
-                            ),
-                        },
-                        {
-                            label: "CPU usage",
-                            value:
-                                sysInfo?.cpu_percent !== undefined
-                                    ? `${sysInfo.cpu_percent.toFixed(1)} %`
-                                    : "—",
-                        },
-                        {
-                            label: "memory",
-                            value: renderMemoryLine(
-                                sysInfo?.mem_used,
-                                memTotal,
-                                sysInfo?.mem_available,
-                            ),
-                        },
-                        {
-                            label: "swap",
-                            value: renderMemoryLine(sysInfo?.swap_used, sysInfo?.swap_total),
-                        },
-                        {
-                            label: "load avg",
-                            value: renderLoadLine(sysInfo?.load1, sysInfo?.load5, sysInfo?.load15),
-                        },
-                        {
-                            label: "uptime",
-                            value: renderUptime(sysInfo?.uptime_seconds, bootTime),
-                        },
-                        { label: "timezone", value: timezone || "—" },
-                        { label: "current user", value: currentUser ? <Mono>{currentUser}</Mono> : "—" },
-                        {
-                            label: "processes",
-                            value: sysInfo?.process_count ? String(sysInfo.process_count) : "—",
-                        },
-                        {
-                            label: "build version",
-                            value: (
-                                <BuildVersionValue
-                                    version={buildVersion}
-                                    latest={latestVersion}
-                                />
-                            ),
-                        },
-                        {
-                            label: "build commit",
-                            value: buildCommit ? <Mono size={11}>{buildCommit}</Mono> : "—",
-                        },
-                        {
-                            label: "build date",
-                            value: buildDate ? <Mono>{buildDate}</Mono> : "—",
-                        },
-                        {
-                            label: "protocol version",
-                            value: protocolVersion ? String(protocolVersion) : "—",
-                        },
-                    ]}
-                />
-                {sysInfoError && !sysInfo && (
-                    <div
-                        style={{
-                            marginTop: space[3],
-                            fontSize: 12,
-                            color: palette.textSecondary,
-                        }}
-                    >
-                        Live metrics unavailable — showing last-known values. ({sysInfoError})
-                    </div>
-                )}
-            </Card>
-
-            <Card header="Network" padding={5}>
-                <DataList
-                    items={[
-                        { label: "primary IP", value: primaryIP ? <Mono>{primaryIP}</Mono> : "—" },
-                        { label: "primary MAC", value: primaryMAC ? <Mono>{primaryMAC}</Mono> : "—" },
-                        {
-                            label: "default gateway",
-                            value: sysInfo?.default_gateway ? <Mono>{sysInfo.default_gateway}</Mono> : "—",
-                        },
-                        {
-                            label: "public IP",
-                            value: sysInfo?.public_ip ? <Mono>{sysInfo.public_ip}</Mono> : "—",
-                        },
-                    ]}
-                />
-                {sysInfo?.interfaces && sysInfo.interfaces.length > 0 && (
-                    <div style={{ marginTop: space[4] }}>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[160px]">interface</TableHead>
-                                    <TableHead>MAC</TableHead>
-                                    <TableHead>addresses</TableHead>
-                                    <TableHead className="w-[100px]">state</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sysInfo.interfaces.map((ifi) => (
-                                    <TableRow key={ifi.name}>
-                                        <TableCell>
-                                            <Mono>{ifi.name}</Mono>
-                                        </TableCell>
-                                        <TableCell>
-                                            {ifi.mac ? <Mono size={11}>{ifi.mac}</Mono> : "—"}
-                                        </TableCell>
-                                        <TableCell>
-                                            {ifi.addrs && ifi.addrs.length > 0 ? (
-                                                <Mono size={11}>{ifi.addrs.join(", ")}</Mono>
-                                            ) : (
-                                                "—"
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {ifi.is_up ? (
-                                                <StatusPill tone="success">up</StatusPill>
-                                            ) : (
-                                                <StatusPill tone="neutral">down</StatusPill>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-            </Card>
-
-            <HardwareCard host={host} sysInfo={sysInfo} />
-
-            {sysInfo?.disks && sysInfo.disks.length > 0 && (
-                <Card header="Storage" padding={5}>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>mount</TableHead>
-                                <TableHead>device</TableHead>
-                                <TableHead className="w-[90px]">fs</TableHead>
-                                <TableHead className="w-[120px]">used</TableHead>
-                                <TableHead className="w-[120px]">total</TableHead>
-                                <TableHead className="w-[70px]">%</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sysInfo.disks.map((d, i) => (
-                                <TableRow key={`${d.mountpoint}-${i}`}>
-                                    <TableCell>
-                                        <Mono>{d.mountpoint}</Mono>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Mono size={11}>{d.device || "—"}</Mono>
-                                    </TableCell>
-                                    <TableCell>{d.fstype || "—"}</TableCell>
-                                    <TableCell>{formatBytes(d.used_bytes)}</TableCell>
-                                    <TableCell>{formatBytes(d.total_bytes)}</TableCell>
-                                    <TableCell>{formatPercent(d.used_bytes, d.total_bytes)}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </Card>
-            )}
-
-            {sysInfo?.users && sysInfo.users.length > 0 && (
-                <Card
-                    header="Logged-in users"
-                    padding={5}
-                    style={{ gridColumn: "1 / -1" }}
-                >
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[140px]">user</TableHead>
-                                <TableHead className="w-[140px]">terminal</TableHead>
-                                <TableHead>from</TableHead>
-                                <TableHead className="w-[160px]">since</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sysInfo.users.map((u, i) => (
-                                <TableRow key={`${u.user}-${u.terminal}-${i}`}>
-                                    <TableCell>
-                                        <Mono>{u.user || "—"}</Mono>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Mono size={11}>{u.terminal || "—"}</Mono>
-                                    </TableCell>
-                                    <TableCell>{u.host ? <Mono size={11}>{u.host}</Mono> : "—"}</TableCell>
-                                    <TableCell className="text-text-secondary">
-                                        {u.started_at
-                                            ? fromNow(new Date(u.started_at * 1000).toISOString())
-                                            : "—"}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </Card>
-            )}
-            </AutoGrid>
-        </div>
-    );
-}
-
-// InfoKPIStrip renders the at-a-glance health row above the Info-tab
-// detail grid. The five tiles cover the questions an operator asks
-// in the first second after opening a host: is it pegged, out of
-// memory, swapping, full, and how long has it been up? Cells render
-// only when their underlying field is present so an offline agent
-// produces a 0-tile strip rather than a row of "—" placeholders. The
-// `auto-fit` grid wraps gracefully on narrow viewports (a 720 px
-// sidebar+main layout collapses the 5 tiles to a 3+2 row pair).
-function InfoKPIStrip({
-    host,
-    sysInfo,
-}: {
-    host: Host;
-    sysInfo: HostSysInfo | null;
-}) {
-    interface Tile {
-        key: string;
-        label: string;
-        value: ReactNode;
-        hint?: ReactNode;
-        accent?: "default" | "success" | "warning" | "danger";
-    }
-    const tiles: Tile[] = [];
-
-    // CPU %. Warn at 70, danger at 90 — thresholds inside InlineBar
-    // already pick the right tone, but we still echo it onto the
-    // surrounding MetricCard accent so the value text colour matches.
-    if (sysInfo?.cpu_percent !== undefined) {
-        const pct = sysInfo.cpu_percent;
-        tiles.push({
-            key: "cpu",
-            label: "CPU",
-            value: (
-                <InlineBar
-                    value={pct}
-                    width={120}
-                    label="CPU usage"
-                    data-testid="host-cpu-bar"
-                />
-            ),
-            accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
-        });
-    }
-
-    // Memory %. Computed from used/total — neither field alone is
-    // useful as a KPI on its own (raw bytes scale with the host),
-    // so we hide the tile unless both are present.
-    const memTotal = sysInfo?.mem_total || host.mem_total_bytes;
-    if (sysInfo?.mem_used !== undefined && memTotal) {
-        const pct = (sysInfo.mem_used / memTotal) * 100;
-        tiles.push({
-            key: "mem",
-            label: "Memory",
-            value: (
-                <InlineBar
-                    value={pct}
-                    width={120}
-                    label="Memory usage"
-                    data-testid="host-mem-bar"
-                />
-            ),
-            hint: `${formatBytes(sysInfo.mem_used)} / ${formatBytes(memTotal)}`,
-            accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
-        });
-    }
-
-    // Load 1. Threshold is per-CPU because raw load1 means nothing
-    // without core count — load1=4 on a 32-core box is idle, on a
-    // 2-core box it's a full pegging.
-    if (sysInfo?.load1 !== undefined) {
-        const cores = sysInfo.num_cpu || host.num_cpu || 1;
-        const ratio = sysInfo.load1 / cores;
-        tiles.push({
-            key: "load1",
-            label: "Load 1m",
-            value: sysInfo.load1.toFixed(2),
-            hint:
-                sysInfo.load5 !== undefined && sysInfo.load15 !== undefined
-                    ? `${sysInfo.load5.toFixed(2)} · ${sysInfo.load15.toFixed(2)}`
-                    : undefined,
-            accent: ratio >= 2 ? "danger" : ratio >= 1 ? "warning" : "default",
-        });
-    }
-
-    // Disk %. Pick the worst-utilised mount across all reported
-    // disks. The hint names that mount so the operator can drill in
-    // without having to scan the Storage table.
-    if (sysInfo?.disks && sysInfo.disks.length > 0) {
-        let worst: { pct: number; mount: string } | null = null;
-        for (const d of sysInfo.disks) {
-            if (!d.total_bytes || d.total_bytes <= 0) continue;
-            const pct = ((d.used_bytes ?? 0) / d.total_bytes) * 100;
-            if (!worst || pct > worst.pct) {
-                worst = { pct, mount: d.mountpoint || "—" };
-            }
-        }
-        if (worst) {
-            tiles.push({
-                key: "disk",
-                label: "Disk",
-                value: (
-                    <InlineBar
-                        value={worst.pct}
-                        width={120}
-                        label="Disk usage"
-                        data-testid="host-disk-bar"
-                    />
-                ),
-                hint: worst.mount,
-                accent:
-                    worst.pct >= 90 ? "danger" : worst.pct >= 80 ? "warning" : "default",
-            });
-        }
-    }
-
-    // Uptime. Reuses renderUptime() — already returns "Nd Nh Nm" or
-    // "—". We only push the tile when the renderer would produce a
-    // real string so the strip stays clean on never-seen hosts.
-    const uptime = renderUptime(sysInfo?.uptime_seconds, sysInfo?.boot_time_unix || host.boot_time_unix);
-    if (uptime !== "—") {
-        tiles.push({ key: "uptime", label: "Uptime", value: uptime });
-    }
-
-    if (tiles.length === 0) return null;
-
-    return (
-        <AutoGrid minSize={140} gap={3} data-testid="host-info-kpi-strip">
-            {tiles.map((t) => (
-                <MetricCard
-                    key={t.key}
-                    label={t.label}
-                    value={t.value}
-                    hint={t.hint}
-                    accent={t.accent}
-                />
-            ))}
-        </AutoGrid>
-    );
-}
-
-// formatBytes turns a byte count into a short human-friendly label
-// (e.g. "124 GB"). Returns "—" for undefined / zero so tables align.
-function formatBytes(n?: number): string {
-    if (!n || n <= 0) return "—";
-    const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-    let i = 0;
-    let v = n;
-    while (v >= 1024 && i < units.length - 1) {
-        v /= 1024;
-        i++;
-    }
-    return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} ${units[i]}`;
-}
-
-function formatPercent(used?: number, total?: number): string {
-    if (!used || !total || total <= 0) return "—";
-    return `${((used / total) * 100).toFixed(1)} %`;
-}
-
-function renderMemoryLine(used?: number, total?: number, available?: number): React.ReactNode {
-    if (!total) return "—";
-    const pct = used ? ` · ${((used / total) * 100).toFixed(1)} %` : "";
-    return (
-        <span>
-            {formatBytes(used)} / {formatBytes(total)}
-            {pct}
-            {available ? ` · ${formatBytes(available)} avail` : ""}
-        </span>
-    );
-}
-
-function renderLoadLine(l1?: number, l5?: number, l15?: number): React.ReactNode {
-    if (l1 === undefined && l5 === undefined && l15 === undefined) return "—";
-    const fmt = (n?: number) => (n === undefined ? "—" : n.toFixed(2));
-    return (
-        <Mono>
-            {fmt(l1)} · {fmt(l5)} · {fmt(l15)}
-        </Mono>
-    );
-}
-
-function renderUptime(secs?: number, bootUnix?: number): React.ReactNode {
-    if (!secs && !bootUnix) return "—";
-    const s = secs ?? (bootUnix ? Math.max(0, Math.floor(Date.now() / 1000) - bootUnix) : 0);
-    if (!s) return "—";
-    const d = Math.floor(s / 86400);
-    const h = Math.floor((s % 86400) / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const parts: string[] = [];
-    if (d) parts.push(`${d}d`);
-    if (h || d) parts.push(`${h}h`);
-    parts.push(`${m}m`);
-    return parts.join(" ");
-}
-
-function SessionsPanel({ sessions }: { sessions: SessionRow[] }) {
-    if (sessions.length === 0) {
-        return (
-            <Card padding={0}>
-                <EmptyState
-                    title="No sessions"
-                    description="No connections recorded for this host yet."
-                />
-            </Card>
-        );
-    }
-    return (
-        <Card padding={0}>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[180px]">Session</TableHead>
-                        <TableHead>Ingress</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Remote</TableHead>
-                        <TableHead className="w-[120px]">Agent</TableHead>
-                        <TableHead className="w-[140px]">Connected</TableHead>
-                        <TableHead className="w-[180px]">Status</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sessions.map((r) => {
-                        return (
-                            <TableRow key={r.id}>
-                                <TableCell>
-                                    <Mono>{`${r.id.slice(0, 16)}…`}</Mono>
-                                </TableCell>
-                                <TableCell>
-                                    {r.ingress_addr ? <Mono>{r.ingress_addr}</Mono> : "—"}
-                                </TableCell>
-                                <TableCell>
-                                    {r.user ? (
-                                        r.user === "root" ? (
-                                            <StatusPill tone="danger">root</StatusPill>
-                                        ) : (
-                                            <Mono>{r.user}</Mono>
-                                        )
-                                    ) : (
-                                        "—"
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    {r.remote_addr ? <Mono>{r.remote_addr}</Mono> : "—"}
-                                </TableCell>
-                                <TableCell data-testid="session-version-cell">
-                                    {r.version ? <Mono size={11}>{r.version}</Mono> : "—"}
-                                </TableCell>
-                                <TableCell className="text-text-secondary">
-                                    {fromNow(r.connected_at)}
-                                </TableCell>
-                                <TableCell>
-                                    {r.disconnected_at ? (
-                                        <StatusPill tone="neutral">
-                                            {`closed ${fromNow(r.disconnected_at)}`}
-                                        </StatusPill>
-                                    ) : (
-                                        <StatusPill tone="success">live</StatusPill>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
-        </Card>
-    );
-}
-
-// machineTypeMeta maps the coarse classification string to a label
-// and a lucide icon. Keeping the mapping tight here (rather than in
-// a shared util) so that adding a new category only touches one
-// place per use site.
-const machineTypeMeta: Record<
-    string,
-    { label: string; Icon: React.ComponentType<{ className?: string }> }
-> = {
-    container: { label: "container", Icon: Boxes },
-    vm: { label: "virtual machine", Icon: Layers },
-    bare_metal: { label: "bare metal", Icon: Server },
-    laptop: { label: "laptop", Icon: Laptop },
-    desktop: { label: "desktop", Icon: Monitor },
-    unknown: { label: "unknown", Icon: HelpCircle },
-};
-
-function MachineTypePill({ type }: { type?: string }) {
-    const meta = type ? machineTypeMeta[type] : undefined;
-    if (!meta) return <>—</>;
-    const { label, Icon } = meta;
-    return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
-            <Icon className="size-3.5" />
-            <span>{label}</span>
-        </span>
-    );
-}
-
-// HardwareCard surfaces the chassis / product / BIOS identity plus
-// the GPU list. Everything is optional — if the agent had no way to
-// read DMI and ghw returned nothing we still render the card with
-// "—" placeholders so operators can tell the probe ran but found
-// nothing rather than "was this even collected?".
-function HardwareCard({ host, sysInfo }: { host: Host; sysInfo: HostSysInfo | null }) {
-    const productVendor = sysInfo?.product_vendor || host.product_vendor;
-    const productName = sysInfo?.product_name || host.product_name;
-    const biosVendor = sysInfo?.bios_vendor || host.bios_vendor;
-    const biosVersion = sysInfo?.bios_version || host.bios_version;
-    const chassis = sysInfo?.chassis_type || host.chassis_type;
-    const containerRuntime = sysInfo?.container_runtime;
-
-    const gpus = sysInfo?.gpus || [];
-
-    return (
-        <Card header="Hardware" padding={5}>
-            <DataList
-                items={[
-                    {
-                        label: "machine type",
-                        value: (
-                            <MachineTypePill type={sysInfo?.machine_type || host.machine_type} />
-                        ),
-                    },
-                    ...(containerRuntime
-                        ? [
-                              {
-                                  label: "container runtime",
-                                  value: <Mono>{containerRuntime}</Mono>,
-                              },
-                          ]
-                        : []),
-                    {
-                        label: "chassis",
-                        value: chassis ? <Mono>{chassis}</Mono> : "—",
-                    },
-                    {
-                        label: "product",
-                        value: (
-                            <span>
-                                {productVendor || "—"}
-                                {productName ? ` · ${productName}` : ""}
-                            </span>
-                        ),
-                    },
-                    {
-                        label: "BIOS",
-                        value: (
-                            <span>
-                                {biosVendor || "—"}
-                                {biosVersion ? ` · ${biosVersion}` : ""}
-                            </span>
-                        ),
-                    },
-                ]}
-            />
-            {gpus.length > 0 && (
-                <div style={{ marginTop: space[4] }}>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[100px]">vendor</TableHead>
-                                <TableHead>model</TableHead>
-                                <TableHead className="w-[120px]">driver</TableHead>
-                                <TableHead className="w-[120px]">VRAM</TableHead>
-                                <TableHead className="w-[90px]">util</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {gpus.map((g, i) => (
-                                <TableRow key={g.uuid || g.bus_id || `gpu-${i}`}>
-                                    <TableCell>{g.vendor || "—"}</TableCell>
-                                    <TableCell>{g.model || "—"}</TableCell>
-                                    <TableCell>
-                                        {g.driver ? (
-                                            <Mono size={11}>
-                                                {g.driver}
-                                                {g.driver_version ? ` ${g.driver_version}` : ""}
-                                            </Mono>
-                                        ) : (
-                                            "—"
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {g.vram_total_bytes
-                                            ? `${formatBytes(g.vram_used_bytes)} / ${formatBytes(
-                                                  g.vram_total_bytes,
-                                              )}`
-                                            : "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {g.utilization_pct !== undefined && g.utilization_pct > 0
-                                            ? `${g.utilization_pct.toFixed(0)} %`
-                                            : "—"}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            )}
-            {gpus.length === 0 && host.gpu_summary && (
-                <div
-                    style={{
-                        marginTop: space[3],
-                        fontSize: 12,
-                        color: palette.textSecondary,
-                    }}
-                >
-                    {host.gpu_summary}
-                </div>
-            )}
-        </Card>
     );
 }
