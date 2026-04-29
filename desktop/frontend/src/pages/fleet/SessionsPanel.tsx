@@ -137,7 +137,7 @@ export default function SessionsPanel() {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
                 {!sessions && (

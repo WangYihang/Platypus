@@ -103,7 +103,7 @@ export default function RolesTab() {
                     </Button>
                 }
             />
-            {error && <ErrorBox text={String(error)} />}
+            {error && <ErrorBox text={humanizeError(error)} />}
             <Card padding={0}>
                 {rows === null ? (
                     <div className="flex items-center justify-center p-10">

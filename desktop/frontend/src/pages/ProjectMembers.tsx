@@ -220,7 +220,7 @@ export default function ProjectMembers({ project }: Props) {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
                 {!canAdd && (

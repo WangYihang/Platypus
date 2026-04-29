@@ -6,6 +6,7 @@ import Card from "../../../components/Card";
 import Mono from "../../../components/Mono";
 import { palette } from "../../../layout/theme";
 import { type RBACPermission, listRBACPermissions } from "../../../lib/api";
+import { humanizeError } from "../../../lib/humanizeError";
 import { qk } from "../../../lib/queryKeys";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
@@ -37,7 +38,7 @@ export default function PermissionsTab() {
             </Card>
         );
     }
-    if (error) return <ErrorBox text={String(error)} />;
+    if (error) return <ErrorBox text={humanizeError(error)} />;
 
     return (
         <div className="space-y-4">

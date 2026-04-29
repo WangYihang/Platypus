@@ -105,7 +105,7 @@ export default function HostsPanel() {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
                 {hosts && hosts.length === 0 ? (

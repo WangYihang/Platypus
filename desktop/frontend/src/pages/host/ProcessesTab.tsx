@@ -9,6 +9,7 @@ import {
     ListHostProcessesOpts,
     listHostProcesses,
 } from "../../lib/api";
+import { humanizeError } from "../../lib/humanizeError";
 import { qk } from "../../lib/queryKeys";
 import { fromNow } from "../../lib/time";
 
@@ -168,7 +169,7 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
                         fontSize: 12,
                     }}
                 >
-                    {String(error)}
+                    {humanizeError(error)}
                 </div>
             )}
 

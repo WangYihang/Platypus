@@ -131,7 +131,7 @@ export default function InstallPanel({ projectID, projectSlug }: Props) {
                         fontSize: 13,
                     }}
                 >
-                    {String(error)}
+                    {humanizeError(error)}
                 </div>
             )}
             <Card padding={0}>

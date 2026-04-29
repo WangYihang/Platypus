@@ -24,6 +24,7 @@ import {
     listHosts,
     listProjectSessions,
 } from "../lib/api";
+import { humanizeError } from "../lib/humanizeError";
 import { qk } from "../lib/queryKeys";
 import { fromNow, isOnline } from "../lib/time";
 
@@ -166,7 +167,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
 

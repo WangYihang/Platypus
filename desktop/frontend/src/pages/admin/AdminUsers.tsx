@@ -235,7 +235,7 @@ export default function AdminUsers() {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
                 {users && users.length === 0 ? (

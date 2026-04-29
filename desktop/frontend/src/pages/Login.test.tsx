@@ -10,6 +10,7 @@ vi.mock("../lib/auth", () => ({
 vi.mock("../lib/servers", () => ({
     getServer: () => null,
     listServers: () => [],
+    defaultServerURL: () => "http://127.0.0.1:7331",
 }));
 
 import Login from "./Login";

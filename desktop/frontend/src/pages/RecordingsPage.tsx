@@ -221,7 +221,7 @@ export default function RecordingsPage() {
                             fontSize: 13,
                         }}
                     >
-                        {String(error)}
+                        {humanizeError(error)}
                     </div>
                 )}
                 {!items && (

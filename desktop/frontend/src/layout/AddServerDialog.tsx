@@ -91,7 +91,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
             setProbeInfo(info);
             setPhase(info.admin_bootstrapped ? "login" : "bootstrap");
         } catch (err) {
-            setProbeError(String(err));
+            setProbeError(humanizeError(err));
         } finally {
             setProbing(false);
         }

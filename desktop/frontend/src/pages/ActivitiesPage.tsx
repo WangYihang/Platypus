@@ -369,7 +369,7 @@ export default function ActivitiesPage() {
                                 fontSize: 13,
                             }}
                         >
-                            {String(error)}
+                            {humanizeError(error)}
                         </div>
                     )}
                     {!items && (

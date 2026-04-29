@@ -129,7 +129,7 @@ export default function PATPanel({ projectID }: Props) {
                         fontSize: 13,
                     }}
                 >
-                    {String(error)}
+                    {humanizeError(error)}
                 </div>
             )}
             <Card padding={0}>
