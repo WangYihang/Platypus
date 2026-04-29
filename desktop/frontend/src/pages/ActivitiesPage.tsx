@@ -1,29 +1,16 @@
-import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import {
-    Clock,
-    Download,
-    Loader2,
-    Search,
-} from "lucide-react";
+import { Clock, Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { humanizeError } from "../lib/humanizeError";
 
-import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
-import Mono from "../components/Mono";
-import RefreshButton from "../components/RefreshButton";
 import FacetSidebar from "../components/FacetSidebar";
-import StatusPill from "../components/StatusPill";
+import RefreshButton from "../components/RefreshButton";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
+import { palette, space } from "../layout/theme";
 import { getSessionUser } from "../lib/auth";
-import {
-    QuickFilterPreset,
-    applyQuickFilter,
-} from "./activities/quickFilters";
-import { palette, radius, space } from "../layout/theme";
+import { humanizeError } from "../lib/humanizeError";
 import {
     ActivityItem,
     ActivityOutcome,
@@ -33,13 +20,9 @@ import {
     ListActivitiesOpts,
 } from "../lib/api";
 import { qk } from "../lib/queryKeys";
-import { fromNow } from "../lib/time";
-import { cn } from "@/lib/cn";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     Select,
     SelectContent,
@@ -47,67 +30,30 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+import { QuickFilterPreset, applyQuickFilter } from "./activities/quickFilters";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+    CATEGORY_OPTIONS,
+    TimeRange,
+    rangeToFrom,
+} from "./activities/format";
+import ActivityDetailSheet from "./activities/ActivityDetailSheet";
+import ActivityTable from "./activities/ActivityTable";
+import MultiSelectPopover from "./activities/MultiSelectPopover";
+import QuickFilterChip from "./activities/QuickFilterChip";
 
-type TimeRange = "24h" | "7d" | "30d" | "all";
-
-// Curated superset of categories the backend writes. Kept static so the
-// filter dropdown renders before the first fetch; the underlying `q`
-// text search is the escape hatch for anything not in this list.
-const CATEGORY_OPTIONS = [
-    "auth",
-    "session",
-    "command",
-    "file",
-    "tunnel",
-    "listener",
-    "agent",
-    "admin",
-    "project",
-    "server",
-    "user",
-];
-
-const OUTCOME_TONE: Record<ActivityOutcome, "success" | "warning" | "danger"> = {
-    success: "success",
-    denied: "warning",
-    error: "danger",
-};
-
-// ActivitiesPage renders /projects/:slug/activities: a paginated,
-// filterable, project-scoped view of the unified activity log. Clicking
-// a row opens a right-side sheet with the full structured meta payload
-// so the table itself can stay compact.
+// /projects/:slug/activities — paginated, filterable, project-scoped view
+// of the unified activity log. Clicking a row opens a right-side sheet
+// with the full structured meta payload.
 export default function ActivitiesPage() {
     const project = useCurrentProject();
     const queryClient = useQueryClient();
 
     const [range, setRange] = useState<TimeRange>("7d");
     const [categories, setCategories] = useState<string[]>([]);
-    // sources is the "who originated this row" segment. Empty means
-    // "all"; the toggle group lets users narrow to one bucket. We keep
-    // it as an array on the wire so a future "human + system" combo
+    // sources stays an array on the wire so a future "human + system" combo
     // doesn't need a new endpoint shape.
     const [sources, setSources] = useState<ActivitySource[]>([]);
     const [actor, setActor] = useState("");
@@ -151,10 +97,6 @@ export default function ActivitiesPage() {
         [fromDate, categories, sources, actor, outcome, query, includeGlobal],
     );
 
-    // The query key embeds the page-1 buildOpts (cursor=undefined) so
-    // changing any filter rebuilds the cursor stack from scratch —
-    // useInfiniteQuery guarantees `pages[0]` is always page-1 of the
-    // current filter set.
     const baseOpts = useMemo(() => buildOpts(), [buildOpts]);
     const activitiesQuery = useInfiniteQuery({
         queryKey: qk.activities(project.id, baseOpts),
@@ -195,14 +137,7 @@ export default function ActivitiesPage() {
         if (error) toast.error(`load activities: ${humanizeError(error)}`);
     }, [error]);
 
-    // Facet sidebar — counts derived from the currently-loaded items.
-    // Clicking an option toggles it as the single active value for
-    // that filter (matching the existing actor / outcome single-select
-    // semantics; the API doesn't accept multi-actor / multi-outcome
-    // today). The sidebar exists alongside the inline toolbar, not
-    // instead of it: power users still reach for the toolbar's quick
-    // filters; visual-first operators get the at-a-glance counts the
-    // sidebar offers.
+    // Facet sidebar — counts derived from currently-loaded items.
     const userFacetOptions = useMemo(() => {
         const counts = new Map<string, number>();
         for (const it of items ?? []) {
@@ -232,18 +167,15 @@ export default function ActivitiesPage() {
                 selected: outcome === v,
             }));
     }, [items, outcome]);
-    const onFacetToggle = useCallback(
-        (key: string, value: string) => {
-            if (key === "user") {
-                setActor((prev) => (prev.trim() === value ? "" : value));
-            } else if (key === "outcome") {
-                setOutcome((prev) =>
-                    prev === value ? "" : (value as ActivityOutcome),
-                );
-            }
-        },
-        [],
-    );
+    const onFacetToggle = useCallback((key: string, value: string) => {
+        if (key === "user") {
+            setActor((prev) => (prev.trim() === value ? "" : value));
+        } else if (key === "outcome") {
+            setOutcome((prev) =>
+                prev === value ? "" : (value as ActivityOutcome),
+            );
+        }
+    }, []);
 
     const handleExport = useCallback(
         async (format: "jsonl" | "csv") => {
@@ -258,10 +190,6 @@ export default function ActivitiesPage() {
                 a.download = `activities-${project.slug}.${format}`;
                 a.click();
                 URL.revokeObjectURL(url);
-                // Confirm-on-success toast: large exports can take a
-                // few seconds and the download UI lives in the
-                // browser chrome, not the page — without a toast the
-                // operator can't tell whether the click did anything.
                 toast.success(`Exported activities as ${format.toUpperCase()}`);
             } catch (e) {
                 toast.error(`export: ${humanizeError(e)}`);
@@ -280,595 +208,207 @@ export default function ActivitiesPage() {
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
             <FacetSidebar
                 facets={[
-                    {
-                        key: "user",
-                        title: "User",
-                        options: userFacetOptions,
-                    },
-                    {
-                        key: "outcome",
-                        title: "Outcome",
-                        options: outcomeFacetOptions,
-                    },
+                    { key: "user", title: "User", options: userFacetOptions },
+                    { key: "outcome", title: "Outcome", options: outcomeFacetOptions },
                 ]}
                 onToggle={onFacetToggle}
             />
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-            {/* AuditPage owns the page-level header + tab strip — this
-                component renders only its filter chips, toolbar, and
-                table. Export / Refresh moved into the toolbar's right
-                slot since there's no PageHeader actions slot here. */}
-            <div
-                data-testid="activities-quick-filters"
-                style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: space[2],
-                    padding: `${space[2]}px ${space[4]}px 0`,
-                }}
-            >
-                <QuickFilterChip
-                    label="My actions"
-                    title="Filter to your actions over the last 24h"
-                    disabled={!me?.username}
-                    onClick={() => onQuickFilter("my")}
-                />
-                <QuickFilterChip
-                    label="Failures"
-                    title="Show only events with outcome = error"
-                    onClick={() => onQuickFilter("failures")}
-                />
-                <QuickFilterChip
-                    label="Last 24h"
-                    title="Narrow the time window to the last 24 hours"
-                    onClick={() => onQuickFilter("24h")}
-                />
-                <QuickFilterChip
-                    label="Clear"
-                    title="Reset every filter"
-                    variant="ghost"
-                    onClick={() => onQuickFilter("clear")}
-                />
-            </div>
-            <Toolbar
-                left={
-                    <>
-                        {/*
-                          Source segment: one tap to narrow the log to
-                          human actions, agent link events, or system
-                          background work. "" = no filter; the
-                          ToggleGroup uses a single-select model and
-                          maps an explicit "all" sentinel to clearing
-                          the array so deselecting still has a target.
-                        */}
-                        <ToggleGroup
-                            type="single"
-                            value={sources[0] ?? "all"}
-                            variant="outline"
-                            size="sm"
-                            onValueChange={(v) => {
-                                if (!v || v === "all") setSources([]);
-                                else setSources([v as ActivitySource]);
-                            }}
-                        >
-                            <ToggleGroupItem value="all" title="All sources">
-                                All
-                            </ToggleGroupItem>
-                            <ToggleGroupItem value="human" title="Actions initiated by a user or API token">
-                                Users
-                            </ToggleGroupItem>
-                            <ToggleGroupItem value="agent" title="Agent link lifecycle events">
-                                Agents
-                            </ToggleGroupItem>
-                            <ToggleGroupItem value="system" title="Server-side background events">
-                                System
-                            </ToggleGroupItem>
-                        </ToggleGroup>
-
-                        <ToggleGroup
-                            type="single"
-                            value={range}
-                            variant="outline"
-                            size="sm"
-                            onValueChange={(v) => {
-                                if (v) setRange(v as TimeRange);
-                            }}
-                        >
-                            <ToggleGroupItem value="24h">24h</ToggleGroupItem>
-                            <ToggleGroupItem value="7d">7d</ToggleGroupItem>
-                            <ToggleGroupItem value="30d">30d</ToggleGroupItem>
-                            <ToggleGroupItem value="all">All</ToggleGroupItem>
-                        </ToggleGroup>
-
-                        <MultiSelectPopover
-                            label="Category"
-                            options={CATEGORY_OPTIONS}
-                            selected={categories}
-                            onChange={setCategories}
-                        />
-
-                        <Select
-                            value={outcome || "__all__"}
-                            onValueChange={(v) =>
-                                setOutcome(v === "__all__" ? "" : (v as ActivityOutcome))
-                            }
-                        >
-                            <SelectTrigger size="sm" className="min-w-[140px]">
-                                <SelectValue placeholder="Outcome" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All outcomes</SelectItem>
-                                <SelectItem value="success">success</SelectItem>
-                                <SelectItem value="denied">denied</SelectItem>
-                                <SelectItem value="error">error</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Input
-                            placeholder="Actor (username)"
-                            value={actor}
-                            onChange={(e) => setActor(e.target.value)}
-                            className="h-8 max-w-[200px]"
-                        />
-
-                        <div className="relative max-w-[280px] w-full">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
-                            <Input
-                                placeholder="Search action / target / meta"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className="h-8 pl-8"
-                            />
-                        </div>
-                    </>
-                }
-                right={
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ color: palette.textSecondary, fontSize: 12 }}>
-                            {subtitle}
-                        </span>
-                        <span style={{ color: palette.textSecondary, fontSize: 12, marginLeft: 8 }}>
-                            Include global
-                        </span>
-                        <Switch checked={includeGlobal} onCheckedChange={setIncludeGlobal} />
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleExport("jsonl")}
-                        >
-                            <Download className="size-3.5" />
-                            JSONL
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleExport("csv")}
-                        >
-                            <Download className="size-3.5" />
-                            CSV
-                        </Button>
-                        <RefreshButton
-                            loading={loading}
-                            onClick={refresh}
-                            iconOnly
-                            aria-label="Refresh"
-                        />
-                    </div>
-                }
-            />
-
-            <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
-                {error && (
-                    <div
-                        style={{
-                            marginBottom: space[4],
-                            padding: `${space[3]}px ${space[4]}px`,
-                            border: `1px solid ${palette.danger}`,
-                            borderRadius: 6,
-                            color: palette.danger,
-                            fontSize: 13,
-                        }}
-                    >
-                        {String(error)}
-                    </div>
-                )}
-                {!items && (
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            padding: 80,
-                        }}
-                    >
-                        <Loader2 className="size-5 animate-spin text-text-muted" />
-                    </div>
-                )}
-                {items && items.length === 0 && (
-                    <EmptyState
-                        icon={<Clock className="size-5" />}
-                        title="No activities yet"
-                        description="As users, agents, and the server do things, their actions appear here in real time."
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                <div
+                    data-testid="activities-quick-filters"
+                    style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: space[2],
+                        padding: `${space[2]}px ${space[4]}px 0`,
+                    }}
+                >
+                    <QuickFilterChip
+                        label="My actions"
+                        title="Filter to your actions over the last 24h"
+                        disabled={!me?.username}
+                        onClick={() => onQuickFilter("my")}
                     />
-                )}
-                {items && items.length > 0 && (
-                    <Card padding={0}>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[140px]">When</TableHead>
-                                    <TableHead className="w-[180px]">Actor</TableHead>
-                                    <TableHead className="w-[220px]">Action</TableHead>
-                                    <TableHead>Target</TableHead>
-                                    <TableHead className="w-[110px]">Outcome</TableHead>
-                                    <TableHead className="w-[100px]">Duration</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {items.map((it) => (
-                                    <TableRow
-                                        key={it.id}
-                                        onClick={() => setSelected(it)}
-                                        className="cursor-pointer"
-                                    >
-                                        <TableCell>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span className="text-text-secondary">
-                                                        {fromNow(it.at)}
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    {new Date(it.at).toLocaleString()}
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <span className="text-text-primary">
-                                                    {it.actor_user || (
-                                                        <span className="text-text-muted">
-                                                            system
-                                                        </span>
-                                                    )}
-                                                </span>
-                                                {it.actor_ip && (
-                                                    <Mono style={{ fontSize: 11, color: palette.textMuted }}>
-                                                        {it.actor_ip}
-                                                    </Mono>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <Mono>{it.action}</Mono>
-                                                <span className="text-[11px] text-text-muted">
-                                                    {it.category}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TargetCell item={it} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusPill
-                                                tone={OUTCOME_TONE[it.outcome] ?? "neutral"}
-                                            >
-                                                {it.outcome}
-                                            </StatusPill>
-                                        </TableCell>
-                                        <TableCell>
-                                            {typeof it.duration_ms === "number" ? (
-                                                <span className="text-text-secondary">
-                                                    {formatDuration(it.duration_ms)}
-                                                </span>
-                                            ) : (
-                                                <span className="text-text-muted">—</span>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {nextCursor && (
-                            <div
-                                style={{
-                                    padding: space[4],
-                                    display: "flex",
-                                    justifyContent: "center",
+                    <QuickFilterChip
+                        label="Failures"
+                        title="Show only events with outcome = error"
+                        onClick={() => onQuickFilter("failures")}
+                    />
+                    <QuickFilterChip
+                        label="Last 24h"
+                        title="Narrow the time window to the last 24 hours"
+                        onClick={() => onQuickFilter("24h")}
+                    />
+                    <QuickFilterChip
+                        label="Clear"
+                        title="Reset every filter"
+                        variant="ghost"
+                        onClick={() => onQuickFilter("clear")}
+                    />
+                </div>
+                <Toolbar
+                    left={
+                        <>
+                            <ToggleGroup
+                                type="single"
+                                value={sources[0] ?? "all"}
+                                variant="outline"
+                                size="sm"
+                                onValueChange={(v) => {
+                                    if (!v || v === "all") setSources([]);
+                                    else setSources([v as ActivitySource]);
                                 }}
                             >
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={loadingMore}
-                                    onClick={loadMore}
-                                >
-                                    {loadingMore && (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                    )}
-                                    Load more
-                                </Button>
-                            </div>
-                        )}
-                    </Card>
-                )}
-            </div>
+                                <ToggleGroupItem value="all" title="All sources">
+                                    All
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="human" title="Actions initiated by a user or API token">
+                                    Users
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="agent" title="Agent link lifecycle events">
+                                    Agents
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="system" title="Server-side background events">
+                                    System
+                                </ToggleGroupItem>
+                            </ToggleGroup>
 
-            <ActivityDetailSheet
-                item={selected}
-                onOpenChange={(open) => {
-                    if (!open) setSelected(null);
-                }}
-            />
-        </div>
-        </div>
-    );
-}
+                            <ToggleGroup
+                                type="single"
+                                value={range}
+                                variant="outline"
+                                size="sm"
+                                onValueChange={(v) => {
+                                    if (v) setRange(v as TimeRange);
+                                }}
+                            >
+                                <ToggleGroupItem value="24h">24h</ToggleGroupItem>
+                                <ToggleGroupItem value="7d">7d</ToggleGroupItem>
+                                <ToggleGroupItem value="30d">30d</ToggleGroupItem>
+                                <ToggleGroupItem value="all">All</ToggleGroupItem>
+                            </ToggleGroup>
 
-// TargetCell renders a truncated, tooltip-backed target label so long
-// paths / URLs don't blow up the row. Split out from the main table
-// body so it's obvious where the truncation rule lives.
-function TargetCell({ item }: { item: ActivityItem }) {
-    const label = item.target_label || item.target_id || "—";
-    const short = label.length > 40 ? `${label.slice(0, 40)}…` : label;
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <span>
-                    <Mono>{short}</Mono>
-                </span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[420px] break-all">{label}</TooltipContent>
-        </Tooltip>
-    );
-}
-
-// MultiSelectPopover is a minimal multi-select built from shadcn
-// Popover + Checkbox. shadcn's core Select only handles single values;
-// rather than pulling in Command + cmdk just for checkboxes, a tiny
-// popover list is enough for the ~10-option category filter.
-function MultiSelectPopover({
-    label,
-    options,
-    selected,
-    onChange,
-}: {
-    label: string;
-    options: string[];
-    selected: string[];
-    onChange: (next: string[]) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const summary =
-        selected.length === 0
-            ? label
-            : selected.length === 1
-              ? selected[0]
-              : `${label} · ${selected.length}`;
-
-    function toggle(opt: string, next: boolean) {
-        if (next) onChange([...selected, opt]);
-        else onChange(selected.filter((x) => x !== opt));
-    }
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn("min-w-[160px] justify-between", {
-                        "text-text-muted": selected.length === 0,
-                    })}
-                >
-                    {summary}
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-[220px] p-1">
-                {options.map((opt) => {
-                    const checked = selected.includes(opt);
-                    return (
-                        <label
-                            key={opt}
-                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                        >
-                            <Checkbox
-                                checked={checked}
-                                onCheckedChange={(v) => toggle(opt, v === true)}
+                            <MultiSelectPopover
+                                label="Category"
+                                options={CATEGORY_OPTIONS}
+                                selected={categories}
+                                onChange={setCategories}
                             />
-                            <span>{opt}</span>
-                        </label>
-                    );
-                })}
-                {selected.length > 0 && (
-                    <>
-                        <div className="my-1 h-px bg-border" />
-                        <button
-                            type="button"
-                            onClick={() => onChange([])}
-                            className="flex w-full items-center justify-center rounded-sm px-2 py-1.5 text-xs text-text-muted hover:bg-accent hover:text-text-primary"
-                        >
-                            Clear
-                        </button>
-                    </>
-                )}
-            </PopoverContent>
-        </Popover>
-    );
-}
 
-// ActivityDetailSheet slides a right-side panel in for one row. Kept
-// separate so the table stays compact and the sheet can grow richer
-// over time (links to session, request_id cross-reference, etc.).
-function ActivityDetailSheet({
-    item,
-    onOpenChange,
-}: {
-    item: ActivityItem | null;
-    onOpenChange: (open: boolean) => void;
-}) {
-    const rows: Array<{ label: string; value: React.ReactNode }> = [];
-    if (item) {
-        rows.push({ label: "When", value: new Date(item.at).toLocaleString() });
-        rows.push({ label: "Action", value: <Mono>{item.action}</Mono> });
-        rows.push({ label: "Category", value: <Mono>{item.category}</Mono> });
-        rows.push({
-            label: "Actor",
-            value: (
-                <div>
-                    <div>{item.actor_user || "(system)"}</div>
-                    {item.actor_ip && (
-                        <Mono style={{ fontSize: 11, color: palette.textMuted }}>
-                            {item.actor_ip}
-                        </Mono>
-                    )}
-                    {item.actor_ua && (
-                        <div className="text-[11px] text-text-muted">{item.actor_ua}</div>
-                    )}
-                </div>
-            ),
-        });
-        rows.push({
-            label: "Target",
-            value: (
-                <div>
-                    {item.target_type && (
-                        <span className="text-text-muted">{item.target_type} · </span>
-                    )}
-                    <Mono>{item.target_label || item.target_id || "—"}</Mono>
-                </div>
-            ),
-        });
-        rows.push({
-            label: "Outcome",
-            value: (
-                <StatusPill tone={OUTCOME_TONE[item.outcome] ?? "neutral"}>
-                    {item.outcome}
-                </StatusPill>
-            ),
-        });
-        if (item.error) rows.push({ label: "Error", value: <Mono>{item.error}</Mono> });
-        if (typeof item.duration_ms === "number") {
-            rows.push({ label: "Duration", value: formatDuration(item.duration_ms) });
-        }
-        if (item.session_id) rows.push({ label: "Session", value: <Mono>{item.session_id}</Mono> });
-        if (item.request_id)
-            rows.push({ label: "Request ID", value: <Mono>{item.request_id}</Mono> });
-        if (item.project_id)
-            rows.push({ label: "Project", value: <Mono>{item.project_id}</Mono> });
-    }
+                            <Select
+                                value={outcome || "__all__"}
+                                onValueChange={(v) =>
+                                    setOutcome(v === "__all__" ? "" : (v as ActivityOutcome))
+                                }
+                            >
+                                <SelectTrigger size="sm" className="min-w-[140px]">
+                                    <SelectValue placeholder="Outcome" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All outcomes</SelectItem>
+                                    <SelectItem value="success">success</SelectItem>
+                                    <SelectItem value="denied">denied</SelectItem>
+                                    <SelectItem value="error">error</SelectItem>
+                                </SelectContent>
+                            </Select>
 
-    return (
-        <Sheet open={item !== null} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto">
-                <SheetHeader>
-                    <SheetTitle>{item ? <Mono>{item.action}</Mono> : "Activity"}</SheetTitle>
-                    <SheetDescription>Full structured record for this event.</SheetDescription>
-                </SheetHeader>
-                <div className="px-4 pb-6 space-y-4">
-                    <div
-                        className="grid gap-x-5"
-                        style={{
-                            gridTemplateColumns: "110px 1fr",
-                            rowGap: 12,
-                        }}
-                    >
-                        {rows.map((r) => (
-                            <Fragment key={r.label} label={r.label} value={r.value} />
-                        ))}
-                    </div>
-                    {item?.meta && (
-                        <div>
-                            <div className="mb-2 text-[11px] uppercase text-text-muted">
-                                Meta
+                            <Input
+                                placeholder="Actor (username)"
+                                value={actor}
+                                onChange={(e) => setActor(e.target.value)}
+                                className="h-8 max-w-[200px]"
+                            />
+
+                            <div className="relative max-w-[280px] w-full">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
+                                <Input
+                                    placeholder="Search action / target / meta"
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    className="h-8 pl-8"
+                                />
                             </div>
-                            <pre className="max-h-[360px] overflow-auto rounded border border-border bg-surface p-4 text-xs text-text-primary">
-                                {typeof item.meta === "string"
-                                    ? item.meta
-                                    : JSON.stringify(item.meta, null, 2)}
-                            </pre>
+                        </>
+                    }
+                    right={
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ color: palette.textSecondary, fontSize: 12 }}>
+                                {subtitle}
+                            </span>
+                            <span style={{ color: palette.textSecondary, fontSize: 12, marginLeft: 8 }}>
+                                Include global
+                            </span>
+                            <Switch checked={includeGlobal} onCheckedChange={setIncludeGlobal} />
+                            <Button size="sm" variant="outline" onClick={() => handleExport("jsonl")}>
+                                <Download className="size-3.5" />
+                                JSONL
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleExport("csv")}>
+                                <Download className="size-3.5" />
+                                CSV
+                            </Button>
+                            <RefreshButton
+                                loading={loading}
+                                onClick={refresh}
+                                iconOnly
+                                aria-label="Refresh"
+                            />
+                        </div>
+                    }
+                />
+
+                <div style={{ flex: 1, overflow: "auto", padding: space[8] }}>
+                    {error && (
+                        <div
+                            style={{
+                                marginBottom: space[4],
+                                padding: `${space[3]}px ${space[4]}px`,
+                                border: `1px solid ${palette.danger}`,
+                                borderRadius: 6,
+                                color: palette.danger,
+                                fontSize: 13,
+                            }}
+                        >
+                            {String(error)}
                         </div>
                     )}
+                    {!items && (
+                        <div
+                            style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                padding: 80,
+                            }}
+                        >
+                            <Loader2 className="size-5 animate-spin text-text-muted" />
+                        </div>
+                    )}
+                    {items && items.length === 0 && (
+                        <EmptyState
+                            icon={<Clock className="size-5" />}
+                            title="No activities yet"
+                            description="As users, agents, and the server do things, their actions appear here in real time."
+                        />
+                    )}
+                    {items && items.length > 0 && (
+                        <ActivityTable
+                            items={items}
+                            nextCursor={nextCursor}
+                            loadingMore={loadingMore}
+                            onLoadMore={loadMore}
+                            onSelect={setSelected}
+                        />
+                    )}
                 </div>
-            </SheetContent>
-        </Sheet>
-    );
-}
 
-function Fragment({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-        <>
-            <div className="pt-0.5 text-[11px] uppercase text-text-muted">{label}</div>
-            <div className="text-text-primary break-words">{value}</div>
-        </>
-    );
-}
-
-// rangeToFrom maps the toggle-group value to a lower-bound Date. "all"
-// returns null so the server's "no from filter" branch kicks in.
-function rangeToFrom(range: TimeRange): Date | null {
-    const now = Date.now();
-    switch (range) {
-        case "24h":
-            return new Date(now - 24 * 60 * 60 * 1000);
-        case "7d":
-            return new Date(now - 7 * 24 * 60 * 60 * 1000);
-        case "30d":
-            return new Date(now - 30 * 24 * 60 * 60 * 1000);
-        case "all":
-            return null;
-    }
-}
-
-// formatDuration renders a millisecond count in the most compact form a
-// human can eyeball: <1s stays as ms, 1s-60s as seconds with one
-// decimal, above that as minutes+seconds.
-function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms} ms`;
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-    const mins = Math.floor(ms / 60_000);
-    const secs = Math.floor((ms % 60_000) / 1000);
-    return `${mins}m ${secs}s`;
-}
-
-// QuickFilterChip is a small pill-styled button. Lives inline because
-// no other surface needs the same shape — the chips are only here.
-// Uses StatusPill-like styling so the row reads as a coherent group
-// instead of generic Buttons stacked next to each other.
-interface ChipProps {
-    label: string;
-    title?: string;
-    onClick: () => void;
-    disabled?: boolean;
-    variant?: "outline" | "ghost";
-}
-
-function QuickFilterChip({ label, title, onClick, disabled, variant = "outline" }: ChipProps) {
-    const ghost = variant === "ghost";
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            title={title}
-            style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: `2px ${space[3]}px`,
-                fontSize: 12,
-                fontWeight: 500,
-                lineHeight: 1.6,
-                color: ghost ? palette.textMuted : palette.textSecondary,
-                border: ghost ? "1px solid transparent" : `1px solid ${palette.border}`,
-                background: "transparent",
-                borderRadius: radius.pill,
-                cursor: disabled ? "not-allowed" : "pointer",
-                opacity: disabled ? 0.5 : 1,
-                whiteSpace: "nowrap",
-            }}
-        >
-            {label}
-        </button>
+                <ActivityDetailSheet
+                    item={selected}
+                    onOpenChange={(open) => {
+                        if (!open) setSelected(null);
+                    }}
+                />
+            </div>
+        </div>
     );
 }
