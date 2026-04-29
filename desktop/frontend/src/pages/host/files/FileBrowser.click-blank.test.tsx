@@ -1,0 +1,108 @@
+import { render, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+// Regression: a left-click on a file row used to make the entire file
+// listing area collapse — preview pane and file grid both vanished —
+// because the preview-pane ResizablePanel maxSize was authored as the
+// number `70`, which react-resizable-panels v4 reads as 70 *pixels*
+// (not 70 percent). On a wide viewport the preview clamped to a 70 px
+// sliver and the listing flashed through a tiny pixel-basis layout
+// before the library's ResizeObserver promoted it to the percentage
+// flex. The user reported the area as "blank".
+//
+// We can't faithfully reproduce the layout flash in jsdom (no flex
+// engine, no ResizeObserver), but we can pin the structural invariant
+// the bug breaks: clicking a file selects it, opens the preview pane,
+// and KEEPS the file grid mounted with all entries. A regression that
+// remounts the wrong subtree or stops rendering the panels would fail
+// here.
+//
+// Mock the Wails App bindings before importing FileBrowser; the
+// platform shim normally ships ListDir / ReadFile / etc., we replace
+// them with vi.fn so the test exercises pure UI behaviour without
+// spinning up an agent.
+vi.mock("@wails/go/app/App", () => ({
+    ListDir: vi.fn(async () => ({
+        entries: [
+            { name: "Photos", size: 0, mode: 0o755, modTimeUnix: 0, isDir: true, isSymlink: false },
+            { name: "screenshot.png", size: 207 * 1024, mode: 0o644, modTimeUnix: 0, isDir: false, isSymlink: false, mime: "image/png" },
+            { name: "find.json", size: 881 * 1024, mode: 0o644, modTimeUnix: 0, isDir: false, isSymlink: false, mime: "application/json" },
+        ],
+        total: 3,
+        eof: true,
+    })),
+    ReadFile: vi.fn(async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47])),
+    WriteFile: vi.fn(async () => undefined),
+    DeleteFile: vi.fn(async () => undefined),
+    RenameFile: vi.fn(async () => undefined),
+    Mkdir: vi.fn(async () => undefined),
+    Chmod: vi.fn(async () => undefined),
+    DownloadFile: vi.fn(async () => undefined),
+    DownloadArchive: vi.fn(async () => undefined),
+    UploadFile: vi.fn(async () => undefined),
+    PickFileToUpload: vi.fn(async () => ""),
+    PickSaveLocation: vi.fn(async () => ""),
+}));
+
+vi.mock("../../../components/TransfersPill", () => ({
+    useTransfersDrawer: () => ({ setOpen: vi.fn() }),
+}));
+
+import FileBrowser from "./FileBrowser";
+
+function renderBrowser() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+        <QueryClientProvider client={qc}>
+            <TooltipProvider>
+                <FileBrowser projectID="default" sessionHash="h1" host={null} />
+            </TooltipProvider>
+        </QueryClientProvider>,
+    );
+}
+
+beforeEach(() => {
+    window.localStorage.clear();
+    // Default viewMode is "list" (FileTable); the user's bug report
+    // is in grid mode, so seed the preference here.
+    window.localStorage.setItem(
+        "platypus.pref.ui.files.viewMode",
+        JSON.stringify("grid"),
+    );
+});
+
+describe("FileBrowser click-on-file does not blank the explorer", () => {
+    it("a left-click on a file keeps every panel + every tile mounted", async () => {
+        const { findByRole, queryByText, container } = renderBrowser();
+
+        // Wait for the directory listing to render.
+        const fileTile = await findByRole(
+            "button",
+            { name: /screenshot\.png/i },
+            { timeout: 3000 },
+        );
+        expect(fileTile).toBeInTheDocument();
+        expect(queryByText("Photos")).toBeInTheDocument();
+        expect(queryByText("find.json")).toBeInTheDocument();
+
+        fireEvent.click(fileTile);
+        await new Promise((r) => setTimeout(r, 100));
+
+        // Both panels mount. A regression that returned null from the
+        // preview branch (or remounted the FileBrowser root via an
+        // uncaught render error) would zero this out.
+        const panels = container.querySelectorAll("[data-panel]");
+        expect(panels.length).toBeGreaterThanOrEqual(2);
+
+        // Every original tile is still in the DOM. The previewed file
+        // is selected; the grid does not unmount.
+        expect(
+            container.querySelectorAll('button[aria-label*="screenshot.png"]').length,
+        ).toBeGreaterThan(0);
+        expect(queryByText("Photos")).toBeInTheDocument();
+        expect(queryByText("find.json")).toBeInTheDocument();
+    });
+});
