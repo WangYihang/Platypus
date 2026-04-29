@@ -26,6 +26,7 @@ export interface Host {
     current_user?: string;
     timezone?: string;
     primary_ip?: string;
+    primary_ip_info?: RemoteIpInfo;
     primary_mac?: string;
     boot_time_unix?: number;
 
@@ -256,6 +257,16 @@ export async function listHostProcesses(
     const qs = params.toString();
     const url = `/api/v1/projects/${pid}/hosts/${hid}/processes${qs ? `?${qs}` : ""}`;
     return authJSON<HostProcessList>(url);
+}
+
+// Ad-hoc enrichment for an IP that didn't ride along on a richer
+// payload (e.g. sysinfo's public_ip, mesh link telemetry). The
+// server caches lookups in-process, and React Query dedupes by IP
+// on the client, so a dashboard rendering N copies of the same IP
+// only triggers one round trip.
+export async function lookupIpInfo(ip: string): Promise<RemoteIpInfo> {
+    const qs = new URLSearchParams({ ip }).toString();
+    return authJSON<RemoteIpInfo>(`/api/v1/ipinfo?${qs}`);
 }
 
 export async function listHostSessions(pid: string, hid: string): Promise<SessionRow[]> {

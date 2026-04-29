@@ -558,6 +558,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
+	api.RegisterV1IPInfoRoutes(rest, api.NewIPInfoHandler(), rbac)
 	api.RegisterV1AdminSettingsRoutes(rest, api.NewAdminSettingsHandler(settingsReg), rbac)
 	api.RegisterSwaggerRoutes(rest)
 

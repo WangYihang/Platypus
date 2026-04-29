@@ -1,18 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
+
+import { lookupIpInfo, RemoteIpInfo } from "../lib/api";
+import { qk } from "../lib/queryKeys";
 import Mono from "./Mono";
 
 // IpInfo mirrors the Go-side ipinfo.Info struct serialised by the
 // API. All geo fields are optional — they only get populated for
 // public IPv4 addresses that ip2region recognises.
-export interface IpInfo {
-    ip: string;
-    version?: number;
-    is_private?: boolean;
-    is_loopback?: boolean;
-    country?: string;
-    province?: string;
-    city?: string;
-    isp?: string;
-}
+export type IpInfo = RemoteIpInfo;
 
 // Country-name → ISO emoji flag for the names ip2region emits. The
 // dataset uses Chinese country names, so the keys here are the raw
@@ -87,6 +82,12 @@ interface Props {
     addr: string;
     info?: IpInfo | null;
     monoSize?: number;
+    // When true and `info` is not provided, fall back to a server
+    // lookup via /api/v1/ipinfo. List endpoints already inline
+    // *_info on each row (cheap), so this is reserved for one-off
+    // sites like InfoTab.public_ip where there's no enclosing list
+    // payload.
+    fetchInfo?: boolean;
 }
 
 // RemoteAddr renders an IP address with optional geo / class
@@ -97,16 +98,28 @@ interface Props {
 // Hover surfaces the full breakdown via a native title attribute —
 // matches the rest of the codebase's tooltip pattern (StatusBar,
 // RoleHelpIcon) instead of dragging in a popover lib.
-export default function RemoteAddr({ addr, info, monoSize = 12 }: Props) {
+export default function RemoteAddr({ addr, info, monoSize = 12, fetchInfo }: Props) {
+    // Hooks must run unconditionally — gate on `enabled` instead of
+    // an early return so the rules-of-hooks linter is happy when the
+    // empty-addr branch below short-circuits.
+    const lookup = useQuery({
+        queryKey: qk.ipInfo(addr),
+        queryFn: () => lookupIpInfo(addr),
+        enabled: Boolean(fetchInfo && !info && addr),
+        staleTime: 5 * 60_000,
+        gcTime: 30 * 60_000,
+    });
+
     if (!addr) return <>—</>;
 
-    const tooltip = buildTooltip(addr, info ?? undefined);
-    const flag = info?.country ? FLAG_BY_COUNTRY[info.country] : undefined;
-    const location = info ? formatLocation(info) : "";
+    const resolved = info ?? lookup.data ?? undefined;
+    const tooltip = buildTooltip(addr, resolved);
+    const flag = resolved?.country ? FLAG_BY_COUNTRY[resolved.country] : undefined;
+    const location = resolved ? formatLocation(resolved) : "";
 
     let badge: string | null = null;
-    if (info?.is_loopback) badge = "loopback";
-    else if (info?.is_private) badge = "private";
+    if (resolved?.is_loopback) badge = "loopback";
+    else if (resolved?.is_private) badge = "private";
 
     return (
         <span

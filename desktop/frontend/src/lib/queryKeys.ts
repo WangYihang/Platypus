@@ -41,6 +41,9 @@ export const qk = {
     serverInfo: () => ["serverInfo"] as const,
     installPlatforms: () => ["installPlatforms"] as const,
 
+    // --- Misc lookups --------------------------------------------
+    ipInfo: (ip: string) => ["ipInfo", ip] as const,
+
     // --- Admin (server-wide) -------------------------------------
     adminUsers: () => ["adminUsers"] as const,
     adminRoles: () => ["adminRoles"] as const,

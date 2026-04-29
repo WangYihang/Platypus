@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
+import RemoteAddr from "../../components/RemoteAddr";
 import FilterToolbar from "../../components/FilterToolbar";
 import StatusDot from "../../components/StatusDot";
 import { useCurrentProject } from "../../layout/ProjectShell";
@@ -185,7 +186,10 @@ export default function HostsPanel() {
                                             </TableCell>
                                             <TableCell>
                                                 {h.primary_ip ? (
-                                                    <Mono>{h.primary_ip}</Mono>
+                                                    <RemoteAddr
+                                                        addr={h.primary_ip}
+                                                        info={h.primary_ip_info}
+                                                    />
                                                 ) : (
                                                     <span className="text-text-muted">—</span>
                                                 )}

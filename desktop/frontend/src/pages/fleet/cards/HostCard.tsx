@@ -1,6 +1,7 @@
 import { Cpu } from "lucide-react";
 
 import Mono from "../../../components/Mono";
+import RemoteAddr from "../../../components/RemoteAddr";
 import StatusDot from "../../../components/StatusDot";
 import StatusPill from "../../../components/StatusPill";
 import { palette, radius, space } from "../../../layout/theme";
@@ -129,7 +130,7 @@ export default function HostCard({
                 <span style={{ color: palette.textMuted }}>IP</span>
                 <span>
                     {host.primary_ip ? (
-                        <Mono>{host.primary_ip}</Mono>
+                        <RemoteAddr addr={host.primary_ip} info={host.primary_ip_info} />
                     ) : (
                         <Dim>—</Dim>
                     )}

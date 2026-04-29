@@ -4,6 +4,7 @@ import AutoGrid from "../../components/AutoGrid";
 import Card from "../../components/Card";
 import DataList from "../../components/DataList";
 import Mono from "../../components/Mono";
+import RemoteAddr from "../../components/RemoteAddr";
 import RefreshButton from "../../components/RefreshButton";
 import StatusPill from "../../components/StatusPill";
 import { palette, space } from "../../layout/theme";
@@ -314,6 +315,7 @@ export default function InfoTab({
                 <NetworkCard
                     sysInfo={sysInfo}
                     primaryIP={primaryIP}
+                    primaryIPInfo={host.primary_ip_info}
                     primaryMAC={primaryMAC}
                 />
 
@@ -390,10 +392,12 @@ function IdentityCard({
 function NetworkCard({
     sysInfo,
     primaryIP,
+    primaryIPInfo,
     primaryMAC,
 }: {
     sysInfo: HostSysInfo | null;
     primaryIP?: string;
+    primaryIPInfo?: import("../../lib/api").RemoteIpInfo;
     primaryMAC?: string;
 }) {
     return (
@@ -402,7 +406,23 @@ function NetworkCard({
                 items={[
                     {
                         label: "primary IP",
-                        value: primaryIP ? <Mono>{primaryIP}</Mono> : "—",
+                        // Live sysInfo wins over the cached host.primary_ip,
+                        // so primaryIPInfo only matches when the server-side
+                        // cached value is the one being shown; otherwise we
+                        // fall back to fetchInfo for ad-hoc enrichment.
+                        value: primaryIP ? (
+                            <RemoteAddr
+                                addr={primaryIP}
+                                info={
+                                    primaryIPInfo && primaryIPInfo.ip === primaryIP
+                                        ? primaryIPInfo
+                                        : undefined
+                                }
+                                fetchInfo
+                            />
+                        ) : (
+                            "—"
+                        ),
                     },
                     {
                         label: "primary MAC",
@@ -411,7 +431,7 @@ function NetworkCard({
                     {
                         label: "default gateway",
                         value: sysInfo?.default_gateway ? (
-                            <Mono>{sysInfo.default_gateway}</Mono>
+                            <RemoteAddr addr={sysInfo.default_gateway} fetchInfo />
                         ) : (
                             "—"
                         ),
@@ -419,7 +439,7 @@ function NetworkCard({
                     {
                         label: "public IP",
                         value: sysInfo?.public_ip ? (
-                            <Mono>{sysInfo.public_ip}</Mono>
+                            <RemoteAddr addr={sysInfo.public_ip} fetchInfo />
                         ) : (
                             "—"
                         ),
