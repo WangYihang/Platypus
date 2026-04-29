@@ -931,7 +931,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         autoSaveId="files-preview-split"
                         className="min-h-0 flex-1"
                     >
-                        <ResizablePanel id="files-list" defaultSize={62} minSize={30} className="relative">
+                        <ResizablePanel id="files-list" defaultSize="62%" minSize="30%" className="relative">
                             <FileContextMenu
                                 variant={{ kind: "empty" }}
                                 onNewFile={() => setShowNewFile(true)}
@@ -982,9 +982,9 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                         <ResizableHandle className="mx-1 bg-transparent" />
                         <ResizablePanel
                             id="files-preview"
-                            defaultSize={38}
-                            minSize={20}
-                            maxSize={70}
+                            defaultSize="38%"
+                            minSize="20%"
+                            maxSize="70%"
                             className="relative"
                         >
                             <PreviewPaneShell
