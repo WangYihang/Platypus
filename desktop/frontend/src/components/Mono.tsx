@@ -3,7 +3,10 @@ import type { CSSProperties, ReactNode } from "react";
 import { font } from "../layout/theme";
 
 interface Props {
-    children: ReactNode;
+    // Optional so this component composes with i18next's <Trans
+    // components={{ mono: <Mono /> }} />, which injects children at
+    // render time. Direct callers always pass them explicitly.
+    children?: ReactNode;
     size?: number;
     color?: string;
     style?: CSSProperties;

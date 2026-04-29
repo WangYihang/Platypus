@@ -1,4 +1,5 @@
 import { Loader2, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { palette, space } from "../../layout/theme";
 import { hostnameFromURL } from "../../lib/servers";
@@ -33,10 +34,14 @@ export default function ProbeStep({
     onBack,
     onNext,
 }: Props) {
+    const { t } = useTranslation("onboarding");
+    const { t: tc } = useTranslation("common");
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[4] }}>
             <div>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Your server</h2>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+                    {t("probe.title")}
+                </h2>
                 <p
                     style={{
                         margin: `${space[1]}px 0 0`,
@@ -44,11 +49,10 @@ export default function ProbeStep({
                         fontSize: 13,
                     }}
                 >
-                    Paste the server URL. We'll probe it and pick the right next
-                    step automatically.
+                    {t("probe.subtitle")}
                 </p>
             </div>
-            <Field label="Server URL">
+            <Field label={tc("labels.serverUrl")}>
                 <Input
                     value={url}
                     onChange={(e) => onURL(e.target.value)}
@@ -57,7 +61,7 @@ export default function ProbeStep({
                     data-testid="onboarding-url"
                 />
             </Field>
-            <Field label="Display name (optional)">
+            <Field label={tc("labels.displayName")}>
                 <Input
                     value={name}
                     onChange={(e) => onName(e.target.value)}
@@ -81,7 +85,7 @@ export default function ProbeStep({
             )}
             <div style={{ display: "flex", gap: space[2] }}>
                 <Button variant="outline" onClick={onBack}>
-                    Back
+                    {tc("actions.back")}
                 </Button>
                 <Button
                     onClick={onNext}
@@ -90,7 +94,7 @@ export default function ProbeStep({
                     data-testid="onboarding-probe"
                 >
                     {probing && <Loader2 className="size-3.5 animate-spin" />}
-                    Continue
+                    {tc("actions.continue")}
                 </Button>
             </div>
         </div>

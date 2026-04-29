@@ -1,0 +1,22 @@
+{
+    "nav": {
+        "overview": "概览",
+        "fleet": "Fleet",
+        "audit": "审计",
+        "members": "成员",
+        "settings": "设置",
+        "preferences": "偏好",
+        "account": "账号",
+        "admin": "管理员"
+    },
+    "addServer": {
+        "title": "添加服务器",
+        "description": "保存一个 Platypus 服务器，方便从侧栏一键切换。",
+        "submitProbe": "继续",
+        "submitLogin": "登录",
+        "submitBootstrap": "创建管理员",
+        "connectedHint": "已连接到 {{url}} — {{state}}",
+        "stateLogin": "可以登录",
+        "stateBootstrap": "首次配置"
+    }
+}

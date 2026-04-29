@@ -1,9 +1,11 @@
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { palette, space } from "../../layout/theme";
 import { Button } from "@/components/ui/button";
 
 export default function WelcomeStep({ onNext }: { onNext: () => void }) {
+    const { t } = useTranslation("onboarding");
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[4] }}>
             <div>
@@ -15,7 +17,7 @@ export default function WelcomeStep({ onNext }: { onNext: () => void }) {
                         letterSpacing: -0.3,
                     }}
                 >
-                    Welcome to Platypus
+                    {t("welcome.title")}
                 </h1>
                 <p
                     style={{
@@ -25,14 +27,11 @@ export default function WelcomeStep({ onNext }: { onNext: () => void }) {
                         lineHeight: 1.6,
                     }}
                 >
-                    Let's connect you to a server. It takes about thirty seconds.
-                    You'll need the server's URL, and either a username/password
-                    or, on a fresh install, the first-admin secret from
-                    <code> &lt;data-dir&gt;/bootstrap.secret</code> on the server.
+                    {t("welcome.subtitle")}
                 </p>
             </div>
             <Button onClick={onNext} size="lg" data-testid="onboarding-get-started">
-                Get started
+                {t("welcome.getStarted")}
                 <ArrowRight className="size-4" />
             </Button>
         </div>

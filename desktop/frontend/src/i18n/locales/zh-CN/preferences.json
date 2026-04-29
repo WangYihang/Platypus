@@ -1,0 +1,25 @@
+{
+    "title": "偏好设置",
+    "subtitle": "界面相关的个人偏好。仅保存在当前浏览器。",
+    "language": {
+        "label": "语言",
+        "hint": "切换当前浏览器的界面语言。服务器返回的数据和事件载荷不会被翻译。"
+    },
+    "theme": {
+        "label": "主题",
+        "options": {
+            "system": "跟随系统",
+            "light": "浅色",
+            "dark": "深色"
+        }
+    },
+    "fleetView": {
+        "label": "Fleet 默认视图",
+        "options": {
+            "cards": "卡片",
+            "table": "表格",
+            "topology": "拓扑",
+            "sessions": "会话"
+        }
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "title": "Platypus",
+    "subtitleDefault": "Log in to your server, or bootstrap the first admin from the startup secret.",
+    "subtitlePinned": "Sign back in to {{url}}, or bootstrap the first admin if none exists yet.",
+    "tabs": {
+        "login": "Log in",
+        "bootstrap": "Bootstrap admin"
+    },
+    "bootstrap": {
+        "intro": "Paste the secret from <mono>&lt;data-dir&gt;/bootstrap.secret</mono> on the server (mode 0600, written on first boot). After the first admin exists this tab stops working.",
+        "secretLabel": "Server secret",
+        "adminUsername": "Admin username",
+        "adminPassword": "Admin password",
+        "submit": "Create admin"
+    },
+    "backToServers": "Back to servers"
+}

@@ -1,9 +1,15 @@
 import { RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import Card from "../components/Card";
 import PageShell from "../components/PageShell";
 import SettingRow from "../components/SettingRow";
+import {
+    LANGUAGE_LABELS,
+    SUPPORTED_LANGUAGES,
+    type SupportedLanguage,
+} from "../i18n";
 import { palette, space } from "../layout/theme";
 import {
     PreferenceDefs,
@@ -39,10 +45,11 @@ import {
 // round-trip. To add a preference: declare it in PreferenceDefs +
 // DEFAULTS in lib/preferences.ts and add a SettingRow here.
 export default function Preferences() {
+    const { t } = useTranslation("preferences");
     return (
         <PageShell
-            title="Preferences"
-            subtitle="This browser only · not synced across devices"
+            title={t("title")}
+            subtitle={t("subtitle")}
             bodyPadding={8}
         >
             <div style={{ maxWidth: 720 }}>
@@ -82,6 +89,8 @@ function DisplayTab() {
 
     return (
         <Card header="Display" padding={5}>
+            <LanguageRow />
+
             <SettingRow
                 label="UI density"
                 description="Comfortable spacing reads better; compact fits more rows on a small screen."
@@ -307,4 +316,39 @@ function formatValue(v: PreferenceDefs[keyof PreferenceDefs]): string {
 
 function clamp(n: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, n));
+}
+
+// LanguageRow lives here (rather than in lib/i18n) because it's the
+// only place the user picks a language: a global header dropdown
+// would be UI noise for the 99% case where someone sets it once and
+// forgets it. Selection persists via i18next's LanguageDetector
+// caches:["localStorage"] config — no extra storage wiring needed.
+function LanguageRow() {
+    const { t, i18n } = useTranslation("preferences");
+    const current =
+        (i18n.resolvedLanguage as SupportedLanguage) || "en-US";
+    return (
+        <SettingRow
+            label={t("language.label")}
+            description={t("language.hint")}
+        >
+            <Select
+                value={current}
+                onValueChange={(v) => {
+                    void i18n.changeLanguage(v);
+                }}
+            >
+                <SelectTrigger className="h-8 w-[180px]">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                        <SelectItem key={lang} value={lang}>
+                            {LANGUAGE_LABELS[lang]}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </SettingRow>
+    );
 }

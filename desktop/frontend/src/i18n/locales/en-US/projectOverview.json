@@ -1,0 +1,23 @@
+{
+    "title": "Overview",
+    "subtitle": "At-a-glance KPIs for the project.",
+    "metrics": {
+        "hostsOnline": "Hosts online",
+        "hostsTotal": "Hosts (total)",
+        "sessions24h": "Sessions (24h)",
+        "members": "Members"
+    },
+    "charts": {
+        "sessions24h": "Sessions in the last 24 hours"
+    },
+    "feed": {
+        "title": "Recent activity",
+        "empty": "No activity recorded yet."
+    },
+    "quickActions": {
+        "title": "Quick actions",
+        "enrollHost": "Enroll a host",
+        "viewFleet": "View fleet",
+        "openAudit": "Open audit"
+    }
+}

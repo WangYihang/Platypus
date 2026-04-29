@@ -1,0 +1,25 @@
+{
+    "actions": {
+        "back": "Back",
+        "cancel": "Cancel",
+        "continue": "Continue",
+        "save": "Save",
+        "submit": "Submit",
+        "gotIt": "Got it",
+        "logIn": "Log in",
+        "logOut": "Log out",
+        "refresh": "Refresh"
+    },
+    "labels": {
+        "username": "Username",
+        "password": "Password",
+        "serverUrl": "Server URL",
+        "displayName": "Display name (optional)",
+        "loading": "Loading…"
+    },
+    "errors": {
+        "required": "Required",
+        "minChars": "Min {{count}} chars",
+        "invalidUrl": "Must be a valid URL"
+    }
+}

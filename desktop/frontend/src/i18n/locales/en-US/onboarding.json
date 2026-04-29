@@ -1,0 +1,31 @@
+{
+    "welcome": {
+        "title": "Welcome to Platypus",
+        "subtitle": "Let's connect to your server.",
+        "getStarted": "Get started"
+    },
+    "probe": {
+        "title": "Your server",
+        "subtitle": "Paste the server URL. We'll probe it and pick the right next step automatically.",
+        "errorPrefix": "Probe failed"
+    },
+    "login": {
+        "title": "Log in",
+        "subtitle": "Sign in with your existing admin credentials."
+    },
+    "bootstrap": {
+        "title": "Create the first admin",
+        "subtitle": "Paste the first-admin secret from the server and pick admin credentials.",
+        "secretLabel": "Server secret",
+        "secretHint": "Look for <code>bootstrap.secret</code> in the server's data directory (mode 0600, written on first boot). On Docker compose, run the command below — copy it to clipboard with the button on the right. You can delete the file once the first admin is created.",
+        "adminUsername": "Admin username",
+        "adminPassword": "Admin password",
+        "submit": "Create admin"
+    },
+    "classicLogin": "Use the classic login form",
+    "welcomeToast": "Welcome to {{name}}",
+    "adminCreated": {
+        "title": "Admin created — welcome to Platypus",
+        "description": "Delete <mono>&lt;data-dir&gt;/bootstrap.secret</mono> on the server to keep the secret out of backups. The server also clears it on the next boot once a user exists."
+    }
+}

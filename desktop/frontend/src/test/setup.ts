@@ -18,6 +18,18 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
+// i18n: tests render real components that call useTranslation. The
+// production app initialises the i18next instance in main.tsx via a
+// side-effect import; tests never load main.tsx. Pin every spec to
+// en-US so a developer with `lang=zh-CN` already in their
+// localStorage doesn't see English-string assertions break — the
+// LanguageDetector chain reads localStorage and we want a
+// deterministic value here regardless of the host environment.
+import i18n, { i18nReady } from "../i18n";
+
+await i18nReady;
+await i18n.changeLanguage("en-US");
+
 // RTL's auto-cleanup hook only registers if a global `afterEach` is in
 // scope. Vitest only injects globals when `globals: true` is set in
 // the config — we run with `globals: false` so the imports stay

@@ -8,22 +8,24 @@
 // reading the wizard's last step would miss it entirely. Centralising
 // the wording so Onboarding / Login / AddServerDialog can't drift.
 
+import { Trans } from "react-i18next";
 import { toast } from "sonner";
 
 import Mono from "../components/Mono";
+import i18n from "../i18n";
 
 export function showAdminCreatedToast(): void {
-    toast.success("Admin created — welcome to Platypus", {
+    toast.success(i18n.t("onboarding:adminCreated.title"), {
         description: (
-            <span>
-                Delete <Mono>&lt;data-dir&gt;/bootstrap.secret</Mono> on the
-                server to keep the secret out of backups. The server also
-                clears it on the next boot once a user exists.
-            </span>
+            <Trans
+                ns="onboarding"
+                i18nKey="adminCreated.description"
+                components={{ mono: <Mono /> }}
+            />
         ),
         duration: Infinity,
         action: {
-            label: "Got it",
+            label: i18n.t("common:actions.gotIt"),
             onClick: () => {
                 /* sonner closes the toast on action click */
             },

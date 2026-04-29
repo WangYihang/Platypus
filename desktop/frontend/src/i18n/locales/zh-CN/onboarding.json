@@ -1,0 +1,31 @@
+{
+    "welcome": {
+        "title": "欢迎使用 Platypus",
+        "subtitle": "我们先来连接你的服务器。",
+        "getStarted": "开始"
+    },
+    "probe": {
+        "title": "你的服务器",
+        "subtitle": "粘贴服务器地址，我们会自动探测并跳到合适的下一步。",
+        "errorPrefix": "探测失败"
+    },
+    "login": {
+        "title": "登录",
+        "subtitle": "使用已有的管理员账号登录。"
+    },
+    "bootstrap": {
+        "title": "创建首位管理员",
+        "subtitle": "粘贴服务器生成的首位管理员密钥，并设置一组管理员凭据。",
+        "secretLabel": "服务器密钥",
+        "secretHint": "服务器首次启动时会在数据目录里写入 <code>bootstrap.secret</code>（权限 0600）。在 Docker compose 部署中，可直接用右侧按钮复制下面的命令读取。首位管理员创建之后，这个文件就可以删除了。",
+        "adminUsername": "管理员用户名",
+        "adminPassword": "管理员密码",
+        "submit": "创建管理员"
+    },
+    "classicLogin": "使用经典登录表单",
+    "welcomeToast": "欢迎来到 {{name}}",
+    "adminCreated": {
+        "title": "管理员已创建 — 欢迎使用 Platypus",
+        "description": "请在服务器上删除 <mono>&lt;数据目录&gt;/bootstrap.secret</mono> 以避免密钥进入备份。当已有用户存在时，服务器在下次启动时也会自动清理它。"
+    }
+}

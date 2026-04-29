@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -34,6 +35,7 @@ type Step = "welcome" | "probe" | "login" | "bootstrap";
 // On success the user lands on /projects.
 export default function Onboarding() {
     const navigate = useNavigate();
+    const { t } = useTranslation("onboarding");
     const [step, setStep] = useState<Step>("welcome");
 
     const [url, setUrl] = useState(defaultServerURL());
@@ -98,7 +100,7 @@ export default function Onboarding() {
     }
 
     async function finish(profile: ServerProfile) {
-        toast.success(`Welcome to ${profile.name}`);
+        toast.success(t("welcomeToast", { name: profile.name }));
         navigate("/projects", { replace: true });
     }
 
@@ -205,7 +207,7 @@ export default function Onboarding() {
                         textDecorationStyle: "dotted",
                     }}
                 >
-                    Use the classic login form
+                    {t("classicLogin")}
                 </button>
             </div>
         </WizardCard>

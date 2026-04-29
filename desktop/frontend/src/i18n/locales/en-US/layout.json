@@ -1,0 +1,22 @@
+{
+    "nav": {
+        "overview": "Overview",
+        "fleet": "Fleet",
+        "audit": "Audit",
+        "members": "Members",
+        "settings": "Settings",
+        "preferences": "Preferences",
+        "account": "Account",
+        "admin": "Admin"
+    },
+    "addServer": {
+        "title": "Add a server",
+        "description": "Save a Platypus server so it shows up in the rail and stays reachable with one click.",
+        "submitProbe": "Continue",
+        "submitLogin": "Log in",
+        "submitBootstrap": "Create admin",
+        "connectedHint": "Connected to {{url}} — {{state}}",
+        "stateLogin": "ready to log in",
+        "stateBootstrap": "first-time setup"
+    }
+}

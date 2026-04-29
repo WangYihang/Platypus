@@ -1,0 +1,25 @@
+{
+    "title": "Preferences",
+    "subtitle": "Personal UI preferences. Stored in this browser only.",
+    "language": {
+        "label": "Language",
+        "hint": "Switches the UI language for this browser. Server-side data and event payloads are not translated."
+    },
+    "theme": {
+        "label": "Theme",
+        "options": {
+            "system": "System",
+            "light": "Light",
+            "dark": "Dark"
+        }
+    },
+    "fleetView": {
+        "label": "Default fleet view",
+        "options": {
+            "cards": "Cards",
+            "table": "Table",
+            "topology": "Topology",
+            "sessions": "Sessions"
+        }
+    }
+}

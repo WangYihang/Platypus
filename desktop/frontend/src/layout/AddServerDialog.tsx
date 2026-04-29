@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { humanizeError } from "../lib/humanizeError";
 
@@ -47,6 +48,9 @@ type Phase = "probe" | "login" | "bootstrap";
 // more servers saved.
 export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) {
     const [phase, setPhase] = useState<Phase>("probe");
+    const { t } = useTranslation("layout");
+    const { t: to } = useTranslation("onboarding");
+    const { t: tc } = useTranslation("common");
 
     // Shared fields across phases
     const [url, setUrl] = useState(defaultServerURL());
@@ -140,16 +144,13 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[460px]">
                 <DialogHeader>
-                    <DialogTitle>Add a server</DialogTitle>
-                    <DialogDescription>
-                        Save a Platypus server so it shows up in the rail and stays
-                        reachable with one click.
-                    </DialogDescription>
+                    <DialogTitle>{t("addServer.title")}</DialogTitle>
+                    <DialogDescription>{t("addServer.description")}</DialogDescription>
                 </DialogHeader>
 
                 {phase === "probe" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
-                        <Field label="Server URL">
+                        <Field label={tc("labels.serverUrl")}>
                             <Input
                                 data-testid="add-server-url"
                                 value={url}
@@ -158,7 +159,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                                 autoFocus
                             />
                         </Field>
-                        <Field label="Display name (optional)">
+                        <Field label={tc("labels.displayName")}>
                             <Input
                                 data-testid="add-server-name"
                                 value={name}
@@ -196,15 +197,19 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                     >
                         <CheckCircle2 className="size-3.5" />
                         <span>
-                            Connected to {normaliseURL(url)} —{" "}
-                            {probeInfo.admin_bootstrapped ? "ready to log in" : "first-time setup"}
+                            {t("addServer.connectedHint", {
+                                url: normaliseURL(url),
+                                state: probeInfo.admin_bootstrapped
+                                    ? t("addServer.stateLogin")
+                                    : t("addServer.stateBootstrap"),
+                            })}
                         </span>
                     </div>
                 )}
 
                 {phase === "login" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
-                        <Field label="Username">
+                        <Field label={tc("labels.username")}>
                             <Input
                                 data-testid="add-server-username"
                                 autoFocus
@@ -212,7 +217,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                                 onChange={(e) => setUsername(e.target.value)}
                             />
                         </Field>
-                        <Field label="Password">
+                        <Field label={tc("labels.password")}>
                             <Input
                                 data-testid="add-server-password"
                                 type="password"
@@ -225,7 +230,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
 
                 {phase === "bootstrap" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
-                        <Field label="Server secret">
+                        <Field label={to("bootstrap.secretLabel")}>
                             <Input
                                 autoFocus
                                 type="password"
@@ -233,13 +238,13 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                                 onChange={(e) => setSecret(e.target.value)}
                             />
                         </Field>
-                        <Field label="Admin username">
+                        <Field label={to("bootstrap.adminUsername")}>
                             <Input
                                 value={bootstrapUsername}
                                 onChange={(e) => setBootstrapUsername(e.target.value)}
                             />
                         </Field>
-                        <Field label="Admin password">
+                        <Field label={to("bootstrap.adminPassword")}>
                             <Input
                                 type="password"
                                 value={bootstrapPassword}
@@ -252,16 +257,16 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                 <DialogFooter>
                     {(phase === "login" || phase === "bootstrap") && (
                         <Button variant="outline" onClick={() => setPhase("probe")}>
-                            Back
+                            {tc("actions.back")}
                         </Button>
                     )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
+                        {tc("actions.cancel")}
                     </Button>
                     {phase === "probe" && (
                         <Button onClick={doProbe} disabled={!url || probing}>
                             {probing && <Loader2 className="size-3.5 animate-spin" />}
-                            Continue
+                            {t("addServer.submitProbe")}
                         </Button>
                     )}
                     {phase === "login" && (
@@ -270,7 +275,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                             disabled={busy || !username || !password}
                         >
                             {busy && <Loader2 className="size-3.5 animate-spin" />}
-                            Log in
+                            {t("addServer.submitLogin")}
                         </Button>
                     )}
                     {phase === "bootstrap" && (
@@ -284,7 +289,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
                             }
                         >
                             {busy && <Loader2 className="size-3.5 animate-spin" />}
-                            Create admin
+                            {t("addServer.submitBootstrap")}
                         </Button>
                     )}
                 </DialogFooter>

@@ -1,0 +1,25 @@
+{
+    "actions": {
+        "back": "返回",
+        "cancel": "取消",
+        "continue": "继续",
+        "save": "保存",
+        "submit": "提交",
+        "gotIt": "知道了",
+        "logIn": "登录",
+        "logOut": "退出登录",
+        "refresh": "刷新"
+    },
+    "labels": {
+        "username": "用户名",
+        "password": "密码",
+        "serverUrl": "服务器地址",
+        "displayName": "显示名称（可选）",
+        "loading": "加载中…"
+    },
+    "errors": {
+        "required": "必填",
+        "minChars": "至少 {{count}} 个字符",
+        "invalidUrl": "请输入合法的 URL"
+    }
+}

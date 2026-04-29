@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { humanizeError } from "../lib/humanizeError";
 import { useForm } from "react-hook-form";
@@ -8,6 +9,7 @@ import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../components/Card";
+import Mono from "../components/Mono";
 import WizardCard from "../components/WizardCard";
 import { bootstrap, login } from "../lib/auth";
 import { showAdminCreatedToast } from "../lib/bootstrapToast";
@@ -58,6 +60,8 @@ interface Props {
 export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props) {
     const [busy, setBusy] = useState(false);
     const navigate = useNavigate();
+    const { t } = useTranslation("login");
+    const { t: tc } = useTranslation("common");
 
     const pinnedProfile = pinnedServerId ? getServer(pinnedServerId) : null;
     // Default to the page's own origin so the embedded server bundle
@@ -129,7 +133,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                             }}
                         >
                             <ArrowLeft className="size-3" />
-                            Back to servers
+                            {t("backToServers")}
                         </button>
                     )}
                     <h1
@@ -143,7 +147,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                             letterSpacing: -0.2,
                         }}
                     >
-                        {pinnedProfile ? pinnedProfile.name : "Platypus"}
+                        {pinnedProfile ? pinnedProfile.name : t("title")}
                     </h1>
                     <p
                         style={{
@@ -154,16 +158,16 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                         }}
                     >
                         {pinnedProfile
-                            ? `Sign back in to ${pinnedProfile.url}, or bootstrap the first admin if none exists yet.`
-                            : "Log in to your server, or bootstrap the first admin from the startup secret."}
+                            ? t("subtitlePinned", { url: pinnedProfile.url })
+                            : t("subtitleDefault")}
                     </p>
                 </div>
 
                 <Card padding={6}>
                     <Tabs defaultValue="login" className="w-full">
                         <TabsList className="mb-4 grid w-full grid-cols-2">
-                            <TabsTrigger value="login">Log in</TabsTrigger>
-                            <TabsTrigger value="bootstrap">Bootstrap admin</TabsTrigger>
+                            <TabsTrigger value="login">{t("tabs.login")}</TabsTrigger>
+                            <TabsTrigger value="bootstrap">{t("tabs.bootstrap")}</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="login">
@@ -178,7 +182,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                             name="url"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Server URL</FormLabel>
+                                                    <FormLabel>{tc("labels.serverUrl")}</FormLabel>
                                                     <FormControl>
                                                         <Input
                                                             placeholder="http://127.0.0.1:7331"
@@ -207,7 +211,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                         name="username"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Username</FormLabel>
+                                                <FormLabel>{tc("labels.username")}</FormLabel>
                                                 <FormControl>
                                                     <Input autoFocus placeholder="admin" {...field} />
                                                 </FormControl>
@@ -220,7 +224,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                         name="password"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Password</FormLabel>
+                                                <FormLabel>{tc("labels.password")}</FormLabel>
                                                 <FormControl>
                                                     <Input type="password" {...field} />
                                                 </FormControl>
@@ -230,7 +234,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                     />
                                     <Button type="submit" className="w-full" disabled={busy}>
                                         {busy && <Loader2 className="size-3.5 animate-spin" />}
-                                        Log in
+                                        {tc("actions.logIn")}
                                     </Button>
                                 </form>
                             </Form>
@@ -245,12 +249,11 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                     lineHeight: 1.5,
                                 }}
                             >
-                                Paste the secret from{" "}
-                                <span style={{ fontFamily: font.mono, fontSize: 12 }}>
-                                    &lt;data-dir&gt;/bootstrap.secret
-                                </span>{" "}
-                                on the server (mode 0600, written on first boot).
-                                After the first admin exists this tab stops working.
+                                <Trans
+                                    ns="login"
+                                    i18nKey="bootstrap.intro"
+                                    components={{ mono: <Mono /> }}
+                                />
                             </p>
                             <Form {...bootstrapForm}>
                                 <form
@@ -263,7 +266,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                             name="url"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Server URL</FormLabel>
+                                                    <FormLabel>{tc("labels.serverUrl")}</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -289,7 +292,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                         name="secret"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Server secret</FormLabel>
+                                                <FormLabel>{t("bootstrap.secretLabel")}</FormLabel>
                                                 <FormControl>
                                                     <Input type="password" {...field} />
                                                 </FormControl>
@@ -302,7 +305,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                         name="username"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Admin username</FormLabel>
+                                                <FormLabel>{t("bootstrap.adminUsername")}</FormLabel>
                                                 <FormControl>
                                                     <Input {...field} />
                                                 </FormControl>
@@ -315,7 +318,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                         name="password"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Admin password</FormLabel>
+                                                <FormLabel>{t("bootstrap.adminPassword")}</FormLabel>
                                                 <FormControl>
                                                     <Input type="password" {...field} />
                                                 </FormControl>
@@ -325,7 +328,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                                     />
                                     <Button type="submit" className="w-full" disabled={busy}>
                                         {busy && <Loader2 className="size-3.5 animate-spin" />}
-                                        Create admin
+                                        {t("bootstrap.submit")}
                                     </Button>
                                 </form>
                             </Form>

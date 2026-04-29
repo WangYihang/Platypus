@@ -1,0 +1,23 @@
+{
+    "title": "概览",
+    "subtitle": "项目的关键指标一览。",
+    "metrics": {
+        "hostsOnline": "在线主机",
+        "hostsTotal": "主机总数",
+        "sessions24h": "会话数（24 小时）",
+        "members": "成员数"
+    },
+    "charts": {
+        "sessions24h": "最近 24 小时的会话"
+    },
+    "feed": {
+        "title": "近期活动",
+        "empty": "暂无活动记录。"
+    },
+    "quickActions": {
+        "title": "快捷操作",
+        "enrollHost": "纳管主机",
+        "viewFleet": "查看 Fleet",
+        "openAudit": "打开审计"
+    }
+}

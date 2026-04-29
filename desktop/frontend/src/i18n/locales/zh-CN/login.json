@@ -1,0 +1,17 @@
+{
+    "title": "Platypus",
+    "subtitleDefault": "登录你的服务器，或使用启动密钥创建首位管理员。",
+    "subtitlePinned": "重新登录到 {{url}}，如果尚无管理员，可以创建首位管理员。",
+    "tabs": {
+        "login": "登录",
+        "bootstrap": "创建首位管理员"
+    },
+    "bootstrap": {
+        "intro": "粘贴服务器上 <mono>&lt;数据目录&gt;/bootstrap.secret</mono> 中的密钥（权限 0600，首次启动时写入）。一旦首位管理员创建完成，这个标签页将停止工作。",
+        "secretLabel": "服务器密钥",
+        "adminUsername": "管理员用户名",
+        "adminPassword": "管理员密码",
+        "submit": "创建管理员"
+    },
+    "backToServers": "返回服务器列表"
+}

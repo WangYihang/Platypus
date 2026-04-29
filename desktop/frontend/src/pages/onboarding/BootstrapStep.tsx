@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 import CopyButton from "../../components/CopyButton";
 import { palette, radius, space } from "../../layout/theme";
@@ -32,12 +33,14 @@ export default function BootstrapStep({
     onBack,
     onSubmit,
 }: Props) {
+    const { t } = useTranslation("onboarding");
+    const { t: tc } = useTranslation("common");
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[4] }}>
-            <ConfirmedBanner url={url} hint="Bootstrap admin" />
+            <ConfirmedBanner url={url} hint={t("bootstrap.title")} />
             <div>
                 <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
-                    Create the first admin
+                    {t("bootstrap.title")}
                 </h2>
                 <p
                     style={{
@@ -46,17 +49,18 @@ export default function BootstrapStep({
                         fontSize: 13,
                     }}
                 >
-                    Paste the first-admin secret from the server and pick admin credentials.
+                    {t("bootstrap.subtitle")}
                 </p>
             </div>
             <Field
-                label="Server secret"
+                label={t("bootstrap.secretLabel")}
                 helper={
                     <>
-                        Look for <code>bootstrap.secret</code> in the server's data
-                        directory (mode 0600, written on first boot). On Docker compose,
-                        run the command below — copy it to clipboard with the button on
-                        the right. You can delete the file once the first admin is created.
+                        <Trans
+                            ns="onboarding"
+                            i18nKey="bootstrap.secretHint"
+                            components={{ code: <code /> }}
+                        />
                         <div
                             style={{
                                 display: "flex",
@@ -97,13 +101,13 @@ export default function BootstrapStep({
                     data-testid="onboarding-secret"
                 />
             </Field>
-            <Field label="Admin username">
+            <Field label={t("bootstrap.adminUsername")}>
                 <Input
                     value={username}
                     onChange={(e) => onUsername(e.target.value)}
                 />
             </Field>
-            <Field label="Admin password">
+            <Field label={t("bootstrap.adminPassword")}>
                 <Input
                     type="password"
                     value={password}
@@ -112,7 +116,7 @@ export default function BootstrapStep({
             </Field>
             <div style={{ display: "flex", gap: space[2] }}>
                 <Button variant="outline" onClick={onBack}>
-                    Back
+                    {tc("actions.back")}
                 </Button>
                 <Button
                     onClick={onSubmit}
@@ -120,7 +124,7 @@ export default function BootstrapStep({
                     style={{ marginLeft: "auto" }}
                 >
                     {busy && <Loader2 className="size-3.5 animate-spin" />}
-                    Create admin
+                    {t("bootstrap.submit")}
                 </Button>
             </div>
         </div>
