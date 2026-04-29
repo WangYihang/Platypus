@@ -47,11 +47,11 @@ type Host struct {
 	// Build identity (migration 000023). Populated from the agent's
 	// pkg/version at enroll time and refreshed on every SysInfo
 	// reconnect. All advisory; never gates security decisions.
-	// BuildVersion is semver, Commit is short git SHA, BuildDate is
-	// RFC3339. ProtocolVersion is a separate monotonic uint32 used
+	// BuildVersion is semver, BuildCommit is short git SHA, BuildDate
+	// is RFC3339. ProtocolVersion is a separate monotonic uint32 used
 	// for capability gating — see internal/link.ProtocolVersion.
 	BuildVersion    string
-	Commit          string
+	BuildCommit     string
 	BuildDate       string
 	ProtocolVersion uint32
 
@@ -119,7 +119,7 @@ type HostIdentity struct {
 	BootTimeUnix    int64
 
 	BuildVersion    string
-	Commit          string
+	BuildCommit     string
 	BuildDate       string
 	ProtocolVersion uint32
 
@@ -255,7 +255,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			nullIfEmpty(merged.CurrentUser), nullIfEmpty(merged.Timezone),
 			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
 			nullIfInt64(merged.BootTimeUnix),
-			nullIfEmpty(merged.BuildVersion), nullIfEmpty(merged.Commit),
+			nullIfEmpty(merged.BuildVersion), nullIfEmpty(merged.BuildCommit),
 			nullIfEmpty(merged.BuildDate), nullIfUint32(merged.ProtocolVersion),
 			nullIfEmpty(merged.MachineType), nullIfEmpty(merged.ChassisType),
 			nullIfEmpty(merged.ProductVendor), nullIfEmpty(merged.ProductName),
@@ -303,7 +303,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		PrimaryMAC:          ident.PrimaryMAC,
 		BootTimeUnix:        ident.BootTimeUnix,
 		BuildVersion:        ident.BuildVersion,
-		Commit:              ident.Commit,
+		BuildCommit:         ident.BuildCommit,
 		BuildDate:           ident.BuildDate,
 		ProtocolVersion:     ident.ProtocolVersion,
 		MachineType:         ident.MachineType,
@@ -353,7 +353,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfEmpty(h.CurrentUser), nullIfEmpty(h.Timezone),
 		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
 		nullIfInt64(h.BootTimeUnix),
-		nullIfEmpty(h.BuildVersion), nullIfEmpty(h.Commit),
+		nullIfEmpty(h.BuildVersion), nullIfEmpty(h.BuildCommit),
 		nullIfEmpty(h.BuildDate), nullIfUint32(h.ProtocolVersion),
 		nullIfEmpty(h.MachineType), nullIfEmpty(h.ChassisType),
 		nullIfEmpty(h.ProductVendor), nullIfEmpty(h.ProductName),
@@ -421,8 +421,8 @@ func mergeHost(existing *Host, ident *HostIdentity) *Host {
 	if ident.BuildVersion != "" {
 		h.BuildVersion = ident.BuildVersion
 	}
-	if ident.Commit != "" {
-		h.Commit = ident.Commit
+	if ident.BuildCommit != "" {
+		h.BuildCommit = ident.BuildCommit
 	}
 	if ident.BuildDate != "" {
 		h.BuildDate = ident.BuildDate
@@ -636,8 +636,9 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		h.BuildVersion = buildVersion.String
 	}
 	if buildCommit.Valid {
-		h.Commit = buildCommit.String
+		h.BuildCommit = buildCommit.String
 	}
+
 	if buildDate.Valid {
 		h.BuildDate = buildDate.String
 	}

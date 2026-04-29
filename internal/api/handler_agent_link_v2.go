@@ -507,7 +507,7 @@ func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
 		PrimaryMAC:      s.PrimaryMac,
 		BootTimeUnix:    int64(s.BootTimeUnix),
 		BuildVersion:    s.BuildVersion,
-		Commit:          s.Commit,
+		BuildCommit:     s.BuildCommit,
 		BuildDate:       s.BuildDate,
 		ProtocolVersion: s.ProtocolVersion,
 		MachineType:     s.MachineType,

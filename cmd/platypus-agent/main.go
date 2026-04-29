@@ -43,7 +43,7 @@ func main() {
 		"service", "platypus-agent",
 		"hostname", hostname,
 		"build_version", version.Version,
-		"commit", version.Commit,
+		"build_commit", version.Commit,
 	)
 
 	opts, err := options.InitOptions()
@@ -259,7 +259,7 @@ func main() {
 			ProjectCA:       caPool,
 			Hostname:        hostname,
 			BuildVersion:    version.Version,
-			Commit:          version.Commit,
+			BuildCommit:     version.Commit,
 			BuildDate:       version.Date,
 			ProtocolVersion: link.ProtocolVersion,
 		})

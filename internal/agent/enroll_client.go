@@ -40,7 +40,7 @@ type EnrollOptions struct {
 	// Build identity, sourced from pkg/version. All optional; the
 	// server treats them as advisory display fields.
 	BuildVersion string // semver
-	Commit       string // short git SHA
+	BuildCommit  string // short git SHA
 	BuildDate    string // RFC3339
 
 	// Wire-protocol version this binary speaks. Sourced from
@@ -104,7 +104,7 @@ func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
 		Hostname:        opts.Hostname,
 		MachineId:       opts.MachineID,
 		BuildVersion:    opts.BuildVersion,
-		Commit:          opts.Commit,
+		BuildCommit:     opts.BuildCommit,
 		BuildDate:       opts.BuildDate,
 		ProtocolVersion: opts.ProtocolVersion,
 	}

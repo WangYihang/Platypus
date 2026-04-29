@@ -44,7 +44,7 @@ func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 		// rows stay accurate after a self-upgrade swap. Sourced from
 		// pkg/version (ldflags-injected at release time).
 		BuildVersion:    version.Version,
-		Commit:          version.Commit,
+		BuildCommit:     version.Commit,
 		BuildDate:       version.Date,
 		ProtocolVersion: link.ProtocolVersion,
 	}

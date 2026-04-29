@@ -80,7 +80,7 @@ func TestEnroll_HappyPath(t *testing.T) {
 		PAT:             "plt_goodpat",
 		Hostname:        "unit-test",
 		BuildVersion:    "1.5.1-test",
-		Commit:          "deadbee",
+		BuildCommit:     "deadbee",
 		BuildDate:       "2025-01-01T00:00:00Z",
 		ProtocolVersion: 1,
 	})

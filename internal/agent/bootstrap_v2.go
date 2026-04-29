@@ -42,7 +42,7 @@ type BootstrapV2Options struct {
 	// the box. All three are advisory; the server never gates
 	// security decisions on them.
 	BuildVersion string // semver
-	Commit       string // short git SHA
+	BuildCommit  string // short git SHA
 	BuildDate    string // RFC3339
 
 	// Wire-protocol version this binary speaks. Sourced from
@@ -189,7 +189,7 @@ func enrollAndPersist(ctx context.Context, opts BootstrapV2Options) (*Identity, 
 		Hostname:        opts.Hostname,
 		MachineID:       opts.MachineID,
 		BuildVersion:    opts.BuildVersion,
-		Commit:          opts.Commit,
+		BuildCommit:     opts.BuildCommit,
 		BuildDate:       opts.BuildDate,
 		ProtocolVersion: opts.ProtocolVersion,
 		ProjectCA:       opts.ProjectCA,

@@ -255,7 +255,7 @@ func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollm
 		PrimaryMAC:      req.GetPrimaryMac(),
 		BootTimeUnix:    int64(req.GetBootTimeUnix()),
 		BuildVersion:    req.GetBuildVersion(),
-		Commit:          req.GetCommit(),
+		BuildCommit:     req.GetBuildCommit(),
 		BuildDate:       req.GetBuildDate(),
 		ProtocolVersion: req.GetProtocolVersion(),
 		MachineType:     req.GetMachineType(),

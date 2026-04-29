@@ -73,7 +73,7 @@ type hostResponse struct {
 	BootTimeUnix    int64  `json:"boot_time_unix,omitempty"`
 
 	BuildVersion    string `json:"build_version,omitempty"`
-	Commit          string `json:"commit,omitempty"`
+	BuildCommit     string `json:"build_commit,omitempty"`
 	BuildDate       string `json:"build_date,omitempty"`
 	ProtocolVersion uint32 `json:"protocol_version,omitempty"`
 
@@ -113,7 +113,7 @@ func toHostResponse(h *storage.Host) hostResponse {
 		PrimaryMAC:          h.PrimaryMAC,
 		BootTimeUnix:        h.BootTimeUnix,
 		BuildVersion:        h.BuildVersion,
-		Commit:              h.Commit,
+		BuildCommit:         h.BuildCommit,
 		BuildDate:           h.BuildDate,
 		ProtocolVersion:     h.ProtocolVersion,
 		MachineType:         h.MachineType,

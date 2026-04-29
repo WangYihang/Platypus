@@ -37,7 +37,7 @@ message EnrollRequest {
   // build_date is RFC3339. They are advisory — the server never
   // gates security decisions on them.
   string build_version = 5;
-  string commit        = 6;
+  string build_commit  = 6;
   string build_date    = 7;
 
   // Wire-protocol version the agent speaks. Single monotonic
