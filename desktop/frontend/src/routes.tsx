@@ -169,12 +169,23 @@ export const routeTree: RouteObject[] = [
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
                     { path: "fleet", element: withSuspense(<FleetPage />) },
-                    // Enrollment is a sub-surface of Fleet — it's how
-                    // you grow the fleet, not a peer admin verb. The
-                    // canonical URL is /fleet/enroll; the legacy
-                    // /enrollment path below redirects here so old
-                    // bookmarks / docs / e2e specs keep working.
-                    { path: "fleet/enroll", element: withSuspense(<EnrollmentPage />) },
+                    // Day-to-day enrollment (issue an install
+                    // command for one new host) happens through the
+                    // EnrollAgentWizard inside FleetPage's card view
+                    // — the wizard opens via the `?enroll=1` URL
+                    // param, no separate route needed. The historical
+                    // management surface (browse / revoke past
+                    // artifacts + tokens) lives under
+                    // /audit/enrollment, see the audit subtree below.
+                    //
+                    // The legacy /fleet/enroll URL still resolves so
+                    // old bookmarks / docs / e2e specs land
+                    // somewhere reasonable; it redirects to the new
+                    // canonical path.
+                    {
+                        path: "fleet/enroll",
+                        element: <Navigate to="../audit/enrollment" replace />,
+                    },
                     { path: "fleet/approvals", element: withSuspense(<ApprovalsPage />) },
                     {
                         // Default landing tab is `files` — the R3
@@ -208,11 +219,17 @@ export const routeTree: RouteObject[] = [
                             { path: "activities", element: withSuspense(<ActivitiesPage />) },
                             { path: "recordings", element: withSuspense(<RecordingsPage />) },
                             { path: "transfers", element: withSuspense(<TransfersPage />) },
+                            // Historical install-artifact + token
+                            // management. Reached from the Audit tab
+                            // strip (see AuditPage); the day-to-day
+                            // "issue one install command" flow goes
+                            // through the Fleet card-view wizard.
+                            { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
                         ],
                     },
                     {
                         path: "enrollment",
-                        element: <Navigate to="../fleet/enroll" replace />,
+                        element: <Navigate to="../audit/enrollment" replace />,
                     },
                     { path: "members", element: withSuspense(<MembersRoute />) },
                     { path: "settings", element: withSuspense(<ProjectSettings />) },

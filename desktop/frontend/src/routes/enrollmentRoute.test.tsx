@@ -4,12 +4,16 @@ import { Outlet, RouterProvider, createMemoryRouter } from "react-router-dom";
 
 import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
-// Step 1 of the settings reorg: Enrollment moves from a standalone
-// /projects/<slug>/enrollment surface into the FLEET sub-tree. The
-// canonical URL is now /projects/<slug>/fleet/enroll. The old URL
-// continues to resolve, but only as a redirect to the new one — that
-// keeps existing bookmarks, external docs, and the e2e fixtures
-// working without freezing the URL shape.
+// 2026-04 enrollment IA pass moves the management surface into the
+// AUDIT sub-tree. Day-to-day enrollment now happens through the
+// EnrollAgentWizard dialog (URL param `?enroll=1` on /fleet); the
+// page that lists historical install artifacts and tokens — rarely
+// visited — lives at /projects/<slug>/audit/enrollment.
+//
+// Both legacy URLs (the original /enrollment and the brief
+// /fleet/enroll experiment) keep resolving as redirects to the new
+// canonical path so existing bookmarks, docs, and e2e fixtures
+// continue to land somewhere sensible.
 //
 // The actual route table lives in src/routes.tsx. To keep this spec
 // independent of lazy-loaded chunks, we import the bare `routeTree`
@@ -60,25 +64,32 @@ function renderAt(path: string) {
     return { router: r, ...renderWithQueryClient(<RouterProvider router={r} />) };
 }
 
-describe("enrollment routing — moved under /fleet/enroll", () => {
-    it("renders EnrollmentPage at /projects/<slug>/fleet/enroll", async () => {
-        renderAt("/projects/test-project/fleet/enroll");
+const CANONICAL = "/projects/test-project/audit/enrollment";
+
+describe("enrollment routing — moved under /audit/enrollment", () => {
+    it("renders EnrollmentPage at the canonical /audit/enrollment path", async () => {
+        const { router } = renderAt(CANONICAL);
         expect(
             await screen.findByRole("tab", { name: /install commands/i }),
         ).toBeInTheDocument();
+        expect(router.state.location.pathname).toBe(CANONICAL);
     });
 
-    it("redirects the legacy /projects/<slug>/enrollment to /fleet/enroll", async () => {
+    it("redirects legacy /projects/<slug>/enrollment to /audit/enrollment", async () => {
         const { router } = renderAt("/projects/test-project/enrollment");
-        // Wait for the redirect to settle — react-router runs the
-        // <Navigate replace /> on the next tick after the route
-        // matches, and the EnrollmentPage suspense boundary then
-        // streams the page in.
+        // Wait for the redirect + AuditPage suspense to settle, then
+        // the EnrollmentPage tab strip becomes reachable.
         expect(
             await screen.findByRole("tab", { name: /install commands/i }),
         ).toBeInTheDocument();
-        expect(router.state.location.pathname).toBe(
-            "/projects/test-project/fleet/enroll",
-        );
+        expect(router.state.location.pathname).toBe(CANONICAL);
+    });
+
+    it("redirects legacy /projects/<slug>/fleet/enroll to /audit/enrollment", async () => {
+        const { router } = renderAt("/projects/test-project/fleet/enroll");
+        expect(
+            await screen.findByRole("tab", { name: /install commands/i }),
+        ).toBeInTheDocument();
+        expect(router.state.location.pathname).toBe(CANONICAL);
     });
 });

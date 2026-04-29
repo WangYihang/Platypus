@@ -21,13 +21,20 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 //
 // Active sub-tab is derived from the last path segment so deep links
 // (/projects/:slug/audit/recordings) continue to land directly.
-const TABS = ["activities", "recordings", "transfers"] as const;
+//
+// 2026-04 refactor adds `enrollment` — the historical install-artifact
+// + enrollment-token management surface. Day-to-day enrollment now
+// happens through the Fleet card-view wizard; this tab is for the
+// rarer "what was issued / let me revoke an old token" flows that
+// match the read-only audit framing of the other tabs.
+const TABS = ["activities", "recordings", "transfers", "enrollment"] as const;
 type AuditTab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<AuditTab, string> = {
     activities: "Activities",
     recordings: "Recordings",
     transfers: "Transfers",
+    enrollment: "Enrollment",
 };
 
 export default function AuditPage() {

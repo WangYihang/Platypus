@@ -183,7 +183,13 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                             icon={<CloudDownload className="size-4" />}
                             label="Enroll agent"
                             shortcut="enrollment pat install artifacts tokens"
-                            onSelect={() => go("fleet/enroll")}
+                            // 2026-04: enrollment is now a wizard
+                            // dialog mounted on FleetPage. We hop to
+                            // /fleet (the surface where the wizard
+                            // lives) with `?enroll=1` so the wizard
+                            // opens on top of whichever Fleet view
+                            // the operator's preference defaults to.
+                            onSelect={() => go("fleet?enroll=1")}
                         />
                         <PaletteItem
                             icon={<Users className="size-4" />}

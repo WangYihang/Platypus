@@ -38,6 +38,7 @@ import {
     STATUS_LABEL,
     STATUS_TONE,
 } from "./enrollment/status";
+import { ARCH_ORDER, OS_ORDER, preferredOrder } from "./enrollment/platforms";
 
 import {
     AlertDialog,
@@ -89,26 +90,9 @@ type PlatformsState =
     | { status: "empty"; channel: string }
     | { status: "error"; message: string };
 
-// Display order for the install-target picker. OSes a deployer is most
-// likely to pick come first; within an OS the common 64-bit archs lead
-// and the long tail (mips, riscv, …) trails. Anything not in the list
-// gets sorted alphabetically and appended — keeps us forward-compatible
-// with future GOOS/GOARCH additions without code changes.
-const OS_ORDER = ["linux", "darwin", "windows", "freebsd", "openbsd", "netbsd"];
-const ARCH_ORDER = [
-    "amd64",
-    "arm64",
-    "arm",
-    "386",
-    "riscv64",
-    "ppc64le",
-    "s390x",
-    "loong64",
-    "mips64le",
-    "mips64",
-    "mipsle",
-    "mips",
-];
+// OS_ORDER / ARCH_ORDER / preferredOrder live in
+// ./enrollment/platforms so the inline EnrollAgentWizard (Fleet card
+// view) can share them without circular-importing this module.
 
 // Schema for Issue Install. All optional fields stay optional; the
 // backend fills in defaults. Numeric fields coerce empty strings to
@@ -385,22 +369,6 @@ function InstallPanel({
             </AlertDialog>
         </>
     );
-}
-
-// preferredOrder returns a comparator that ranks `priority` items first
-// (in their declared order) and trails everything else alphabetically.
-// Used to bubble the densest-used OSes / archs to the front of the
-// pickers without dropping forward compatibility for new GOOS/GOARCH
-// values that ship in future manifests.
-function preferredOrder(priority: string[]): (a: string, b: string) => number {
-    return (a, b) => {
-        const ia = priority.indexOf(a);
-        const ib = priority.indexOf(b);
-        if (ia === -1 && ib === -1) return a.localeCompare(b);
-        if (ia === -1) return 1;
-        if (ib === -1) return -1;
-        return ia - ib;
-    };
 }
 
 // PlatformPickerField is the "Target platform" form control. Two

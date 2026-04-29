@@ -20,6 +20,7 @@ import HostsCardPanel from "./fleet/HostsCardPanel";
 import HostsPanel from "./fleet/HostsPanel";
 import SessionsPanel from "./fleet/SessionsPanel";
 import TopologyPanel from "./fleet/TopologyPanel";
+import EnrollAgentWizard from "./fleet/enroll/EnrollAgentWizard";
 
 type FleetView = "cards" | "table" | "timeline" | "graph";
 
@@ -121,11 +122,13 @@ export default function FleetPage() {
     );
 
     // "Enroll agent" is the primary action on Fleet — it's how the
-    // fleet grows. The Enrollment surface used to live as its own
-    // sidebar entry under Admin, but it's not really an admin verb;
-    // it's the onboarding step for the surface you're already
-    // looking at. Keep it visible in the header so it's discoverable
-    // without browsing the sidebar.
+    // fleet grows. After the 2026-04 wizard refactor, the button no
+    // longer routes to a separate page. It just sets `?enroll=1` on
+    // the current URL, which the page-level <EnrollAgentWizard />
+    // (mounted below) picks up to open. The same param is used by
+    // the inline EnrollAgentTile inside HostsCardPanel and by the
+    // Command Palette entry, so all three entry points share one
+    // wire format and one open-state.
     const EnrollIcon = icons.enrollment;
     const actions = (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -141,7 +144,7 @@ export default function FleetPage() {
                 </Button>
             )}
             <Button asChild variant="outline" size="sm">
-                <Link to={`/projects/${project.slug}/fleet/enroll`}>
+                <Link to="?enroll=1" data-testid="fleet-enroll-trigger">
                     <EnrollIcon className="size-3.5" />
                     Enroll agent
                 </Link>
@@ -167,6 +170,11 @@ export default function FleetPage() {
             bodyStyle={{ overflow: "visible", display: "flex", flexDirection: "column", padding: 0 }}
         >
             <EnrollmentWaitBanner projectID={project.id} projectSlug={project.slug} />
+            {/* Mounted once at the page level so it floats over any
+                of the four child views (cards / table / timeline /
+                graph). Open / closed state is driven by the
+                `?enroll=1` URL param (see useEnrollWizardOpen). */}
+            <EnrollAgentWizard />
             <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                 <div
                     data-testid="fleet-panel-cards"
