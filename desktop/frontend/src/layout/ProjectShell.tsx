@@ -26,6 +26,7 @@ import AddServerDialog from "./AddServerDialog";
 import ManageServersDialog from "./ManageServersDialog";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
+import TopChrome from "./TopChrome";
 import {
     ResizableHandle,
     ResizablePanel,
@@ -167,6 +168,13 @@ function ShellChrome({
                 overflow: "hidden",
             }}
         >
+            {/* TopChrome owns the global Cmd-K trigger — its centered
+                input-shaped button dispatches the same keydown event
+                the existing CommandPalette listens for, so a click
+                and the keyboard shortcut go through one open path.
+                Left/right slots are reserved for breadcrumbs and
+                global indicators in later phases. */}
+            <TopChrome />
             <div
                 style={{
                     display: "flex",

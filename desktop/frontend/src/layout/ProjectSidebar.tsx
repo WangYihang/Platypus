@@ -12,7 +12,6 @@ import { z } from "zod";
 import { Project, createProject } from "../lib/api";
 import { SessionUser } from "../lib/auth";
 import { palette, space } from "./theme";
-import CmdKHint from "./CmdKHint";
 import ProjectSwitcher from "./ProjectSwitcher";
 import ServerSwitcher from "./ServerSwitcher";
 import UserMenu from "./UserMenu";
@@ -199,24 +198,18 @@ export default function ProjectSidebar({
         >
             {/* Sidebar header: server switcher (was the standalone
                 ServerRail column) on top, project switcher right
-                below. The ⌘K hint sits inline next to the server
-                switcher so the keyboard affordance stays visible
-                without needing its own row. */}
+                below. The ⌘K hint moved to TopChrome above the
+                shell so the search bar is full-width; the sidebar
+                no longer carries the keyboard affordance. */}
             <div
                 style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: space[2],
                     padding: `${space[2]}px ${space[2]}px ${space[1]}px`,
                 }}
             >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <ServerSwitcher
-                        onAddServer={onAddServer}
-                        onManageServers={onManageServers}
-                    />
-                </div>
-                <CmdKHint />
+                <ServerSwitcher
+                    onAddServer={onAddServer}
+                    onManageServers={onManageServers}
+                />
             </div>
 
             <div style={{ padding: `0 ${space[2]}px ${space[2]}px` }}>
