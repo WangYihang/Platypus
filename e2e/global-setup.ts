@@ -283,6 +283,12 @@ async function startBaselineAgent(
     const agentHome = path.join(tmpdir, "baseline-agent");
     mkdirSync(agentHome, { recursive: true });
 
+    // Agent CLI in 93fdd65 onwards: install-token is a positional
+    // argument (not --token), and the persistent-state directory
+    // moved from --identity-dir to --data-dir. Server host/port can
+    // still be forced with --host / --port (used here so the e2e
+    // backend's loopback bind works regardless of what's embedded
+    // in the freshly-minted PAT).
     const agent = spawn(
         AGENT_BINARY,
         [
@@ -290,10 +296,9 @@ async function startBaselineAgent(
             BACKEND_HOST,
             "--port",
             String(BACKEND_PORT),
-            "--token",
-            patResp.token,
-            "--identity-dir",
+            "--data-dir",
             agentHome,
+            patResp.token,
         ],
         {
             cwd: tmpdir,
