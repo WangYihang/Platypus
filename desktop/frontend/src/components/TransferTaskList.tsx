@@ -21,6 +21,32 @@ import {
 import { Button } from "./ui/button";
 import EmptyState from "./EmptyState";
 import StatusPill from "./StatusPill";
+import {
+    detailCellStyle,
+    detailGridStyle,
+    detailKeyStyle,
+    detailRowStyle,
+    detailValueStyle,
+    inlineErrorCellStyle,
+    inlineErrorRowStyle,
+    pathInnerStyle,
+    pathTextStyle,
+    progressLabelStyle,
+    progressTrackStyle,
+    progressWrapperStyle,
+    sizeMainStyle,
+    sizeSubStyle,
+    tableStyle,
+    tdChevronStyle,
+    tdNumStyle,
+    tdPathStyle,
+    tdStyle,
+    thChevronStyle,
+    thNumStyle,
+    thStyle,
+    trExpandedStyle,
+    trStyle,
+} from "./transfers/styles";
 
 interface Props {
     /** Restrict the list to a single project. Omit for the global view. */
@@ -460,184 +486,3 @@ function ProgressBar({ pct, status }: ProgressBarProps) {
     );
 }
 
-const tableStyle: React.CSSProperties = {
-    width: "100%",
-    borderCollapse: "collapse",
-    fontSize: 13,
-};
-
-// Padding values must carry their `px` unit because the template
-// literal turns `space[2]` (the number 8) into the unitless string
-// "8 12" — invalid CSS, silently dropped by the browser, leaving
-// the table headers running together with no horizontal breathing
-// room. Use the same explicit-unit pattern the rest of the
-// codebase uses (Card.tsx, EmptyState.tsx, …).
-const thStyle: React.CSSProperties = {
-    textAlign: "left",
-    padding: `${space[2]}px ${space[3]}px`,
-    fontSize: 11,
-    fontWeight: 600,
-    color: palette.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    borderBottom: `1px solid ${palette.border}`,
-    whiteSpace: "nowrap",
-};
-
-const thNumStyle: React.CSSProperties = {
-    ...thStyle,
-    textAlign: "right",
-};
-
-// Chevron column is a fixed-width gutter — empty header label so the
-// affordance is purely the chevron itself.
-const thChevronStyle: React.CSSProperties = {
-    ...thStyle,
-    width: 24,
-    padding: `${space[2]}px ${space[1]}px`,
-};
-
-const trStyle: React.CSSProperties = {
-    borderBottom: `1px solid ${palette.border}`,
-    cursor: "pointer",
-};
-
-const trExpandedStyle: React.CSSProperties = {
-    ...trStyle,
-    background: palette.surfaceHover,
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: `${space[2]}px ${space[3]}px`,
-    color: palette.textPrimary,
-    verticalAlign: "middle",
-};
-
-const tdChevronStyle: React.CSSProperties = {
-    ...tdStyle,
-    padding: `${space[2]}px ${space[1]}px`,
-    width: 24,
-    color: palette.textMuted,
-};
-
-// Numeric cells: right-aligned so the operator can scan a column of
-// sizes/speeds/percentages without their eye jumping. nowrap stops
-// "38.7 MB / 38.7 MB" from breaking across two lines when the
-// viewport gets tight. tabular-nums keeps digits the same width so
-// adjacent rows line up vertically.
-const tdNumStyle: React.CSSProperties = {
-    ...tdStyle,
-    textAlign: "right",
-    whiteSpace: "nowrap",
-    fontVariantNumeric: "tabular-nums",
-};
-
-const tdPathStyle: React.CSSProperties = {
-    ...tdStyle,
-    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-    color: palette.textSecondary,
-    maxWidth: 360,
-    overflow: "hidden",
-};
-
-const pathInnerStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: space[2],
-    minWidth: 0,
-};
-
-const pathTextStyle: React.CSSProperties = {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-};
-
-// Stacked size cell: the canonical "X / Y" display on top, smaller
-// muted "B/s · ratio" sub-line beneath. Both lines right-aligned via
-// the parent <td>'s textAlign.
-const sizeMainStyle: React.CSSProperties = {
-    fontVariantNumeric: "tabular-nums",
-};
-
-const sizeSubStyle: React.CSSProperties = {
-    fontSize: 11,
-    color: palette.textMuted,
-    fontVariantNumeric: "tabular-nums",
-    marginTop: 1,
-};
-
-// Inline error sub-row is a single full-width red strip immediately
-// under the row so the operator sees what failed without expanding.
-const inlineErrorRowStyle: React.CSSProperties = {
-    borderBottom: `1px solid ${palette.border}`,
-};
-
-const inlineErrorCellStyle: React.CSSProperties = {
-    padding: `${space[1]}px ${space[3]}px ${space[2]}px ${space[3]}px`,
-    color: palette.danger,
-    fontSize: 12,
-    background: palette.surface,
-};
-
-// Expanded detail row: a single full-width cell containing a
-// two-column key-value grid. Same border treatment as the rest of
-// the table so the visual rhythm doesn't break.
-const detailRowStyle: React.CSSProperties = {
-    borderBottom: `1px solid ${palette.border}`,
-    background: palette.surfaceHover,
-};
-
-const detailCellStyle: React.CSSProperties = {
-    padding: `${space[3]}px ${space[5]}px`,
-};
-
-const detailGridStyle: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: `${space[2]}px ${space[5]}px`,
-    margin: 0,
-    fontSize: 12,
-};
-
-const detailKeyStyle: React.CSSProperties = {
-    color: palette.textMuted,
-    minWidth: 100,
-    whiteSpace: "nowrap",
-    fontWeight: 500,
-};
-
-const detailValueStyle: React.CSSProperties = {
-    color: palette.textPrimary,
-    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-    fontVariantNumeric: "tabular-nums",
-};
-
-// The track + label sit side-by-side inside the cell so the label
-// can't overflow into the next column the way `position: absolute;
-// right: -34px` did. Fixed track width + min-width on the wrapper
-// stops the column from collapsing when the table fights for space.
-const progressWrapperStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: space[2],
-    minWidth: 180,
-};
-
-const progressTrackStyle: React.CSSProperties = {
-    position: "relative",
-    width: 140,
-    height: 6,
-    background: palette.border,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-    flexShrink: 0,
-};
-
-const progressLabelStyle: React.CSSProperties = {
-    fontSize: 11,
-    color: palette.textMuted,
-    fontVariantNumeric: "tabular-nums",
-    minWidth: 32,
-    textAlign: "right",
-};
