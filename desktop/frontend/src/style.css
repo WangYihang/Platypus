@@ -147,8 +147,13 @@
     --color-input: var(--input);
     --color-ring: var(--ring);
 
-    /* Fonts exposed as Tailwind font families (font-sans / font-mono). */
-    --font-sans: var(--font-geist-sans);
+    /* Fonts exposed as Tailwind font families. The whole UI now uses
+     * Geist Mono — `font-sans` Tailwind utility resolves to the same
+     * family as `font-mono` so existing callers don't have to migrate
+     * one-by-one. The Geist Sans @font-face still loads for any
+     * legacy opt-in caller, but nothing in production should reach
+     * for it. Phase 6 will drop the Sans face entirely. */
+    --font-sans: var(--font-geist-mono);
     --font-mono: var(--font-geist-mono);
 
     /* Radius scale exposed as Tailwind sizes. */
@@ -186,7 +191,15 @@ body {
     margin: 0;
     background-color: #0a0a0a;
     color: #fafafa;
-    font-family: var(--font-geist-sans);
+    /* Geist Mono is the default body font: the redesign treats the
+     * whole UI as a CLI surface (host inventory, file paths, audit
+     * rows, identifiers). Geist Sans is still loaded for any
+     * opt-in callers but no production component should reach for
+     * it — `font-sans` Tailwind utility is also remapped to mono
+     * via the @theme block above, so `font-sans` and `font-mono`
+     * resolve to the same family today.
+     */
+    font-family: var(--font-geist-mono);
 }
 
 ::selection {
