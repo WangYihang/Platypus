@@ -1,0 +1,7 @@
+# Real frontend bundle is produced by `make web-ui-embed` (rsync from
+# desktop/frontend/dist-web/). Only the committed stub `index.html` and
+# the directory marker survive a fresh checkout so `go build` works
+# without a Node toolchain.
+dist/*
+!dist/index.html
+!dist/.gitkeep

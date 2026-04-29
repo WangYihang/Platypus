@@ -46,6 +46,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
 	"github.com/WangYihang/Platypus/internal/utils/update"
+	"github.com/WangYihang/Platypus/internal/webui"
 
 	// Import the generated OpenAPI docs so `swag init`'s output is wired
 	// into the binary. The swagger UI handler in internal/api looks up
@@ -533,6 +534,11 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
 	api.RegisterV1AdminSettingsRoutes(rest, api.NewAdminSettingsHandler(settingsReg), rbac)
 	api.RegisterSwaggerRoutes(rest)
+
+	// Frontend bundle. Must be the last registration so explicit API
+	// routes win first-match; webui's NoRoute handler is the catch-all
+	// for both static asset serving and React Router SPA fallback.
+	webui.RegisterRoutes(rest)
 
 	// TopologyStream + observer were v1 — they relied on the
 	// AgentClient map and legacy sysinfo cache. Rebuilt on top of

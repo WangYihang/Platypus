@@ -27,6 +27,13 @@ go.work.sum
 # Build artifacts
 build/
 dist/
+# The platypus-server embeds the React bundle from internal/webui/dist/
+# via //go:embed. We commit the stub index.html + .gitkeep so a fresh
+# checkout still compiles; the real bundle is staged on top by
+# `make web-ui-embed`. Re-include the directory itself here so the
+# nested internal/webui/.gitignore can manage the stub vs. build
+# artifacts inside it.
+!internal/webui/dist/
 
 # Stray binaries at repo root left by `go build ./...` — the
 # Makefile puts proper builds under build/, but ad-hoc local

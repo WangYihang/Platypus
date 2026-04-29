@@ -59,12 +59,15 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
     const navigate = useNavigate();
 
     const pinnedProfile = pinnedServerId ? getServer(pinnedServerId) : null;
+    // Default to the page's own origin so the embedded server bundle
+    // (platypus-server serves the UI at /) just works on first visit.
+    // Standalone-preview flows (`make web-ui-serve` on :7777 talking to a
+    // server on :9443) need the user to overwrite this once; the value
+    // persists in the saved server profile after that.
     const defaultURL =
         pinnedProfile?.url ||
         initialURL ||
-        (typeof window !== "undefined"
-            ? window.location.origin.replace(/:\d+$/, ":7331")
-            : "");
+        (typeof window !== "undefined" ? window.location.origin : "");
     const hasSavedServers = listServers().length > 0;
 
     const loginForm = useForm<LoginFormValues>({

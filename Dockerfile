@@ -1,3 +1,18 @@
+# Stage 0: Build the React web UI bundle.
+#
+# The platypus-server embeds this bundle via //go:embed (see
+# internal/webui/), so the Go builder needs the dist-web/ output staged
+# under internal/webui/dist/ before `go build`. Doing it in a separate
+# stage keeps the Go image free of Node and lets pnpm install cache on
+# the lockfile alone.
+FROM node:20-alpine AS frontend-builder
+WORKDIR /fe
+RUN corepack enable
+COPY desktop/frontend/package.json desktop/frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY desktop/frontend/ ./
+RUN pnpm run build:web
+
 # Stage 1: Build the binaries
 FROM golang:1.25 AS builder
 
@@ -7,6 +22,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+
+# Overlay the freshly built web bundle on top of the committed stub so
+# //go:embed picks up the real frontend.
+COPY --from=frontend-builder /fe/dist-web/ ./internal/webui/dist/
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
     -o /out/platypus-server ./cmd/platypus-server

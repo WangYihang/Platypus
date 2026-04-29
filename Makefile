@@ -13,16 +13,17 @@ PROTO_V2_OUT := pkg/proto/v2/common.pb.go
 AGENT_SIGNING_PUBKEY ?=
 AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
 
-.PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
+.PHONY: all build build-bundled proto test lint fmt vet tidy clean release snapshot help swag \
         hooks pre-commit \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
-        web-ui web-ui-serve e2e e2e-deps screenshots
+        web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots
 
 all: build
 
 help:
 	@echo "Server / agent (./cmd/...):"
 	@echo "  build           Build both binaries to ./$(BUILD_DIR)/"
+	@echo "  build-bundled   Build the web UI and embed it into platypus-server"
 	@echo "  proto           Regenerate protobuf code"
 	@echo "  test            Run tests with race detector"
 	@echo "  lint            Run golangci-lint"
@@ -44,6 +45,7 @@ help:
 	@echo ""
 	@echo "Standalone web UI (no server embed):"
 	@echo "  web-ui           Build browser bundle to desktop/frontend/dist-web/"
+	@echo "  web-ui-embed     Build web UI and stage it into internal/webui/dist/"
 	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:7777"
 	@echo ""
 	@echo "End-to-end tests + screenshot gallery:"
@@ -114,6 +116,10 @@ release:
 clean:
 	rm -rf $(BUILD_DIR) dist
 	rm -rf desktop/build/bin desktop/frontend/dist desktop/frontend/wailsjs
+	@# Strip the staged web bundle but keep the committed stub so a
+	@# subsequent `go build` still works without re-running web-ui-embed.
+	@find internal/webui/dist -mindepth 1 \
+	  ! -name index.html ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
 
 # ---------- Desktop app ----------
 
@@ -151,6 +157,23 @@ desktop-test:
 
 web-ui:
 	cd desktop/frontend && pnpm install && pnpm run build:web
+
+# Stage the dist-web bundle into internal/webui/dist/ so //go:embed
+# picks it up on the next `go build`. rsync --delete prevents stale
+# files from a previous build polluting the binary; the excludes
+# preserve the committed stub (which provides a graceful fallback when
+# the embed dir is otherwise empty) and the .gitignore that hides
+# build artifacts.
+web-ui-embed: web-ui
+	@mkdir -p internal/webui/dist
+	rsync -a --delete \
+	  --exclude='.gitignore' --exclude='.gitkeep' \
+	  desktop/frontend/dist-web/ internal/webui/dist/
+
+# Production build path: web UI first, then both binaries with the
+# real bundle baked in. `make build` alone keeps Go-only builds fast
+# for contributors without a Node toolchain.
+build-bundled: web-ui-embed build
 
 # ---------- End-to-end tests + screenshot gallery ----------
 #
