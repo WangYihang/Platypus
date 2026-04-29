@@ -41,11 +41,7 @@ import { basename, humanize } from "../../../lib/format";
 
 import FileTable from "./FileTable";
 import FileGrid from "./FileGrid";
-import {
-    ResizableHandle,
-    ResizablePanel,
-    ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import Split from "@/components/ui/Split";
 import { useViewMode } from "./useViewMode";
 import {
     ArchiveFormat,
@@ -175,7 +171,7 @@ function PreviewPaneShell({
 }) {
     return (
         <div
-            className="absolute inset-0 flex flex-col overflow-hidden rounded-md border"
+            className="flex h-full w-full flex-col overflow-hidden rounded-md border"
             data-testid="preview-pane"
         >
             <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm">
@@ -915,93 +911,81 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                 </div>
 
                 {/* Browser + preview split. The preview pane is "either /
-                    or": when a single previewable file is selected and the
-                    pane is open, it renders as a resizable panel (panel
-                    group autoSaveId persists the width). Otherwise it
-                    collapses to a 24 px right-edge rail so the listing
-                    reclaims the full width — no more 38 % wasted on a
-                    "Select a single file to preview" placeholder. The two
-                    branches don't share the same ResizablePanelGroup
-                    because the rail must sit *outside* the group; mounting
-                    it inside as a fixed-width sibling fights the
-                    percent-based layout the panel group uses. */}
+                    or": when a single previewable file is selected and
+                    the pane is open, the listing and preview share a
+                    draggable seam (the seam's percent persists in
+                    localStorage). Otherwise the listing reclaims the
+                    full width and a 24 px right-edge rail keeps the
+                    "open preview" affordance visible. */}
                 {previewExpanded ? (
-                    <ResizablePanelGroup
-                        direction="horizontal"
-                        autoSaveId="files-preview-split"
-                        className="min-h-0 flex-1"
+                    <Split
+                        direction="row"
+                        storageKey="files-preview-split"
+                        defaultPercent={62}
+                        minPercent={30}
+                        maxPercent={80}
+                        className="flex-1"
                     >
-                        <ResizablePanel id="files-list" defaultSize="62%" minSize="30%" className="relative">
-                            <FileContextMenu
-                                variant={{ kind: "empty" }}
-                                onNewFile={() => setShowNewFile(true)}
-                                onNewFolder={() => setShowNewFolder(true)}
-                                onUploadHere={handleUploadClick}
-                                onRefresh={dir.reload}
-                            >
-                                <div
-                                    className={cn(
-                                        "absolute inset-0 overflow-auto rounded-md border",
-                                        dragOver && "bg-accent/40 outline outline-2 outline-primary",
-                                    )}
-                                    {...dropHandlers}
-                                >
-                                    {dir.error ? (
-                                        <div className="p-6 text-sm text-red-500">
-                                            Load error: {dir.error}
-                                        </div>
-                                    ) : viewMode === "grid" ? (
-                                        <FileGrid
-                                            entries={dir.entries}
-                                            currentPath={dir.path}
-                                            selectedNames={selected}
-                                            setSelectedNames={setSelected}
-                                            onOpen={openEntry}
-                                            onInternalMove={handleInternalMove}
-                                            projectID={projectID}
-                                            sessionHash={sessionHash}
-                                            wrapRow={wrapRowWithContextMenu}
-                                        />
-                                    ) : (
-                                        <FileTable
-                                            entries={dir.entries}
-                                            currentPath={dir.path}
-                                            selectedNames={selected}
-                                            setSelectedNames={setSelected}
-                                            onOpen={openEntry}
-                                            sorting={sorting}
-                                            setSorting={setSorting}
-                                            onInternalMove={handleInternalMove}
-                                            wrapRow={wrapRowWithContextMenu}
-                                            density={density}
-                                        />
-                                    )}
-                                </div>
-                            </FileContextMenu>
-                        </ResizablePanel>
-                        <ResizableHandle className="mx-1 bg-transparent" />
-                        <ResizablePanel
-                            id="files-preview"
-                            defaultSize="38%"
-                            minSize="20%"
-                            maxSize="70%"
-                            className="relative"
+                        <FileContextMenu
+                            variant={{ kind: "empty" }}
+                            onNewFile={() => setShowNewFile(true)}
+                            onNewFolder={() => setShowNewFolder(true)}
+                            onUploadHere={handleUploadClick}
+                            onRefresh={dir.reload}
                         >
-                            <PreviewPaneShell
-                                entry={previewEntry}
-                                canToggleEdit={canToggleEdit}
-                                previewKind={previewKind}
-                                editMode={editMode}
-                                setEditMode={setEditMode}
-                                onClose={preview.close}
-                                projectID={projectID}
-                                sessionHash={sessionHash}
-                                dirPath={dir.path}
-                                onDownload={handleDownloadClick}
-                                onReload={dir.reload}
-                            />
-                        </ResizablePanel>
-                    </ResizablePanelGroup>
+                            <div
+                                className={cn(
+                                    "h-full w-full overflow-auto rounded-md border",
+                                    dragOver && "bg-accent/40 outline outline-2 outline-primary",
+                                )}
+                                {...dropHandlers}
+                            >
+                                {dir.error ? (
+                                    <div className="p-6 text-sm text-red-500">
+                                        Load error: {dir.error}
+                                    </div>
+                                ) : viewMode === "grid" ? (
+                                    <FileGrid
+                                        entries={dir.entries}
+                                        currentPath={dir.path}
+                                        selectedNames={selected}
+                                        setSelectedNames={setSelected}
+                                        onOpen={openEntry}
+                                        onInternalMove={handleInternalMove}
+                                        projectID={projectID}
+                                        sessionHash={sessionHash}
+                                        wrapRow={wrapRowWithContextMenu}
+                                    />
+                                ) : (
+                                    <FileTable
+                                        entries={dir.entries}
+                                        currentPath={dir.path}
+                                        selectedNames={selected}
+                                        setSelectedNames={setSelected}
+                                        onOpen={openEntry}
+                                        sorting={sorting}
+                                        setSorting={setSorting}
+                                        onInternalMove={handleInternalMove}
+                                        wrapRow={wrapRowWithContextMenu}
+                                        density={density}
+                                    />
+                                )}
+                            </div>
+                        </FileContextMenu>
+                        <PreviewPaneShell
+                            entry={previewEntry}
+                            canToggleEdit={canToggleEdit}
+                            previewKind={previewKind}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            onClose={preview.close}
+                            projectID={projectID}
+                            sessionHash={sessionHash}
+                            dirPath={dir.path}
+                            onDownload={handleDownloadClick}
+                            onReload={dir.reload}
+                        />
+                    </Split>
                 ) : (
                     <div className="flex min-h-0 flex-1 gap-1">
                         <FileContextMenu

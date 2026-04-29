@@ -5,20 +5,18 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Regression: a left-click on a file row used to make the entire file
-// listing area collapse — preview pane and file grid both vanished —
-// because the preview-pane ResizablePanel maxSize was authored as the
-// number `70`, which react-resizable-panels v4 reads as 70 *pixels*
-// (not 70 percent). On a wide viewport the preview clamped to a 70 px
-// sliver and the listing flashed through a tiny pixel-basis layout
-// before the library's ResizeObserver promoted it to the percentage
-// flex. The user reported the area as "blank".
+// listing area collapse — both the listing and the preview pane
+// vanished. Two bugs in the previous react-resizable-panels-backed
+// implementation stacked on top of each other (one in our shadcn
+// wrapper, one in our prop authoring), and the preview-pane mount
+// served as the trigger.
 //
-// We can't faithfully reproduce the layout flash in jsdom (no flex
-// engine, no ResizeObserver), but we can pin the structural invariant
-// the bug breaks: clicking a file selects it, opens the preview pane,
-// and KEEPS the file grid mounted with all entries. A regression that
-// remounts the wrong subtree or stops rendering the panels would fail
-// here.
+// The whole panel-group machinery is gone now (replaced by a tiny
+// custom <Split>), but the structural invariant still matters: a
+// click on a file selects it, opens the preview pane, and KEEPS the
+// file grid + every other tile mounted in the DOM. A future
+// regression that returns null from the preview branch (or loses the
+// file grid via an uncaught render error) would still trip this test.
 //
 // Mock the Wails App bindings before importing FileBrowser; the
 // platform shim normally ships ListDir / ReadFile / etc., we replace
@@ -91,12 +89,10 @@ describe("FileBrowser click-on-file does not blank the explorer", () => {
         fireEvent.click(fileTile);
         await new Promise((r) => setTimeout(r, 100));
 
-        // Both panels mount. A regression that returned null from the
-        // preview branch (or remounted the FileBrowser root via an
-        // uncaught render error) would zero this out.
-        const panels = container.querySelectorAll("[data-panel]");
-        expect(panels.length).toBeGreaterThanOrEqual(2);
-
+        // The preview pane mounts.
+        expect(
+            container.querySelector('[data-testid="preview-pane"]'),
+        ).toBeInTheDocument();
         // Every original tile is still in the DOM. The previewed file
         // is selected; the grid does not unmount.
         expect(

@@ -46,7 +46,6 @@
     "react-hook-form": "^7.73.1",
     "react-markdown": "^10.1.0",
     "react-pdf": "^10.4.1",
-    "react-resizable-panels": "^4.10.0",
     "react-router-dom": "^7.14.1",
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
