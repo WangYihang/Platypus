@@ -72,11 +72,11 @@ type upgradeResponse struct {
 	BytesTotal   uint64 `json:"bytes_total,omitempty"`
 }
 
-// Trigger handles POST /api/v1/projects/:pid/agents/:aid/upgrade.
+// Trigger handles POST /api/v1/projects/:pid/agents/:agent_id/upgrade.
 // Gated by RequireAuth + RequireProjectRole(admin) at registration.
 func (h *AgentUpgradeHandler) Trigger(c *gin.Context) {
 	projectID := c.Param("pid")
-	agentID := c.Param("aid")
+	agentID := c.Param("agent_id")
 	claims, _ := ClaimsFromContext(c)
 
 	var body upgradeRequest
@@ -284,13 +284,19 @@ var errAgentNotConnected = errors.New("agent not connected")
 var _ = errAgentNotConnected
 
 // RegisterV1AgentUpgradeRoutes mounts POST
-// /api/v1/projects/:pid/agents/:aid/upgrade. Gated by
+// /api/v1/projects/:pid/agents/:agent_id/upgrade. Gated by
 // RequireAuth + RequireProjectRole(admin) — only an admin in the
 // project can trigger a self-upgrade on one of its agents.
+//
+// The agent path param has to be `:agent_id` to share the
+// `/api/v1/projects/:pid/agents/:agent_id/...` prefix with the fs/
+// terminal/exec handlers — Gin's trie refuses to register two
+// distinct wildcard names under the same prefix and panics on
+// startup if it sees `:aid` here alongside `:agent_id` elsewhere.
 func RegisterV1AgentUpgradeRoutes(engine *gin.Engine, h *AgentUpgradeHandler, rbac *RBAC) {
 	admin := engine.Group("/api/v1/projects/:pid/agents")
 	admin.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleAdmin))
 	{
-		admin.POST("/:aid/upgrade", h.Trigger)
+		admin.POST("/:agent_id/upgrade", h.Trigger)
 	}
 }
