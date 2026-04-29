@@ -18,6 +18,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import AutoGrid from "../components/AutoGrid";
 import Card from "../components/Card";
+import InlineBar from "../components/InlineBar";
 import DataList from "../components/DataList";
 import EmptyState from "../components/EmptyState";
 import MetricCard from "../components/MetricCard";
@@ -758,15 +759,22 @@ function InfoKPIStrip({
     }
     const tiles: Tile[] = [];
 
-    // CPU %. Warn at 70, danger at 90 — the thresholds match the
-    // colours the operator already associates with the StatusPill
-    // tones elsewhere on the page.
+    // CPU %. Warn at 70, danger at 90 — thresholds inside InlineBar
+    // already pick the right tone, but we still echo it onto the
+    // surrounding MetricCard accent so the value text colour matches.
     if (sysInfo?.cpu_percent !== undefined) {
         const pct = sysInfo.cpu_percent;
         tiles.push({
             key: "cpu",
             label: "CPU",
-            value: `${pct.toFixed(1)}%`,
+            value: (
+                <InlineBar
+                    value={pct}
+                    width={120}
+                    label="CPU usage"
+                    data-testid="host-cpu-bar"
+                />
+            ),
             accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
         });
     }
@@ -780,7 +788,14 @@ function InfoKPIStrip({
         tiles.push({
             key: "mem",
             label: "Memory",
-            value: `${pct.toFixed(1)}%`,
+            value: (
+                <InlineBar
+                    value={pct}
+                    width={120}
+                    label="Memory usage"
+                    data-testid="host-mem-bar"
+                />
+            ),
             hint: `${formatBytes(sysInfo.mem_used)} / ${formatBytes(memTotal)}`,
             accent: pct >= 90 ? "danger" : pct >= 70 ? "warning" : "default",
         });
@@ -820,7 +835,14 @@ function InfoKPIStrip({
             tiles.push({
                 key: "disk",
                 label: "Disk",
-                value: `${worst.pct.toFixed(1)}%`,
+                value: (
+                    <InlineBar
+                        value={worst.pct}
+                        width={120}
+                        label="Disk usage"
+                        data-testid="host-disk-bar"
+                    />
+                ),
                 hint: worst.mount,
                 accent:
                     worst.pct >= 90 ? "danger" : worst.pct >= 80 ? "warning" : "default",
