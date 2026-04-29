@@ -19,13 +19,12 @@ test.describe("project creation — navigates into the new project", () => {
         await loginAsAdmin(page);
         await page.goto("/projects");
 
-        // The "New project" affordance lives inside the project
-        // switcher dropdown (the trigger sits at the top of the
-        // ProjectSidebar). Open the switcher, then click the footer
-        // action.
-        const sidebar = page.getByRole("complementary").nth(1);
-        // The first button inside the sidebar is the switcher trigger.
-        await sidebar.getByRole("button").first().click();
+        // Sidebar collapses to an icon-only rail by default; the
+        // ProjectSwitcher (which hosts the "New project" footer
+        // action) is hidden in that mode. Expand the sidebar first so
+        // the switcher trigger lands in the DOM, then open the menu.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
+        await page.getByTestId("project-switcher-trigger").click();
         await page
             .getByRole("button", { name: /new project/i })
             .first()

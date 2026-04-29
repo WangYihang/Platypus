@@ -25,7 +25,12 @@ test.describe("no stale 'listeners' or 'dispatch' copy", () => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Staging created/i }).click();
         await page.getByRole("link", { name: /Fleet$/ }).click();
-        await expect(page.getByText("No hosts yet")).toBeVisible();
+        // Fleet ships two panels (cards + table), both render the
+        // empty state — scope to the table panel so the assertion
+        // doesn't strict-mode-fail on duplicate matches.
+        await expect(
+            page.getByTestId("fleet-panel-table").getByText("No hosts yet"),
+        ).toBeVisible();
 
         const main = page.locator("main");
         const text = (await main.textContent()) ?? "";

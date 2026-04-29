@@ -16,21 +16,19 @@ test.describe("project shell", () => {
 
         // Server switcher sits at the top of the sidebar (the
         // standalone server rail column was retired in 2026-04 IA pass).
+        // Sidebar starts collapsed to an icon-only rail; click
+        // through the chevron so the text labels assertions below
+        // resolve.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         await expect(page.getByTestId("server-switcher-trigger")).toBeVisible();
         await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
 
         // Current nav surface (desktop/frontend/src/layout/ProjectSidebar.tsx).
-        // Hosts + Sessions + Topology collapsed into the Fleet view;
-        // Dispatch was removed; Settings is new. Enrollment is admin-
-        // only (we're logged in as admin so it renders).
-        for (const label of [
-            "Overview",
-            "Fleet",
-            "Activities",
-            "Enrollment",
-            "Members",
-            "Settings",
-        ]) {
+        // Activities + Recordings collapsed into a single Audit entry;
+        // Enrollment moved inside Fleet (it's how you grow the fleet);
+        // Settings is admin-only (we're logged in as admin so it
+        // renders).
+        for (const label of ["Overview", "Fleet", "Members", "Audit", "Settings"]) {
             await expect(
                 page.getByRole("link", { name: new RegExp(`${label}$`) }),
             ).toBeVisible();

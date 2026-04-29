@@ -34,6 +34,7 @@ export default function ProjectSwitcher({
             <PopoverTrigger asChild>
                 <button
                     type="button"
+                    data-testid="project-switcher-trigger"
                     style={{
                         display: "flex",
                         alignItems: "center",

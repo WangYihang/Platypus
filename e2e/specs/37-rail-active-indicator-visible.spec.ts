@@ -17,6 +17,11 @@ test.describe("server-switcher active row", () => {
         await loginAsAdmin(page);
         await expect(page).toHaveURL(/\/projects/);
 
+        // Sidebar collapses to an icon-only rail by default; the
+        // switcher trigger is hidden in that mode (Cmd-K is the
+        // surface for switching while collapsed). Expand once before
+        // exercising the inline switcher.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         await page.getByTestId("server-switcher-trigger").click();
         const menu = page.getByTestId("server-switcher-menu");
         const indicator = page.getByTestId("rail-active-indicator");

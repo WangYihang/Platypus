@@ -10,16 +10,23 @@ test.describe("host view", () => {
         await page.getByRole("link", { name: /Fleet$/ }).click();
         await expect(page).toHaveURL(/\/projects\/default\/fleet(?:\?.*)?$/);
 
-        // Click into the host row — Fleet Table view routes into
-        // /hosts/:id/info (Terminal tab was extracted into the global
-        // bottom drawer). Scope to the Table panel so the Timeline
-        // panel's hidden session table doesn't resolve first.
+        // Click into the host row — Fleet Table view routes into the
+        // host's default tab. After 9748a49 (`feat(host): Files
+        // default + Tunnels tab on HostView`) the default landed on
+        // /hosts/:id/files. Scope the selector to the Table panel so
+        // the Timeline panel's hidden session table doesn't resolve
+        // first.
         const row = page
             .getByTestId("fleet-panel-table")
             .locator("table tbody tr")
             .first();
         await expect(row).toBeVisible({ timeout: 10_000 });
         await row.click();
+        await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
+        // Hop over to the Info tab — the rest of this spec asserts on
+        // the host header + tab strip, which renders identically
+        // regardless of the active tab.
+        await page.getByRole("tab", { name: "Info" }).click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/info$/);
 
         // PageHeader subtitle on HostView is "<N> active · <os>".
@@ -27,18 +34,22 @@ test.describe("host view", () => {
             page.getByText(/active · /).first(),
         ).toBeVisible({ timeout: 10_000 });
 
-        // Current tab strip — Terminal moved to the global drawer and
-        // Processes was added.
-        for (const label of ["Info", "Files", "Processes"]) {
+        // Current tab strip — Terminal moved to the global drawer.
+        // Tunnels was added in 9748a49.
+        for (const label of ["Info", "Files", "Processes", "Tunnels"]) {
             await expect(page.getByRole("tab", { name: label })).toBeVisible();
         }
         // Sessions tab renders with a count suffix, match the prefix.
         await expect(
             page.getByRole("tab", { name: /^Sessions/ }),
         ).toBeVisible();
-        // "Open terminal" button lives in the page header actions row.
+        // "Open terminal" button lives in the page header actions
+        // row. Match the exact name so the status-bar's terminals
+        // pill ("N open terminal(s)") doesn't double-resolve.
         await expect(
-            page.getByRole("button", { name: /Open terminal/i }),
+            page
+                .getByTestId("shell-content-frame")
+                .getByRole("button", { name: "Open terminal" }),
         ).toBeVisible();
 
         await page.screenshot({

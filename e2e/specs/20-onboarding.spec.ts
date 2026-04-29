@@ -39,8 +39,11 @@ test.describe("onboarding", () => {
 
         // Land on the projects grid with the server switcher trigger
         // visible. Open it and confirm one row, labelled "Primary",
-        // shows up as active.
+        // shows up as active. The sidebar collapses to an icon-only
+        // rail by default in 2026-04+, hiding the switcher trigger;
+        // expand it once before the assertion.
         await expect(page).toHaveURL(/\/projects$/, { timeout: 15_000 });
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         const trigger = page.getByTestId("server-switcher-trigger");
         await expect(trigger).toBeVisible();
         await trigger.click();

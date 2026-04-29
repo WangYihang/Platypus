@@ -46,6 +46,13 @@ test.describe("project sidebar nav grouping", () => {
         await loginAsAdmin(page);
         await page.goto("/projects/default/overview");
 
+        // The sidebar collapses to an icon-only rail by default
+        // (`ui.sidebarExpanded = false` in the typed preference
+        // registry). Group headers + nav labels only render in the
+        // expanded layout, so click the chevron toggle once before
+        // asserting on them.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
+
         // Group headings appear as small caps labels above each
         // section. Tagged with data-testid="nav-group-<key>" so the
         // spec doesn't depend on letter-case styling.

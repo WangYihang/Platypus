@@ -19,6 +19,10 @@ test.describe("server-switcher row actions use themed dialogs", () => {
         });
 
         await loginAsAdmin(page);
+        // The sidebar collapses to an icon-only rail by default; the
+        // server-switcher trigger is hidden in that mode. Expand it
+        // before clicking the trigger.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         await page.getByTestId("server-switcher-trigger").click();
         const row = page.getByTestId("server-row-0");
         await row.hover();
@@ -41,6 +45,10 @@ test.describe("server-switcher row actions use themed dialogs", () => {
         });
 
         await loginAsAdmin(page);
+        // The sidebar collapses to an icon-only rail by default; the
+        // server-switcher trigger is hidden in that mode. Expand it
+        // before clicking the trigger.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         await page.getByTestId("server-switcher-trigger").click();
         const row = page.getByTestId("server-row-0");
         await row.hover();

@@ -19,15 +19,45 @@ test.describe("global terminal drawer", () => {
             .locator("table tbody tr")
             .first()
             .click();
-        await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/info$/);
+        // After 9748a49 the default host tab is Files, not Info. The
+        // "Open terminal" header button is mounted on every tab so we
+        // don't need to switch.
+        await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
+
+        // Wait for the link-session row to land: the agent finishes
+        // its WS upgrade asynchronously (the link handler inserts a
+        // session row inside the upgrade callback, so the host page
+        // can briefly mount with `0 active`). The "Open terminal"
+        // button gates on `liveCount > 0` and stays disabled until
+        // the row appears.
+        await expect(page.getByText(/^\d+ active · /).first()).toContainText(
+            /^[1-9]\d* active/,
+            { timeout: 15_000 },
+        );
 
         // Click the "Open terminal" action in the page header; that
         // pushes a shell into the global drawer and unhides it.
-        await page.getByRole("button", { name: /Open terminal/i }).click();
+        // Scope to shell-content-frame so the status-bar's
+        // terminals-pill (aria-label "N open terminal(s)") doesn't
+        // double-resolve once the drawer is up.
+        await page
+            .getByTestId("shell-content-frame")
+            .getByRole("button", { name: "Open terminal" })
+            .click();
 
-        // The Terminal input is the focusable proxy xterm renders for
-        // accessibility — its presence proves the WS upgrade landed.
-        await expect(page.getByLabel("Terminal input")).toBeVisible({ timeout: 15_000 });
+        // Xterm mounts at least one `.xterm-screen` inside the
+        // drawer once the WS upgrade lands. It may be visibility:
+        // hidden in playwright's eyes (xterm renders into an absolute-
+        // positioned canvas and its a11y helper textarea is offscreen
+        // by design), so we assert *attachment* rather than
+        // visibility — same contract the original spec was after,
+        // just without the brittle "is this DOM node within the
+        // browser viewport?" check. A regression to using session.id
+        // as the route param would still surface here because the
+        // canvas would never mount in the first place.
+        await expect(page.locator(".xterm-screen").first()).toBeAttached({
+            timeout: 15_000,
+        });
         // No "failed to open" / "ws failed" banner — that's the exact
         // symptom of the agent_id / session.id mix-up.
         await expect(page.getByText(/failed to open|ws failed/i)).not.toBeVisible();
@@ -37,7 +67,7 @@ test.describe("global terminal drawer", () => {
         // HostView tab strip.
         await page.getByRole("link", { name: /Overview$/ }).click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
-        await expect(page.getByLabel("Terminal input")).toBeVisible();
+        await expect(page.locator(".xterm-screen").first()).toBeAttached();
 
         await page.screenshot({
             path: shotPath("16-host-terminal.png"),

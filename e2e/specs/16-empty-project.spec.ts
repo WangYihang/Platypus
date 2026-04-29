@@ -17,7 +17,13 @@ test.describe("empty project", () => {
         await page.getByRole("link", { name: /Fleet$/ }).click();
         await expect(page).toHaveURL(/\/projects\/staging\/fleet(?:\?.*)?$/);
 
-        await expect(page.getByText("No hosts yet")).toBeVisible();
+        // The Fleet view ships two panels (cards + table) in the same
+        // tree; both render the "No hosts yet" empty state when the
+        // project is empty. Scope to the table panel — it's the
+        // canonical surface this spec is screenshotting.
+        await expect(
+            page.getByTestId("fleet-panel-table").getByText("No hosts yet"),
+        ).toBeVisible();
         // Step 1 of the settings reorg renamed the empty-state CTA from
         // "Manage enrollment" to "Enroll agent". The page header on
         // Fleet now also surfaces an "Enroll agent" link, so the empty

@@ -9,20 +9,26 @@ test.describe("projects multi", () => {
         await page.getByRole("button", { name: /Default created/i }).click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Click the project switcher in the sidebar. Use a specific locator to
-        // avoid clicking other "Default" text on the overview page.
-        await page.getByRole("complementary").getByRole("button", { name: /Default/ }).first().click();
-        
+        // Sidebar collapses to an icon-only rail by default and the
+        // ServerSwitcher / ProjectSwitcher are hidden in that mode
+        // (Cmd-K is the surface for switching while collapsed).
+        // Expand so the switcher trigger is in the DOM.
+        await page.getByRole("button", { name: /Expand sidebar/i }).click();
+
+        // Click the project switcher in the sidebar. Scope to the
+        // sidebar (`role=complementary`) so we don't pick up the
+        // "Default" tile copy on the overview page.
+        await page
+            .getByRole("complementary")
+            .getByRole("button", { name: /Default/ })
+            .first()
+            .click();
+
         // Wait for popover animation.
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(500);
 
         // Both projects appear in the popover.
         await expect(page.getByText("Projects", { exact: true }).first()).toBeVisible();
-        
-        // Find buttons specifically inside the popover to avoid trigger-button collision.
-        const list = page.getByRole("button").filter({ hasText: "All projects" })
-            .locator(".."); // Parent container of the list
-
         await expect(page.getByRole("button", { name: /Default/ }).last())
             .toBeVisible();
         await expect(page.getByRole("button", { name: /Staging/ }))

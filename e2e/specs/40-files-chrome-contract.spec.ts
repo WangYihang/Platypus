@@ -54,18 +54,26 @@ test.describe("host files chrome + right-click menu contract", () => {
         const pane = page.getByTestId("files-breadcrumb-row");
         await pane.click();
 
-        // Right-click well below the last row to land on empty space.
-        const fileArea = page.locator('[data-slot="table-container"]').first();
-        const box = await fileArea.boundingBox();
-        if (!box) throw new Error("file pane has no bounding box");
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height - 8);
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height - 8, {
-            button: "right",
-        });
+        // The empty-variant FileContextMenu wraps the
+        // `.rounded-md.border` outer of the file pane (Radix
+        // `<ContextMenuTrigger asChild>` clones an `onContextMenu`
+        // listener onto it). We exercise that listener directly: a
+        // synthetic `contextmenu` event on the wrapper, dispatched
+        // outside any row, fires the empty-area menu without depending
+        // on whether the directory listing happens to leave bottom
+        // padding visible at the playwright viewport size.
+        const fileArea = page
+            .locator(".rounded-md.border")
+            .filter({ has: page.locator('[data-slot="table-container"]') })
+            .first();
+        await fileArea.dispatchEvent("contextmenu");
 
+        // Some menu items render an inline shortcut suffix (e.g.
+        // "New file Ctrl+N"); match the prefix so the assertion
+        // doesn't depend on the keyboard hint copy.
         for (const item of ["New file", "New folder", "Upload here", "Refresh"]) {
             await expect(
-                page.getByRole("menuitem", { name: new RegExp(`^${item}$`) }),
+                page.getByRole("menuitem", { name: new RegExp(`^${item}\\b`) }),
             ).toBeVisible();
         }
         // Close the menu so the next test starts clean.
@@ -78,9 +86,12 @@ test.describe("host files chrome + right-click menu contract", () => {
         const row = page.getByText("etc", { exact: true });
         await row.click({ button: "right" });
 
+        // Some menu items render an inline shortcut suffix (Open
+        // Enter, Delete Del); match the prefix so the assertion
+        // doesn't depend on the keyboard hint copy.
         for (const item of ["Open", "Copy path", "Delete"]) {
             await expect(
-                page.getByRole("menuitem", { name: new RegExp(`^${item}$`) }),
+                page.getByRole("menuitem", { name: new RegExp(`^${item}\\b`) }),
             ).toBeVisible();
         }
         await page.keyboard.press("Escape");
