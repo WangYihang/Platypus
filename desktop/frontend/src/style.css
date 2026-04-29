@@ -276,6 +276,23 @@ body {
     margin-top: 1px;
 }
 
+/* Icon-only variant of pl-nav-link, used when ui.sidebarExpanded is
+ * off. The base .pl-nav-link is a flex row with a label-shaped
+ * second child; the icon-only variant pins the row to a 40x40 px
+ * square so every icon centers in a uniform tap target regardless
+ * of font baseline. Tooltips supply the missing label.
+ */
+.pl-nav-link--icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 6px;
+}
+.pl-nav-link--icon + .pl-nav-link--icon {
+    margin-top: 0;
+}
+
 /* Subtle fade-in for route transitions. */
 @keyframes pl-fade-in {
     from {

@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Loader2 } from "lucide-react";
 
 import { icons } from "../lib/icons";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { Project, createProject } from "../lib/api";
 import { SessionUser } from "../lib/auth";
+import { usePreference } from "../lib/preferences";
 import { palette, space } from "./theme";
 import ProjectSwitcher from "./ProjectSwitcher";
 import ServerSwitcher from "./ServerSwitcher";
@@ -108,6 +109,7 @@ export default function ProjectSidebar({
     const [createOpen, setCreateOpen] = useState(false);
     const { pathname } = useLocation();
     const navigate = useNavigate();
+    const [expanded, setExpanded] = usePreference("ui.sidebarExpanded");
 
     const createForm = useForm<ProjectFormValues>({
         resolver: zodResolver(projectSchema),
@@ -196,32 +198,52 @@ export default function ProjectSidebar({
                 flexDirection: "column",
             }}
         >
-            {/* Sidebar header: server switcher (was the standalone
-                ServerRail column) on top, project switcher right
-                below. The ⌘K hint moved to TopChrome above the
-                shell so the search bar is full-width; the sidebar
-                no longer carries the keyboard affordance. */}
-            <div
+            {/* Sidebar header: server switcher on top, project
+                switcher right below — only when expanded. The ⌘K
+                hint moved to TopChrome above the shell so the
+                search bar is full-width; the sidebar no longer
+                carries the keyboard affordance. When collapsed
+                we hide both switchers entirely (ServerSwitcher's
+                dropdown is reachable via Cmd-K → "Switch
+                server", ProjectSwitcher via "Switch project")
+                so the rail stays a pure nav surface. */}
+            {expanded && (
+                <div
+                    style={{
+                        padding: `${space[2]}px ${space[2]}px ${space[1]}px`,
+                    }}
+                >
+                    <ServerSwitcher
+                        onAddServer={onAddServer}
+                        onManageServers={onManageServers}
+                    />
+                </div>
+            )}
+
+            {expanded && (
+                <div style={{ padding: `0 ${space[2]}px ${space[2]}px` }}>
+                    <ProjectSwitcher
+                        projects={projects}
+                        currentSlug={currentSlug}
+                        canCreateProject={user.role === "admin"}
+                        onCreateProject={() => setCreateOpen(true)}
+                    />
+                </div>
+            )}
+
+            <nav
                 style={{
-                    padding: `${space[2]}px ${space[2]}px ${space[1]}px`,
+                    flex: 1,
+                    padding: expanded
+                        ? `${space[1]}px ${space[2]}px`
+                        : `${space[2]}px 0`,
+                    overflow: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: expanded ? "stretch" : "center",
+                    gap: expanded ? 0 : 4,
                 }}
             >
-                <ServerSwitcher
-                    onAddServer={onAddServer}
-                    onManageServers={onManageServers}
-                />
-            </div>
-
-            <div style={{ padding: `0 ${space[2]}px ${space[2]}px` }}>
-                <ProjectSwitcher
-                    projects={projects}
-                    currentSlug={currentSlug}
-                    canCreateProject={user.role === "admin"}
-                    onCreateProject={() => setCreateOpen(true)}
-                />
-            </div>
-
-            <nav style={{ flex: 1, padding: `${space[1]}px ${space[2]}px`, overflow: "auto" }}>
                 {currentSlug ? (
                     visibleGroups.map((g, gi) => (
                         <div
@@ -230,31 +252,52 @@ export default function ProjectSidebar({
                                 // First group sits flush; subsequent
                                 // groups get extra top space so the
                                 // section break reads as a break, not
-                                // an accidental gap. Tightened from
-                                // space[3] (12) → space[2] (8) so all
-                                // four IA groups + their items fit
-                                // above the user menu without scroll.
+                                // an accidental gap. When collapsed,
+                                // the gap is rendered as a hairline
+                                // separator instead of a heading +
+                                // padding sandwich.
                                 marginTop: gi === 0 ? 0 : space[2],
+                                width: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: expanded ? "stretch" : "center",
+                                borderTop:
+                                    !expanded && gi !== 0
+                                        ? `1px solid ${palette.border}`
+                                        : "none",
+                                paddingTop: !expanded && gi !== 0 ? space[2] : 0,
                             }}
                         >
+                            {expanded && (
+                                <div
+                                    data-testid={`nav-group-${g.key}`}
+                                    style={{
+                                        padding: `${space[1]}px ${space[3]}px 2px`,
+                                        fontSize: 10,
+                                        fontWeight: 600,
+                                        letterSpacing: 0.6,
+                                        textTransform: "uppercase",
+                                        color: palette.textMuted,
+                                    }}
+                                >
+                                    {g.label}
+                                </div>
+                            )}
                             <div
-                                data-testid={`nav-group-${g.key}`}
+                                data-testid={`nav-group-items-${g.key}`}
                                 style={{
-                                    padding: `${space[1]}px ${space[3]}px 2px`,
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    letterSpacing: 0.6,
-                                    textTransform: "uppercase",
-                                    color: palette.textMuted,
+                                    width: "100%",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: expanded ? "stretch" : "center",
+                                    gap: expanded ? 0 : 2,
                                 }}
                             >
-                                {g.label}
-                            </div>
-                            <div data-testid={`nav-group-items-${g.key}`}>
                                 {g.items.map((it) => (
                                     <NavLink
                                         key={it.to}
                                         to={`/projects/${currentSlug}/${it.to}`}
+                                        aria-label={it.label}
                                         className={({ isActive }) => {
                                             // Host detail pages live at
                                             // /hosts/:id/:tab but
@@ -266,23 +309,29 @@ export default function ProjectSidebar({
                                                     pathname.startsWith(
                                                         `/projects/${currentSlug}/hosts/`,
                                                     )) ||
-                                                // Audit nav points at the
-                                                // default sub-tab; treat
-                                                // any /audit/* URL as
-                                                // active so switching
-                                                // tabs inside AuditPage
-                                                // doesn't lose the
-                                                // sidebar highlight.
                                                 (it.to.startsWith("audit/") &&
                                                     pathname.startsWith(
                                                         `/projects/${currentSlug}/audit`,
                                                     ));
                                             const active = isActive || forced;
+                                            const base = expanded
+                                                ? "pl-nav-link"
+                                                : "pl-nav-link pl-nav-link--icon";
                                             return (
-                                                "pl-nav-link" +
+                                                base +
                                                 (active ? " pl-nav-link--active" : "")
                                             );
                                         }}
+                                        // Native title= when collapsed
+                                        // names the icon on hover. The
+                                        // shadcn Tooltip primitive
+                                        // would render a richer chip,
+                                        // but it requires a
+                                        // TooltipProvider in test
+                                        // environments and the native
+                                        // title is sufficient for the
+                                        // 5-icon nav surface.
+                                        title={expanded ? undefined : it.label}
                                     >
                                         <span
                                             style={{
@@ -293,13 +342,13 @@ export default function ProjectSidebar({
                                         >
                                             {it.icon}
                                         </span>
-                                        <span>{it.label}</span>
+                                        {expanded && <span>{it.label}</span>}
                                     </NavLink>
                                 ))}
                             </div>
                         </div>
                     ))
-                ) : (
+                ) : expanded ? (
                     <div
                         style={{
                             padding: `${space[3]}px ${space[3]}px`,
@@ -310,8 +359,38 @@ export default function ProjectSidebar({
                     >
                         Pick a project to see its hosts and sessions.
                     </div>
-                )}
+                ) : null}
             </nav>
+
+            {/* Expand / collapse toggle. Persists to
+                `ui.sidebarExpanded` so the next reload keeps the
+                operator's choice. ChevronsRight (collapse →
+                expand) / ChevronsLeft (expand → collapse) makes
+                the action direction obvious without a label. */}
+            <button
+                type="button"
+                onClick={() => setExpanded(!expanded)}
+                aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+                title={expanded ? "Collapse sidebar" : "Expand sidebar"}
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: expanded ? "flex-end" : "center",
+                    width: "100%",
+                    padding: `6px ${expanded ? space[3] : 0}px`,
+                    background: "none",
+                    border: "none",
+                    borderTop: `1px solid ${palette.border}`,
+                    color: palette.textMuted,
+                    cursor: "pointer",
+                }}
+            >
+                {expanded ? (
+                    <ChevronsLeft className="size-4" />
+                ) : (
+                    <ChevronsRight className="size-4" />
+                )}
+            </button>
 
             <UserMenu user={user} serverURL={serverURL} />
 

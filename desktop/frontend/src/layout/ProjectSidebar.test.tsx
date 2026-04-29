@@ -63,7 +63,12 @@ describe("<ProjectSidebar> — Enrollment is no longer in the Admin group", () =
         const { getByTestId } = renderSidebar();
         const adminItems = getByTestId("nav-group-items-admin");
         const links = within(adminItems).getAllByRole("link");
-        const labels = links.map((l) => (l.textContent ?? "").trim());
+        // Default `ui.sidebarExpanded` is false (icon-only rail) so
+        // visible labels are carried via `aria-label`, not text
+        // content. Read aria-label so the assertion is mode-independent.
+        const labels = links.map(
+            (l) => (l.getAttribute("aria-label") ?? l.textContent ?? "").trim(),
+        );
         expect(labels).toEqual(["Members"]);
     });
 
@@ -80,7 +85,12 @@ describe("<ProjectSidebar> — Enrollment is no longer in the Admin group", () =
         const { getByTestId } = renderSidebar();
         const workItems = getByTestId("nav-group-items-work");
         const links = within(workItems).getAllByRole("link");
-        const labels = links.map((l) => (l.textContent ?? "").trim());
+        // Default `ui.sidebarExpanded` is false (icon-only rail) so
+        // visible labels are carried via `aria-label`, not text
+        // content. Read aria-label so the assertion is mode-independent.
+        const labels = links.map(
+            (l) => (l.getAttribute("aria-label") ?? l.textContent ?? "").trim(),
+        );
         expect(labels).toEqual(["Overview", "Fleet"]);
     });
 });

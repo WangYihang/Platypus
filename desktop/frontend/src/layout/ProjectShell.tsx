@@ -27,12 +27,17 @@ import ManageServersDialog from "./ManageServersDialog";
 import { palette } from "./theme";
 import ProjectSidebar from "./ProjectSidebar";
 import TopChrome from "./TopChrome";
+import { usePreference } from "../lib/preferences";
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
     usePanelRef,
 } from "@/components/ui/resizable";
+// ResizablePanelGroup is still used by MainColumn for the
+// vertical content / terminal-drawer split below; only the
+// horizontal sidebar / main split was simplified to a fixed-width
+// column above.
 
 interface ShellState {
     projects: Project[];
@@ -183,54 +188,29 @@ function ShellChrome({
                     overflow: "hidden",
                 }}
             >
-                {/* ResizablePanelGroup owns the sidebar ↔ main split.
-                    The previous standalone ServerRail (64 px column)
-                    was folded into the sidebar header as a
-                    `ServerSwitcher` dropdown — see
-                    layout/ServerSwitcher.tsx — so the entire left
-                    chrome lives in one resizable panel now. The sidebar
-                    default of 200px and persisted autoSaveId stay the
-                    same. */}
-                <ResizablePanelGroup
-                    direction="horizontal"
-                    autoSaveId="shell-sidebar"
-                    style={{ flex: 1, minHeight: 0, minWidth: 0 }}
-                >
-                    <ResizablePanel
-                        id="sidebar"
-                        defaultSize="200px"
-                        minSize="168px"
-                        maxSize="480px"
-                        className="relative"
-                    >
-                        <div className="absolute inset-0 flex flex-col">
-                            <ProjectSidebar
-                                user={user}
-                                serverURL={serverURL}
-                                projects={projects}
-                                currentSlug={currentSlug}
-                                onProjectsChanged={() => void refresh()}
-                                onAddServer={() => setAddOpen(true)}
-                                onManageServers={() => setManageOpen(true)}
-                            />
-                        </div>
-                    </ResizablePanel>
-                    <ResizableHandle />
-                    <ResizablePanel id="main" minSize="40%" className="relative">
-                        {/* The absolute-inset wrapper needs `flex flex-col`
-                            so MainColumn's outer div (which has `flex: 1`)
-                            actually grows to fill the panel. Without
-                            display:flex on this wrapper, MainColumn lays
-                            out as a normal block at `height: auto` and
-                            collapses to 0 — the inner vertical
-                            ResizablePanelGroup then has nothing to
-                            distribute, so `<main>` renders empty and the
-                            entire content area looks blank. */}
-                        <div className="absolute inset-0 flex flex-col">
-                            <MainColumn>{children}</MainColumn>
-                        </div>
-                    </ResizablePanel>
-                </ResizablePanelGroup>
+                {/* Sidebar is now a fixed-width column driven by the
+                    `ui.sidebarExpanded` preference. Default is the
+                    72-px icon-only rail; flipping the chevron toggle
+                    inside ProjectSidebar expands it to 200 px with
+                    nav labels. The previous react-resizable-panels
+                    drag-to-size affordance was dropped in the R3
+                    redesign — the rail has two states, not a
+                    continuum, so two-button toggle is clearer than
+                    a draggable seam. */}
+                <SidebarColumn>
+                    <ProjectSidebar
+                        user={user}
+                        serverURL={serverURL}
+                        projects={projects}
+                        currentSlug={currentSlug}
+                        onProjectsChanged={() => void refresh()}
+                        onAddServer={() => setAddOpen(true)}
+                        onManageServers={() => setManageOpen(true)}
+                    />
+                </SidebarColumn>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <MainColumn>{children}</MainColumn>
+                </div>
             </div>
             <StatusBar />
             <CommandPalette
@@ -243,6 +223,36 @@ function ShellChrome({
                 onOpenChange={setManageOpen}
                 onAddServer={() => setAddOpen(true)}
             />
+        </div>
+    );
+}
+
+// SidebarColumn picks the rail width from the user's
+// `ui.sidebarExpanded` preference. 56 px collapsed gives the icon
+// row enough breathing room (40 px tap target + 8 px each side);
+// 200 px expanded matches the original sidebar width so existing
+// layouts inside the sidebar (ServerSwitcher dropdown menus, nav
+// labels) don't have to recalculate.
+const SIDEBAR_W_COLLAPSED = 56;
+const SIDEBAR_W_EXPANDED = 200;
+
+function SidebarColumn({ children }: { children: ReactNode }) {
+    const [expanded] = usePreference("ui.sidebarExpanded");
+    const width = expanded ? SIDEBAR_W_EXPANDED : SIDEBAR_W_COLLAPSED;
+    return (
+        <div
+            style={{
+                flexShrink: 0,
+                width,
+                minWidth: width,
+                maxWidth: width,
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                transition: "width 160ms ease-out",
+            }}
+        >
+            {children}
         </div>
     );
 }
