@@ -14,10 +14,19 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
     -o /out/platypus-agent ./cmd/platypus-agent
 
+# Empty dir baked into the server image so a fresh `platypus_data`
+# named volume mounted at /app/data inherits 65532:65532 from the
+# image — Docker copies a mount target's image content & ownership
+# into a new volume on first attach. Without this the volume comes
+# up root:root and the distroless `nonroot` runtime can't open
+# platypus.db (SQLITE_CANTOPEN).
+RUN mkdir -p /out/data
+
 # Stage 2: Server runtime
 FROM gcr.io/distroless/static-debian12:nonroot AS server
 WORKDIR /app
 COPY --from=builder /out/platypus-server /usr/local/bin/platypus-server
+COPY --from=builder --chown=nonroot:nonroot /out/data /app/data
 USER nonroot:nonroot
 EXPOSE 9443
 ENTRYPOINT ["/usr/local/bin/platypus-server"]
@@ -48,12 +57,25 @@ RUN apt-get update \
         openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # Bind-mounted /workspace is owned by the host user (uid != 0) but the
-# container runs as root, so git refuses to read .git under its
-# "safe.directory" rule and `go build` then fails on VCS stamping with
-# `error obtaining VCS status: exit status 128`. Whitelisting any path
-# is fine here — the publisher only ever sees source we ourselves
+# container runs as a non-root UID, so git refuses to read .git under
+# its "safe.directory" rule and `go build` then fails on VCS stamping
+# with `error obtaining VCS status: exit status 128`. Whitelisting any
+# path is fine here — the publisher only ever sees source we ourselves
 # bind-mount in.
 RUN git config --system --add safe.directory '*'
 COPY scripts/dev-publish-entrypoint.sh /usr/local/bin/dev-publish-entrypoint.sh
 RUN chmod +x /usr/local/bin/dev-publish-entrypoint.sh
+# Run as the same UID as the distroless `nonroot` server (65532) so
+# files written into the shared platypus_data volume are owned by the
+# user that later reads / replaces them — no runtime chown step. Each
+# mount target is pre-created with 65532 ownership so Docker
+# initializes the matching named volumes with the right perms on
+# first attach, regardless of whether the publisher or the server
+# runs first.
+ENV HOME=/home/publisher \
+    GOCACHE=/cache/go-build \
+    GOMODCACHE=/cache/go-mod
+RUN mkdir -p /home/publisher /keys /output /cache/go-build /cache/go-mod \
+    && chown -R 65532:65532 /home/publisher /keys /output /cache/go-build /cache/go-mod
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/dev-publish-entrypoint.sh"]

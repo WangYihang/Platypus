@@ -14,8 +14,9 @@
 # pair; subsequent invocations reuse it.
 #
 # Source tree is bind-mounted read-only at /workspace; Go module + build
-# caches mount at /go/pkg/mod and /root/.cache/go-build to keep iteration
-# fast (cold publish ~90 s on this matrix; warm publish ~10 s).
+# caches mount at /cache/go-mod and /cache/go-build (GOMODCACHE +
+# GOCACHE in the publisher image) to keep iteration fast (cold publish
+# ~90 s on this matrix; warm publish ~10 s).
 set -euo pipefail
 
 KEYS_DIR="/keys"
@@ -62,12 +63,5 @@ openbsd/amd64 openbsd/arm64 \
 netbsd/amd64 netbsd/arm64}"
 
 mkdir -p "$RELEASES_DIR"
-
-# The publisher runs as root but platypus-server runs as the distroless
-# `nonroot` user (uid 65532) and needs to create platypus.db under
-# /app/data (== this container's /output). Bind-mount source dirs are
-# auto-created by Docker as root:root 0755, so without widening perms
-# here the server fails on boot with `unable to open database file (14)`.
-chmod 0777 /output "$RELEASES_DIR"
 
 exec bash scripts/release-publish.sh

@@ -6,7 +6,7 @@ services:
     ports:
       - "9443:9443"
     volumes:
-      - ./data:/app/data
+      - platypus_data:/app/data
     environment:
       PLATYPUS_EXTERNAL_ADDR: "localhost:9443"
       PLATYPUS_DATA_DIR: "/app/data"
@@ -22,8 +22,14 @@ services:
       target: publisher
     volumes:
       - ./:/workspace:ro
-      - ./.publisher/keys:/keys
-      - ./.publisher/gocache:/root/.cache/go-build
-      - ./.publisher/gomod:/go/pkg/mod
-      - ./data:/output
+      - publisher_keys:/keys
+      - publisher_gocache:/cache/go-build
+      - publisher_gomod:/cache/go-mod
+      - platypus_data:/output
     restart: "no"
+
+volumes:
+  platypus_data:
+  publisher_keys:
+  publisher_gocache:
+  publisher_gomod:
