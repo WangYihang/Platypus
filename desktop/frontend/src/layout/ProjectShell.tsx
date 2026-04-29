@@ -8,13 +8,18 @@ import {
     useRef,
     useState,
 } from "react";
-import { Outlet, useParams } from "react-router-dom";
+import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
 import { TransfersDrawer, TransfersDrawerProvider } from "../components/TransfersPill";
-import { Project, listProjects } from "../lib/api";
+import { Project, createProject, listProjects } from "../lib/api";
+import { humanizeError } from "../lib/humanizeError";
 import { getSessionUser, getSession } from "../lib/auth";
 import { listServers, setActiveServerId } from "../lib/servers";
 import { cn } from "@/lib/cn";
@@ -26,10 +31,29 @@ import TerminalDrawer, { TAB_BAR_HEIGHT } from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
 import AddServerDialog from "./AddServerDialog";
 import ManageServersDialog from "./ManageServersDialog";
+import NavTabs from "./NavTabs";
+import TopBar from "./TopBar";
 import { palette } from "./theme";
-import ProjectSidebar from "./ProjectSidebar";
-import TopChrome from "./TopChrome";
-import { usePreference } from "../lib/preferences";
+
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 
 interface ShellState {
     projects: Project[];
@@ -65,8 +89,10 @@ interface Props {
 
 // ProjectShell is the route outlet for every authenticated screen. Owns
 // the project list (single fetch shared across pages), resolves
-// :projectSlug → Project for nested routes, and renders the sidebar +
-// outlet two-column layout.
+// :projectSlug → Project for nested routes, and renders the top-bar +
+// nav-tabs + outlet vertical layout. The historical left rail was
+// retired in the 2026-04 IA pass — see TopBar / NavTabs for the
+// replacement chrome.
 export default function ProjectShell({ requireProject = false }: Props) {
     const params = useParams<{ projectSlug?: string }>();
     const user = getSessionUser();
@@ -104,30 +130,31 @@ export default function ProjectShell({ requireProject = false }: Props) {
                         user={user}
                         serverURL={serverURL}
                         projects={projectList}
+                        currentProject={project}
                         currentSlug={params.projectSlug}
                         refresh={refresh}
                     >
-                    {loading && requireProject ? (
-                        // For project-scoped routes (Fleet, Members,
-                        // Settings, …) the slug must resolve to a real
-                        // project before the page can render anything
-                        // useful, so we still hold them with the
-                        // shell-level spinner. Non-project routes
-                        // (today: ProjectsLanding at /projects) get
-                        // the Outlet during loading and render their
-                        // own skeleton via useShell().loading.
-                        <Centered>
-                            <Loader2 className="size-5 animate-spin text-text-muted" />
-                        </Centered>
-                    ) : requireProject && !project ? (
-                        <EmptyState
-                            title="Project not found"
-                            description={`No project with slug "${params.projectSlug}". It may have been deleted, or you may have lost access.`}
-                            fill
-                        />
-                    ) : (
-                        <Outlet />
-                    )}
+                        {loading && requireProject ? (
+                            // For project-scoped routes (Fleet, Members,
+                            // Settings, …) the slug must resolve to a real
+                            // project before the page can render anything
+                            // useful, so we still hold them with the
+                            // shell-level spinner. Non-project routes
+                            // (today: ProjectsLanding at /projects) get
+                            // the Outlet during loading and render their
+                            // own skeleton via useShell().loading.
+                            <Centered>
+                                <Loader2 className="size-5 animate-spin text-text-muted" />
+                            </Centered>
+                        ) : requireProject && !project ? (
+                            <EmptyState
+                                title="Project not found"
+                                description={`No project with slug "${params.projectSlug}". It may have been deleted, or you may have lost access.`}
+                                fill
+                            />
+                        ) : (
+                            <Outlet />
+                        )}
                     </ShellChrome>
                 </TransfersDrawerProvider>
             </GlobalTerminalProvider>
@@ -139,6 +166,7 @@ function ShellChrome({
     user,
     serverURL,
     projects,
+    currentProject,
     currentSlug,
     refresh,
     children,
@@ -146,12 +174,14 @@ function ShellChrome({
     user: ReturnType<typeof getSessionUser> & {};
     serverURL: string;
     projects: Project[];
+    currentProject: Project | null;
     currentSlug?: string;
     refresh: () => Promise<void>;
     children: ReactNode;
 }) {
     const [addOpen, setAddOpen] = useState(false);
     const [manageOpen, setManageOpen] = useState(false);
+    const [createOpen, setCreateOpen] = useState(false);
     useGlobalTerminalHotkey();
     useServerSwitchHotkeys();
     return (
@@ -165,42 +195,26 @@ function ShellChrome({
                 overflow: "hidden",
             }}
         >
-            {/* TopChrome owns the global Cmd-K trigger — its centered
-                input-shaped button dispatches the same keydown event
-                the existing CommandPalette listens for, so a click
-                and the keyboard shortcut go through one open path.
-                Left/right slots are reserved for breadcrumbs and
-                global indicators in later phases. */}
-            <TopChrome />
+            <TopBar
+                user={user}
+                serverURL={serverURL}
+                projects={projects}
+                currentProject={currentProject}
+                onCreateProject={() => setCreateOpen(true)}
+                onAddServer={() => setAddOpen(true)}
+                onManageServers={() => setManageOpen(true)}
+            />
+            <NavTabs user={user} currentSlug={currentSlug} />
             <div
                 style={{
-                    display: "flex",
                     flex: 1,
                     minHeight: 0,
+                    display: "flex",
+                    flexDirection: "column",
                     overflow: "hidden",
                 }}
             >
-                {/* Sidebar is a fixed-width column driven by the
-                    `ui.sidebarExpanded` preference. Default is the
-                    72-px icon-only rail; flipping the chevron toggle
-                    inside ProjectSidebar expands it to 200 px with
-                    nav labels. The rail has two states, not a
-                    continuum, so a two-button toggle is clearer than
-                    a draggable seam. */}
-                <SidebarColumn>
-                    <ProjectSidebar
-                        user={user}
-                        serverURL={serverURL}
-                        projects={projects}
-                        currentSlug={currentSlug}
-                        onProjectsChanged={() => void refresh()}
-                        onAddServer={() => setAddOpen(true)}
-                        onManageServers={() => setManageOpen(true)}
-                    />
-                </SidebarColumn>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                    <MainColumn>{children}</MainColumn>
-                </div>
+                <MainColumn>{children}</MainColumn>
             </div>
             <StatusBar />
             <CommandPalette
@@ -213,37 +227,127 @@ function ShellChrome({
                 onOpenChange={setManageOpen}
                 onAddServer={() => setAddOpen(true)}
             />
+            <CreateProjectDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                onCreated={() => void refresh()}
+            />
         </div>
     );
 }
 
-// SidebarColumn picks the rail width from the user's
-// `ui.sidebarExpanded` preference. 56 px collapsed gives the icon
-// row enough breathing room (40 px tap target + 8 px each side);
-// 200 px expanded matches the original sidebar width so existing
-// layouts inside the sidebar (ServerSwitcher dropdown menus, nav
-// labels) don't have to recalculate.
-const SIDEBAR_W_COLLAPSED = 56;
-const SIDEBAR_W_EXPANDED = 200;
+// CreateProjectDialog used to live inside ProjectSidebar. Hoisted to
+// the shell so the "+ New project" entry point in TopBar's project
+// breadcrumb can pop the same form without juggling lifted state.
+function CreateProjectDialog({
+    open,
+    onOpenChange,
+    onCreated,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated: () => void;
+}) {
+    const navigate = useNavigate();
+    const projectSchema = z.object({
+        name: z.string().min(1, "project name is required"),
+        slug: z
+            .string()
+            .min(1, "slug is required")
+            .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/, {
+                message: "a-z, 0-9, _ and - only; must start alphanumeric",
+            }),
+    });
+    type FormValues = z.infer<typeof projectSchema>;
+    const form = useForm<FormValues>({
+        resolver: zodResolver(projectSchema),
+        defaultValues: { name: "", slug: "" },
+    });
 
-function SidebarColumn({ children }: { children: ReactNode }) {
-    const [expanded] = usePreference("ui.sidebarExpanded");
-    const width = expanded ? SIDEBAR_W_EXPANDED : SIDEBAR_W_COLLAPSED;
+    async function onSubmit(v: FormValues) {
+        try {
+            await createProject(v.name, v.slug);
+            toast.success(`Created project ${v.slug}`);
+            onOpenChange(false);
+            form.reset({ name: "", slug: "" });
+            onCreated();
+            // Land inside the new project on Fleet — Overview at zero
+            // hosts is uninformative; Fleet is the canonical "now
+            // enrol your first agent" surface.
+            navigate(`/projects/${v.slug}/fleet`);
+        } catch (e) {
+            toast.error(`create: ${humanizeError(e)}`);
+        }
+    }
+
     return (
-        <div
-            style={{
-                flexShrink: 0,
-                width,
-                minWidth: width,
-                maxWidth: width,
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                transition: "width 160ms ease-out",
+        <Dialog
+            open={open}
+            onOpenChange={(o) => {
+                onOpenChange(o);
+                if (!o) form.reset({ name: "", slug: "" });
             }}
         >
-            {children}
-        </div>
+            <DialogContent className="sm:max-w-[420px]">
+                <DialogHeader>
+                    <DialogTitle>New project</DialogTitle>
+                    <DialogDescription>
+                        Projects scope every resource (hosts, sessions, tokens).
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Project name</FormLabel>
+                                    <FormControl>
+                                        <Input autoFocus placeholder="Production" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        Human-friendly — shown in the top bar.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="slug"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Slug</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="prod" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        URL-safe id, unique across projects.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => onOpenChange(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                )}
+                                Create
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
     );
 }
 

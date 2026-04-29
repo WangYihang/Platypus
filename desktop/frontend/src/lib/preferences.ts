@@ -26,11 +26,6 @@ export interface PreferenceDefs {
     "ui.activities.defaultRange": "24h" | "7d" | "30d" | "all";
     "ui.files.viewMode": "list" | "grid";
     "ui.files.previewOpen": boolean;
-    // Sidebar collapse state. Default `false` = icon-only rail (R3
-    // redesign convention); flipping to `true` expands the rail to
-    // show nav labels. The rail header carries a chevron toggle
-    // bound to this preference.
-    "ui.sidebarExpanded": boolean;
 
     // --- Terminal
     "terminal.fontSize": number;
@@ -51,7 +46,6 @@ const DEFAULTS: PreferenceDefs = {
     "ui.activities.defaultRange": "7d",
     "ui.files.viewMode": "list",
     "ui.files.previewOpen": true,
-    "ui.sidebarExpanded": false,
     "terminal.fontSize": 13,
     "terminal.cursorBlink": true,
     "terminal.scrollback": 5000,

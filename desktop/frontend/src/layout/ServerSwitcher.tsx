@@ -36,14 +36,25 @@ import {
 interface Props {
     onAddServer: () => void;
     onManageServers: () => void;
+    // panel (default) — full-width sidebar pill with avatar tile +
+    // server name + chevron. Retained for any consumer still rendering
+    // a vertical layout.
+    // breadcrumb — compact inline pill used in TopBar between the
+    // project name and the cmd-k trigger. Renders the avatar + server
+    // name + chevron without the full-width / heavy borders.
+    variant?: "panel" | "breadcrumb";
 }
 
-// ServerSwitcher is the consolidated server picker that replaced the
-// old 64 px ServerRail column. Mounts at the top of ProjectSidebar:
-// trigger pill at the top, dropdown lists every saved server with
-// drag-to-reorder, per-row actions (rename / sign-out / remove), plus
-// "Add server…" and "Manage all…" entries at the bottom.
-export default function ServerSwitcher({ onAddServer, onManageServers }: Props) {
+// ServerSwitcher is the consolidated server picker. The dropdown
+// content (drag-to-reorder, "Add server…", "Manage all…") is identical
+// in both variants — only the trigger styling differs so the same
+// component can sit inside the top bar's breadcrumb chain or in any
+// future sidebar / panel surface.
+export default function ServerSwitcher({
+    onAddServer,
+    onManageServers,
+    variant = "panel",
+}: Props) {
     const profiles = useServerList();
     const activeId = useActiveServerId();
     const active = useActiveServer();
@@ -81,6 +92,11 @@ export default function ServerSwitcher({ onAddServer, onManageServers }: Props) 
 
     const activeAvatar = active ? avatarFor(active) : null;
 
+    const triggerClassName =
+        variant === "breadcrumb"
+            ? "pl-breadcrumb-pill"
+            : "flex w-full items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1 text-left text-xs hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger asChild>
@@ -88,21 +104,21 @@ export default function ServerSwitcher({ onAddServer, onManageServers }: Props) 
                     type="button"
                     data-testid="server-switcher-trigger"
                     aria-label={active ? `Active server: ${active.name}` : "Select server"}
-                    className="flex w-full items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1 text-left text-xs hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={triggerClassName}
                 >
                     {activeAvatar ? (
                         <span
                             aria-hidden
                             style={{
-                                width: 20,
-                                height: 20,
+                                width: variant === "breadcrumb" ? 16 : 20,
+                                height: variant === "breadcrumb" ? 16 : 20,
                                 borderRadius: radius.sm,
                                 background: activeAvatar.bg,
                                 color: activeAvatar.fg,
                                 display: "inline-flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                fontSize: 11,
+                                fontSize: variant === "breadcrumb" ? 10 : 11,
                                 fontWeight: 600,
                                 flexShrink: 0,
                             }}
@@ -112,13 +128,23 @@ export default function ServerSwitcher({ onAddServer, onManageServers }: Props) 
                     ) : (
                         <span
                             aria-hidden
-                            className="size-5 shrink-0 rounded-sm border border-dashed border-border-subtle"
+                            className={
+                                variant === "breadcrumb"
+                                    ? "size-4 shrink-0 rounded-sm border border-dashed border-border-subtle"
+                                    : "size-5 shrink-0 rounded-sm border border-dashed border-border-subtle"
+                            }
                         />
                     )}
-                    <span className="min-w-0 flex-1 truncate font-medium text-text-primary">
+                    <span
+                        className={
+                            variant === "breadcrumb"
+                                ? "min-w-0 max-w-[160px] truncate font-medium text-text-primary"
+                                : "min-w-0 flex-1 truncate font-medium text-text-primary"
+                        }
+                    >
                         {active?.name ?? "No server"}
                     </span>
-                    <ChevronDown className="size-3.5 shrink-0 text-text-muted" />
+                    <ChevronDown className="size-3 shrink-0 text-text-muted" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent

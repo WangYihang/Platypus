@@ -18,6 +18,7 @@ import {
     File,
     Folder,
     HardDrive,
+    History,
     KeyRound,
     LayoutGrid,
     LineChart,
@@ -25,11 +26,14 @@ import {
     Network,
     Plug,
     Server,
+    ServerCog,
     Settings2,
     ShieldCheck,
+    ShieldHalf,
     Circle,
     Terminal,
     Users,
+    Wrench,
     Zap,
 } from "lucide-react";
 
@@ -40,15 +44,24 @@ import {
 // Adding here is cheap; introducing two icons for the same noun via
 // direct lucide imports elsewhere is what we're trying to avoid.
 export const icons = {
-    // Sidebar / navigation
+    // Top-bar navigation (project context)
     project: LayoutGrid,
     fleet: Monitor,
+    operations: Wrench,
+    history: History,
+    members: Users,
+    settings: Settings2,
+
+    // Top-bar navigation (global context)
+    projects: LayoutGrid,
+    servers: ServerCog,
+    admin: ShieldHalf,
+
+    // Surfaces nested inside History / Operations
     activity: Clock,
     transfers: ArrowDownUp,
     recordings: Circle,
     enrollment: CloudDownload,
-    members: Users,
-    settings: Settings2,
 
     // Domain entities
     host: Server,
