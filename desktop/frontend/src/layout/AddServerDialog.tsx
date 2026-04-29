@@ -31,6 +31,7 @@ import {
     probeServer,
     switchServer,
 } from "../lib/auth";
+import { showAdminCreatedToast } from "../lib/bootstrapToast";
 
 interface Props {
     open: boolean;
@@ -123,7 +124,10 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
         const profile = addServer({ name: displayName, url });
         try {
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
-            await finish(profile);
+            onAdded?.(profile);
+            await switchServer(profile.id);
+            showAdminCreatedToast();
+            onOpenChange(false);
         } catch (err) {
             toast.error(`bootstrap: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);

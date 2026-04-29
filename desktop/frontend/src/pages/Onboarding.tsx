@@ -19,6 +19,7 @@ import {
     login,
     probeServer,
 } from "../lib/auth";
+import { showAdminCreatedToast } from "../lib/bootstrapToast";
 
 import BootstrapStep from "./onboarding/BootstrapStep";
 import LoginStep from "./onboarding/LoginStep";
@@ -120,14 +121,8 @@ export default function Onboarding() {
         const profile = addServer({ name: displayName, url });
         try {
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
-            // Server cleans up <data-dir>/bootstrap.secret on the next
-            // start once a user exists, but until then the operator can
-            // delete it explicitly.
-            toast.info(
-                "Admin created. Delete <data-dir>/bootstrap.secret on the server to keep the secret out of backups.",
-                { duration: 8000 },
-            );
-            await finish(profile);
+            showAdminCreatedToast();
+            navigate("/projects", { replace: true });
         } catch (err) {
             toast.error(`bootstrap: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);

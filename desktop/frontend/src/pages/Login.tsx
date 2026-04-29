@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import WizardCard from "../components/WizardCard";
 import { bootstrap, login } from "../lib/auth";
+import { showAdminCreatedToast } from "../lib/bootstrapToast";
 import { defaultServerURL, getServer, listServers } from "../lib/servers";
 import { font, palette, space } from "../layout/theme";
 
@@ -92,7 +93,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
         setBusy(true);
         try {
             await bootstrap(pinnedProfile ?? v.url, v.secret, v.username, v.password);
-            toast.success("Admin created — welcome to Platypus");
+            showAdminCreatedToast();
             onLoggedIn();
         } catch (err) {
             toast.error(`bootstrap: ${humanizeError(err)}`);
