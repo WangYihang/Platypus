@@ -8,7 +8,7 @@ Fresh client → /onboarding → paste server URL → log in → land in /projec
 
 <video src="01-onboarding.webm" controls width="900"></video>
 
-_807.4 KB · WebM (VP8/Opus)_
+_837.3 KB · WebM (VP8/Opus)_
 
 ## Slack-style server rail
 
@@ -16,7 +16,7 @@ Add a second profile, switch with Ctrl+1 / Ctrl+2, rename via the themed Dialog 
 
 <video src="02-server-rail.webm" controls width="900"></video>
 
-_1.4 MB · WebM (VP8/Opus)_
+_1.9 MB · WebM (VP8/Opus)_
 
 ## Fleet · Table / Timeline / Graph
 
@@ -32,7 +32,7 @@ Open a shell on a host, walk through Activities and Settings, drawer keeps strea
 
 <video src="04-terminal-persistence.webm" controls width="900"></video>
 
-_1.6 MB · WebM (VP8/Opus)_
+_2.1 MB · WebM (VP8/Opus)_
 
 ## Cmd / Ctrl+K command palette
 
@@ -40,12 +40,12 @@ Keyboard-first nav: jump between pages, switch project, open a terminal on any h
 
 <video src="05-command-palette.webm" controls width="900"></video>
 
-_1.7 MB · WebM (VP8/Opus)_
+_1.8 MB · WebM (VP8/Opus)_
 
-## Phase 1+2 auth redesign — opaque session + AAT lifecycle
+## Phase-2 auth: opaque session-token lifecycle
 
-End-to-end demonstration of the new auth path: log in via the UI to receive a single `pst_` session token (no JWT pair, no refresh dance), mint an `aat_` AI agent token via REST, use it to call a protected endpoint, revoke it, and watch the same bearer immediately fail — the verifier cache invalidates synchronously, so revocation is 0-latency on the issuing node.
+Login → server returns a single `pst_…` bearer (no JWT pair). Logout revokes it server-side; subsequent requests fail with 401 immediately.
 
 <video src="06-auth-redesign.webm" controls width="900"></video>
 
-_~743 KB · WebM (VP8/Opus)_
+_600.0 KB · WebM (VP8/Opus)_
