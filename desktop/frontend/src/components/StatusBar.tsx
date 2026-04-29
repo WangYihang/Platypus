@@ -12,6 +12,7 @@ import TransferThroughputPill from "./TransferThroughputPill";
 import Mono from "./Mono";
 import Sparkline from "./Sparkline";
 import StatusDot from "./StatusDot";
+import UtcClock from "./UtcClock";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Refresh cadence: 1 Hz so memory / goroutines / uptime tick like a
@@ -298,6 +299,18 @@ export default function StatusBar() {
                         {serverHost}
                     </Mono>
                 </span>
+                {lastPollMs !== null && (
+                    <span
+                        data-testid="status-bar-rtt"
+                        title={`Last /info round-trip: ${lastPollMs} ms`}
+                        style={{ color: palette.border }}
+                    >
+                        <span style={{ color: palette.border }}>·</span>{" "}
+                        <Mono size={11} color={palette.textPrimary}>
+                            {`${lastPollMs}ms`}
+                        </Mono>
+                    </span>
+                )}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: space[3] }}>
@@ -311,6 +324,20 @@ export default function StatusBar() {
                     cpuHistory={cpuHistory}
                 />
                 <CountPills info={info} />
+                <Sep />
+                <UtcClock />
+                {session?.user && (
+                    <>
+                        <Sep />
+                        <span
+                            data-testid="status-bar-user-pill"
+                            title={`Signed in as ${session.user.username} (${session.user.role})`}
+                            style={{ color: palette.textPrimary, fontWeight: 500 }}
+                        >
+                            {session.user.username}
+                        </span>
+                    </>
+                )}
                 <VersionLinks info={info} />
             </div>
         </div>
