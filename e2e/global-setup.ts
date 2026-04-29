@@ -1,7 +1,6 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
-import * as YAML from "yaml";
 
 // Backend ingress serves a self-signed TLS cert on dev / first-boot.
 // Node's built-in fetch refuses those by default; since this is the
@@ -78,56 +77,35 @@ export default async function globalSetup() {
     const tmpdir = makeTmpdir();
     process.env.PLATYPUS_E2E_TMPDIR = tmpdir;
 
-    const dbPath = path.join(tmpdir, "platypus.db");
-    const configPath = path.join(tmpdir, "config.yml");
-
-    // Matches internal/utils/config/config.go (snake_case yaml tags).
-    // Listeners / distributor / mesh listen_addr all moved onto the
-    // unified ingress; distributor.store endpoint left empty so the
-    // installer routes are disabled (no MinIO dependency in e2e).
-    // mesh.project_id is "default" to align with the system-seeded
-    // project row (storage.DefaultProjectID) — using any other value
-    // would fail project_ca's FK on startup.
-    //
-    // Leaving ingress.cert/key unset triggers the server's new
-    // auto-issue path (cmd/platypus-server/main.go :: issueIngressLeaf
-    // FromProjectCA), which stamps a TLS leaf signed by the project
-    // CA. Agents that pin PLATYPUS_PROJECT_CA (fetched via
-    // /api/v1/projects/:pid/ca after bootstrap) verify that chain.
-    const config = {
-        ingress: {
-            addr: `${BACKEND_HOST}:${BACKEND_PORT}`,
-            public_addr: `${BACKEND_HOST}:${BACKEND_PORT}`,
-        },
-        restful: {
-            db_file: dbPath,
-            // Stable JWT keys mean the run is reproducible; otherwise
-            // every cold start mints fresh keys and tokens churn.
-            jwt_access_key: "e2e-access-key-do-not-use-in-prod",
-            jwt_refresh_key: "e2e-refresh-key-do-not-use-in-prod",
-        },
-        mesh: {
-            psk_file: path.join(tmpdir, MESH_PSK_FILENAME),
-            discovery_lan: true,
-            project_id: "default",
-        },
-    };
-    writeFileSync(configPath, YAML.stringify(config), "utf8");
-
-    // Write the Mesh PSK file for use by agents.
+    // Mesh PSK lives at <data-dir>/mesh.psk; presence of that file is
+    // what enables the mesh subsystem at server boot. Drop it now so
+    // agents enrolled later can look it up via the same convention.
     writeFileSync(path.join(tmpdir, MESH_PSK_FILENAME), MESH_PSK, "utf8");
 
-    // platypus-server reads config.yml from cwd (no --config flag), so
-    // spawn with the tmpdir as cwd. Any artefact files the server writes
-    // (logs etc) end up in tmpdir too and get cleaned up by teardown.
+    // Server config switched to env / flag inputs in ec0af4d (kong;
+    // YAML and viper retired). The full surface lives in
+    // internal/utils/config/config.go; we set the three required
+    // bootstrap inputs and leave the rest at defaults:
     //
-    // PLATYPUS_DEV=1 opts the e2e backend into the dev-only on-disk KEK
-    // fallback at <data-dir>/ca.kek. Without it the server refuses to
-    // start when PLATYPUS_CA_KEK is unset (which it is in e2e).
+    //   PLATYPUS_EXTERNAL_ADDR — agent-facing; drives TLS cert SAN
+    //   PLATYPUS_LISTEN        — bind address (defaults to 0.0.0.0:port,
+    //                             but we pin it to 127.0.0.1 so the e2e
+    //                             box doesn't expose the port to the LAN)
+    //   PLATYPUS_DATA_DIR      — persistent state root (db, recordings,
+    //                             ca.kek, mesh.psk, bootstrap.secret …)
+    //   PLATYPUS_DEV           — opts into the on-disk KEK fallback so
+    //                             we don't have to mint and feed a real
+    //                             one into PLATYPUS_CA_KEK
     const backend = spawn(SERVER_BINARY, [], {
         cwd: tmpdir,
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, PLATYPUS_DEV: "1" },
+        env: {
+            ...process.env,
+            PLATYPUS_EXTERNAL_ADDR: `${BACKEND_HOST}:${BACKEND_PORT}`,
+            PLATYPUS_LISTEN: `${BACKEND_HOST}:${BACKEND_PORT}`,
+            PLATYPUS_DATA_DIR: tmpdir,
+            PLATYPUS_DEV: "1",
+        },
     });
     process.env.PLATYPUS_E2E_PID = String(backend.pid);
 
@@ -239,6 +217,23 @@ export default async function globalSetup() {
     // persist (500 "persist refresh") under the same DB.
     process.env.PLATYPUS_E2E_ADMIN_TOKEN = auth.access_token;
 
+    // Disable the admin-gated host approval globally for the e2e
+    // run. Without this, agents enrolling via the baseline PAT land
+    // in `pending` and the link handler returns 425 ("awaiting
+    // admin approval") for every WS upgrade — sessions never start,
+    // FilesTab / Terminal / etc. show the "No live session"
+    // placeholder, and ~10 specs that treat "the agent is online"
+    // as a precondition fail with a 15-second visibility timeout.
+    // Approval-flow itself is exercised by the dedicated approval
+    // specs (which start their own agent + admin and exercise the
+    // approve / reject buttons).
+    await updateGlobalSetting(
+        backendURL,
+        auth.access_token,
+        "enrollment.require_approval",
+        false,
+    );
+
     // Spawn one baseline agent for the "default" project. Specs that
     // need "an agent is online" assert on host rows directly rather
     // than spawning their own per-test agent; multiple agents on the
@@ -254,11 +249,39 @@ export default async function globalSetup() {
     await startBaselineAgent(tmpdir, defaultProject.id, auth.access_token);
 }
 
+async function updateGlobalSetting(
+    serverURL: string,
+    adminToken: string,
+    key: string,
+    value: unknown,
+): Promise<void> {
+    const r = await fetch(
+        `${serverURL}/api/v1/admin/settings/${encodeURIComponent(key)}`,
+        {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({ value }),
+        },
+    );
+    if (!r.ok) {
+        throw new Error(
+            `globalSetup: PUT /admin/settings/${key} → ${r.status} ${r.statusText}`,
+        );
+    }
+}
+
 async function startBaselineAgent(
     tmpdir: string,
     projectID: string,
     adminToken: string,
 ): Promise<void> {
+    // The admin-gated approval policy is disabled globally above
+    // (`enrollment.require_approval = false`), so the baseline agent
+    // lands directly in `approved` once it redeems this PAT. We
+    // don't need a per-token auto_approve flag.
     const patResp = (await (
         await fetch(`${backendURL}/api/v1/projects/${projectID}/pat-tokens`, {
             method: "POST",
