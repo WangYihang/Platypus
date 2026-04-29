@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 
 import Card from "../components/Card";
+import WizardCard from "../components/WizardCard";
 import { bootstrap, login } from "../lib/auth";
 import { getServer, listServers } from "../lib/servers";
 import { font, palette, space } from "../layout/theme";
@@ -101,18 +102,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
     }
 
     return (
-        <div
-            style={{
-                minHeight: "100vh",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: space[6],
-                background: palette.main,
-                color: palette.textPrimary,
-            }}
-        >
-            <div style={{ width: 440, maxWidth: "100%" }}>
+        <WizardCard width={440}>
                 <div style={{ marginBottom: space[6], textAlign: "left" }}>
                     {hasSavedServers && (
                         <button
@@ -341,7 +331,6 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                         </TabsContent>
                     </Tabs>
                 </Card>
-            </div>
-        </div>
+        </WizardCard>
     );
 }

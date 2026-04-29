@@ -6,6 +6,7 @@ import { humanizeError } from "../lib/humanizeError";
 
 import Card from "../components/Card";
 import CopyButton from "../components/CopyButton";
+import WizardCard from "../components/WizardCard";
 import { palette, radius, space } from "../layout/theme";
 import {
     ServerProfile,
@@ -149,18 +150,7 @@ export default function Onboarding() {
         step === "welcome" ? 1 : step === "probe" ? 2 : 3;
 
     return (
-        <div
-            style={{
-                minHeight: "100vh",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: palette.main,
-                color: palette.textPrimary,
-                padding: space[6],
-            }}
-        >
-            <div style={{ width: 480, maxWidth: "100%" }}>
+        <WizardCard width={480}>
                 <ProgressPill step={stepNumber} total={totalSteps} />
                 <Card padding={6}>
                     {step === "welcome" && (
@@ -235,8 +225,7 @@ export default function Onboarding() {
                         Use the classic login form
                     </button>
                 </div>
-            </div>
-        </div>
+        </WizardCard>
     );
 }
 
