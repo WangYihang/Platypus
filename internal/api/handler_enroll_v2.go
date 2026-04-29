@@ -38,6 +38,19 @@ type EnrollV2Handler struct {
 	// render even before the agent opens its first link. Keeping it
 	// optional preserves the no-DB test paths in enroll_v2_test.go.
 	db *storage.DB
+	// approvalPolicy decides whether a freshly-enrolled host enrolls
+	// straight to `approved` or has to wait for an admin click. Nil
+	// means "always require approval unless the PAT carried
+	// auto_approve" — this is the safer default for tests.
+	approvalPolicy ApprovalPolicy
+}
+
+// ApprovalPolicy is the abstraction the v2 enroll handler consults to
+// decide whether the global "require admin approval" toggle is on.
+// Production wires this to settings.Registry.EnrollmentRequireApproval;
+// tests can substitute a constant.
+type ApprovalPolicy interface {
+	EnrollmentRequireApproval() bool
 }
 
 // ContentTypeEnrollV2 is the MIME the endpoint accepts and
@@ -59,6 +72,15 @@ func NewEnrollV2Handler(enroll *enrollment.Service, pkiSvc *pki.Service) *Enroll
 // upsert (tests that don't care about hosts just skip calling it).
 func (h *EnrollV2Handler) WithDB(db *storage.DB) *EnrollV2Handler {
 	h.db = db
+	return h
+}
+
+// WithApprovalPolicy attaches the live policy provider for the
+// "require admin approval" toggle. Idempotent; nil restores the
+// strict default (always require approval unless the PAT was
+// auto-approved). Wired in main.go to settings.Registry.
+func (h *EnrollV2Handler) WithApprovalPolicy(p ApprovalPolicy) *EnrollV2Handler {
+	h.approvalPolicy = p
 	return h
 }
 
@@ -143,8 +165,21 @@ func (h *EnrollV2Handler) Enroll(c *gin.Context) {
 	// We swallow DB errors — a transient SQLite hiccup should not
 	// break enrollment; the next agent reconnect will retry the
 	// upsert via the link handler.
+	//
+	// Approval policy:
+	//   - PAT.auto_approve=true → host lands in `approved` regardless of policy.
+	//   - global require_approval=false → host lands in `approved`.
+	//   - otherwise (the safe default) → host lands in `pending`,
+	//     link handler will reject WS upgrades until an admin clicks
+	//     Approve.
+	initialApproval := storage.HostApprovalPending
+	if redeemed.AutoApprove {
+		initialApproval = storage.HostApprovalApproved
+	} else if h.approvalPolicy != nil && !h.approvalPolicy.EnrollmentRequireApproval() {
+		initialApproval = storage.HostApprovalApproved
+	}
 	if h.db != nil {
-		if err := upsertHostFromEnroll(c.Request.Context(), h.db, redeemed, &req); err != nil {
+		if err := upsertHostFromEnroll(c.Request.Context(), h.db, redeemed, &req, initialApproval); err != nil {
 			log.Warn("enroll: host upsert failed: agent=%s err=%v", redeemed.AgentID, err)
 		}
 	}
@@ -178,7 +213,7 @@ func RegisterV2AgentEnrollRoute(engine *gin.Engine, h *EnrollV2Handler) {
 // UUID on macOS, MachineGuid on Windows) or a fallback "fp-…" hash;
 // we distinguish by the "fp-" prefix so the UI can still show a
 // "fingerprint fallback" badge on opaque hosts.
-func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollment.RedeemResult, req *v2pb.EnrollRequest) error {
+func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollment.RedeemResult, req *v2pb.EnrollRequest, initialApproval storage.HostApprovalStatus) error {
 	reported := req.GetMachineId()
 	machineID := reported
 	fingerprint := reported
@@ -226,6 +261,7 @@ func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollm
 		ProductName:     req.GetProductName(),
 		BIOSVendor:      req.GetBiosVendor(),
 		BIOSVersion:     req.GetBiosVersion(),
+		InitialApproval: initialApproval,
 	}
 	_, err := db.Hosts().Upsert(ctx, ident)
 	return err

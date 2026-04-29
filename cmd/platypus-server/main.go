@@ -395,7 +395,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// admin-minted install links copy straight into `curl -k ... | sh`.
 	distributorBase := "https://" + api.PublicAddr
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
-	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc).WithDB(db)
+	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc).WithDB(db).WithApprovalPolicy(settingsReg)
 
 	// v2 agent link handler (yamux-over-WebSocket, mTLS-auth'd).
 	// agentLinkSvc was constructed upstream because SessionsV2Handler

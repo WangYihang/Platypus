@@ -194,6 +194,12 @@ type MintEnrollmentTokenInput struct {
 	MaxUses          int
 	BindingMachineID string
 	BindingHostAlias string
+	// AutoApprove pre-authorizes the host that redeems this token —
+	// the resulting hosts row enrolls straight to `approved` instead
+	// of the default `pending`. Used for automation flows (Ansible,
+	// CI, cloud-init) where there's no human-in-the-loop step. The
+	// admin mint dialog has to opt in explicitly.
+	AutoApprove bool
 }
 
 func (s *Service) MintEnrollmentToken(ctx context.Context, in MintEnrollmentTokenInput) (*IssueEnrollmentTokenResult, error) {
@@ -225,6 +231,7 @@ func (s *Service) MintEnrollmentToken(ctx context.Context, in MintEnrollmentToke
 		BindingMachineID: in.BindingMachineID,
 		BindingHostAlias: in.BindingHostAlias,
 		Description:      in.Description,
+		AutoApprove:      in.AutoApprove,
 	}
 	if err := s.db.EnrollmentTokens().Create(ctx, tok); err != nil {
 		return nil, fmt.Errorf("enrollment: create PAT: %w", err)
@@ -260,6 +267,14 @@ type RedeemResult struct {
 
 	CertPEM string
 	CAPem   string
+
+	// AutoApprove mirrors the redeemed PAT's flag so the v2 enroll
+	// handler can decide whether to stamp the freshly-inserted hosts
+	// row as `approved` (PAT was pre-authorized) or `pending` (the
+	// default — admin still has to click Approve). Plumbed through
+	// the result rather than re-fetched from the DB so the redeem +
+	// host insert stay decoupled.
+	AutoApprove bool
 }
 
 // RedeemContext is the per-request metadata the enrollment code needs
@@ -309,11 +324,12 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 	certPEM, caPEM := s.maybeIssueCert(ctx, tok.ProjectID, agentID, rctx.AgentPubKey, "enroll")
 
 	return &RedeemResult{
-		AgentID:   agentID,
-		ProjectID: tok.ProjectID,
-		Outcome:   "success",
-		CertPEM:   certPEM,
-		CAPem:     caPEM,
+		AgentID:     agentID,
+		ProjectID:   tok.ProjectID,
+		Outcome:     "success",
+		CertPEM:     certPEM,
+		CAPem:       caPEM,
+		AutoApprove: tok.AutoApprove,
 	}, nil
 }
 

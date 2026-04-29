@@ -47,6 +47,11 @@ type issueInstallRequest struct {
 	PATTTLSeconds       int    `json:"pat_ttl_seconds"`
 	PATBindingMachineID string `json:"pat_binding_machine_id"`
 	PATDescription      string `json:"pat_description"`
+	// AutoApprove pre-authorizes the host that redeems this install
+	// link — the host enrolls straight to `approved` without a
+	// human-in-the-loop step. Used for automation flows. Default
+	// false so the safer behaviour (admin reviews) wins by default.
+	AutoApprove bool `json:"auto_approve"`
 }
 
 // issueInstallResponse is the only place the plaintext download token
@@ -79,6 +84,7 @@ type installListItem struct {
 	ConsumedAt          *time.Time `json:"consumed_at,omitempty"`
 	ConsumedIP          string     `json:"consumed_ip,omitempty"`
 	ConsumedPATID       string     `json:"consumed_pat_id,omitempty"`
+	AutoApprove         bool       `json:"auto_approve"`
 	Revoked             bool       `json:"revoked"`
 	RevokedAt           *time.Time `json:"revoked_at,omitempty"`
 	Status              string     `json:"status"`
@@ -100,6 +106,7 @@ func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installLi
 		ConsumedAt:          t.ConsumedAt,
 		ConsumedIP:          t.ConsumedIP,
 		ConsumedPATID:       t.ConsumedPATID,
+		AutoApprove:         t.AutoApprove,
 		Revoked:             t.Revoked,
 		RevokedAt:           t.RevokedAt,
 		Status:              string(t.Status(now)),
@@ -131,6 +138,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		PATTTL:              time.Duration(req.PATTTLSeconds) * time.Second,
 		PATBindingMachineID: req.PATBindingMachineID,
 		PATDescription:      req.PATDescription,
+		AutoApprove:         req.AutoApprove,
 	})
 	if err != nil {
 		h.audit(c, "install.issue", "install_download", "", projectID, req, "error", err.Error())

@@ -106,6 +106,54 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	// Approval gate. The cert chain proves "this agent_id was issued
+	// by the project CA", but issuance happens on PAT redeem — a
+	// leaked PAT can clear that bar. We require the operator to have
+	// flipped the host to `approved` before letting the link open;
+	// `pending` agents are turned away with a recognizable HTTP code
+	// (425 Too Early) so the agent client can drive a friendly retry
+	// loop. `rejected` agents get 403 — the cert is dead from the
+	// server's perspective.
+	if h.db != nil {
+		host, lookupErr := h.db.Hosts().GetByAgentID(c.Request.Context(), agentID)
+		switch {
+		case lookupErr != nil && !errors.Is(lookupErr, storage.ErrNotFound):
+			log.L.Warn("link.host_lookup_failed",
+				"agent_id", agentID,
+				"error", lookupErr.Error(),
+			)
+			c.String(http.StatusInternalServerError, "agent link: host lookup")
+			return
+		case lookupErr == nil:
+			switch host.ApprovalStatus {
+			case storage.HostApprovalRejected:
+				log.L.Warn("link.rejected_by_admin",
+					"agent_id", agentID,
+					"project_id", projectID,
+					"client_ip", c.ClientIP(),
+					"decided_by", host.ApprovalDecidedBy,
+				)
+				c.Header("X-Platypus-Approval-Status", "rejected")
+				c.String(http.StatusForbidden, "agent link: enrollment rejected by administrator")
+				return
+			case storage.HostApprovalPending:
+				log.L.Info("link.pending_approval",
+					"agent_id", agentID,
+					"project_id", projectID,
+					"client_ip", c.ClientIP(),
+				)
+				c.Header("X-Platypus-Approval-Status", "pending")
+				c.String(http.StatusTooEarly, "agent link: awaiting admin approval; retry later")
+				return
+			}
+		}
+		// ErrNotFound on lookup means no hosts row was inserted at
+		// enroll time (unlikely now that we always Upsert) — fall
+		// through to accept the link rather than blocking; the
+		// background SysInfo refresh will re-run Upsert on connect
+		// and catch up the row.
+	}
+
 	wsConn, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
 		Subprotocols: []string{link.Subprotocol},
 	})

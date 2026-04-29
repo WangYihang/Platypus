@@ -50,8 +50,8 @@ func TestAdminSettings_ListReturnsAllDescriptors(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(body.Settings) != 9 {
-		t.Fatalf("len=%d want=9 body=%s", len(body.Settings), w.Body.String())
+	if len(body.Settings) != 10 {
+		t.Fatalf("len=%d want=10 body=%s", len(body.Settings), w.Body.String())
 	}
 }
 

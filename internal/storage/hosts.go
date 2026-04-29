@@ -58,7 +58,28 @@ type Host struct {
 	BIOSVendor    string
 	BIOSVersion   string
 	GPUSummary    string
+
+	// --- Admin approval gate (migration 000022). Every fresh
+	// enrollment lands as "pending" unless the redeemed PAT had its
+	// auto_approve flag set; admins flip the state via the
+	// /hosts/:hid/approve|reject endpoints. Link handler refuses WS
+	// upgrades for non-approved hosts so a leaked PAT can't reach the
+	// agent runtime even after a successful enroll. ---
+	ApprovalStatus    HostApprovalStatus
+	ApprovalDecidedAt *time.Time
+	ApprovalDecidedBy string
+	ApprovalReason    string
 }
+
+// HostApprovalStatus is the host-level approval state. See migration
+// 000022 for the lifecycle semantics.
+type HostApprovalStatus string
+
+const (
+	HostApprovalPending  HostApprovalStatus = "pending"
+	HostApprovalApproved HostApprovalStatus = "approved"
+	HostApprovalRejected HostApprovalStatus = "rejected"
+)
 
 // HostIdentity carries the agent-reported identity we upsert into the
 // hosts table. SeenAt is used for both first_seen_at (on insert) and
@@ -95,6 +116,12 @@ type HostIdentity struct {
 	BIOSVendor    string
 	BIOSVersion   string
 	GPUSummary    string
+
+	// InitialApproval is the approval_status to stamp on a fresh
+	// hosts row only — Upsert never overwrites an existing row's
+	// approval state. Empty defaults to HostApprovalPending so a
+	// caller that forgets to set it still gets the safe behaviour.
+	InitialApproval HostApprovalStatus
 }
 
 func (db *DB) Hosts() *HostRepo { return &HostRepo{db: db.DB} }
@@ -113,7 +140,8 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        current_user, timezone, primary_ip, primary_mac,
        boot_time_unix, agent_version,
        machine_type, chassis_type, product_vendor, product_name,
-       bios_vendor, bios_version, gpu_summary`
+       bios_vendor, bios_version, gpu_summary,
+       approval_status, approval_decided_at, approval_decided_by, approval_reason`
 
 // Upsert merges the given identity into the hosts table. Matching order:
 //
@@ -225,7 +253,12 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		return merged, nil
 	}
 
-	// 4) Insert fresh.
+	// 4) Insert fresh. Approval defaults to pending unless caller
+	// said otherwise (e.g. PAT with auto_approve=true).
+	approval := ident.InitialApproval
+	if approval == "" {
+		approval = HostApprovalPending
+	}
 	h := &Host{
 		ID:                  uuid.NewString(),
 		ProjectID:           ident.ProjectID,
@@ -258,6 +291,18 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		BIOSVendor:          ident.BIOSVendor,
 		BIOSVersion:         ident.BIOSVersion,
 		GPUSummary:          ident.GPUSummary,
+		ApprovalStatus:      approval,
+	}
+	// auto_approve=true on the PAT → admin/system already decided at
+	// mint time; stamp the decision so the audit trail is uniform.
+	if approval == HostApprovalApproved {
+		decidedAt := ident.SeenAt.UTC()
+		h.ApprovalDecidedAt = &decidedAt
+		h.ApprovalDecidedBy = "system:auto-approve"
+	}
+	var decidedAt any
+	if h.ApprovalDecidedAt != nil {
+		decidedAt = *h.ApprovalDecidedAt
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO hosts
@@ -268,10 +313,12 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		   current_user, timezone, primary_ip, primary_mac,
 		   boot_time_unix, agent_version,
 		   machine_type, chassis_type, product_vendor, product_name,
-		   bios_vendor, bios_version, gpu_summary)
+		   bios_vendor, bios_version, gpu_summary,
+		   approval_status, approval_decided_at, approval_decided_by, approval_reason)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		        ?, ?, ?, ?, ?, ?, ?)`,
+		        ?, ?, ?, ?, ?, ?, ?,
+		        ?, ?, ?, ?)`,
 		h.ID, h.ProjectID, nullIfEmpty(h.MachineID), h.Fingerprint,
 		h.FingerprintFallback, h.Hostname, h.PrimaryAlias, h.OS,
 		h.FirstSeenAt, h.LastSeenAt,
@@ -286,6 +333,8 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfEmpty(h.ProductVendor), nullIfEmpty(h.ProductName),
 		nullIfEmpty(h.BIOSVendor), nullIfEmpty(h.BIOSVersion),
 		nullIfEmpty(h.GPUSummary),
+		string(h.ApprovalStatus), decidedAt,
+		nullIfEmpty(h.ApprovalDecidedBy), nullIfEmpty(h.ApprovalReason),
 	); err != nil {
 		return nil, err
 	}
@@ -477,6 +526,10 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		biosVendor      sql.NullString
 		biosVersion     sql.NullString
 		gpuSummary      sql.NullString
+		approvalStatus  string
+		approvalAt      sql.NullTime
+		approvalBy      sql.NullString
+		approvalReason  sql.NullString
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
@@ -487,6 +540,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&bootTimeUnix, &agentVersion,
 		&machineType, &chassisType, &productVendor, &productName,
 		&biosVendor, &biosVersion, &gpuSummary,
+		&approvalStatus, &approvalAt, &approvalBy, &approvalReason,
 	)
 	if err != nil {
 		return nil, err
@@ -563,6 +617,17 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if gpuSummary.Valid {
 		h.GPUSummary = gpuSummary.String
 	}
+	h.ApprovalStatus = HostApprovalStatus(approvalStatus)
+	if approvalAt.Valid {
+		v := approvalAt.Time
+		h.ApprovalDecidedAt = &v
+	}
+	if approvalBy.Valid {
+		h.ApprovalDecidedBy = approvalBy.String
+	}
+	if approvalReason.Valid {
+		h.ApprovalReason = approvalReason.String
+	}
 	return &h, nil
 }
 
@@ -584,6 +649,97 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// Approve transitions a host from `pending` (or even `rejected`) to
+// `approved` and stamps the decision metadata. Idempotent on rows
+// already approved by the same user — re-approval is a no-op write.
+// Returns ErrNotFound when the id doesn't match any row.
+func (r *HostRepo) Approve(ctx context.Context, id, byUser, reason string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE hosts
+		   SET approval_status = 'approved',
+		       approval_decided_at = ?,
+		       approval_decided_by = ?,
+		       approval_reason = ?
+		 WHERE id = ?`,
+		at.UTC(), byUser, nullIfEmpty(reason), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Reject transitions a host to `rejected`. Same shape as Approve.
+// Callers should also revoke any cert linked to this host so the
+// agent can't re-link by simply retrying — Reject only updates the
+// approval flag.
+func (r *HostRepo) Reject(ctx context.Context, id, byUser, reason string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE hosts
+		   SET approval_status = 'rejected',
+		       approval_decided_at = ?,
+		       approval_decided_by = ?,
+		       approval_reason = ?
+		 WHERE id = ?`,
+		at.UTC(), byUser, nullIfEmpty(reason), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListPendingByProject returns every host in a project still awaiting
+// admin approval, oldest first so the operator works through the
+// queue in arrival order. Drives the per-project approval drawer
+// + the badge count on the top-bar.
+func (r *HostRepo) ListPendingByProject(ctx context.Context, projectID string) ([]*Host, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT `+hostAllCols+`
+		  FROM hosts
+		 WHERE project_id = ? AND approval_status = 'pending'
+		 ORDER BY first_seen_at ASC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := []*Host{}
+	for rows.Next() {
+		h, err := scanHostRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// CountPendingByProject is a cheap COUNT(*) for the pending-approvals
+// badge — avoids transferring all the rich-info columns when the UI
+// only wants a number.
+func (r *HostRepo) CountPendingByProject(ctx context.Context, projectID string) (int, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM hosts
+		 WHERE project_id = ? AND approval_status = 'pending'`, projectID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // nullIfInt / nullIfInt64 do the same for numeric columns — a zero

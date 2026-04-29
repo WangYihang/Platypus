@@ -29,10 +29,17 @@ type EnrollmentToken struct {
 	BindingMachineID string
 	BindingHostAlias string
 	Description      string
-	Revoked          bool
-	RevokedAt        *time.Time
-	RevokedByUser    string
-	RevokedReason    string
+	// AutoApprove pre-authorizes the host that redeems this token —
+	// the resulting hosts row is stamped `approved` instead of the
+	// default `pending`. Mirrors Tailscale's --preauthorized auth-key
+	// flag: the safer "manual review" stays the default and admins
+	// have to opt in explicitly when minting the PAT (e.g. for
+	// automation / CI).
+	AutoApprove   bool
+	Revoked       bool
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
 }
 
 // EnrollmentStatus is a view-only value derived from EnrollmentToken at
@@ -79,18 +86,24 @@ type EnrollmentTokenRepo struct {
 // The plaintext secret is hashed by the caller — we never want it
 // materialised here.
 func (r *EnrollmentTokenRepo) Create(ctx context.Context, p *EnrollmentToken) error {
+	autoApprove := 0
+	if p.AutoApprove {
+		autoApprove = 1
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO enrollment_tokens (
 			token_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, max_uses, uses,
 			binding_machine_id, binding_host_alias, description,
+			auto_approve,
 			revoked, revoked_at, revoked_by_user, revoked_reason
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, NULL, NULL, NULL)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, NULL, NULL, NULL)`,
 		p.TokenID, p.SecretHash, p.ProjectID, p.IssuedByUser,
 		p.IssuedAt.UTC(), p.ExpiresAt.UTC(), p.MaxUses,
 		nullableString(p.BindingMachineID),
 		nullableString(p.BindingHostAlias),
 		nullableString(p.Description),
+		autoApprove,
 	)
 	return err
 }
@@ -100,7 +113,7 @@ func (r *EnrollmentTokenRepo) Get(ctx context.Context, tokenID string) (*Enrollm
 	return r.scanOne(ctx, `
 		SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 		       expires_at, max_uses, uses, binding_machine_id,
-		       binding_host_alias, description, revoked, revoked_at,
+		       binding_host_alias, description, auto_approve, revoked, revoked_at,
 		       revoked_by_user, revoked_reason
 		  FROM enrollment_tokens WHERE token_id = ?`, tokenID)
 }
@@ -119,7 +132,7 @@ func (r *EnrollmentTokenRepo) ListByProject(ctx context.Context, projectID strin
 		rows, err = r.db.QueryContext(ctx, `
 			SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 			       expires_at, max_uses, uses, binding_machine_id,
-			       binding_host_alias, description, revoked, revoked_at,
+			       binding_host_alias, description, auto_approve, revoked, revoked_at,
 			       revoked_by_user, revoked_reason
 			  FROM enrollment_tokens WHERE project_id = ?
 			  ORDER BY issued_at DESC`, projectID)
@@ -130,7 +143,7 @@ func (r *EnrollmentTokenRepo) ListByProject(ctx context.Context, projectID strin
 		rows, err = r.db.QueryContext(ctx, `
 			SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 			       expires_at, max_uses, uses, binding_machine_id,
-			       binding_host_alias, description, revoked, revoked_at,
+			       binding_host_alias, description, auto_approve, revoked, revoked_at,
 			       revoked_by_user, revoked_reason
 			  FROM enrollment_tokens
 			 WHERE project_id = ? AND revoked = 0
@@ -185,7 +198,7 @@ func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, se
 	p, err := scanEnrollmentTokenSingle(tx.QueryRowContext(ctx, `
 		SELECT token_id, secret_hash, project_id, issued_by_user, issued_at,
 		       expires_at, max_uses, uses, binding_machine_id,
-		       binding_host_alias, description, revoked, revoked_at,
+		       binding_host_alias, description, auto_approve, revoked, revoked_at,
 		       revoked_by_user, revoked_reason
 		  FROM enrollment_tokens WHERE token_id = ?`, tokenID))
 	if errors.Is(err, ErrNotFound) {
@@ -286,19 +299,20 @@ func scanEnrollmentTokenSingle(row rowScanner) (*EnrollmentToken, error) {
 
 func scanEnrollmentToken(row rowScanner) (*EnrollmentToken, error) {
 	var (
-		p        EnrollmentToken
-		bindMid  sql.NullString
-		bindAlia sql.NullString
-		desc     sql.NullString
-		revokAt  sql.NullTime
-		revokBy  sql.NullString
-		revokRes sql.NullString
-		revoked  int
+		p           EnrollmentToken
+		bindMid     sql.NullString
+		bindAlia    sql.NullString
+		desc        sql.NullString
+		autoApprove int
+		revokAt     sql.NullTime
+		revokBy     sql.NullString
+		revokRes    sql.NullString
+		revoked     int
 	)
 	err := row.Scan(
 		&p.TokenID, &p.SecretHash, &p.ProjectID, &p.IssuedByUser,
 		&p.IssuedAt, &p.ExpiresAt, &p.MaxUses, &p.Uses,
-		&bindMid, &bindAlia, &desc,
+		&bindMid, &bindAlia, &desc, &autoApprove,
 		&revoked, &revokAt, &revokBy, &revokRes,
 	)
 	if err != nil {
@@ -307,6 +321,7 @@ func scanEnrollmentToken(row rowScanner) (*EnrollmentToken, error) {
 	p.BindingMachineID = bindMid.String
 	p.BindingHostAlias = bindAlia.String
 	p.Description = desc.String
+	p.AutoApprove = autoApprove == 1
 	p.Revoked = revoked == 1
 	if revokAt.Valid {
 		t := revokAt.Time

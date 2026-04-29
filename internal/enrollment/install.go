@@ -53,6 +53,13 @@ type MintInstallArtifactInput struct {
 	PATTTL              time.Duration // propagated into the minted PAT
 	PATBindingMachineID string
 	PATDescription      string
+	// AutoApprove makes the host that redeems this install link
+	// enroll directly to `approved`, skipping the admin Approve step.
+	// Use for automation flows (Ansible, CI, cloud-init) where there
+	// is no human-in-the-loop. Default false: a leaked install link
+	// can still create a `pending` host but can't reach the agent
+	// runtime until an admin clicks Approve.
+	AutoApprove bool
 }
 
 // MintInstallArtifact inserts a new install_download_tokens row and
@@ -100,6 +107,7 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 		PATTTLSeconds:       int(patTTL / time.Second),
 		PATBindingMachineID: in.PATBindingMachineID,
 		PATDescription:      in.PATDescription,
+		AutoApprove:         in.AutoApprove,
 	}
 	if err := s.db.InstallDownloadTokens().Create(ctx, tok); err != nil {
 		return nil, fmt.Errorf("enrollment: create install download token: %w", err)
@@ -185,7 +193,9 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		return &ConsumeResult{Outcome: "invalid_secret"}, nil
 	}
 
-	// Now mint the PAT. It inherits TTL + binding from the install token.
+	// Now mint the PAT. It inherits TTL + binding + auto_approve
+	// from the install token so the consume-time PAT carries the same
+	// pre-authorization decision the admin made at mint time.
 	patRes, err := s.MintEnrollmentToken(ctx, MintEnrollmentTokenInput{
 		ProjectID:        tok.ProjectID,
 		IssuedByUser:     tok.IssuedByUser,
@@ -193,6 +203,7 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		TTL:              time.Duration(tok.PATTTLSeconds) * time.Second,
 		MaxUses:          1,
 		BindingMachineID: tok.PATBindingMachineID,
+		AutoApprove:      tok.AutoApprove,
 	})
 	if err != nil {
 		s.logInstallEvent(ctx, id, cctx, "", "error", err.Error())

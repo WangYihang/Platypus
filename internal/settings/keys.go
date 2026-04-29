@@ -31,10 +31,11 @@ const (
 	KeyAuthPATDefaultTTL        = "auth.pat_default_ttl"
 	KeyDistributorChannel       = "distributor.channel"
 	KeyDistributorPresignedTTL  = "distributor.presigned_ttl"
-	KeyMeshDiscoveryLAN         = "mesh.discovery_lan"
-	KeyMeshDiscoveryIntervalSec = "mesh.discovery_interval_seconds"
-	KeyAuditRetentionDays       = "audit.retention_days"
-	KeyMeshPeers                = "mesh.peers"
+	KeyMeshDiscoveryLAN          = "mesh.discovery_lan"
+	KeyMeshDiscoveryIntervalSec  = "mesh.discovery_interval_seconds"
+	KeyAuditRetentionDays        = "audit.retention_days"
+	KeyMeshPeers                 = "mesh.peers"
+	KeyEnrollmentRequireApproval = "enrollment.require_approval"
 )
 
 // Hardcoded defaults — the last line of the resolution chain. Must
@@ -52,6 +53,11 @@ const (
 	// delete user audit data. Admins can set a finite value when
 	// disk / compliance constraints require it.
 	DefaultAuditRetentionDays = 0
+	// Strict by default — every fresh agent enrollment lands in
+	// `pending` until an admin clicks Approve. Operators can flip
+	// this off for low-trust environments where every host is known
+	// to be friendly (dev clusters, ephemeral CI fleets).
+	DefaultEnrollmentRequireApproval = true
 )
 
 // valueType tags determine how the registry and HTTP layer serialise

@@ -31,10 +31,14 @@ type InstallDownloadToken struct {
 	ConsumedIP          string
 	ConsumedUA          string
 	ConsumedPATID       string
-	Revoked             bool
-	RevokedAt           *time.Time
-	RevokedByUser       string
-	RevokedReason       string
+	// AutoApprove propagates into the PAT minted at consume time —
+	// the resulting host enrolls straight to `approved` instead of
+	// the default `pending`. See migration 000022.
+	AutoApprove   bool
+	Revoked       bool
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
 }
 
 // InstallDownloadStatus is derived (never materialised). Separate from
@@ -78,14 +82,19 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 	if t.ServerEndpoint == "" {
 		return errors.New("install_download_tokens: server_endpoint required")
 	}
+	autoApprove := 0
+	if t.AutoApprove {
+		autoApprove = 1
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO install_download_tokens (
 			download_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, target_os, target_arch,
 			server_endpoint, pat_ttl_seconds, pat_binding_machine_id,
-			pat_description, consumed_at, consumed_ip, consumed_ua,
+			pat_description, auto_approve,
+			consumed_at, consumed_ip, consumed_ua,
 			consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		          NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL)`,
 		t.DownloadID, t.SecretHash, t.ProjectID, t.IssuedByUser,
 		t.IssuedAt.UTC(), t.ExpiresAt.UTC(),
@@ -93,6 +102,7 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 		t.ServerEndpoint, t.PATTTLSeconds,
 		nullableString(t.PATBindingMachineID),
 		nullableString(t.PATDescription),
+		autoApprove,
 	)
 	return err
 }
@@ -246,7 +256,7 @@ const installDownloadColumns = `
 	SELECT download_id, secret_hash, project_id, issued_by_user,
 	       issued_at, expires_at, target_os, target_arch,
 	       server_endpoint, pat_ttl_seconds, pat_binding_machine_id,
-	       pat_description, consumed_at, consumed_ip, consumed_ua,
+	       pat_description, auto_approve, consumed_at, consumed_ip, consumed_ua,
 	       consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
 	  FROM install_download_tokens`
 
@@ -260,25 +270,26 @@ func scanInstallDownloadSingle(row rowScanner) (*InstallDownloadToken, error) {
 
 func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	var (
-		t       InstallDownloadToken
-		tOS     sql.NullString
-		tArch   sql.NullString
-		bindMID sql.NullString
-		patDesc sql.NullString
-		consAt  sql.NullTime
-		consIP  sql.NullString
-		consUA  sql.NullString
-		consPAT sql.NullString
-		revAt   sql.NullTime
-		revBy   sql.NullString
-		revReas sql.NullString
-		revoked int
+		t           InstallDownloadToken
+		tOS         sql.NullString
+		tArch       sql.NullString
+		bindMID     sql.NullString
+		patDesc     sql.NullString
+		autoApprove int
+		consAt      sql.NullTime
+		consIP      sql.NullString
+		consUA      sql.NullString
+		consPAT     sql.NullString
+		revAt       sql.NullTime
+		revBy       sql.NullString
+		revReas     sql.NullString
+		revoked     int
 	)
 	err := row.Scan(
 		&t.DownloadID, &t.SecretHash, &t.ProjectID, &t.IssuedByUser,
 		&t.IssuedAt, &t.ExpiresAt, &tOS, &tArch,
 		&t.ServerEndpoint, &t.PATTTLSeconds, &bindMID,
-		&patDesc, &consAt, &consIP, &consUA,
+		&patDesc, &autoApprove, &consAt, &consIP, &consUA,
 		&consPAT, &revoked, &revAt, &revBy, &revReas,
 	)
 	if err != nil {
@@ -288,6 +299,7 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.TargetArch = tArch.String
 	t.PATBindingMachineID = bindMID.String
 	t.PATDescription = patDesc.String
+	t.AutoApprove = autoApprove == 1
 	if consAt.Valid {
 		v := consAt.Time
 		t.ConsumedAt = &v

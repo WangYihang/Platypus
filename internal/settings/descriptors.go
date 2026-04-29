@@ -102,6 +102,13 @@ var allDescriptors = []descriptorMeta{
 		Label:       "Bootstrap peers",
 		Description: "host:port addresses the mesh node dials at boot and on every reconcile tick. Live-editable; the Node picks up adds/removes on the next tick.",
 	},
+	{
+		Key:         KeyEnrollmentRequireApproval,
+		Type:        typeBool,
+		Section:     "enrollment",
+		Label:       "Require admin approval",
+		Description: "When on, fresh agent enrollments land in `pending` and can't open a link until an admin approves them. PATs minted with auto_approve=true bypass this regardless of the global setting.",
+	},
 }
 
 func descriptor(key string) (descriptorMeta, bool) {
@@ -165,6 +172,8 @@ func (r *Registry) describeDefault(m descriptorMeta) any {
 		return int64(DefaultAuditRetentionDays)
 	case KeyMeshPeers:
 		return []string{}
+	case KeyEnrollmentRequireApproval:
+		return DefaultEnrollmentRequireApproval
 	}
 	return nil
 }
@@ -265,6 +274,8 @@ func (r *Registry) describeEffective(m descriptorMeta) any {
 		return int64(r.AuditRetentionDays())
 	case KeyMeshPeers:
 		return r.MeshPeers()
+	case KeyEnrollmentRequireApproval:
+		return r.EnrollmentRequireApproval()
 	}
 	return nil
 }

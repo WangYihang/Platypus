@@ -19,6 +19,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/WangYihang/Platypus/internal/agent"
+	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/pkg/options"
@@ -179,6 +180,27 @@ func main() {
 			AgentVersion: "v2",
 		})
 		if err != nil {
+			// Approval gate: the agent is enrolled but the operator
+			// hasn't clicked Approve yet. Don't spam the log with the
+			// full error chain — print a single friendly status line
+			// and let the backoff retry. Treated as a transient
+			// failure so backoff keeps growing.
+			if errors.Is(err, link.ErrPendingApproval) {
+				logger.Info("agent waiting for admin approval — ask an administrator to approve this host in the Web UI",
+					slog.String("endpoint", endpoint),
+					slog.Int("attempt", connectAttempt),
+				)
+				return err
+			}
+			// Hard reject: the cert is dead from the server's
+			// perspective. Stop retrying — backoff.Permanent breaks
+			// the loop.
+			if errors.Is(err, link.ErrApprovalRejected) {
+				logger.Error("agent enrollment rejected by administrator; the locally-stored cert is no longer accepted; obtain a fresh install token and re-enroll",
+					slog.String("endpoint", endpoint),
+				)
+				return backoff.Permanent(err)
+			}
 			logger.Warn("agent bootstrap failed",
 				slog.String("endpoint", endpoint),
 				slog.Int("attempt", connectAttempt),

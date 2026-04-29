@@ -52,6 +52,11 @@ type hostResponse struct {
 	FirstSeenAt         time.Time `json:"first_seen_at"`
 	LastSeenAt          time.Time `json:"last_seen_at"`
 
+	ApprovalStatus    string     `json:"approval_status"`
+	ApprovalDecidedAt *time.Time `json:"approval_decided_at,omitempty"`
+	ApprovalDecidedBy string     `json:"approval_decided_by,omitempty"`
+	ApprovalReason    string     `json:"approval_reason,omitempty"`
+
 	AgentID         string `json:"agent_id,omitempty"`
 	Arch            string `json:"arch,omitempty"`
 	Platform        string `json:"platform,omitempty"`
@@ -111,6 +116,10 @@ func toHostResponse(h *storage.Host) hostResponse {
 		BIOSVendor:          h.BIOSVendor,
 		BIOSVersion:         h.BIOSVersion,
 		GPUSummary:          h.GPUSummary,
+		ApprovalStatus:      string(h.ApprovalStatus),
+		ApprovalDecidedAt:   h.ApprovalDecidedAt,
+		ApprovalDecidedBy:   h.ApprovalDecidedBy,
+		ApprovalReason:      h.ApprovalReason,
 	}
 }
 
@@ -290,16 +299,145 @@ func (h *HostsHandler) GetProcesses(c *gin.Context) {
 	c.JSON(http.StatusOK, pl)
 }
 
+// approvalDecisionRequest is the JSON body for Approve / Reject. The
+// reason field is free-form and lands in the activity meta + the
+// hosts.approval_reason column for audit. Empty is fine.
+type approvalDecisionRequest struct {
+	Reason string `json:"reason"`
+}
+
+// ListPendingApprovals handles GET /projects/:pid/hosts/pending. Returns
+// hosts in the project still awaiting admin approval, oldest first so
+// the operator works through the queue in arrival order. Surfaces
+// fingerprint + reported OS / IP so an admin can sanity-check "is
+// this expected?" before clicking Approve.
+func (h *HostsHandler) ListPendingApprovals(c *gin.Context) {
+	hosts, err := h.db.Hosts().ListPendingByProject(c.Request.Context(), c.Param("pid"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list pending approvals"})
+		return
+	}
+	out := make([]hostResponse, 0, len(hosts))
+	for _, host := range hosts {
+		out = append(out, toHostResponse(host))
+	}
+	c.JSON(http.StatusOK, gin.H{"hosts": out})
+}
+
+// PendingApprovalCount handles GET /projects/:pid/hosts/pending/count.
+// Cheap COUNT(*) for the top-bar badge — separate endpoint so the
+// frontend doesn't pay the full row scan + JSON marshal cost on every
+// poll.
+func (h *HostsHandler) PendingApprovalCount(c *gin.Context) {
+	n, err := h.db.Hosts().CountPendingByProject(c.Request.Context(), c.Param("pid"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "count pending approvals"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"pending": n})
+}
+
+// Approve handles POST /projects/:pid/hosts/:hid/approve. Flips the
+// host from `pending` (or `rejected` — admins can change their mind)
+// to `approved` and stamps the decision metadata. The next agent link
+// attempt will succeed.
+func (h *HostsHandler) Approve(c *gin.Context) {
+	projectID := c.Param("pid")
+	hostID := c.Param("hid")
+	claims, _ := ClaimsFromContext(c)
+
+	var body approvalDecisionRequest
+	// Body is optional — admins clicking the button get an empty
+	// payload. ShouldBindJSON treats EOF as ok when the struct has
+	// no required fields.
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now().UTC()
+	err := h.db.Hosts().Approve(c.Request.Context(), hostID, claims.UserID, body.Reason, now)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		log.Warn("hosts: approve %s: %v", hostID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "approve host"})
+		return
+	}
+
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      "host.approve",
+		TargetType:  "host",
+		TargetID:    hostID,
+		TargetLabel: hostID,
+		Outcome:     storage.OutcomeSuccess,
+		Meta:        map[string]string{"reason": body.Reason},
+		At:          now,
+	})
+	c.JSON(http.StatusOK, gin.H{"status": "approved"})
+}
+
+// Reject handles POST /projects/:pid/hosts/:hid/reject. Flips the host
+// to `rejected`. The agent's open WS link (if any) stays up — operators
+// who want a hard kick should also revoke the cert via the existing
+// /pat-tokens admin surface; the link gate will refuse the next
+// reconnect.
+func (h *HostsHandler) Reject(c *gin.Context) {
+	projectID := c.Param("pid")
+	hostID := c.Param("hid")
+	claims, _ := ClaimsFromContext(c)
+
+	var body approvalDecisionRequest
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now().UTC()
+	err := h.db.Hosts().Reject(c.Request.Context(), hostID, claims.UserID, body.Reason, now)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		log.Warn("hosts: reject %s: %v", hostID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "reject host"})
+		return
+	}
+
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      "host.reject",
+		TargetType:  "host",
+		TargetID:    hostID,
+		TargetLabel: hostID,
+		Outcome:     storage.OutcomeSuccess,
+		Meta:        map[string]string{"reason": body.Reason},
+		At:          now,
+	})
+	c.JSON(http.StatusOK, gin.H{"status": "rejected"})
+}
+
 // RegisterV1HostsRoutes mounts the per-project host routes under
 // /api/v1/projects/:pid/hosts. Every route is RequireAuth +
-// RequireProjectRole(viewer).
+// RequireProjectRole(viewer); approve/reject bump up to admin.
 func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
-	grp := engine.Group("/api/v1/projects/:pid/hosts")
-	grp.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleViewer))
+	viewer := engine.Group("/api/v1/projects/:pid/hosts")
+	viewer.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleViewer))
 	{
-		grp.GET("", h.List)
-		grp.GET("/:hid", h.Get)
-		grp.GET("/:hid/sysinfo", h.GetSysInfo)
-		grp.GET("/:hid/processes", h.GetProcesses)
+		viewer.GET("", h.List)
+		viewer.GET("/pending", h.ListPendingApprovals)
+		viewer.GET("/pending/count", h.PendingApprovalCount)
+		viewer.GET("/:hid", h.Get)
+		viewer.GET("/:hid/sysinfo", h.GetSysInfo)
+		viewer.GET("/:hid/processes", h.GetProcesses)
+	}
+
+	admin := engine.Group("/api/v1/projects/:pid/hosts")
+	admin.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleAdmin))
+	{
+		admin.POST("/:hid/approve", h.Approve)
+		admin.POST("/:hid/reject", h.Reject)
 	}
 }

@@ -130,6 +130,18 @@ func (r *Registry) AuditRetentionDays() int {
 	})
 }
 
+// EnrollmentRequireApproval controls whether fresh agent enrollments
+// land in `pending` (true) or auto-promote to `approved` (false). The
+// per-PAT auto_approve flag overrides this — a PAT minted with
+// auto_approve=true always pre-authorizes its host regardless of the
+// global setting. Default true: an out-of-the-box deployment is safe
+// against PAT leaks closing the loop without admin attention.
+func (r *Registry) EnrollmentRequireApproval() bool {
+	return r.getBool(KeyEnrollmentRequireApproval, func() bool {
+		return DefaultEnrollmentRequireApproval
+	})
+}
+
 // MeshPeers is the list of bootstrap peer addresses ("host:port").
 // The mesh Node reconciles against this on every tick so admins can
 // add / remove peers live from the Web UI without a restart.
