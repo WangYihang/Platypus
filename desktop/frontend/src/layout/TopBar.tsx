@@ -63,21 +63,21 @@ export default function TopBar({
         >
             <Brand />
             <BreadcrumbSep />
+            <ServerBreadcrumb
+                onAddServer={onAddServer}
+                onManageServers={onManageServers}
+            />
             {currentProject ? (
                 <>
+                    <BreadcrumbSep />
                     <ProjectBreadcrumb
                         projects={projects}
                         currentProject={currentProject}
                         canCreateProject={user.role === "admin"}
                         onCreateProject={onCreateProject}
                     />
-                    <BreadcrumbSep />
                 </>
             ) : null}
-            <ServerBreadcrumb
-                onAddServer={onAddServer}
-                onManageServers={onManageServers}
-            />
 
             <div style={{ flex: 1, minWidth: 0 }} />
 
