@@ -12,6 +12,7 @@ import EmptyState from "../../components/EmptyState";
 import PageShell from "../../components/PageShell";
 import RefreshButton from "../../components/RefreshButton";
 import RoleHelpIcon from "../../components/RoleHelpIcon";
+import StatusPills from "../../components/StatusPills";
 import StatusPill from "../../components/StatusPill";
 import { palette, space } from "../../layout/theme";
 import {
@@ -190,11 +191,28 @@ export default function AdminUsers() {
         }
     }
 
+    const roleCounts = (users ?? []).reduce(
+        (acc, u) => {
+            acc[u.role] = (acc[u.role] ?? 0) + 1;
+            return acc;
+        },
+        {} as Record<string, number>,
+    );
+
     return (
         <>
         <PageShell
             title="Users"
             subtitle="Manage who can log in and what they can do"
+            pills={
+                <StatusPills
+                    pills={[
+                        { tone: "success", count: users?.length ?? 0, label: "total" },
+                        { tone: "danger", count: roleCounts.admin ?? 0, label: "admin" },
+                        { tone: "info", count: roleCounts.operator ?? 0, label: "operators" },
+                    ]}
+                />
+            }
             actions={
                 <>
                     <RefreshButton loading={loading} onClick={() => void refetch()} />

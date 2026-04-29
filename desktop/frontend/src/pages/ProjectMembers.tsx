@@ -11,6 +11,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import PageShell from "../components/PageShell";
 import RefreshButton from "../components/RefreshButton";
+import StatusPills from "../components/StatusPills";
 import RoleHelpIcon from "../components/RoleHelpIcon";
 import StatusPill from "../components/StatusPill";
 import { palette, space } from "../layout/theme";
@@ -174,11 +175,27 @@ export default function ProjectMembers({ project }: Props) {
     const existingIds = new Set(members?.map((m) => m.user_id));
     const availableCandidates = (candidates ?? []).filter((u) => !existingIds.has(u.id));
 
+    const roleCounts = (members ?? []).reduce(
+        (acc, m) => {
+            acc[m.role] = (acc[m.role] ?? 0) + 1;
+            return acc;
+        },
+        {} as Record<string, number>,
+    );
+
     return (
         <>
         <PageShell
             title={`${project.name} · members`}
-            subtitle={`${members?.length ?? 0} member(s)`}
+            pills={
+                <StatusPills
+                    pills={[
+                        { tone: "danger", count: roleCounts.admin ?? 0, label: "admin" },
+                        { tone: "info", count: roleCounts.operator ?? 0, label: "operators" },
+                        { tone: "muted", count: roleCounts.viewer ?? 0, label: "viewers" },
+                    ]}
+                />
+            }
             actions={
                 <>
                     <RefreshButton loading={loading} onClick={() => void refetch()} />
