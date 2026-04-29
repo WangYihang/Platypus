@@ -139,3 +139,9 @@ Global user CRUD reachable from the user menu.
 A fresh project with no listener and no agent. Empty-state CTA points to the listener page since hosts only appear after an agent connects.
 
 <img src="21-hosts-empty.png" alt="Hosts (empty)" width="900">
+
+## Misc
+
+### activity audit
+
+<img src="23-activity-audit.png" alt="activity audit" width="900">
