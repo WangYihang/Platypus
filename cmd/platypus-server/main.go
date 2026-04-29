@@ -28,8 +28,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-playground/validator/v10"
-	"github.com/spf13/viper"
+	"github.com/alecthomas/kong"
 
 	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/api"
@@ -56,8 +55,6 @@ import (
 
 const shutdownTimeout = 30 * time.Second
 
-const defaultIngressAddr = ":9443"
-
 func main() {
 	log.Init()
 	hostname, _ := os.Hostname()
@@ -67,65 +64,60 @@ func main() {
 		"hostname", hostname,
 	)
 
-	cfg, configFile, err := loadConfig()
-	if err != nil {
-		log.Error("config: %v", err)
-		os.Exit(1)
-	}
-
-	// Pull store credentials from env (docker-compose / k8s inject
-	// PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID + …_SECRET_ACCESS_KEY
-	// rather than templating the YAML), then enforce post-load
-	// invariants — chiefly: distributor enabled requires non-empty
-	// store credentials, so we never silently boot with blank keys.
-	if err := cfg.ApplyEnvOverrides(); err != nil {
-		log.Error("config env overrides: %v", err)
-		os.Exit(1)
-	}
-	if err := cfg.Validate(); err != nil {
-		log.Error("config invalid: %v", err)
-		os.Exit(1)
-	}
-
-	log.L.Info("server_starting", "version", update.Version, "config", configFile)
+	cfg := parseFlags()
+	log.L.Info("server_starting", "version", update.Version,
+		"data_dir", cfg.DataDir,
+		"listen", cfg.Listen,
+		"external_addr", cfg.ExternalAddr,
+	)
 
 	core.Ctx = app.New(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Ensure data_dir exists before any subsystem touches files inside
+	// it. Auto-creation here (rather than failing at first Open) keeps
+	// the "drop a binary on a fresh box" experience close to one-step.
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		log.Error("create data dir %q: %v", cfg.DataDir, err)
+		os.Exit(1)
+	}
+
 	// Open the persistent store before anything else that needs it
 	// (enrollment, PKI, install tokens). Distributor / REST / agent
 	// all share the same handle.
-	dbFile := cfg.RESTful.DBFileOrDefault()
-	db, err := storage.Open(dbFile)
+	dbPath := cfg.DBPath()
+	db, err := storage.Open(dbPath)
 	if err != nil {
-		log.Error("open database %q: %v", dbFile, err)
+		log.Error("open database %q: %v", dbPath, err)
 		os.Exit(1)
 	}
 	core.Ctx.Storage = db
-	log.Success("Storage: %s", dbFile)
+	log.Success("Storage: %s", dbPath)
 
 	// KEK source policy:
-	//   1. PLATYPUS_CA_KEK env var (production path — key never touches disk).
-	//   2. PLATYPUS_DEV=1 enables a dev-only fallback at <data-dir>/ca.kek so
+	//   1. --ca-kek / PLATYPUS_CA_KEK (production path — key never touches disk).
+	//   2. --dev / PLATYPUS_DEV=1 enables a dev-only fallback at <data-dir>/ca.kek so
 	//      `docker compose up` bootstraps cleanly without operator action.
 	//   3. Otherwise: refuse to start. Falling back to a co-located key file
 	//      in production defeats AES-GCM-sealing the CA private key — a
 	//      compromise of the data volume yields both ciphertext and key.
-	if os.Getenv(pki.KEKEnvVar) == "" {
-		if os.Getenv("PLATYPUS_DEV") == "1" {
-			pki.KEKPath = filepath.Join(filepath.Dir(dbFile), "ca.kek")
-			log.L.Warn("dev_mode_kek_fallback_enabled",
-				"path", pki.KEKPath,
-				"hint", "set "+pki.KEKEnvVar+" to keep the CA key out of the data volume",
-			)
-		} else {
-			log.Error("CA key-encryption-key missing: set %s to a 32-byte hex value, "+
-				"or set PLATYPUS_DEV=1 to enable the on-disk dev fallback at <data-dir>/ca.kek. "+
-				"Generate one with: openssl rand -hex 32", pki.KEKEnvVar)
-			os.Exit(1)
-		}
+	if cfg.CAKEK != "" {
+		// kong already populated the env var indirectly; re-export so
+		// internal/pki (which reads pki.KEKEnvVar at use time) finds it.
+		_ = os.Setenv(pki.KEKEnvVar, cfg.CAKEK)
+	} else if cfg.Dev {
+		pki.KEKPath = cfg.CAKEKPath()
+		log.L.Warn("dev_mode_kek_fallback_enabled",
+			"path", pki.KEKPath,
+			"hint", "set --ca-kek (or PLATYPUS_CA_KEK) to keep the CA key out of the data volume",
+		)
+	} else {
+		log.Error("CA key-encryption-key missing: set --ca-kek (or PLATYPUS_CA_KEK) to a base64 32-byte value, " +
+			"or pass --dev (PLATYPUS_DEV=1) to enable the on-disk dev fallback at <data-dir>/ca.kek. " +
+			"Generate one with: openssl rand 32 | base64")
+		os.Exit(1)
 	}
 
 	// Seed the "system" pseudo-user and the "default" project before
@@ -158,14 +150,8 @@ func main() {
 			"hint", "previous instance exited without graceful shutdown — audit-tail disconnected_at stamps are best-effort approximations of crash time")
 	}
 
-	ingressAddr := cfg.Ingress.Addr
-	if ingressAddr == "" {
-		ingressAddr = defaultIngressAddr
-	}
-	publicAddr := cfg.Ingress.PublicAddr
-	if publicAddr == "" {
-		publicAddr = ingressAddr
-	}
+	ingressAddr := cfg.Listen
+	publicAddr := cfg.ExternalAddr
 	api.PublicAddr = publicAddr
 
 	// pkiSvc is constructed here (rather than inside buildRESTEngine)
@@ -182,31 +168,35 @@ func main() {
 	// without a restart.
 	settingsReg := settings.New(db, cfg)
 
-	// Mesh node (optional). The server self-issues a cert-bound
-	// leaf under cfg.Mesh.ProjectID's CA — same chain agents in
-	// that project use — and joins the overlay. On any wiring
-	// failure mesh is skipped with an error log; server startup
-	// never aborts over mesh.
+	// Mesh node (optional). Activated by the presence of a mesh PSK
+	// file at <data_dir>/mesh.psk — when missing, mesh stays inert
+	// and the server still serves agent traffic on the unified
+	// ingress. The server self-issues a cert-bound leaf under
+	// cfg.MeshProjectID's CA — same chain agents in that project use.
+	// On any wiring failure mesh is skipped with an error log; server
+	// startup never aborts over mesh.
 	var meshNode *mesh.Node
-	if cfg.Mesh.PSKFile != "" {
+	if fileExists(cfg.MeshPSKPath()) {
 		if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr, settingsReg); node != nil {
 			core.Ctx.Mesh = node
 			meshNode = node
 		}
 	}
 
-	// If no cert was configured, self-issue a leaf from the project CA
-	// and use it for ingress TLS. This replaces the stand-alone
-	// self-signed dev fallback — the old cert chained to nothing the
-	// agent-side trust store knew, so agents with PLATYPUS_PROJECT_CA
-	// pinned refused the handshake with a confusing "unknown
-	// authority" error. Issuing the ingress leaf from the same CA
-	// agents pin makes `docker compose up` work without mkcert.
-	certSource := ingress.CertSource{
-		CertFile: cfg.Ingress.Cert,
-		KeyFile:  cfg.Ingress.Key,
-	}
-	if cfg.Ingress.Cert == "" && cfg.Ingress.Key == "" {
+	// Custom TLS leaf is opt-in via the cert.pem / key.pem file
+	// convention under <data_dir>. When both files exist they're used
+	// directly; otherwise we self-issue a leaf from the project CA
+	// (the only chain agents with PLATYPUS_PROJECT_CA pinned will
+	// trust). This dual scheme lets `docker compose up` Just Work
+	// without mkcert while still letting an operator drop in their
+	// own corporate-CA leaf without code changes.
+	certPath, keyPath := cfg.CertPath(), cfg.KeyPath()
+	customCert := fileExists(certPath) && fileExists(keyPath)
+	certSource := ingress.CertSource{}
+	if customCert {
+		certSource.CertFile = certPath
+		certSource.KeyFile = keyPath
+	} else {
 		if issued, err := issueIngressLeafFromProjectCA(ctx, pkiSvc, cfg); err != nil {
 			log.L.Warn("ingress_tls_autoissue_failed",
 				"error", err.Error(),
@@ -278,9 +268,9 @@ func main() {
 	}()
 
 	log.L.Info("ingress_ready",
-		"addr", ingressAddr,
-		"public_addr", publicAddr,
-		"tls_cert", cfg.Ingress.Cert,
+		"listen", ingressAddr,
+		"external_addr", publicAddr,
+		"custom_tls", customCert,
 	)
 
 	log.L.Info("server_running")
@@ -292,9 +282,10 @@ func main() {
 		TargetLabel: "platypus-server",
 		Meta: map[string]any{
 			"version":      update.Version,
-			"config":       configFile,
-			"ingress":      ingressAddr,
-			"mesh_enabled": cfg.Mesh.PSKFile != "",
+			"listen":       ingressAddr,
+			"external":     publicAddr,
+			"data_dir":     cfg.DataDir,
+			"mesh_enabled": fileExists(cfg.MeshPSKPath()),
 		},
 	})
 
@@ -325,41 +316,42 @@ func main() {
 	log.Success("Server stopped cleanly")
 }
 
-func loadConfig() (*config.Config, string, error) {
-	v := viper.New()
-	v.SetConfigName("config")
-	v.SetConfigType("yml")
-	v.AddConfigPath(".")
-
-	if err := v.ReadInConfig(); err != nil {
-		return nil, "", fmt.Errorf("read config: %w", err)
+// parseFlags reads CLI flags and env vars into a config.Options,
+// runs PostParse to apply derived defaults + load secret files, and
+// exits cleanly on --help or --version. Any parse / validation
+// failure prints the error to stderr and exits non-zero.
+//
+// Lives next to main() so the wiring is easy to find when an env var
+// gets renamed.
+func parseFlags() *config.Options {
+	var opts config.Options
+	kctx := kong.Parse(&opts,
+		kong.Name("platypus-server"),
+		kong.Description("Platypus host management hub. Configure via flags or PLATYPUS_* env vars."),
+		kong.Vars{"version": update.Version},
+		kong.UsageOnError(),
+	)
+	if err := opts.PostParse(); err != nil {
+		kctx.Fatalf("%v", err)
 	}
-
-	var cfg config.Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, v.ConfigFileUsed(), fmt.Errorf("unmarshal config: %w", err)
-	}
-
-	if err := validator.New().Struct(&cfg); err != nil {
-		return nil, v.ConfigFileUsed(), formatValidationError(err)
-	}
-
-	return &cfg, v.ConfigFileUsed(), nil
+	return &opts
 }
 
-func formatValidationError(err error) error {
-	var ve validator.ValidationErrors
-	if !errors.As(err, &ve) {
-		return err
+// fileExists is a tiny test seam that returns true when path exists
+// and is readable as a regular file. Used by the cert.pem / key.pem /
+// mesh.psk file-convention probes during startup.
+func fileExists(path string) bool {
+	if path == "" {
+		return false
 	}
-	msg := "config validation failed:"
-	for _, fe := range ve {
-		msg += fmt.Sprintf("\n  - %s: %s (got %v)", fe.Namespace(), fe.Tag(), fe.Value())
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
 	}
-	return errors.New(msg)
+	return info.Mode().IsRegular()
 }
 
-func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) (http.Handler, *core.AgentLinkService) {
+func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) (http.Handler, *core.AgentLinkService) {
 	rest := api.CreateRESTfulAPIServer()
 
 	auth := api.NewAuth()
@@ -414,15 +406,15 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// deployments can run the full admin surface without wiring an
 	// object store first; operators who later configure one just add
 	// the endpoint and restart.
-	if cfg.Distributor.Store.Endpoint != "" {
+	if cfg.S3Endpoint != "" {
 		store, err := artifact.NewS3Store(artifact.S3Config{
-			Endpoint:        cfg.Distributor.Store.Endpoint,
-			Region:          cfg.Distributor.Store.Region,
-			Bucket:          cfg.Distributor.Store.Bucket,
-			Prefix:          cfg.Distributor.Store.Prefix,
-			AccessKeyID:     cfg.Distributor.Store.AccessKeyID,
-			SecretAccessKey: cfg.Distributor.Store.SecretAccessKey,
-			UseSSL:          cfg.Distributor.Store.UseSSL,
+			Endpoint:        cfg.S3Endpoint,
+			Region:          cfg.S3Region,
+			Bucket:          cfg.S3Bucket,
+			Prefix:          cfg.S3Prefix,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretKey,
+			UseSSL:          cfg.S3Secure,
 		})
 		if err != nil {
 			log.Error("distributor: init artifact store: %v", err)
@@ -451,23 +443,20 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
 
 	// Terminal session recording: every operator shell is mirrored to
-	// an asciinema v2 cast file under <data-dir>/recordings (or the
-	// configured override). Disabled by default; flip
-	// recording.enabled in config.yml to turn it on.
-	dataDir := filepath.Dir(cfg.RESTful.DBFileOrDefault())
-	recDir := cfg.Recording.DirOrDefault(dataDir)
-	if cfg.Recording.Enabled {
-		if err := os.MkdirAll(recDir, 0o700); err != nil {
-			log.L.Warn("recording_dir_create_failed",
-				"dir", recDir,
-				"error", err.Error(),
-				"hint", "recordings will fail until this directory is writable",
-			)
-		} else {
-			log.L.Info("terminal_recording_enabled", "dir", recDir)
-		}
+	// an asciinema v2 cast file under <data_dir>/recordings.
+	// Recording is always on; the dir is created up-front so a slow
+	// first session doesn't pay the mkdir cost.
+	recDir := cfg.RecordingDir()
+	if err := os.MkdirAll(recDir, 0o700); err != nil {
+		log.L.Warn("recording_dir_create_failed",
+			"dir", recDir,
+			"error", err.Error(),
+			"hint", "recordings will fail until this directory is writable",
+		)
+	} else {
+		log.L.Info("terminal_recording_enabled", "dir", recDir)
 	}
-	recMgr := recording.New(db, recDir, cfg.Recording.Enabled)
+	recMgr := recording.New(db, recDir, true)
 
 	// Audit-tail close for recordings: a previous instance that exited
 	// without graceful shutdown leaves rows in `recording` state. Mark
@@ -578,10 +567,10 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 	// <data-dir>/bootstrap.secret with mode 0600 and log only the path.
 	// When an admin exists, log a redacted marker so operators can see
 	// the server is up without leaking anything.
-	bootstrapPath := filepath.Join(dataDir, "bootstrap.secret")
+	bootstrapPath := filepath.Join(cfg.DataDir, "bootstrap.secret")
 	adminCount, _ := db.Users().Count(ctx)
 	if adminCount == 0 {
-		_ = os.MkdirAll(dataDir, 0o700)
+		_ = os.MkdirAll(cfg.DataDir, 0o700)
 		if err := os.WriteFile(bootstrapPath, []byte(auth.GetSecret()+"\n"), 0o600); err != nil {
 			log.L.Warn("bootstrap_secret_write_failed",
 				"path", bootstrapPath,
@@ -623,9 +612,9 @@ func buildRESTEngine(ctx context.Context, cfg *config.Config, db *storage.DB, pk
 // nil, err if the project CA isn't available yet (e.g. KEK
 // misconfigured) — the caller logs the error and falls back to the
 // stand-alone self-signed leaf. Hosts for the SAN come from
-// cfg.Ingress.PublicAddrOrAddr() (split off the port).
-func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config) (*tls.Certificate, error) {
-	projectID := cfg.Mesh.ProjectID
+// cfg.ExternalAddr (split off the port).
+func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg *config.Options) (*tls.Certificate, error) {
+	projectID := cfg.MeshProjectID
 	if projectID == "" {
 		projectID = storage.DefaultProjectID
 	}
@@ -634,9 +623,9 @@ func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg
 	if _, err := pkiSvc.EnsureCA(ctx, projectID, storage.SystemUserID); err != nil {
 		return nil, fmt.Errorf("ensure project CA: %w", err)
 	}
-	addr := cfg.Ingress.PublicAddrOrAddr()
+	addr := cfg.ExternalAddr
 	if addr == "" {
-		return nil, errors.New("ingress.public_addr / ingress.addr both empty")
+		return nil, errors.New("--external-addr is empty")
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -663,13 +652,13 @@ func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg
 	return &leaf, nil
 }
 
-// Project scoping: cfg.Mesh.ProjectID picks which project's CA to
+// Project scoping: cfg.MeshProjectID picks which project's CA to
 // chain the server's leaf to. Agents in the same project will
 // trust the resulting identity via the same CA.
-func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Config, publicAddr string, settingsReg *settings.Registry) *mesh.Node {
-	projectID := cfg.Mesh.ProjectID
+func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Options, publicAddr string, settingsReg *settings.Registry) *mesh.Node {
+	projectID := cfg.MeshProjectID
 	if projectID == "" {
-		log.Error("mesh: cfg.Mesh.ProjectID is required for the server to self-issue a leaf cert; skipping")
+		log.Error("mesh: --mesh-project is required for the server to self-issue a leaf cert; skipping")
 		return nil
 	}
 	// Ensure (or create) the project CA, then self-issue a leaf
@@ -712,28 +701,30 @@ func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Co
 		return nil
 	}
 
-	bootstrapTarget := cfg.Mesh.BootstrapTarget
-	if bootstrapTarget == "" {
-		bootstrapTarget = publicAddr
-	}
-	advertise := cfg.Mesh.AdvertiseAddrs
-	if len(advertise) == 0 && publicAddr != "" {
+	// Bootstrap target + advertise addr both default to the server's
+	// own external_addr — it's the one address every agent already
+	// knows how to reach. Operators with multi-server federation needs
+	// can override these via the SettingsRegistry; the YAML-side knobs
+	// were deemed runtime-policy and moved out of bootstrap config.
+	bootstrapTarget := publicAddr
+	var advertise []string
+	if publicAddr != "" {
 		advertise = []string{publicAddr}
 	}
 	node, err := mesh.NewNode(mesh.Config{
-		PSKFile:           cfg.Mesh.PSKFile,
-		Identity:          meshID,
-		TrustedCAs:        pool,
-		ListenAddr:        "", // listener is the unified ingress
-		AdvertiseAddrs:    advertise,
-		Peers:             cfg.Mesh.Peers,
-		Role:              "server",
-		DiscoveryLAN:      cfg.Mesh.DiscoveryLAN,
-		DiscoveryInterval: cfg.Mesh.DiscoveryInterval,
-		ProjectID:         projectID,
-		BootstrapEnabled:  bootstrapTarget != "",
-		BootstrapTarget:   bootstrapTarget,
-		Settings:          settingsReg,
+		PSKFile:        cfg.MeshPSKPath(),
+		Identity:       meshID,
+		TrustedCAs:     pool,
+		ListenAddr:     "", // listener is the unified ingress
+		AdvertiseAddrs: advertise,
+		// Peers, DiscoveryLAN, DiscoveryInterval all flow through
+		// the SettingsRegistry; cfg-side defaults are gone.
+		Role:             "server",
+		DiscoveryLAN:     true,
+		ProjectID:        projectID,
+		BootstrapEnabled: bootstrapTarget != "",
+		BootstrapTarget:  bootstrapTarget,
+		Settings:         settingsReg,
 	}, nil)
 	if err != nil {
 		log.Error("mesh: NewNode: %v", err)

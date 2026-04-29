@@ -7,21 +7,34 @@ services:
       - "9443:9443" # Unified TLS ingress (REST + agent link + mesh + installer)
     volumes:
       - platypus_data:/app/data
-      - ./config.docker.yml:/app/config.yml
     environment:
+      # All server config is env vars now — see `platypus-server --help`
+      # for the full list. The minimum needed to boot is
+      # PLATYPUS_EXTERNAL_ADDR; everything else has a default.
+
+      # External address agents reach. localhost works on the host running
+      # docker compose; for a remote deployment override to a real public
+      # IP / hostname (e.g. PLATYPUS_EXTERNAL_ADDR=1.2.3.4:9443).
+      PLATYPUS_EXTERNAL_ADDR: "localhost:9443"
+      PLATYPUS_DATA_DIR: "/app/data"
+
       # PLATYPUS_DEV=1 opts into the dev-only on-disk KEK fallback at
       # /app/data/ca.kek so a fresh `docker compose up` Just Works. For
       # production, REMOVE this line and inject a real PLATYPUS_CA_KEK
-      # (32 bytes hex; `openssl rand -hex 32`) via a secret. Keeping the
-      # KEK on the same volume as the encrypted DB defeats the seal.
+      # (32 bytes base64; `openssl rand 32 | base64`) via a secret.
+      # Keeping the KEK on the same volume as the encrypted DB defeats
+      # the seal.
       PLATYPUS_DEV: "1"
-      # The bundled config.docker.yml leaves S3/MinIO credentials blank
-      # so the file is safe to copy into other deployments. We inject
-      # the dev MinIO root creds via env vars here; production should
-      # use a docker secret / k8s Secret that points at non-default
-      # MinIO credentials, and update both blocks to match.
-      PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-platypus_admin}"
-      PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-platypus_password}"
+
+      # S3 distributor (MinIO sidecar). Endpoint + bucket enable it;
+      # credentials are injected via env so this file is safe to copy
+      # without leaking secrets. Production: use a docker / k8s secret.
+      PLATYPUS_S3_ENDPOINT: "minio:9000"
+      PLATYPUS_S3_BUCKET: "platypus-artifacts"
+      PLATYPUS_S3_PREFIX: "agent/"
+      PLATYPUS_S3_SECURE: "false"
+      PLATYPUS_S3_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-platypus_admin}"
+      PLATYPUS_S3_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-platypus_password}"
     restart: always
     depends_on:
       init-data:

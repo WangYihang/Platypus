@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewApp(t *testing.T) {
-	cfg := &config.Config{}
+	cfg := &config.Options{}
 	a := New(cfg)
 
 	if a.Config != cfg {
@@ -19,7 +19,7 @@ func TestNewApp(t *testing.T) {
 }
 
 func TestFindSessionEmpty(t *testing.T) {
-	a := New(&config.Config{})
+	a := New(&config.Options{})
 	if s := a.FindSession("anything"); s != nil {
 		t.Error("expected nil for empty manager")
 	}

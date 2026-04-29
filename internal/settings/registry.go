@@ -21,7 +21,7 @@ import (
 // Concurrency-safe. Zero value is not usable — always construct via New.
 type Registry struct {
 	db  *storage.DB
-	cfg *config.Config
+	cfg *config.Options
 
 	// cache holds parsed, typed values keyed by setting key. A nil
 	// entry means "we resolved this key to the YAML/default fallback;
@@ -40,7 +40,7 @@ type cacheEntry struct {
 // New constructs a Registry backed by db (for DB-level overrides) and
 // cfg (for YAML fallbacks). cfg may be nil, in which case the YAML
 // layer is skipped and only DB and hardcoded defaults apply.
-func New(db *storage.DB, cfg *config.Config) *Registry {
+func New(db *storage.DB, cfg *config.Options) *Registry {
 	return &Registry{db: db, cfg: cfg}
 }
 
@@ -78,45 +78,35 @@ func (r *Registry) PATDefaultTTL() time.Duration {
 }
 
 // DistributorChannel is the default release channel shipped in the
-// install script.
+// install script. Bootstrap-config side was removed; defaults live in
+// code, admin overrides flow through the DB.
 func (r *Registry) DistributorChannel() string {
 	return r.getString(KeyDistributorChannel, func() string {
-		if r.cfg != nil && r.cfg.Distributor.Channel != "" {
-			return r.cfg.Distributor.Channel
-		}
 		return DefaultDistributorChannel
 	})
 }
 
 // DistributorPresignedTTL is how long S3 presigned download URLs
-// remain valid.
+// remain valid. Bootstrap-config side was removed; defaults live in
+// code, admin overrides flow through the DB.
 func (r *Registry) DistributorPresignedTTL() time.Duration {
 	return r.getDuration(KeyDistributorPresignedTTL, func() time.Duration {
-		if r.cfg != nil && r.cfg.Distributor.PresignedTTL != "" {
-			if d, err := time.ParseDuration(r.cfg.Distributor.PresignedTTL); err == nil && d > 0 {
-				return d
-			}
-		}
 		return DefaultPresignedTTL
 	})
 }
 
 // MeshDiscoveryLAN controls whether the mesh mDNS broadcaster runs.
+// Defaults to on; admin can disable via DB override.
 func (r *Registry) MeshDiscoveryLAN() bool {
 	return r.getBool(KeyMeshDiscoveryLAN, func() bool {
-		if r.cfg != nil {
-			return r.cfg.Mesh.DiscoveryLAN
-		}
 		return DefaultMeshDiscoveryLAN
 	})
 }
 
 // MeshDiscoveryInterval is the period between mDNS discovery cycles.
+// Default 30s; admin override via DB.
 func (r *Registry) MeshDiscoveryInterval() time.Duration {
 	return r.getDuration(KeyMeshDiscoveryIntervalSec, func() time.Duration {
-		if r.cfg != nil && r.cfg.Mesh.DiscoveryInterval > 0 {
-			return time.Duration(r.cfg.Mesh.DiscoveryInterval) * time.Second
-		}
 		return time.Duration(DefaultMeshDiscoveryIntSecs) * time.Second
 	})
 }
@@ -144,16 +134,12 @@ func (r *Registry) EnrollmentRequireApproval() bool {
 
 // MeshPeers is the list of bootstrap peer addresses ("host:port").
 // The mesh Node reconciles against this on every tick so admins can
-// add / remove peers live from the Web UI without a restart.
-// YAML cfg.Mesh.Peers is the initial default; empty list is a valid
-// override that removes all bootstrap targets.
+// add / remove peers live from the Web UI without a restart. The
+// bootstrap-config side was removed (server's own external_addr is
+// used as the implicit bootstrap target); admins seed any cross-LAN
+// peers through the Web UI / DB.
 func (r *Registry) MeshPeers() []string {
 	return r.getStringList(KeyMeshPeers, func() []string {
-		if r.cfg != nil && len(r.cfg.Mesh.Peers) > 0 {
-			out := make([]string, len(r.cfg.Mesh.Peers))
-			copy(out, r.cfg.Mesh.Peers)
-			return out
-		}
 		return nil
 	})
 }

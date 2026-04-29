@@ -9,7 +9,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
-	"github.com/WangYihang/Platypus/internal/utils/config"
 )
 
 func newTestDB(t *testing.T) *storage.DB {
@@ -53,38 +52,6 @@ func TestRegistry_DefaultWhenNoConfigOrDB(t *testing.T) {
 	}
 	if got := reg.DistributorPresignedTTL(); got != settings.DefaultPresignedTTL {
 		t.Errorf("DistributorPresignedTTL default = %v, want %v", got, settings.DefaultPresignedTTL)
-	}
-}
-
-func TestRegistry_YAMLFallbackWinsOverDefault(t *testing.T) {
-	db := newTestDB(t)
-	cfg := &config.Config{
-		Distributor: config.DistributorConfig{
-			Channel:      "yaml-channel",
-			PresignedTTL: "2m",
-		},
-		Mesh: config.MeshConfig{
-			DiscoveryLAN:      false,
-			DiscoveryInterval: 77,
-		},
-	}
-	reg := settings.New(db, cfg)
-
-	// Auth TTLs no longer take YAML overrides — Phase-2 sessions use
-	// hardcoded SessionIdleWindow / SessionHardTTL constants. The
-	// settings entries survive only as DB-overrideable advisory
-	// values in the admin UI.
-	if got := reg.DistributorChannel(); got != "yaml-channel" {
-		t.Errorf("DistributorChannel yaml = %q", got)
-	}
-	if got := reg.DistributorPresignedTTL(); got != 2*time.Minute {
-		t.Errorf("DistributorPresignedTTL yaml = %v", got)
-	}
-	if reg.MeshDiscoveryLAN() {
-		t.Errorf("MeshDiscoveryLAN yaml = true, want false")
-	}
-	if got := reg.MeshDiscoveryInterval(); got != 77*time.Second {
-		t.Errorf("MeshDiscoveryInterval yaml = %v, want 97s", got)
 	}
 }
 

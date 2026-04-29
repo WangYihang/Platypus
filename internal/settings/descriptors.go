@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/WangYihang/Platypus/internal/storage"
 )
@@ -178,38 +177,16 @@ func (r *Registry) describeDefault(m descriptorMeta) any {
 	return nil
 }
 
-// describeYAML returns the raw YAML value for m.Key if the cfg field
-// is non-zero, nil otherwise. nil signals "YAML didn't specify this —
-// fall back to default".
+// describeYAML returns the operator-supplied bootstrap value for
+// m.Key, or nil when the bootstrap layer doesn't carry one.
+//
+// Phase 1 had a YAML config file with overrides for several runtime
+// settings (channel, TTL, mesh discovery). Those YAML fields were
+// retired alongside viper — the bootstrap layer is now flag/env-only
+// and never carries runtime-policy values. This stub stays so the
+// admin Settings UI's payload schema doesn't churn; it always returns
+// nil now, which the UI renders as "default in code".
 func (r *Registry) describeYAML(m descriptorMeta) any {
-	if r.cfg == nil {
-		return nil
-	}
-	switch m.Key {
-	case KeyAuthAccessTokenTTL, KeyAuthRefreshTokenTTL:
-		// Retired in Phase-2 auth; YAML override no longer applies.
-		return nil
-	case KeyDistributorChannel:
-		if r.cfg.Distributor.Channel != "" {
-			return r.cfg.Distributor.Channel
-		}
-	case KeyDistributorPresignedTTL:
-		if r.cfg.Distributor.PresignedTTL != "" {
-			if d, err := time.ParseDuration(r.cfg.Distributor.PresignedTTL); err == nil && d > 0 {
-				return int64(d.Seconds())
-			}
-		}
-	case KeyMeshDiscoveryLAN:
-		// DiscoveryLAN is a bool — any explicit YAML value is
-		// indistinguishable from the zero value. We surface it
-		// unconditionally when cfg is non-nil so the UI shows the
-		// operator-intended default.
-		return r.cfg.Mesh.DiscoveryLAN
-	case KeyMeshDiscoveryIntervalSec:
-		if r.cfg.Mesh.DiscoveryInterval > 0 {
-			return int64(r.cfg.Mesh.DiscoveryInterval)
-		}
-	}
 	return nil
 }
 

@@ -2,140 +2,190 @@ package config_test
 
 import (
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/alecthomas/kong"
 
 	"github.com/WangYihang/Platypus/internal/utils/config"
 )
 
-// L2: the bundled config.docker.yml used to ship demo MinIO credentials
-// (platypus_admin / platypus_password) inline. Anyone copy-pasting the
-// file into production exposed their object store. Lock the example
-// to blank credentials and require operators to inject real ones via
-// env vars / a secret.
-func TestConfigDockerYAMLHasNoDemoCredentials(t *testing.T) {
-	repoRoot := repoRoot(t)
-	path := filepath.Join(repoRoot, "config.docker.yml")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	text := string(body)
-	for _, banned := range []string{
-		"platypus_admin",
-		"platypus_password",
-	} {
-		if strings.Contains(text, banned) {
-			t.Errorf("config.docker.yml ships demo credential %q; replace with empty string + env-var injection", banned)
-		}
-	}
-}
-
-// L2: when the distributor is enabled (Endpoint set), the artifact
-// store credentials MUST be non-empty. Letting the server boot with
-// blank creds and a configured endpoint silently disables artefact
-// uploads (or worse, lets unauthenticated reads through depending on
-// the bucket policy). Validation must be loud, at startup.
-func TestConfigValidate_DistributorRequiresStoreCredentials(t *testing.T) {
-	cfg := &config.Config{
-		Distributor: config.DistributorConfig{
-			Store: config.ArtifactStoreConfig{
-				Endpoint: "minio:9000",
-				Bucket:   "platypus-artifacts",
-				// AccessKeyID + SecretAccessKey deliberately empty.
-			},
-		},
-	}
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("Validate() with distributor endpoint set + blank credentials must return an error")
-	}
-	if !errors.Is(err, config.ErrMissingStoreCredentials) {
-		t.Fatalf("Validate() returned %v; want ErrMissingStoreCredentials in chain", err)
-	}
-}
-
-// L2: distributor disabled (Endpoint == "") → blank creds are fine,
-// validation must pass.
-func TestConfigValidate_DistributorDisabledIsOK(t *testing.T) {
-	cfg := &config.Config{
-		Distributor: config.DistributorConfig{
-			Store: config.ArtifactStoreConfig{
-				// Endpoint blank → distributor off, no creds needed.
-			},
-		},
-	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() with distributor disabled returned %v; want nil", err)
-	}
-}
-
-// L2: env-var fallback so docker-compose can inject MinIO creds via
-// PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID / _SECRET_ACCESS_KEY into
-// the running container without templating the YAML. Validation must
-// see the env-var values, not just the YAML.
-func TestConfigValidate_StoreCredentialsFromEnv(t *testing.T) {
-	t.Setenv("PLATYPUS_DISTRIBUTOR_STORE_ACCESS_KEY_ID", "from-env")
-	t.Setenv("PLATYPUS_DISTRIBUTOR_STORE_SECRET_ACCESS_KEY", "also-from-env")
-	cfg := &config.Config{
-		Distributor: config.DistributorConfig{
-			Store: config.ArtifactStoreConfig{
-				Endpoint: "minio:9000",
-				Bucket:   "platypus-artifacts",
-				// blank YAML — env should fill in.
-			},
-		},
-	}
-	if err := cfg.ApplyEnvOverrides(); err != nil {
-		t.Fatalf("ApplyEnvOverrides: %v", err)
-	}
-	if cfg.Distributor.Store.AccessKeyID != "from-env" {
-		t.Errorf("AccessKeyID = %q; want \"from-env\"", cfg.Distributor.Store.AccessKeyID)
-	}
-	if cfg.Distributor.Store.SecretAccessKey != "also-from-env" {
-		t.Errorf("SecretAccessKey = %q; want \"also-from-env\"", cfg.Distributor.Store.SecretAccessKey)
-	}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("Validate() after env override: %v", err)
-	}
-}
-
-// repoRoot walks up from the test's working dir until it finds go.mod.
-// Lets the test resolve the project root so config.docker.yml is found
-// regardless of `go test` invocation directory.
-func repoRoot(t *testing.T) string {
+// parseFromEnv runs kong against a dummy argv ([] = no flags) with
+// the supplied env, returning the populated Options + any error from
+// PostParse. Mirrors what cmd/platypus-server/main.go does, minus
+// the os.Exit on parse failure.
+func parseFromEnv(t *testing.T, env map[string]string) (*config.Options, error) {
 	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
+	for k, v := range env {
+		t.Setenv(k, v)
 	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not locate go.mod walking up from %s", dir)
-		}
-		dir = parent
+	var opts config.Options
+	parser, err := kong.New(&opts, kong.Vars{"version": "test"})
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	if _, err := parser.Parse(nil); err != nil {
+		return &opts, err
+	}
+	if err := opts.PostParse(); err != nil {
+		return &opts, err
+	}
+	return &opts, nil
+}
+
+// L0: external_addr is the only required field. A blank env should
+// fail at parse time so operators see the missing value loudly
+// instead of booting with an empty cert SAN.
+func TestParseRequiresExternalAddr(t *testing.T) {
+	_, err := parseFromEnv(t, nil)
+	if err == nil {
+		t.Fatal("parse with no env should fail; PLATYPUS_EXTERNAL_ADDR is required")
 	}
 }
 
-// Sanity that the test file even compiles against viper — config.Config
-// uses viper-style mapstructure tags, and we want a one-line check that
-// the env binding mirror works without a YAML file present.
-func TestViperUnmarshalShape(t *testing.T) {
-	v := viper.New()
-	v.Set("distributor.store.endpoint", "x")
-	var c config.Config
-	if err := v.Unmarshal(&c); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+// L1: minimal happy path — only external_addr set. Listen, data_dir,
+// distributor S3 region etc. all come from defaults / derivations.
+func TestParseMinimal(t *testing.T) {
+	opts, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "203.0.113.10:443",
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
 	}
-	if c.Distributor.Store.Endpoint != "x" {
-		t.Fatalf("expected endpoint=x, got %q", c.Distributor.Store.Endpoint)
+	if opts.ExternalAddr != "203.0.113.10:443" {
+		t.Errorf("ExternalAddr = %q", opts.ExternalAddr)
+	}
+	if opts.DataDir != "./data" {
+		t.Errorf("DataDir = %q; want ./data", opts.DataDir)
+	}
+	// Listen derives from external port when unset — same port both sides.
+	wantListen := "0.0.0.0:443"
+	if opts.Listen != wantListen {
+		t.Errorf("Listen = %q; want %q", opts.Listen, wantListen)
+	}
+	if opts.S3Region != "us-east-1" {
+		t.Errorf("S3Region default = %q; want us-east-1", opts.S3Region)
+	}
+}
+
+// L1: explicit --listen overrides the derive-from-external-port
+// logic, so an operator behind a reverse proxy can bind 127.0.0.1:8000
+// while announcing the public port to agents.
+func TestParseListenOverride(t *testing.T) {
+	opts, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "203.0.113.10:443",
+		"PLATYPUS_LISTEN":        "127.0.0.1:8000",
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if opts.Listen != "127.0.0.1:8000" {
+		t.Errorf("Listen = %q; want 127.0.0.1:8000", opts.Listen)
+	}
+}
+
+// L2: distributor enabled (S3Endpoint set) without credentials must
+// fail — letting the server boot with blank creds and a configured
+// endpoint silently disables artefact uploads (or worse).
+func TestS3RequiresCredentials(t *testing.T) {
+	_, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "x:443",
+		"PLATYPUS_S3_ENDPOINT":   "minio:9000",
+		"PLATYPUS_S3_BUCKET":     "platypus-artifacts",
+		// Credentials deliberately blank.
+	})
+	if err == nil {
+		t.Fatal("S3 endpoint set + blank credentials should fail validation")
+	}
+	if !errors.Is(err, config.ErrMissingS3Credentials) {
+		t.Fatalf("err = %v; want ErrMissingS3Credentials", err)
+	}
+}
+
+// L2: distributor disabled (no endpoint) — blank creds are fine.
+func TestS3DisabledIsOK(t *testing.T) {
+	if _, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "x:443",
+	}); err != nil {
+		t.Fatalf("parse with no S3 should succeed: %v", err)
+	}
+}
+
+// L2: secret-file fallback resolves at PostParse time. Lets a
+// docker/k8s deployment mount /run/secrets/* and inject the file path
+// via env, keeping the secret out of the process environment.
+func TestS3CredentialsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	akPath := filepath.Join(dir, "ak")
+	skPath := filepath.Join(dir, "sk")
+	if err := os.WriteFile(akPath, []byte("from-file-ak\n"), 0o600); err != nil {
+		t.Fatalf("write ak: %v", err)
+	}
+	if err := os.WriteFile(skPath, []byte("from-file-sk"), 0o600); err != nil {
+		t.Fatalf("write sk: %v", err)
+	}
+	opts, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR":               "x:443",
+		"PLATYPUS_S3_ENDPOINT":                 "minio:9000",
+		"PLATYPUS_S3_BUCKET":                   "platypus-artifacts",
+		"PLATYPUS_S3_ACCESS_KEY_ID_FILE":       akPath,
+		"PLATYPUS_S3_SECRET_ACCESS_KEY_FILE":   skPath,
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if opts.S3AccessKeyID != "from-file-ak" {
+		t.Errorf("AccessKeyID = %q; want from-file-ak (trailing newline trimmed)", opts.S3AccessKeyID)
+	}
+	if opts.S3SecretKey != "from-file-sk" {
+		t.Errorf("SecretKey = %q; want from-file-sk", opts.S3SecretKey)
+	}
+}
+
+// L2: derived paths all live under data_dir.
+func TestDerivedPaths(t *testing.T) {
+	opts, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "x:443",
+		"PLATYPUS_DATA_DIR":      "/var/lib/platypus",
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cases := []struct {
+		got, want string
+	}{
+		{opts.DBPath(), "/var/lib/platypus/platypus.db"},
+		{opts.RecordingDir(), "/var/lib/platypus/recordings"},
+		{opts.MeshPSKPath(), "/var/lib/platypus/mesh.psk"},
+		{opts.CertPath(), "/var/lib/platypus/cert.pem"},
+		{opts.KeyPath(), "/var/lib/platypus/key.pem"},
+		{opts.CAKEKPath(), "/var/lib/platypus/ca.kek"},
+		{opts.ReleasesDir(), "/var/lib/platypus/releases"},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("got %q; want %q", c.got, c.want)
+		}
+	}
+}
+
+// L2: external_addr without a port is rejected. Without a port the
+// derived listen would be malformed and the cert SAN logic would
+// have to guess — fail loudly instead.
+func TestExternalAddrMustBeHostPort(t *testing.T) {
+	_, err := parseFromEnv(t, map[string]string{
+		"PLATYPUS_EXTERNAL_ADDR": "no-port-here",
+	})
+	if err == nil {
+		t.Fatal("external_addr without :port should fail")
+	}
+	// Sanity that the underlying cause came from net.SplitHostPort
+	// rather than something else.
+	var addrErr *net.AddrError
+	if errors.As(err, &addrErr) {
+		// fine
+		return
 	}
 }

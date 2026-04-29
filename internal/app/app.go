@@ -19,7 +19,7 @@ import (
 // etc.) have been removed — their jobs live on v2 types now
 // (core.AgentLinkService, core.TunnelService once it lands, etc.).
 type App struct {
-	Config   *config.Config
+	Config   *config.Options
 	Sessions *session.Manager
 
 	// NotifyWebSocket fans topology / lifecycle events out to the
@@ -43,7 +43,7 @@ type App struct {
 }
 
 // New creates a fresh App with initialised managers.
-func New(cfg *config.Config) *App {
+func New(cfg *config.Options) *App {
 	return &App{
 		Config:   cfg,
 		Sessions: session.NewManager(),
