@@ -17,7 +17,9 @@ import (
 	meminfo "github.com/shirou/gopsutil/v4/mem"
 	procinfo "github.com/shirou/gopsutil/v4/process"
 
+	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
+	"github.com/WangYihang/Platypus/pkg/version"
 )
 
 // CollectSysInfo gathers a rich snapshot of the agent host: OS /
@@ -38,6 +40,13 @@ func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 		NumCpu:            uint32(runtime.NumCPU()),
 		NetworkInterfaces: map[string]string{},
 		SampledAtUnix:     time.Now().Unix(),
+		// Build identity travels on every refresh so server-side host
+		// rows stay accurate after a self-upgrade swap. Sourced from
+		// pkg/version (ldflags-injected at release time).
+		BuildVersion:    version.Version,
+		Commit:          version.Commit,
+		BuildDate:       version.Date,
+		ProtocolVersion: link.ProtocolVersion,
 	}
 
 	if hn, err := os.Hostname(); err == nil {

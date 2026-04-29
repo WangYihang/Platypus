@@ -36,7 +36,19 @@ type BootstrapV2Options struct {
 	ProjectCA    *x509.CertPool
 	Hostname     string
 	MachineID    string
-	AgentVersion string
+
+	// Build identity, sourced from pkg/version. Forwarded to the
+	// server so the host row records exactly which binary is on
+	// the box. All three are advisory; the server never gates
+	// security decisions on them.
+	BuildVersion string // semver
+	Commit       string // short git SHA
+	BuildDate    string // RFC3339
+
+	// Wire-protocol version this binary speaks. Sourced from
+	// internal/link.ProtocolVersion. The server compares against
+	// its MinSupportedProtocolVersion at enroll time.
+	ProtocolVersion uint32
 }
 
 // BootstrapV2 returns a live link.Session, running the full agent-
@@ -172,13 +184,16 @@ func enrollAndPersist(ctx context.Context, opts BootstrapV2Options) (*Identity, 
 	// the SysInfo RPC.
 	snap := CollectSysInfo(ctx)
 	res, err := Enroll(ctx, EnrollOptions{
-		ServerURL:    opts.EnrollURL,
-		PAT:          opts.PAT,
-		Hostname:     opts.Hostname,
-		MachineID:    opts.MachineID,
-		AgentVersion: opts.AgentVersion,
-		ProjectCA:    opts.ProjectCA,
-		SysInfo:      snap,
+		ServerURL:       opts.EnrollURL,
+		PAT:             opts.PAT,
+		Hostname:        opts.Hostname,
+		MachineID:       opts.MachineID,
+		BuildVersion:    opts.BuildVersion,
+		Commit:          opts.Commit,
+		BuildDate:       opts.BuildDate,
+		ProtocolVersion: opts.ProtocolVersion,
+		ProjectCA:       opts.ProjectCA,
+		SysInfo:         snap,
 	})
 	if err != nil {
 		return nil, err

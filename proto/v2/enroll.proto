@@ -27,7 +27,29 @@ message EnrollRequest {
   // over agent-reported fields.
   string hostname    = 3;
   string machine_id  = 4;
-  string agent_version = 5;
+
+  // Agent build identity. Populated from pkg/version at build time
+  // via -ldflags. The server records all three on the host row so
+  // operators can answer "exactly which build is on which box" and
+  // the upgrade flow can decide whether a binary push is needed.
+  //
+  // build_version is semver (e.g. "1.5.1"); commit is short SHA;
+  // build_date is RFC3339. They are advisory — the server never
+  // gates security decisions on them.
+  string build_version = 5;
+  string commit        = 6;
+  string build_date    = 7;
+
+  // Wire-protocol version the agent speaks. Single monotonic
+  // integer; bump when adding a new required field, changing
+  // framing, or any other breaking change. Adding optional fields
+  // or new StreamTypes does NOT bump it (proto3 + StreamReject
+  // already cover those gracefully).
+  //
+  // Server compares against MinSupportedProtocolVersion at enroll
+  // time. First-class clients always set this; absence (== 0) means
+  // a pre-versioning agent that the server may treat as v1.
+  uint32 protocol_version = 8;
 
   // Optional agent-reported system info, captured once at enroll
   // time and persisted alongside the host row so the Web UI has

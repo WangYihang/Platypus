@@ -1,0 +1,64 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// Stream protocol for STREAM_TYPE_AGENT_UPGRADE (server->agent,
+// command-only).
+//
+// Header metadata is AgentUpgradeRequest. After the receiver replies
+// StreamAccept, the agent runs the upgrade flow described in
+// docs/agent-upgrade.md and emits UpgradeProgress events on the
+// stream until it reaches a terminal phase (PHASE_EXITING on success
+// or PHASE_FAILED on any unrecoverable error). On PHASE_EXITING the
+// agent calls os.Exit(75) so the supervisor restarts it under the
+// new binary.
+//
+// The bytes of the new binary do NOT flow over this stream. The
+// agent fetches them from the distributor over HTTPS using its
+// existing mTLS client cert; trust comes from the detached Ed25519
+// signature of the manifest, verified with the public key baked
+// into the agent at build time (internal/agent.SigningPublicKey,
+// see Makefile AGENT_SIGNING_PUBKEY).
+
+message AgentUpgradeRequest {
+  // Target manifest version, semver. Empty string means "current
+  // head of `channel`" — useful for "always be on latest stable".
+  string target_version = 1;
+
+  // Distributor channel to pull from. Empty defaults to "stable".
+  string channel = 2;
+
+  // Free-form actor string written to the audit log so the host's
+  // upgrade history shows who triggered it (e.g. "user:alice" or
+  // "system:auto-upgrade-policy"). Server-controlled, never
+  // trusted from the agent side.
+  string actor = 3;
+}
+
+message UpgradeProgress {
+  enum Phase {
+    PHASE_UNSPECIFIED    = 0;
+    PHASE_FETCH_MANIFEST = 1;
+    PHASE_VERIFY_SIG     = 2;
+    PHASE_DOWNLOAD       = 3;
+    PHASE_VERIFY_SHA256  = 4;
+    PHASE_INSTALL        = 5;  // atomic rename, .bak created
+    PHASE_EXITING        = 6;  // terminal: agent will os.Exit(75)
+    PHASE_FAILED         = 7;  // terminal: error populated
+  }
+
+  Phase  phase       = 1;
+  uint64 bytes_done  = 2;
+  uint64 bytes_total = 3;
+
+  // Populated only on PHASE_FAILED. Short, machine-friendly code
+  // (e.g. "signature_mismatch", "sha256_mismatch", "download_eof",
+  // "rename_failed") plus a free-form message.
+  string error_code    = 4;
+  string error_message = 5;
+
+  // Resolved binary identity once known (after manifest fetch).
+  // Empty before PHASE_FETCH_MANIFEST completes.
+  string resolved_version = 6;
+  bytes  resolved_sha256  = 7; // 32 bytes
+}

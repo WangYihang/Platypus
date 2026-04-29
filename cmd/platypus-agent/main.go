@@ -25,6 +25,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/pkg/installbundle"
 	"github.com/WangYihang/Platypus/pkg/options"
+	"github.com/WangYihang/Platypus/pkg/version"
 )
 
 func main() {
@@ -41,7 +42,8 @@ func main() {
 	log.SetBaseFields(
 		"service", "platypus-agent",
 		"hostname", hostname,
-		"agent_version", "v2",
+		"build_version", version.Version,
+		"commit", version.Commit,
 	)
 
 	opts, err := options.InitOptions()
@@ -249,14 +251,17 @@ func main() {
 		)
 
 		sess, err := agent.BootstrapV2(ctx, agent.BootstrapV2Options{
-			IdentityDir:  identityDir,
-			ServerURL:    fmt.Sprintf("wss://%s/api/v1/agent/link", endpoint),
-			EnrollURL:    fmt.Sprintf("https://%s", endpoint),
-			PAT:          opts.Token,
-			ProjectCAPEM: caPEM,
-			ProjectCA:    caPool,
-			Hostname:     hostname,
-			AgentVersion: "v2",
+			IdentityDir:     identityDir,
+			ServerURL:       fmt.Sprintf("wss://%s/api/v1/agent/link", endpoint),
+			EnrollURL:       fmt.Sprintf("https://%s", endpoint),
+			PAT:             opts.Token,
+			ProjectCAPEM:    caPEM,
+			ProjectCA:       caPool,
+			Hostname:        hostname,
+			BuildVersion:    version.Version,
+			Commit:          version.Commit,
+			BuildDate:       version.Date,
+			ProtocolVersion: link.ProtocolVersion,
 		})
 		if err != nil {
 			// Approval gate: the agent is enrolled but the operator

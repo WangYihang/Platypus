@@ -76,10 +76,13 @@ func TestEnroll_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	id, err := Enroll(context.Background(), EnrollOptions{
-		ServerURL:    srv.URL,
-		PAT:          "plt_goodpat",
-		Hostname:     "unit-test",
-		AgentVersion: "v-test",
+		ServerURL:       srv.URL,
+		PAT:             "plt_goodpat",
+		Hostname:        "unit-test",
+		BuildVersion:    "1.5.1-test",
+		Commit:          "deadbee",
+		BuildDate:       "2025-01-01T00:00:00Z",
+		ProtocolVersion: 1,
 	})
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)

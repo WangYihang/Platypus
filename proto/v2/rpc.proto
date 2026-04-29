@@ -180,7 +180,13 @@ message SysInfoResponse {
 
   // Identity.
   string current_user     = 80; // e.g. "ubuntu", "root", "DESKTOP\\alice"
-  string agent_version    = 81;
+  // Agent build identity, mirrors EnrollRequest fields. Sent on
+  // every SysInfo refresh so the host row stays in sync across
+  // self-upgrades / manual binary swaps.
+  string build_version    = 81; // semver, from pkg/version.Version
+  string commit           = 83; // short git SHA, from pkg/version.Commit
+  string build_date       = 84; // RFC3339, from pkg/version.Date
+  uint32 protocol_version = 85; // mirrors EnrollRequest.protocol_version
   string machine_id       = 82;
 
   // Networking (rich).

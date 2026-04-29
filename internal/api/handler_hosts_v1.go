@@ -71,7 +71,11 @@ type hostResponse struct {
 	PrimaryIP       string `json:"primary_ip,omitempty"`
 	PrimaryMAC      string `json:"primary_mac,omitempty"`
 	BootTimeUnix    int64  `json:"boot_time_unix,omitempty"`
-	AgentVersion    string `json:"agent_version,omitempty"`
+
+	BuildVersion    string `json:"build_version,omitempty"`
+	Commit          string `json:"commit,omitempty"`
+	BuildDate       string `json:"build_date,omitempty"`
+	ProtocolVersion uint32 `json:"protocol_version,omitempty"`
 
 	MachineType   string `json:"machine_type,omitempty"`
 	ChassisType   string `json:"chassis_type,omitempty"`
@@ -108,7 +112,10 @@ func toHostResponse(h *storage.Host) hostResponse {
 		PrimaryIP:           h.PrimaryIP,
 		PrimaryMAC:          h.PrimaryMAC,
 		BootTimeUnix:        h.BootTimeUnix,
-		AgentVersion:        h.AgentVersion,
+		BuildVersion:        h.BuildVersion,
+		Commit:              h.Commit,
+		BuildDate:           h.BuildDate,
+		ProtocolVersion:     h.ProtocolVersion,
 		MachineType:         h.MachineType,
 		ChassisType:         h.ChassisType,
 		ProductVendor:       h.ProductVendor,

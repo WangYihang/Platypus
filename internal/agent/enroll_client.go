@@ -33,15 +33,26 @@ type EnrollOptions struct {
 	PAT                string
 	Hostname           string
 	MachineID          string
-	AgentVersion       string
 	ProjectCA          *x509.CertPool
 	InsecureSkipVerify bool
 	HTTPClient         *http.Client
 
+	// Build identity, sourced from pkg/version. All optional; the
+	// server treats them as advisory display fields.
+	BuildVersion string // semver
+	Commit       string // short git SHA
+	BuildDate    string // RFC3339
+
+	// Wire-protocol version this binary speaks. Sourced from
+	// internal/link.ProtocolVersion. Zero means the agent didn't
+	// advertise a version (pre-versioning binary); the server may
+	// treat that as v1 for compatibility decisions.
+	ProtocolVersion uint32
+
 	// SysInfo is an optional agent-collected system snapshot the
 	// server persists on the hosts row so the Web UI has something
 	// to show even when the agent is offline. Nil → server stores
-	// only the legacy hostname / machine_id / agent_version fields.
+	// only the legacy hostname / machine_id fields.
 	SysInfo *v2pb.SysInfoResponse
 }
 
@@ -88,11 +99,14 @@ func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
 	}
 
 	enrollReq := &v2pb.EnrollRequest{
-		Pat:          opts.PAT,
-		CsrPem:       csrPEM,
-		Hostname:     opts.Hostname,
-		MachineId:    opts.MachineID,
-		AgentVersion: opts.AgentVersion,
+		Pat:             opts.PAT,
+		CsrPem:          csrPEM,
+		Hostname:        opts.Hostname,
+		MachineId:       opts.MachineID,
+		BuildVersion:    opts.BuildVersion,
+		Commit:          opts.Commit,
+		BuildDate:       opts.BuildDate,
+		ProtocolVersion: opts.ProtocolVersion,
 	}
 	if s := opts.SysInfo; s != nil {
 		// Server persists these as advisory fields on the hosts row.

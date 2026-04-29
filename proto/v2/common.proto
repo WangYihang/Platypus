@@ -55,6 +55,21 @@ enum StreamType {
   // the per-chunk HTTP roundtrip the legacy
   // read-offset-by-offset path pays. server->agent.
   STREAM_TYPE_FILE_ARCHIVE = 10;
+
+  // server->agent. Command-only; the agent is told which manifest
+  // version to install on which channel and goes off to fetch the
+  // signed binary from the distributor over HTTPS. Header metadata
+  // is AgentUpgradeRequest. The stream body carries UpgradeProgress
+  // events from agent->server until the agent either reports
+  // success (and exits with EX_TEMPFAIL so the supervisor restarts
+  // it) or reports a terminal failure.
+  //
+  // Trust model: the agent verifies the manifest's detached
+  // Ed25519 signature against a public key baked into the agent
+  // binary at build time (internal/agent.SigningPublicKey, set by
+  // -ldflags). mTLS to the distributor is incidental — the
+  // signature is the source of trust, not the transport.
+  STREAM_TYPE_AGENT_UPGRADE = 11;
 }
 
 // StreamHeader is the first protobuf message on every new yamux

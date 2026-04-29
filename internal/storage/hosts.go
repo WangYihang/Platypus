@@ -43,7 +43,17 @@ type Host struct {
 	PrimaryIP       string
 	PrimaryMAC      string
 	BootTimeUnix    int64
-	AgentVersion    string
+
+	// Build identity (migration 000023). Populated from the agent's
+	// pkg/version at enroll time and refreshed on every SysInfo
+	// reconnect. All advisory; never gates security decisions.
+	// BuildVersion is semver, Commit is short git SHA, BuildDate is
+	// RFC3339. ProtocolVersion is a separate monotonic uint32 used
+	// for capability gating — see internal/link.ProtocolVersion.
+	BuildVersion    string
+	Commit          string
+	BuildDate       string
+	ProtocolVersion uint32
 
 	// --- Hardware / chassis classification (migration 000012). All
 	// optional; MachineType is the high-level category surfaced in
@@ -107,7 +117,11 @@ type HostIdentity struct {
 	PrimaryIP       string
 	PrimaryMAC      string
 	BootTimeUnix    int64
-	AgentVersion    string
+
+	BuildVersion    string
+	Commit          string
+	BuildDate       string
+	ProtocolVersion uint32
 
 	MachineType   string
 	ChassisType   string
@@ -138,7 +152,8 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        agent_id, arch, platform, platform_family, platform_version,
        kernel_version, cpu_model, num_cpu, mem_total_bytes,
        current_user, timezone, primary_ip, primary_mac,
-       boot_time_unix, agent_version,
+       boot_time_unix,
+       build_version, build_commit, build_date, protocol_version,
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
        approval_status, approval_decided_at, approval_decided_by, approval_reason`
@@ -224,7 +239,9 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			       platform_version = ?, kernel_version = ?, cpu_model = ?,
 			       num_cpu = ?, mem_total_bytes = ?, current_user = ?,
 			       timezone = ?, primary_ip = ?, primary_mac = ?,
-			       boot_time_unix = ?, agent_version = ?,
+			       boot_time_unix = ?,
+			       build_version = ?, build_commit = ?, build_date = ?,
+			       protocol_version = ?,
 			       machine_type = ?, chassis_type = ?, product_vendor = ?,
 			       product_name = ?, bios_vendor = ?, bios_version = ?,
 			       gpu_summary = ?
@@ -237,7 +254,9 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			nullIfInt(merged.NumCPU), nullIfInt64(merged.MemTotalBytes),
 			nullIfEmpty(merged.CurrentUser), nullIfEmpty(merged.Timezone),
 			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
-			nullIfInt64(merged.BootTimeUnix), nullIfEmpty(merged.AgentVersion),
+			nullIfInt64(merged.BootTimeUnix),
+			nullIfEmpty(merged.BuildVersion), nullIfEmpty(merged.Commit),
+			nullIfEmpty(merged.BuildDate), nullIfUint32(merged.ProtocolVersion),
 			nullIfEmpty(merged.MachineType), nullIfEmpty(merged.ChassisType),
 			nullIfEmpty(merged.ProductVendor), nullIfEmpty(merged.ProductName),
 			nullIfEmpty(merged.BIOSVendor), nullIfEmpty(merged.BIOSVersion),
@@ -283,7 +302,10 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		PrimaryIP:           ident.PrimaryIP,
 		PrimaryMAC:          ident.PrimaryMAC,
 		BootTimeUnix:        ident.BootTimeUnix,
-		AgentVersion:        ident.AgentVersion,
+		BuildVersion:        ident.BuildVersion,
+		Commit:              ident.Commit,
+		BuildDate:           ident.BuildDate,
+		ProtocolVersion:     ident.ProtocolVersion,
 		MachineType:         ident.MachineType,
 		ChassisType:         ident.ChassisType,
 		ProductVendor:       ident.ProductVendor,
@@ -311,12 +333,14 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		   agent_id, arch, platform, platform_family, platform_version,
 		   kernel_version, cpu_model, num_cpu, mem_total_bytes,
 		   current_user, timezone, primary_ip, primary_mac,
-		   boot_time_unix, agent_version,
+		   boot_time_unix,
+		   build_version, build_commit, build_date, protocol_version,
 		   machine_type, chassis_type, product_vendor, product_name,
 		   bios_vendor, bios_version, gpu_summary,
 		   approval_status, approval_decided_at, approval_decided_by, approval_reason)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		        ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?)`,
 		h.ID, h.ProjectID, nullIfEmpty(h.MachineID), h.Fingerprint,
@@ -328,7 +352,9 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfInt(h.NumCPU), nullIfInt64(h.MemTotalBytes),
 		nullIfEmpty(h.CurrentUser), nullIfEmpty(h.Timezone),
 		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
-		nullIfInt64(h.BootTimeUnix), nullIfEmpty(h.AgentVersion),
+		nullIfInt64(h.BootTimeUnix),
+		nullIfEmpty(h.BuildVersion), nullIfEmpty(h.Commit),
+		nullIfEmpty(h.BuildDate), nullIfUint32(h.ProtocolVersion),
 		nullIfEmpty(h.MachineType), nullIfEmpty(h.ChassisType),
 		nullIfEmpty(h.ProductVendor), nullIfEmpty(h.ProductName),
 		nullIfEmpty(h.BIOSVendor), nullIfEmpty(h.BIOSVersion),
@@ -392,8 +418,17 @@ func mergeHost(existing *Host, ident *HostIdentity) *Host {
 	if ident.BootTimeUnix != 0 {
 		h.BootTimeUnix = ident.BootTimeUnix
 	}
-	if ident.AgentVersion != "" {
-		h.AgentVersion = ident.AgentVersion
+	if ident.BuildVersion != "" {
+		h.BuildVersion = ident.BuildVersion
+	}
+	if ident.Commit != "" {
+		h.Commit = ident.Commit
+	}
+	if ident.BuildDate != "" {
+		h.BuildDate = ident.BuildDate
+	}
+	if ident.ProtocolVersion != 0 {
+		h.ProtocolVersion = ident.ProtocolVersion
 	}
 	if ident.MachineType != "" {
 		h.MachineType = ident.MachineType
@@ -518,7 +553,10 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		primaryIP       sql.NullString
 		primaryMAC      sql.NullString
 		bootTimeUnix    sql.NullInt64
-		agentVersion    sql.NullString
+		buildVersion    sql.NullString
+		buildCommit     sql.NullString
+		buildDate       sql.NullString
+		protocolVersion sql.NullInt64
 		machineType     sql.NullString
 		chassisType     sql.NullString
 		productVendor   sql.NullString
@@ -537,7 +575,8 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&agentID, &arch, &platform, &platformFamily, &platformVersion,
 		&kernelVersion, &cpuModel, &numCPU, &memTotalBytes,
 		&currentUser, &timezone, &primaryIP, &primaryMAC,
-		&bootTimeUnix, &agentVersion,
+		&bootTimeUnix,
+		&buildVersion, &buildCommit, &buildDate, &protocolVersion,
 		&machineType, &chassisType, &productVendor, &productName,
 		&biosVendor, &biosVersion, &gpuSummary,
 		&approvalStatus, &approvalAt, &approvalBy, &approvalReason,
@@ -593,8 +632,17 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if bootTimeUnix.Valid {
 		h.BootTimeUnix = bootTimeUnix.Int64
 	}
-	if agentVersion.Valid {
-		h.AgentVersion = agentVersion.String
+	if buildVersion.Valid {
+		h.BuildVersion = buildVersion.String
+	}
+	if buildCommit.Valid {
+		h.Commit = buildCommit.String
+	}
+	if buildDate.Valid {
+		h.BuildDate = buildDate.String
+	}
+	if protocolVersion.Valid {
+		h.ProtocolVersion = uint32(protocolVersion.Int64)
 	}
 	if machineType.Valid {
 		h.MachineType = machineType.String
@@ -757,4 +805,15 @@ func nullIfInt64(n int64) any {
 		return nil
 	}
 	return n
+}
+
+// nullIfUint32 mirrors nullIfInt for unsigned 32-bit columns. Zero is
+// a meaningful "not reported" sentinel for protocol_version (genuine
+// versions start at 1), so we fold it to NULL rather than persisting
+// it as a real zero.
+func nullIfUint32(n uint32) any {
+	if n == 0 {
+		return nil
+	}
+	return int64(n)
 }
