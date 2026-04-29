@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
+	"github.com/WangYihang/Platypus/pkg/installbundle"
 	"github.com/WangYihang/Platypus/pkg/options"
 )
 
@@ -43,6 +45,17 @@ func main() {
 	)
 
 	opts, err := options.InitOptions()
+	if err != nil {
+		printUsage(err)
+		os.Exit(1)
+	}
+
+	// Self-contained install bundle: when the user pasted a
+	// `pinst_<base64>` token, expand it into the equivalent (token +
+	// server + CA bytes) trio so the rest of bootstrap stays
+	// unchanged. Explicit --host / --port still win — they're an
+	// escape hatch for an admin debugging an unrelated server.
+	bundleCAOverride, err := expandInstallBundle(opts)
 	if err != nil {
 		printUsage(err)
 		os.Exit(1)
@@ -167,23 +180,33 @@ func main() {
 	// touches it yet.
 	_ = meshProjectID
 
-	caEnv := os.Getenv(agent.ProjectCAEnvVar)
-	caPool, err := agent.LoadProjectCA(caEnv)
-	if err != nil {
-		logger.Error("parse project CA env var", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
-	// Decode the env value once so both BootstrapV2 (raw PEM, for
-	// per-CA layout dispatch) and the enroll TLS pool (parsed pool)
-	// see the same bytes.
+	// Bundle-expanded CA bytes win over the env-var path: the bundle
+	// is the most specific source for "this enrollment's project CA".
+	// Falls back to PLATYPUS_PROJECT_CA when no bundle was supplied.
 	var caPEM []byte
-	if caEnv != "" {
-		decoded, decodeErr := base64.StdEncoding.DecodeString(caEnv)
-		if decodeErr != nil {
-			logger.Error("decode project CA env var", slog.String("error", decodeErr.Error()))
+	var caPool *x509.CertPool
+	if len(bundleCAOverride) > 0 {
+		caPEM = bundleCAOverride
+		caPool = x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caPEM) {
+			logger.Error("install bundle CA: no valid CERTIFICATE blocks")
 			os.Exit(1)
 		}
-		caPEM = decoded
+	} else {
+		caEnv := os.Getenv(agent.ProjectCAEnvVar)
+		caPool, err = agent.LoadProjectCA(caEnv)
+		if err != nil {
+			logger.Error("parse project CA env var", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		if caEnv != "" {
+			decoded, decodeErr := base64.StdEncoding.DecodeString(caEnv)
+			if decodeErr != nil {
+				logger.Error("decode project CA env var", slog.String("error", decodeErr.Error()))
+				os.Exit(1)
+			}
+			caPEM = decoded
+		}
 	}
 
 	// Bootstrap can run before the agent has any persisted identity
@@ -428,6 +451,52 @@ func projectIDFromURIs(uris []*url.URL) string {
 		return strings.TrimPrefix(u.Path, "/")
 	}
 	return ""
+}
+
+// expandInstallBundle inspects opts.Token for the `pinst_` prefix
+// and, when present, replaces opts.Token / opts.RemoteHost /
+// opts.RemotePort with the bundle's contents and returns the bundle's
+// CA PEM bytes for the caller to plug into the TLS path. Explicit
+// --host / --port flags win over the bundle's server endpoint.
+//
+// Returns nil bytes (and no error) when no bundle was supplied, so
+// the legacy code path stays a no-op.
+func expandInstallBundle(opts *options.Options) ([]byte, error) {
+	if !installbundle.Looks(opts.Token) {
+		return nil, nil
+	}
+	b, err := installbundle.Decode(opts.Token)
+	if err != nil {
+		return nil, fmt.Errorf("install bundle: %w", err)
+	}
+	opts.Token = b.PAT
+	if opts.RemoteHost == "" || opts.RemotePort == 0 {
+		// Bundle's server endpoint fills in only when the operator
+		// didn't override on the CLI / env var.
+		host, port, err := splitBundleHostPort(b.Server)
+		if err != nil {
+			return nil, fmt.Errorf("install bundle: %w", err)
+		}
+		opts.RemoteHost = host
+		opts.RemotePort = port
+	}
+	return []byte(b.CACertPEM), nil
+}
+
+// splitBundleHostPort splits a "host:port" string. Mirrors the
+// pkg/options helper but kept local here so the agent main.go has
+// no cross-package dep just for one trivial parse.
+func splitBundleHostPort(s string) (string, int, error) {
+	i := strings.LastIndex(s, ":")
+	if i <= 0 || i == len(s)-1 {
+		return "", 0, fmt.Errorf("expected host:port, got %q", s)
+	}
+	host := s[:i]
+	port, err := strconv.Atoi(s[i+1:])
+	if err != nil {
+		return "", 0, fmt.Errorf("port: %w", err)
+	}
+	return host, port, nil
 }
 
 // runPSKInstall handles `platypus-agent psk install <psk>`. Writes the

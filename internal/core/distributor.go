@@ -15,6 +15,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/core/artifact"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/pkg/installbundle"
 )
 
 // latestVersionSentinel lets callers request the current channel head
@@ -262,8 +263,14 @@ func (m *Manifest) findArtifact(os, arch string) *ManifestArtifact {
 
 // serveInstallScript handles GET /api/v1/install/<dl_id>.<secret>. It is the
 // public, auth-free counterpart to POST /api/v1/projects/:pid/install-
-// artifacts. On success the response body is a POSIX shell script the
-// admin pastes into `curl ... | sh`.
+// artifacts. The default response is a POSIX shell script the admin
+// pastes into `curl ... | sh`; with ?format=bundle the response is a
+// single-line `pinst_<base64>` token the user pastes straight into
+// `platypus-agent` for offline / scripted bootstrap.
+//
+// Either format consumes the install token exactly once. Choosing
+// the format at curl time means the admin doesn't have to mint two
+// separate install tokens for the two flows.
 func serveInstallScript(c *gin.Context) {
 	if enrollSvc == nil {
 		c.String(http.StatusServiceUnavailable, "server misconfigured: enrollment not enabled")
@@ -302,6 +309,23 @@ func serveInstallScript(c *gin.Context) {
 		return
 	default:
 		c.String(http.StatusInternalServerError, "install failed")
+		return
+	}
+
+	if c.Query("format") == "bundle" {
+		bundle, err := installbundle.Encode(installbundle.Bundle{
+			Server:    res.ServerEndpoint,
+			PAT:       res.PATPlaintext,
+			CACertPEM: res.ProjectCAPEM,
+			ProjectID: res.ProjectID,
+		})
+		if err != nil {
+			log.Error("distributor: encode install bundle: %s", err)
+			c.String(http.StatusInternalServerError, "encode install bundle")
+			return
+		}
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+		c.String(http.StatusOK, bundle)
 		return
 	}
 

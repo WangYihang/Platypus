@@ -65,6 +65,14 @@ type issueInstallResponse struct {
 	TargetOS       string    `json:"target_os,omitempty"`
 	TargetArch     string    `json:"target_arch,omitempty"`
 	InstallCommand string    `json:"install_command"` // "curl -fsSL ... | sh"
+	// BundleURL is the alternative single-string bootstrap form.
+	// `curl -fsSL <bundle_url>` returns a `pinst_<base64>` token the
+	// operator pastes straight into `platypus-agent`. Use when the
+	// target machine can't pipe to a shell or when the operator
+	// wants to inspect the bundle before running it. Same install
+	// token underneath — choosing the script path or the bundle
+	// path consumes it identically.
+	BundleURL string `json:"bundle_url"`
 }
 
 // installListItem is the redacted view. It covers both unused + consumed
@@ -156,7 +164,29 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		TargetOS:       res.TargetOS,
 		TargetArch:     res.TargetArch,
 		InstallCommand: cmd,
+		BundleURL:      h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
 	})
+}
+
+// distributorBase resolves the base URL the install endpoints sit
+// under. Same precedence chain as renderInstallCommand uses; pulled
+// out here so the bundle command renderer can share it.
+func (h *InstallTokensHandler) distributorBase(req *http.Request) string {
+	base := h.defaultDistributorBase
+	if base != "" {
+		return base
+	}
+	scheme := "http"
+	if fwd := req.Header.Get("X-Forwarded-Proto"); fwd != "" {
+		scheme = fwd
+	} else if req.TLS != nil {
+		scheme = "https"
+	}
+	host := req.Host
+	if fwd := req.Header.Get("X-Forwarded-Host"); fwd != "" {
+		host = fwd
+	}
+	return scheme + "://" + host
 }
 
 // renderInstallCommand builds the curl command we return to the admin.

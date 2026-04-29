@@ -760,6 +760,11 @@ export interface IssueInstallResponse {
     target_os?: string;
     target_arch?: string;
     install_command: string; // "curl -fsSL ... | sh"
+    // bundle_url returns a pinst_<base64> self-contained token (when
+    // curled). Use when the target can't pipe to a shell — the user
+    // pastes the resulting token straight into `platypus-agent`.
+    // Consumes the same single-use install token as install_command.
+    bundle_url: string;
 }
 
 export interface IssueInstallRequest {
