@@ -28,10 +28,6 @@ go.work.sum
 build/
 dist/
 
-# docker compose bind-mount targets
-data/
-.publisher/
-
 # Stray binaries at repo root left by `go build ./...` — the
 # Makefile puts proper builds under build/, but ad-hoc local
 # invocations drop them here.
