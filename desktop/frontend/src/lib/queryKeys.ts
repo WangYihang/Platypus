@@ -23,6 +23,10 @@ export const qk = {
         ["hostSessions", projectId, hostId] as const,
     hostProcesses: (projectId: string, hostId: string) =>
         ["hostProcesses", projectId, hostId] as const,
+    pendingHosts: (projectId: string) =>
+        ["pendingHosts", projectId] as const,
+    pendingHostsCount: (projectId: string) =>
+        ["pendingHostsCount", projectId] as const,
 
     // --- Project-scoped lists -------------------------------------
     activities: (projectId: string, opts: ListActivitiesOpts) =>

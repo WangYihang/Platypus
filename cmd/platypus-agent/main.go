@@ -44,18 +44,68 @@ func main() {
 
 	opts, err := options.InitOptions()
 	if err != nil {
-		logger.Error("parse options", slog.String("error", err.Error()))
+		printUsage(err)
 		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	identityDir := agent.ResolveIdentityDir(opts.DataDir)
+
+	// Subcommand dispatch — `psk install` and `psk show` are
+	// one-shot helpers that exit before we touch network state.
+	switch opts.Sub {
+	case options.SubcommandPSKInstall:
+		os.Exit(runPSKInstall(logger, opts, identityDir))
+	case options.SubcommandPSKShow:
+		os.Exit(runPSKShow(logger, opts, identityDir))
+	}
+
+	if opts.Token == "" {
+		// On a fresh install the token is required; on a re-run with
+		// a persisted identity we tolerate an empty token (loadOrEnroll
+		// will skip the redeem step and reuse the cached cert).
+		if !agent.HasPersistedIdentity(identityDir) {
+			printUsage(options.ErrMissingToken)
+			os.Exit(1)
+		}
+	}
+	if opts.RemoteHost == "" || opts.RemotePort == 0 {
+		// Same logic for server endpoint: tolerate missing only
+		// when persisted state lets us skip enrollment.
+		if !agent.HasPersistedIdentity(identityDir) {
+			printUsage(options.ErrMissingServer)
+			os.Exit(1)
+		}
+	}
+
 	state := agent.Init()
-	identityDir := agent.ResolveIdentityDir(opts.IdentityDir)
-	meshPSKFile := opts.MeshPSKFile
+	pskPath, err := agent.ResolvePSKFile(agent.PSKResolveOptions{
+		CLIPath:   opts.MeshPSKFile,
+		EnvFile:   os.Getenv(options.EnvMeshPSKFile),
+		EnvInline: os.Getenv(options.EnvMeshPSK),
+		DataDir:   identityDir,
+	})
+	if err != nil {
+		logger.Error("resolve mesh PSK", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	meshPSKFile := pskPath
 	meshPeers := append([]string(nil), opts.MeshPeers...)
-	meshProjectID := opts.MeshProjectID
+
+	// Project ID is derived from the enrolled cert when an identity
+	// already exists on disk; fresh installs leave it empty until
+	// after BootstrapV2, at which point the next process restart
+	// picks it up.
+	var meshProjectID string
+	if id, err := agent.LoadIdentity(identityDir); err == nil && id != nil {
+		if block, _ := pem.Decode(id.CertPEM); block != nil {
+			if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+				meshProjectID = projectIDFromURIs(cert.URIs)
+			}
+		}
+	}
 	// Mesh state lives under the active enrollment's per-CA subdir.
 	// Migrate any pre-multi-CA flat layout so the active pointer
 	// becomes meaningful before we read it.
@@ -78,6 +128,12 @@ func main() {
 		}
 	}
 	endpoint := fmt.Sprintf("%s:%d", opts.RemoteHost, opts.RemotePort)
+	if opts.RemoteHost == "" {
+		// Fall back to whatever the persisted identity dir knows
+		// about — the v2 dial path will retry-with-cached behavior
+		// once an identity is on disk.
+		endpoint = ""
+	}
 	logger.Info("starting agent",
 		slog.String("endpoint", endpoint),
 		slog.String("token", opts.Token),
@@ -358,4 +414,86 @@ func agentIDFromURIs(uris []*url.URL) string {
 		return strings.TrimPrefix(u.Path, "/")
 	}
 	return ""
+}
+
+// projectIDFromURIs is the project_id companion to agentIDFromURIs.
+// Lets the agent side derive the project from the enrolled cert
+// without an extra config flag — the same data the server side
+// already pins via mTLS chain validation.
+func projectIDFromURIs(uris []*url.URL) string {
+	for _, u := range uris {
+		if u == nil || u.Scheme != "platypus" || u.Host != "project" {
+			continue
+		}
+		return strings.TrimPrefix(u.Path, "/")
+	}
+	return ""
+}
+
+// runPSKInstall handles `platypus-agent psk install <psk>`. Writes the
+// PSK to <data-dir>/mesh.psk (or --psk-file when overridden) and
+// exits. Returns the desired process exit code.
+func runPSKInstall(logger *slog.Logger, opts *options.Options, dataDir string) int {
+	target := opts.MeshPSKFile
+	if target == "" {
+		target = agent.DefaultPSKTarget(dataDir)
+	}
+	if err := agent.InstallPSK(target, opts.PSKArg); err != nil {
+		logger.Error("psk install failed", slog.String("error", err.Error()))
+		return 1
+	}
+	logger.Info("psk installed",
+		slog.String("path", target),
+		slog.String("hint", "subsequent agent runs will pick this up automatically"),
+	)
+	return 0
+}
+
+// runPSKShow handles `platypus-agent psk show`. Prints the resolved
+// PSK file path and whether the file exists. Does NOT print the PSK
+// itself — the file's contents stay on disk under 0600.
+func runPSKShow(logger *slog.Logger, opts *options.Options, dataDir string) int {
+	resolved, err := agent.ResolvePSKFile(agent.PSKResolveOptions{
+		CLIPath:   opts.MeshPSKFile,
+		EnvFile:   os.Getenv(options.EnvMeshPSKFile),
+		EnvInline: os.Getenv(options.EnvMeshPSK),
+		DataDir:   dataDir,
+	})
+	if err != nil {
+		logger.Error("resolve psk", slog.String("error", err.Error()))
+		return 1
+	}
+	if resolved == "" {
+		fmt.Fprintln(os.Stdout, "no PSK installed; mesh participation is disabled")
+		fmt.Fprintln(os.Stdout, "to install one, run: platypus-agent psk install <psk>")
+		return 0
+	}
+	fmt.Fprintln(os.Stdout, resolved)
+	return 0
+}
+
+// printUsage writes a hand-rolled help block to stderr. Avoids the
+// stdlib flag dump (which would leak hidden flags) and gives a
+// concrete pointer at the env vars / subcommands.
+func printUsage(err error) {
+	fmt.Fprintln(os.Stderr, "platypus-agent — connect a host to a Platypus server")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  platypus-agent <install-token>")
+	fmt.Fprintln(os.Stderr, "  platypus-agent psk install <psk>")
+	fmt.Fprintln(os.Stderr, "  platypus-agent psk show")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Environment:")
+	fmt.Fprintln(os.Stderr, "  "+options.EnvInstallToken+"   alternative to positional install-token")
+	fmt.Fprintln(os.Stderr, "  "+options.EnvServerAddr+"           server host:port; alternative to --host/--port")
+	fmt.Fprintln(os.Stderr, "  "+options.EnvDataDir+"        writable state dir (default: ~/.platypus/agent)")
+	fmt.Fprintln(os.Stderr, "  "+options.EnvMeshPSKFile+"   absolute path to mesh PSK")
+	fmt.Fprintln(os.Stderr, "  "+options.EnvMeshPSK+"        inline mesh PSK contents (overrides "+options.EnvMeshPSKFile+")")
+	fmt.Fprintln(os.Stderr, "  PLATYPUS_PROJECT_CA       base64-encoded project CA cert (set by install scripts)")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "PSK resolution: "+options.PSKResolutionOrder)
+	if err != nil {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Error:", err.Error())
+	}
 }

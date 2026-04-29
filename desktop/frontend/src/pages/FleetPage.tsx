@@ -8,10 +8,11 @@ import PageShell from "../components/PageShell";
 import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { icons } from "../lib/icons";
-import { listHosts } from "../lib/api";
+import { listHosts, pendingApprovalCount } from "../lib/api";
 import { usePreference } from "../lib/preferences";
 import { qk } from "../lib/queryKeys";
 import { isOnline } from "../lib/time";
+import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
@@ -55,6 +56,16 @@ export default function FleetPage() {
     const { data: hosts } = useQuery({
         queryKey: qk.hosts(project.id),
         queryFn: () => listHosts(project.id),
+    });
+
+    // Pending approvals badge: cheap COUNT(*) endpoint that polls every
+    // 10s. Surfaced as a click-through pill in the StatusPills strip
+    // when non-zero. Hidden when zero so the steady-state UI stays
+    // uncluttered. The full list lives at /fleet/approvals.
+    const { data: pendingCount = 0 } = useQuery({
+        queryKey: qk.pendingHostsCount(project.id),
+        queryFn: () => pendingApprovalCount(project.id),
+        refetchInterval: 10_000,
     });
     const counts = useMemo(() => {
         const list = hosts ?? [];
@@ -118,6 +129,17 @@ export default function FleetPage() {
     const EnrollIcon = icons.enrollment;
     const actions = (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {pendingCount > 0 && (
+                <Button asChild variant="outline" size="sm" data-testid="fleet-pending-approvals">
+                    <Link
+                        to={`/projects/${project.slug}/fleet/approvals`}
+                        title="Hosts awaiting admin approval — agents can't open links until approved"
+                    >
+                        <ShieldAlert className="size-3.5" />
+                        {pendingCount} pending
+                    </Link>
+                </Button>
+            )}
             <Button asChild variant="outline" size="sm">
                 <Link to={`/projects/${project.slug}/fleet/enroll`}>
                     <EnrollIcon className="size-3.5" />

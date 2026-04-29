@@ -118,6 +118,7 @@ const installSchema = z.object({
     target_os: z.string().optional(),
     target_arch: z.string().optional(),
     ttl_seconds: z.number().int().positive().optional(),
+    auto_approve: z.boolean().optional(),
 });
 type InstallFormValues = z.infer<typeof installSchema>;
 
@@ -530,7 +531,7 @@ function IssueInstallDialog({
         // (ttl_seconds, max_uses) where a typo is silently accepted
         // until the dialog is dismissed.
         mode: "onBlur",
-        defaultValues: { server_endpoint: "", target_os: "", target_arch: "" },
+        defaultValues: { server_endpoint: "", target_os: "", target_arch: "", auto_approve: false },
     });
 
     // Live (os, arch) list from the active channel's manifest. Drives
@@ -645,6 +646,39 @@ function IssueInstallDialog({
                                             : "Default 300 (= 5m)."}
                                     </FormDescription>
                                     <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="auto_approve"
+                            render={({ field }) => (
+                                <FormItem
+                                    className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3"
+                                >
+                                    <FormControl>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!field.value}
+                                            onChange={(e) => field.onChange(e.target.checked)}
+                                            onBlur={field.onBlur}
+                                            ref={field.ref}
+                                            name={field.name}
+                                            style={{ marginTop: 4 }}
+                                        />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                        <FormLabel className="cursor-pointer">
+                                            Skip admin approval (automation)
+                                        </FormLabel>
+                                        <FormDescription>
+                                            When off (default), the host that uses this install link
+                                            lands in <Mono>pending</Mono> and an admin has to click
+                                            Approve on Fleet → Approvals before the agent can open a
+                                            link. Turn on for unattended flows (Ansible, CI,
+                                            cloud-init) where there's no human-in-the-loop step.
+                                        </FormDescription>
+                                    </div>
                                 </FormItem>
                             )}
                         />

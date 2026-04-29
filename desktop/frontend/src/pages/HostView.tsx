@@ -26,6 +26,20 @@ import Mono from "../components/Mono";
 import RefreshButton from "../components/RefreshButton";
 import StatusDot from "../components/StatusDot";
 import StatusPill from "../components/StatusPill";
+
+// ApprovalStatusPill renders the host's approval_status on the host
+// detail KPI strip. Each status maps to a tone in the existing
+// vocabulary so it visually clusters with the other badges (online /
+// offline / fingerprint fallback) on the same row.
+function ApprovalStatusPill({ status }: { status: "pending" | "approved" | "rejected" }) {
+    if (status === "approved") {
+        return <StatusPill tone="success">approved</StatusPill>;
+    }
+    if (status === "rejected") {
+        return <StatusPill tone="danger">rejected</StatusPill>;
+    }
+    return <StatusPill tone="warning">pending approval</StatusPill>;
+}
 import PageHeader from "../components/PageHeader";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
@@ -506,6 +520,10 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                         },
                         { label: "first seen", value: fromNow(host.first_seen_at) },
                         { label: "last seen", value: fromNow(host.last_seen_at) },
+                        {
+                            label: "approval",
+                            value: <ApprovalStatusPill status={host.approval_status} />,
+                        },
                     ]}
                 />
             </Card>

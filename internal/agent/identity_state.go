@@ -114,6 +114,23 @@ func WriteActive(root, fingerprint string) error {
 	return os.Rename(tmp, activePath(root))
 }
 
+// HasPersistedIdentity reports whether the agent has a usable
+// identity already on disk under root. Cheap stat-only check used by
+// main.go to decide whether the user needs to supply an install token
+// and server endpoint on the command line, or whether a re-run can
+// reuse the cached cert + a server endpoint baked into the active
+// pointer's metadata.
+func HasPersistedIdentity(root string) bool {
+	fp, err := ReadActive(root)
+	if err != nil || fp == "" {
+		return false
+	}
+	if _, err := LoadIdentity(root); err == nil {
+		return true
+	}
+	return false
+}
+
 // ReadActive returns the active fingerprint stored under root, or
 // the empty string when no pointer has been written yet (so first-
 // boot callers can branch on that instead of an error).

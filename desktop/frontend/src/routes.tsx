@@ -26,6 +26,7 @@ const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const RecordingsPage = lazy(() => import("./pages/RecordingsPage"));
 const TransfersPage = lazy(() => import("./pages/TransfersPage"));
 const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
+const ApprovalsPage = lazy(() => import("./pages/ApprovalsPage"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
 const ProjectSettings = lazy(() => import("./pages/ProjectSettings"));
 const Preferences = lazy(() => import("./pages/Preferences"));
@@ -174,6 +175,7 @@ export const routeTree: RouteObject[] = [
                     // /enrollment path below redirects here so old
                     // bookmarks / docs / e2e specs keep working.
                     { path: "fleet/enroll", element: withSuspense(<EnrollmentPage />) },
+                    { path: "fleet/approvals", element: withSuspense(<ApprovalsPage />) },
                     {
                         // Default landing tab is `files` — the R3
                         // VS-Code-style HostView treats the file

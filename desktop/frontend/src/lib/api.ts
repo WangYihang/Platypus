@@ -57,6 +57,16 @@ export interface Host {
     bios_vendor?: string;
     bios_version?: string;
     gpu_summary?: string;
+
+    // Approval gate (migration 000022). Every fresh enrollment lands
+    // in `pending` unless the redeemed PAT carried auto_approve.
+    // Admins flip via POST /hosts/:hid/approve|reject. Agents in
+    // `pending` can't open a link until the flag flips to `approved`,
+    // and `rejected` agents are turned away with 403.
+    approval_status: "pending" | "approved" | "rejected";
+    approval_decided_at?: string;
+    approval_decided_by?: string;
+    approval_reason?: string;
 }
 
 // HostSysInfo mirrors v2pb.SysInfoResponse — a full, live snapshot
@@ -241,6 +251,45 @@ export async function removeProjectMember(pid: string, userID: string): Promise<
 export async function listHosts(pid: string): Promise<Host[]> {
     const j = await authJSON<{ hosts: Host[] }>(`/api/v1/projects/${pid}/hosts`);
     return j.hosts;
+}
+
+// listPendingApprovals returns hosts in the project still awaiting
+// admin approval, oldest first. Drives the per-project approval drawer.
+export async function listPendingApprovals(pid: string): Promise<Host[]> {
+    const j = await authJSON<{ hosts: Host[] }>(`/api/v1/projects/${pid}/hosts/pending`);
+    return j.hosts;
+}
+
+// pendingApprovalCount is the cheap COUNT(*) the top-bar badge polls.
+// Cheaper than listPendingApprovals because the response is a single
+// integer rather than the full host rows.
+export async function pendingApprovalCount(pid: string): Promise<number> {
+    const j = await authJSON<{ pending: number }>(
+        `/api/v1/projects/${pid}/hosts/pending/count`,
+    );
+    return j.pending;
+}
+
+// approveHost flips a pending (or rejected — admins can change their
+// mind) host to `approved`. Reason is free-form and lands in the audit
+// log; pass empty string for "no comment".
+export async function approveHost(pid: string, hid: string, reason: string): Promise<void> {
+    await authFetch(`/api/v1/projects/${pid}/hosts/${hid}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+    });
+}
+
+// rejectHost flips a host to `rejected`. The agent's link gate refuses
+// the next reconnect; an in-flight link stays up until it drops on its
+// own. For a hard kick, pair this with a cert revocation.
+export async function rejectHost(pid: string, hid: string, reason: string): Promise<void> {
+    await authFetch(`/api/v1/projects/${pid}/hosts/${hid}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+    });
 }
 
 export async function getHost(pid: string, hid: string): Promise<Host> {
@@ -697,6 +746,7 @@ export interface InstallArtifactListItem {
     consumed_at?: string;
     consumed_ip?: string;
     consumed_pat_id?: string;
+    auto_approve?: boolean;
     revoked: boolean;
     revoked_at?: string;
     status: "pending" | "consumed" | "expired" | "revoked";
@@ -720,6 +770,12 @@ export interface IssueInstallRequest {
     pat_ttl_seconds?: number;
     pat_binding_machine_id?: string;
     pat_description?: string;
+    // Pre-authorize the host that redeems this install link. When
+    // false (the default), the host enrolls in `pending` and an admin
+    // has to click Approve on the Fleet → Approvals page before the
+    // agent can open a link. Use true for automation flows where
+    // there's no human-in-the-loop step.
+    auto_approve?: boolean;
 }
 
 export async function listInstallArtifacts(pid: string, includeInactive = false): Promise<InstallArtifactListItem[]> {
