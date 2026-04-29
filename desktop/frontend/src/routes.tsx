@@ -25,7 +25,7 @@ const AuditPage = lazy(() => import("./pages/AuditPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const RecordingsPage = lazy(() => import("./pages/RecordingsPage"));
 const TransfersPage = lazy(() => import("./pages/TransfersPage"));
-const EnrollmentPage = lazy(() => import("./pages/EnrollmentPage"));
+const EnrollmentPage = lazy(() => import("./pages/enrollment/EnrollmentPage"));
 const ApprovalsPage = lazy(() => import("./pages/ApprovalsPage"));
 const MembersRoute = lazy(() => import("./routes/MembersRoute"));
 const ProjectSettings = lazy(() => import("./pages/ProjectSettings"));

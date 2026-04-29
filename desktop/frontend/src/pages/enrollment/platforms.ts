@@ -4,6 +4,19 @@
 // so the wizard doesn't have to depend on the management-page module
 // just to pick up the priority lists.
 
+import { InstallPlatform } from "../../lib/api";
+
+// PlatformsState tracks the install-target picker's lifecycle so the
+// UI can disable the dropdown while loading and surface the right
+// empty / error hint without conflating "no manifest published" with
+// "request failed". Same shape used by the management-page picker
+// and the four-step wizard.
+export type PlatformsState =
+    | { status: "loading" }
+    | { status: "ready"; platforms: InstallPlatform[]; channel: string }
+    | { status: "empty"; channel: string }
+    | { status: "error"; message: string };
+
 // Display order for the install-target picker. OSes a deployer is most
 // likely to pick come first; within an OS the common 64-bit archs lead
 // and the long tail (mips, riscv, …) trails. Anything not in the list

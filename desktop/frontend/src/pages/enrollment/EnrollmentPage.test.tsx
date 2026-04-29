@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-import { renderWithQueryClient } from "../testing/renderWithQueryClient";
+import { renderWithQueryClient } from "../../testing/renderWithQueryClient";
 
 // EnrollmentPage's user-facing copy was rewritten to drop the bare "PAT"
 // acronym and the "access token" framing. The token tab now reads as
@@ -19,7 +19,7 @@ import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 //   4. The issuance dialog title uses the new noun.
 //   5. The "issued" success dialog uses the new noun.
 
-vi.mock("../layout/ProjectShell", () => ({
+vi.mock("../../layout/ProjectShell", () => ({
     useCurrentProject: () => ({
         id: "p1",
         slug: "test-project",
@@ -27,7 +27,7 @@ vi.mock("../layout/ProjectShell", () => ({
     }),
 }));
 
-vi.mock("../lib/api", () => ({
+vi.mock("../../lib/api", () => ({
     listInstallArtifacts: vi.fn().mockResolvedValue([]),
     listInstallPlatforms: vi.fn().mockResolvedValue({
         channel: "stable",
