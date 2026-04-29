@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -25,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -188,23 +190,46 @@ func main() {
 	// convention under <data_dir>. When both files exist they're used
 	// directly; otherwise we self-issue a leaf from the project CA
 	// (the only chain agents with PLATYPUS_PROJECT_CA pinned will
-	// trust). This dual scheme lets `docker compose up` Just Work
-	// without mkcert while still letting an operator drop in their
-	// own corporate-CA leaf without code changes.
+	// trust) and persist the result to disk so the next startup
+	// reuses the same fingerprint — without persistence every restart
+	// would mint a new leaf and invalidate every browser's "trust this
+	// cert" exception.
 	certPath, keyPath := cfg.CertPath(), cfg.KeyPath()
+	wantHosts := certHostsForSAN(cfg)
+	// SAN drift: if the operator changed --external-addr after the
+	// previous run, the on-disk cert no longer covers the new host.
+	// Drop the stale leaf so the auto-issue path below mints a fresh
+	// one with the right SAN. We don't try to preserve user-provided
+	// certs here — operators bringing their own cert set
+	// PLATYPUS_TLS_CERT_FILE explicitly (future) and shouldn't drop
+	// PEMs into the auto-managed path.
+	if fileExists(certPath) && fileExists(keyPath) && !certCoversHosts(certPath, wantHosts) {
+		log.L.Info("ingress_tls_cert_san_mismatch_reissue",
+			"path", certPath,
+			"want_hosts", wantHosts,
+			"hint", "external-addr changed since last run; the auto-managed leaf will be re-issued",
+		)
+		_ = os.Remove(certPath)
+		_ = os.Remove(keyPath)
+	}
 	customCert := fileExists(certPath) && fileExists(keyPath)
 	certSource := ingress.CertSource{}
 	if customCert {
 		certSource.CertFile = certPath
 		certSource.KeyFile = keyPath
 	} else {
-		if issued, err := issueIngressLeafFromProjectCA(ctx, pkiSvc, cfg); err != nil {
+		if issued, certPEM, keyPEM, err := issueIngressLeafFromProjectCA(ctx, pkiSvc, cfg); err != nil {
 			log.L.Warn("ingress_tls_autoissue_failed",
 				"error", err.Error(),
 				"hint", "falling back to stand-alone self-signed cert; agents that pin PLATYPUS_PROJECT_CA will fail the handshake",
 			)
+			// Standalone self-signed fallback writes its own PEM to
+			// disk through certSource.PersistTo so that path also
+			// survives restarts.
+			certSource.PersistTo = ingress.PersistTarget{CertPath: certPath, KeyPath: keyPath}
 		} else {
 			certSource.InMemoryCert = issued
+			persistAutoIssuedLeaf(certPath, keyPath, certPEM, keyPEM)
 		}
 	}
 	tlsCfg, err := ingress.BuildTLSConfig(certSource, ingress.DefaultProtocols)
@@ -212,6 +237,7 @@ func main() {
 		log.Error("ingress: build tls config: %v", err)
 		os.Exit(1)
 	}
+	logIngressCertFingerprint(tlsCfg)
 
 	// Accept client certificates when presented, but don't reject
 	// connections that lack them — browsers and the REST API still
@@ -630,7 +656,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 // misconfigured) — the caller logs the error and falls back to the
 // stand-alone self-signed leaf. Hosts for the SAN come from
 // cfg.ExternalAddr (split off the port).
-func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg *config.Options) (*tls.Certificate, error) {
+func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg *config.Options) (*tls.Certificate, string, string, error) {
 	projectID := cfg.MeshProjectID
 	if projectID == "" {
 		projectID = storage.DefaultProjectID
@@ -638,35 +664,138 @@ func issueIngressLeafFromProjectCA(ctx context.Context, pkiSvc *pki.Service, cfg
 	// EnsureCA first so the private bits exist before the IssueServerCert
 	// path tries to unseal them. createdBy is the seeded system user.
 	if _, err := pkiSvc.EnsureCA(ctx, projectID, storage.SystemUserID); err != nil {
-		return nil, fmt.Errorf("ensure project CA: %w", err)
+		return nil, "", "", fmt.Errorf("ensure project CA: %w", err)
 	}
+	hosts := certHostsForSAN(cfg)
+	if len(hosts) == 0 {
+		return nil, "", "", errors.New("--external-addr is empty")
+	}
+	res, err := pkiSvc.IssueServerCert(ctx, projectID, hosts, storage.SystemUserID)
+	if err != nil {
+		return nil, "", "", err
+	}
+	leaf, err := tls.X509KeyPair([]byte(res.CertPEM), []byte(res.KeyPEM))
+	if err != nil {
+		return nil, "", "", fmt.Errorf("parse self-issued leaf: %w", err)
+	}
+	return &leaf, res.CertPEM, res.KeyPEM, nil
+}
+
+// certHostsForSAN returns the SAN list the auto-issued ingress leaf
+// should cover: cfg.ExternalAddr's host plus the loopback names so the
+// `curl https://localhost:9443/...` bootstrap path and the `curl
+// https://127.0.0.1:.../api/v1/install/...` path verify against the
+// same leaf without the operator having to line up hostnames with
+// public_addr. Returns an empty slice when ExternalAddr is unset.
+func certHostsForSAN(cfg *config.Options) []string {
 	addr := cfg.ExternalAddr
 	if addr == "" {
-		return nil, errors.New("--external-addr is empty")
+		return nil
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr // no port — treat the whole string as the hostname
 	}
 	hosts := []string{host}
-	// Always add localhost + loopback so the `curl -fsSL http://localhost:<port>/api/v1/install/...`
-	// bootstrap path, and plain `curl https://127.0.0.1:<port>/...`, both
-	// verify against the same leaf without the operator having to line up
-	// hostnames with public_addr.
 	for _, extra := range []string{"localhost", "127.0.0.1", "::1"} {
 		if extra != host {
 			hosts = append(hosts, extra)
 		}
 	}
-	res, err := pkiSvc.IssueServerCert(ctx, projectID, hosts, storage.SystemUserID)
-	if err != nil {
-		return nil, err
+	return hosts
+}
+
+// certCoversHosts returns true iff the leaf cert at certPath covers
+// every host in `wants` via DNSNames or IPAddresses. Any read / parse
+// failure also returns false so the caller re-issues — better to mint
+// a fresh cert than to keep serving an unparseable one.
+func certCoversHosts(certPath string, wants []string) bool {
+	if len(wants) == 0 {
+		return true
 	}
-	leaf, err := tls.X509KeyPair([]byte(res.CertPEM), []byte(res.KeyPEM))
+	pemBytes, err := os.ReadFile(certPath)
 	if err != nil {
-		return nil, fmt.Errorf("parse self-issued leaf: %w", err)
+		return false
 	}
-	return &leaf, nil
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return false
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	have := make(map[string]struct{}, len(leaf.DNSNames)+len(leaf.IPAddresses))
+	for _, d := range leaf.DNSNames {
+		have[strings.ToLower(d)] = struct{}{}
+	}
+	for _, ip := range leaf.IPAddresses {
+		have[ip.String()] = struct{}{}
+	}
+	for _, w := range wants {
+		key := strings.ToLower(w)
+		if _, ok := have[key]; ok {
+			continue
+		}
+		// IP literals are stored canonicalised on the cert side
+		// (`net.IP.String()`); compare again that way to catch
+		// "::1" vs "0:0:0:0:0:0:0:1" style differences.
+		if ip := net.ParseIP(w); ip != nil {
+			if _, ok := have[ip.String()]; ok {
+				continue
+			}
+		}
+		return false
+	}
+	return true
+}
+
+// persistAutoIssuedLeaf writes the freshly-minted leaf to disk so the
+// next startup reuses it. Best-effort: if the data dir is read-only we
+// log and carry on with the in-memory copy, accepting the regression
+// to "new fingerprint every restart" rather than aborting startup.
+func persistAutoIssuedLeaf(certPath, keyPath, certPEM, keyPEM string) {
+	if err := os.WriteFile(certPath, []byte(certPEM), 0o644); err != nil {
+		log.L.Warn("ingress_tls_persist_cert_failed",
+			"path", certPath, "error", err.Error())
+		return
+	}
+	if err := os.WriteFile(keyPath, []byte(keyPEM), 0o600); err != nil {
+		log.L.Warn("ingress_tls_persist_key_failed",
+			"path", keyPath, "error", err.Error())
+		// Roll back the cert too so we don't end up with a half-pair on
+		// disk that the next startup would mistake for a complete one.
+		_ = os.Remove(certPath)
+		return
+	}
+	log.L.Info("ingress_tls_cert_persisted",
+		"cert_path", certPath, "key_path", keyPath)
+}
+
+// logIngressCertFingerprint emits a one-line SHA-256 fingerprint of
+// the active leaf so operators can cross-check it against the
+// "thumbprint" their browser shows on the cert warning page.
+func logIngressCertFingerprint(tlsCfg *tls.Config) {
+	if tlsCfg == nil || len(tlsCfg.Certificates) == 0 {
+		return
+	}
+	leaf := tlsCfg.Certificates[0]
+	if len(leaf.Certificate) == 0 {
+		return
+	}
+	sum := sha256.Sum256(leaf.Certificate[0])
+	parsed, _ := x509.ParseCertificate(leaf.Certificate[0])
+	fields := []any{
+		"sha256", fmt.Sprintf("%X", sum),
+	}
+	if parsed != nil {
+		fields = append(fields,
+			"valid_from", parsed.NotBefore.UTC().Format(time.RFC3339),
+			"valid_until", parsed.NotAfter.UTC().Format(time.RFC3339),
+			"dns_names", parsed.DNSNames,
+		)
+	}
+	log.L.Info("ingress_tls_cert_fingerprint", fields...)
 }
 
 // Project scoping: cfg.MeshProjectID picks which project's CA to

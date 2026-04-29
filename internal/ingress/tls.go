@@ -10,6 +10,16 @@ import (
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 )
 
+// PersistTarget names the on-disk PEM paths where the self-signed
+// fallback should write its freshly-generated keypair so the next
+// startup can reuse it. Empty paths disable persistence (the historic
+// behaviour). Used only by the self-signed fallback path —
+// project-CA-issued leafs are persisted by the caller.
+type PersistTarget struct {
+	CertPath string
+	KeyPath  string
+}
+
 // CertSource describes where to get the server's TLS certificate.
 // Priority is InMemoryCert > (CertFile+KeyFile) > self-signed
 // fallback; each mode logs a distinct ingress_tls_cert_* INFO/WARN
@@ -27,6 +37,13 @@ type CertSource struct {
 	// so agents pinning the same CA pass the handshake. Takes
 	// precedence over CertFile / KeyFile.
 	InMemoryCert *tls.Certificate
+
+	// PersistTo, when set, asks the self-signed fallback to write its
+	// freshly-minted PEMs to these paths after generation. Without
+	// this the fallback would mint a brand-new keypair on every
+	// startup and invalidate every browser's "trust this cert"
+	// exception. Has no effect on the InMemoryCert / CertFile paths.
+	PersistTo PersistTarget
 }
 
 // BuildTLSConfig returns a *tls.Config wired up for ALPN dispatch. On
@@ -78,7 +95,8 @@ func loadOrGenerate(src CertSource) (tls.Certificate, error) {
 	keyBuilder := new(strings.Builder)
 	crypto.Generate(certBuilder, keyBuilder)
 
-	cert, err := tls.X509KeyPair([]byte(certBuilder.String()), []byte(keyBuilder.String()))
+	certPEM, keyPEM := certBuilder.String(), keyBuilder.String()
+	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("self-signed cert: %w", err)
 	}
@@ -87,5 +105,26 @@ func loadOrGenerate(src CertSource) (tls.Certificate, error) {
 		"hint", "browsers will warn and curl needs -k. set Server.TLSCert and Server.TLSKey in production.",
 		"pid", os.Getpid(),
 	)
+
+	// Persist the freshly-minted PEMs so the next startup picks them
+	// up via the CertFile branch above and the leaf fingerprint stays
+	// stable across restarts. Best-effort: a read-only data dir or a
+	// half-written pair is recoverable on the next boot, so we log
+	// and carry on rather than aborting.
+	if src.PersistTo.CertPath != "" && src.PersistTo.KeyPath != "" {
+		if err := os.WriteFile(src.PersistTo.CertPath, []byte(certPEM), 0o644); err != nil {
+			log.L.Warn("ingress_tls_persist_cert_failed",
+				"path", src.PersistTo.CertPath, "error", err.Error())
+		} else if err := os.WriteFile(src.PersistTo.KeyPath, []byte(keyPEM), 0o600); err != nil {
+			log.L.Warn("ingress_tls_persist_key_failed",
+				"path", src.PersistTo.KeyPath, "error", err.Error())
+			_ = os.Remove(src.PersistTo.CertPath)
+		} else {
+			log.L.Info("ingress_tls_cert_persisted",
+				"cert_path", src.PersistTo.CertPath,
+				"key_path", src.PersistTo.KeyPath)
+		}
+	}
+
 	return cert, nil
 }
