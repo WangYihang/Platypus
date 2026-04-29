@@ -13,6 +13,7 @@ import Mono from "./Mono";
 import Sparkline from "./Sparkline";
 import StatusDot from "./StatusDot";
 import UtcClock from "./UtcClock";
+import { useShell } from "../layout/ProjectShell";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Refresh cadence: 1 Hz so memory / goroutines / uptime tick like a
@@ -51,6 +52,12 @@ const HISTORY_SIZE = 60;
 export default function StatusBar() {
     const [session, setSession] = useState(() => getSession());
     const [activeName, setActiveName] = useState(() => getActiveServer()?.name ?? null);
+    // Project context. The mockup pins the active project's slug
+    // next to the server identity (e.g. `srv 192.0.2.10:9443 · 8ms
+    // · red-team-2026`). useShell() returns null on routes without
+    // a project (Projects landing, /preferences, /account); we
+    // hide the chip in that case.
+    const { project } = useShell();
     const [info, setInfo] = useState<ServerInfo | null>(null);
     const [online, setOnline] = useState<"online" | "offline" | "error">("offline");
     const [lastPollAt, setLastPollAt] = useState<number | null>(null);
@@ -310,6 +317,25 @@ export default function StatusBar() {
                             {`${lastPollMs}ms`}
                         </Mono>
                     </span>
+                )}
+                {project && (
+                    <>
+                        <span style={{ color: palette.border }}>·</span>
+                        <span
+                            data-testid="status-bar-project"
+                            title={`Active project: ${project.name} (${project.slug})`}
+                            style={{
+                                color: palette.textPrimary,
+                                fontWeight: 500,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                            }}
+                        >
+                            {project.slug}
+                        </span>
+                    </>
                 )}
             </div>
 

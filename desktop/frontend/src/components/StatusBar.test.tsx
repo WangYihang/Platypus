@@ -21,6 +21,19 @@ vi.mock("../lib/servers", () => ({
     onServersChange: () => () => {},
 }));
 
+// StatusBar consumes useShell() to render the active project's slug
+// inline. Mock it to a no-project shell so the existing assertions
+// (server identity, telemetry, version) stay independent of the
+// project context.
+vi.mock("../layout/ProjectShell", () => ({
+    useShell: () => ({
+        projects: [],
+        project: null,
+        refresh: async () => {},
+        loading: false,
+    }),
+}));
+
 const fakeInfo = {
     version: "0.4.2",
     commit: "abc1234",

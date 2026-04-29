@@ -14,6 +14,7 @@ import Card from "../components/Card";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import RefreshButton from "../components/RefreshButton";
+import FacetSidebar from "../components/FacetSidebar";
 import StatusPill from "../components/StatusPill";
 import Toolbar from "../components/Toolbar";
 import { useCurrentProject } from "../layout/ProjectShell";
@@ -194,6 +195,56 @@ export default function ActivitiesPage() {
         if (error) toast.error(`load activities: ${humanizeError(error)}`);
     }, [error]);
 
+    // Facet sidebar — counts derived from the currently-loaded items.
+    // Clicking an option toggles it as the single active value for
+    // that filter (matching the existing actor / outcome single-select
+    // semantics; the API doesn't accept multi-actor / multi-outcome
+    // today). The sidebar exists alongside the inline toolbar, not
+    // instead of it: power users still reach for the toolbar's quick
+    // filters; visual-first operators get the at-a-glance counts the
+    // sidebar offers.
+    const userFacetOptions = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const it of items ?? []) {
+            const u = it.actor_user || "";
+            if (!u) continue;
+            counts.set(u, (counts.get(u) ?? 0) + 1);
+        }
+        return Array.from(counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([u, c]) => ({
+                value: u,
+                count: c,
+                selected: actor.trim() === u,
+            }));
+    }, [items, actor]);
+    const outcomeFacetOptions = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const it of items ?? []) {
+            counts[it.outcome] = (counts[it.outcome] ?? 0) + 1;
+        }
+        return (["success", "denied", "error"] as const)
+            .filter((v) => (counts[v] ?? 0) > 0)
+            .map((v) => ({
+                value: v,
+                count: counts[v] ?? 0,
+                selected: outcome === v,
+            }));
+    }, [items, outcome]);
+    const onFacetToggle = useCallback(
+        (key: string, value: string) => {
+            if (key === "user") {
+                setActor((prev) => (prev.trim() === value ? "" : value));
+            } else if (key === "outcome") {
+                setOutcome((prev) =>
+                    prev === value ? "" : (value as ActivityOutcome),
+                );
+            }
+        },
+        [],
+    );
+
     const handleExport = useCallback(
         async (format: "jsonl" | "csv") => {
             try {
@@ -226,6 +277,22 @@ export default function ActivitiesPage() {
     }, [items, total]);
 
     return (
+        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+            <FacetSidebar
+                facets={[
+                    {
+                        key: "user",
+                        title: "User",
+                        options: userFacetOptions,
+                    },
+                    {
+                        key: "outcome",
+                        title: "Outcome",
+                        options: outcomeFacetOptions,
+                    },
+                ]}
+                onToggle={onFacetToggle}
+            />
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
             {/* AuditPage owns the page-level header + tab strip — this
                 component renders only its filter chips, toolbar, and
@@ -534,6 +601,7 @@ export default function ActivitiesPage() {
                     if (!open) setSelected(null);
                 }}
             />
+        </div>
         </div>
     );
 }

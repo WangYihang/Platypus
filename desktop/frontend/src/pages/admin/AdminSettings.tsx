@@ -247,7 +247,7 @@ export default function AdminSettings() {
 
                     <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
                         {rows.map((d) => (
-                            <SettingRow
+                            <AdminSettingRow
                                 key={d.key}
                                 d={d}
                                 value={draft[d.key] ?? formValueFor(d)}
@@ -265,7 +265,14 @@ export default function AdminSettings() {
     );
 }
 
-interface SettingRowProps {
+// AdminSettingRow is the admin-server-config row shape: label +
+// source-tone pill + description + key/default text + control +
+// reset button. Distinct from `components/SettingRow.tsx` (the
+// browser-local Preferences row) because admin settings carry more
+// metadata per row (where the value came from, the canonical key,
+// the default that "Reset" returns to). Forcing both onto one
+// primitive would bloat both call sites.
+interface AdminSettingRowProps {
     d: SettingDescriptor;
     value: string;
     onChange: (next: string) => void;
@@ -273,7 +280,7 @@ interface SettingRowProps {
     disabled: boolean;
 }
 
-function SettingRow({ d, value, onChange, onReset, disabled }: SettingRowProps) {
+function AdminSettingRow({ d, value, onChange, onReset, disabled }: AdminSettingRowProps) {
     return (
         <div
             style={{
