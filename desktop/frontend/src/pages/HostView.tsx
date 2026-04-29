@@ -43,6 +43,7 @@ import { fromNow, isOnline } from "../lib/time";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 import FilesTab from "./host/FilesTab";
 import ProcessesTab from "./host/ProcessesTab";
+import TunnelsTab from "./host/TunnelsTab";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -60,7 +61,15 @@ interface Props {
     hostID: string;
 }
 
-const TABS = ["info", "files", "sessions", "processes"] as const;
+// HostView's tab order matches the VS Code mental model the R3
+// redesign adopts: file browser is the centerpiece (this is a
+// remote-shell client, the file system is what operators come here
+// to explore), so Files leads. Info / Sessions / Processes /
+// Tunnels follow as auxiliary panels. The route default
+// (`/hosts/:id` → `/hosts/:id/files`) reflects that — landing on a
+// system-info data dump was useful for debugging the agent but
+// less useful for the day-to-day operator workflow.
+const TABS = ["files", "info", "sessions", "processes", "tunnels"] as const;
 type TabKey = (typeof TABS)[number];
 
 // HostView is the main-panel view when a Host is selected. Four tabs
@@ -249,10 +258,11 @@ export default function HostView({ projectID, hostID }: Props) {
     const tabBar = (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-7">
-                <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="files">Files</TabsTrigger>
+                <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
                 <TabsTrigger value="processes">Processes</TabsTrigger>
+                <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
             </TabsList>
         </Tabs>
     );
@@ -383,6 +393,15 @@ export default function HostView({ projectID, hostID }: Props) {
                         hostID={hostID}
                         active={activeTab === "processes"}
                     />
+                </div>
+                <div
+                    style={{
+                        display: activeTab === "tunnels" ? "block" : "none",
+                        padding: space[4],
+                        height: "100%",
+                    }}
+                >
+                    <TunnelsTab projectID={projectID} hostID={hostID} />
                 </div>
             </div>
         </div>

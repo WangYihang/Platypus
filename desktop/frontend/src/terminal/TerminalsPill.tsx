@@ -41,7 +41,7 @@ export default function TerminalsPill() {
     function jumpToShell(s: ShellEntry) {
         ctx!.setActive(s.id);
         ctx!.openDrawer();
-        navigate(`/projects/${s.projectSlug}/hosts/${s.hostId}/info`);
+        navigate(`/projects/${s.projectSlug}/hosts/${s.hostId}/files`);
     }
 
     // Pill renders only when shells.length > 0, so it's always

@@ -175,8 +175,16 @@ export const routeTree: RouteObject[] = [
                     // bookmarks / docs / e2e specs keep working.
                     { path: "fleet/enroll", element: withSuspense(<EnrollmentPage />) },
                     {
+                        // Default landing tab is `files` — the R3
+                        // VS-Code-style HostView treats the file
+                        // browser as the centerpiece. Operators who
+                        // want the system-info dump open the Info
+                        // tab explicitly. Direct deep links
+                        // (`…/hosts/<id>/info`) keep working
+                        // because the per-tab route below resolves
+                        // any of the TABS values.
                         path: "hosts/:hostId",
-                        element: <Navigate to="info" replace />,
+                        element: <Navigate to="files" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
                     // Audit consolidation: Activities / Recordings /

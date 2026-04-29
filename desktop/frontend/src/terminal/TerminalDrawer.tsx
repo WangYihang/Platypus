@@ -223,7 +223,7 @@ function TabBar({
                             aria-selected={active}
                             onClick={() => onActivate(s.id)}
                             onDoubleClick={() =>
-                                navigate(`/projects/${s.projectSlug}/hosts/${s.hostId}/info`)
+                                navigate(`/projects/${s.projectSlug}/hosts/${s.hostId}/files`)
                             }
                             title={`Double-click to jump to host`}
                             style={{
@@ -449,7 +449,7 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
                                             // dropping a shell into a hidden
                                             // bucket.
                                             navigate(
-                                                `/projects/${project.slug}/hosts/${h.id}/info`,
+                                                `/projects/${project.slug}/hosts/${h.id}/files`,
                                             );
                                         }}
                                     >

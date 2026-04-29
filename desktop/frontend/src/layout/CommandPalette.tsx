@@ -237,7 +237,7 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                                         onSelect={() =>
                                             run(() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/hosts/${h.id}/info`,
+                                                    `/projects/${project.slug}/hosts/${h.id}/files`,
                                                 ),
                                             )
                                         }
