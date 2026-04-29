@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/ipinfo"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
@@ -68,8 +69,9 @@ type hostResponse struct {
 	MemTotalBytes   int64  `json:"mem_total_bytes,omitempty"`
 	CurrentUser     string `json:"current_user,omitempty"`
 	Timezone        string `json:"timezone,omitempty"`
-	PrimaryIP       string `json:"primary_ip,omitempty"`
-	PrimaryMAC      string `json:"primary_mac,omitempty"`
+	PrimaryIP       string       `json:"primary_ip,omitempty"`
+	PrimaryIPInfo   *ipinfo.Info `json:"primary_ip_info,omitempty"`
+	PrimaryMAC      string       `json:"primary_mac,omitempty"`
 	BootTimeUnix    int64  `json:"boot_time_unix,omitempty"`
 
 	BuildVersion    string `json:"build_version,omitempty"`
@@ -87,6 +89,11 @@ type hostResponse struct {
 }
 
 func toHostResponse(h *storage.Host) hostResponse {
+	var primaryInfo *ipinfo.Info
+	if h.PrimaryIP != "" {
+		info := ipinfo.Lookup(h.PrimaryIP)
+		primaryInfo = &info
+	}
 	return hostResponse{
 		ID:                  h.ID,
 		ProjectID:           h.ProjectID,
@@ -110,6 +117,7 @@ func toHostResponse(h *storage.Host) hostResponse {
 		CurrentUser:         h.CurrentUser,
 		Timezone:            h.Timezone,
 		PrimaryIP:           h.PrimaryIP,
+		PrimaryIPInfo:       primaryInfo,
 		PrimaryMAC:          h.PrimaryMAC,
 		BootTimeUnix:        h.BootTimeUnix,
 		BuildVersion:        h.BuildVersion,

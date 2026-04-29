@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
+import RemoteAddr from "../components/RemoteAddr";
 import PageShell from "../components/PageShell";
 import RefreshButton from "../components/RefreshButton";
 import StatusPills from "../components/StatusPills";
@@ -178,7 +179,11 @@ function ApprovalRow({
                 {host.os || <span style={{ color: palette.textMuted }}>—</span>}
             </TableCell>
             <TableCell>
-                <Mono>{host.primary_ip || "—"}</Mono>
+                {host.primary_ip ? (
+                    <RemoteAddr addr={host.primary_ip} info={host.primary_ip_info} />
+                ) : (
+                    <span style={{ color: palette.textMuted }}>—</span>
+                )}
             </TableCell>
             <TableCell>
                 <span style={{ color: palette.textMuted }}>

@@ -1,6 +1,7 @@
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
+import RemoteAddr from "../../components/RemoteAddr";
 import StatusPill from "../../components/StatusPill";
 import { SessionRow } from "../../lib/api";
 import { fromNow } from "../../lib/time";
@@ -71,7 +72,11 @@ export default function SessionsTab({ sessions }: Props) {
                                 )}
                             </TableCell>
                             <TableCell>
-                                {r.remote_addr ? <Mono>{r.remote_addr}</Mono> : "—"}
+                                {r.remote_addr ? (
+                                    <RemoteAddr addr={r.remote_addr} info={r.remote_info} />
+                                ) : (
+                                    "—"
+                                )}
                             </TableCell>
                             <TableCell data-testid="session-version-cell">
                                 {r.version ? <Mono size={11}>{r.version}</Mono> : "—"}

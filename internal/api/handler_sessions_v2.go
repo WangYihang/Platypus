@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/ipinfo"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
@@ -28,26 +29,32 @@ func NewSessionsV2Handler(db *storage.DB, links *core.AgentLinkService) *Session
 }
 
 type sessionResponse struct {
-	ID             string     `json:"id"`
-	ProjectID      string     `json:"project_id"`
-	IngressAddr    string     `json:"ingress_addr"`
-	HostID         string     `json:"host_id"`
-	Alias          string     `json:"alias,omitempty"`
-	User           string     `json:"user,omitempty"`
-	RemoteAddr     string     `json:"remote_addr,omitempty"`
-	Version        string     `json:"version,omitempty"`
-	GroupDispatch  bool       `json:"group_dispatch"`
-	ConnectedAt    time.Time  `json:"connected_at"`
-	DisconnectedAt *time.Time `json:"disconnected_at,omitempty"`
+	ID             string       `json:"id"`
+	ProjectID      string       `json:"project_id"`
+	IngressAddr    string       `json:"ingress_addr"`
+	HostID         string       `json:"host_id"`
+	Alias          string       `json:"alias,omitempty"`
+	User           string       `json:"user,omitempty"`
+	RemoteAddr     string       `json:"remote_addr,omitempty"`
+	RemoteInfo     *ipinfo.Info `json:"remote_info,omitempty"`
+	Version        string       `json:"version,omitempty"`
+	GroupDispatch  bool         `json:"group_dispatch"`
+	ConnectedAt    time.Time    `json:"connected_at"`
+	DisconnectedAt *time.Time   `json:"disconnected_at,omitempty"`
 }
 
 func toSessionResponse(s *storage.Session) sessionResponse {
-	return sessionResponse{
+	resp := sessionResponse{
 		ID: s.ID, ProjectID: s.ProjectID, IngressAddr: s.IngressAddr, HostID: s.HostID,
 		Alias: s.Alias, User: s.User, RemoteAddr: s.RemoteAddr, Version: s.Version,
 		GroupDispatch: s.GroupDispatch,
 		ConnectedAt:   s.ConnectedAt, DisconnectedAt: s.DisconnectedAt,
 	}
+	if s.RemoteAddr != "" {
+		info := ipinfo.Lookup(s.RemoteAddr)
+		resp.RemoteInfo = &info
+	}
+	return resp
 }
 
 // ListForHost handles GET /projects/:pid/hosts/:hid/sessions. Returns

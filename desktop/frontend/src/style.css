@@ -289,6 +289,60 @@ body {
     margin-top: 0;
 }
 
+/* pl-top-tab: horizontal tab in the second row of the top bar
+ * (project nav: Overview / Fleet / Operations / History / Members /
+ * Settings; global nav: Projects / Servers / Admin). Vercel-style:
+ * inactive is muted text with no underline; active gets primary text
+ * and a 2-px white bar on the bottom edge that overlaps the row's
+ * border. Hover lifts text colour but does not preview the bar. */
+.pl-top-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 36px;
+    color: #a1a1a1;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px; /* overlap the row's bottom hairline */
+    transition: color 120ms ease, border-color 120ms ease;
+    user-select: none;
+    white-space: nowrap;
+}
+.pl-top-tab:hover {
+    color: #fafafa;
+}
+.pl-top-tab--active {
+    color: #fafafa;
+    border-bottom-color: #fafafa;
+}
+
+/* pl-breadcrumb-pill: the inline breadcrumb buttons in the top bar
+ * (project name, server name). Visually quiet (no border by default),
+ * a hover background reveals it as clickable. The chevron is rendered
+ * by the consumer. */
+.pl-breadcrumb-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #fafafa;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+.pl-breadcrumb-pill:hover {
+    background: #1a1a1a;
+    border-color: #2e2e2e;
+}
+
 /* Subtle fade-in for route transitions. */
 @keyframes pl-fade-in {
     from {

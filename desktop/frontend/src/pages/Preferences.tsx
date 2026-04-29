@@ -83,9 +83,6 @@ function DisplayTab() {
     const [activitiesRange, setActivitiesRange] = usePreference(
         "ui.activities.defaultRange",
     );
-    const [sidebarExpanded, setSidebarExpanded] = usePreference(
-        "ui.sidebarExpanded",
-    );
 
     return (
         <Card header="Display" padding={5}>
@@ -155,22 +152,11 @@ function DisplayTab() {
                 </Select>
             </SettingRow>
 
-            <SettingRow
-                label="Sidebar mode"
-                description="Collapsed (icon-only) is the default and matches the dense terminal aesthetic. Expanded shows nav labels for keyboard-light operators. Toggle from the sidebar's chevron at any time; this row just exposes the same flag."
-            >
-                <Switch
-                    checked={sidebarExpanded}
-                    onCheckedChange={setSidebarExpanded}
-                />
-            </SettingRow>
-
             <ResetRow
                 keys={[
                     "ui.density",
                     "ui.fleet.defaultView",
                     "ui.activities.defaultRange",
-                    "ui.sidebarExpanded",
                 ]}
             />
         </Card>

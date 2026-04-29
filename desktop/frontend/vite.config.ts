@@ -80,6 +80,13 @@ export default defineConfig(({ mode }) => {
                         }
                         if (id.includes("/@xterm/")) return "vendor-xterm";
                         if (id.includes("/react-router")) return "vendor-router";
+                        // asciinema-player (~65 KB gz incl. inlined
+                        // WASM) is only loaded when the Recordings
+                        // preview opens — pin it to its own named
+                        // chunk so it ships separately from the
+                        // always-on vendor-misc bundle and gets a
+                        // recognisable filename.
+                        if (id.includes("/asciinema-player/")) return "vendor-asciinema";
                         // Cytoscape ships ~900 KB raw; split into its own
                         // chunk so only the Topology/Graph view on Fleet
                         // pays for it.

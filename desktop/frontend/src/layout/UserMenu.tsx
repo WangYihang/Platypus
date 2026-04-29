@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, MoreHorizontal, Settings, SlidersHorizontal, User } from "lucide-react";
+import { ChevronDown, LogOut, MoreHorizontal, Settings, SlidersHorizontal, User } from "lucide-react";
 import { useNavigate, NavLink } from "react-router-dom";
 
 import { SessionUser, logout } from "../lib/auth";
@@ -10,22 +10,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 interface Props {
     user: SessionUser;
     serverURL: string;
+    // stack (default) — vertical block used as the bottom anchor of a
+    // sidebar: avatar + username/role on the left, MoreHorizontal
+    // popover trigger on the right. Retained for any consumer still
+    // rendering a vertical layout.
+    // compact — single inline trigger (avatar + initials + chevron)
+    // used in TopBar's right cluster.
+    variant?: "stack" | "compact";
 }
 
-// UserMenu sits at the bottom of the sidebar: avatar + username + role,
-// with a more-menu (...) opening a popover with admin / account /
-// preferences / logout actions.
+// UserMenu is the dropdown anchored on the user's avatar. Lives in
+// TopBar's right cluster (compact variant). Surfaces admin server
+// destinations (Users / Access Control / Server settings) for admins,
+// then personal destinations (Account, Preferences) and Logout.
 //
 // Account vs Preferences:
 //   · Account → /account → user-self, server-side state (password,
-//     identity). Bookmarkable, deep-linkable, distinct from project
-//     pages.
+//     identity). Bookmarkable, deep-linkable.
 //   · Preferences → /preferences → browser-local state (UI density,
 //     terminal font, default Fleet view). Lives in localStorage and
 //     doesn't sync across devices.
-// Surfacing both as separate links makes the scope difference obvious
-// instead of conflating them under a single "Settings" entry.
-export default function UserMenu({ user, serverURL }: Props) {
+export default function UserMenu({ user, serverURL, variant = "stack" }: Props) {
     const initials = (user.username || "?").slice(0, 2).toUpperCase();
     const [menuOpen, setMenuOpen] = useState(false);
     const navigate = useNavigate();
@@ -34,6 +39,100 @@ export default function UserMenu({ user, serverURL }: Props) {
         setMenuOpen(false);
         await logout();
         navigate("/login", { replace: true });
+    }
+
+    const popoverContent = (
+        <PopoverContent align="end" side={variant === "compact" ? "bottom" : "top"} className="w-[220px] p-1">
+            <div className="mb-2 pb-2 border-b border-border px-2 pt-1">
+                <div className="font-semibold text-text-primary text-sm">
+                    {user.username}
+                </div>
+                <div className="text-xs text-text-muted">
+                    {roleLabel(user.role)} · {hostOf(serverURL)}
+                </div>
+            </div>
+            {user.role === "admin" && (
+                <>
+                    <button
+                        type="button"
+                        className="pl-popover-btn"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            navigate("/admin/users");
+                        }}
+                    >
+                        <Settings className="size-3.5" />
+                        <span>Manage users</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="pl-popover-btn"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            navigate("/admin/access-control");
+                        }}
+                    >
+                        <Settings className="size-3.5" />
+                        <span>Access control</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="pl-popover-btn"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            navigate("/admin/settings");
+                        }}
+                    >
+                        <Settings className="size-3.5" />
+                        <span>Server settings</span>
+                    </button>
+                </>
+            )}
+            <NavLink
+                to="/account"
+                className="pl-popover-btn"
+                onClick={() => setMenuOpen(false)}
+            >
+                <User className="size-3.5" />
+                <span>Account</span>
+            </NavLink>
+            <NavLink
+                to="/preferences"
+                className="pl-popover-btn"
+                onClick={() => setMenuOpen(false)}
+            >
+                <SlidersHorizontal className="size-3.5" />
+                <span>Preferences</span>
+            </NavLink>
+            <button type="button" className="pl-popover-btn" onClick={handleLogout}>
+                <LogOut className="size-3.5" />
+                <span>Log out</span>
+            </button>
+        </PopoverContent>
+    );
+
+    if (variant === "compact") {
+        return (
+            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                <PopoverTrigger asChild>
+                    <button
+                        type="button"
+                        aria-label="User menu"
+                        data-testid="user-menu-trigger"
+                        className="pl-breadcrumb-pill"
+                    >
+                        <span
+                            aria-hidden
+                            className="grid place-items-center size-5 rounded-full border border-border-strong bg-surface-hover text-[10px] font-semibold text-text-primary"
+                        >
+                            {initials}
+                        </span>
+                        <ChevronDown className="size-3 text-text-muted" />
+                    </button>
+                </PopoverTrigger>
+                {popoverContent}
+            </Popover>
+        );
     }
 
     return (
@@ -46,9 +145,7 @@ export default function UserMenu({ user, serverURL }: Props) {
                 borderTop: `1px solid ${palette.border}`,
             }}
         >
-            <div
-                className="grid place-items-center flex-shrink-0 size-8 rounded-full border border-border-strong bg-surface-hover text-xs font-semibold text-text-primary"
-            >
+            <div className="grid place-items-center flex-shrink-0 size-8 rounded-full border border-border-strong bg-surface-hover text-xs font-semibold text-text-primary">
                 {initials}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -68,7 +165,6 @@ export default function UserMenu({ user, serverURL }: Props) {
                     {roleLabel(user.role)}
                 </div>
             </div>
-
             <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                 <PopoverTrigger asChild>
                     <button
@@ -79,73 +175,7 @@ export default function UserMenu({ user, serverURL }: Props) {
                         <MoreHorizontal className="size-4" />
                     </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" side="top" className="w-[220px] p-1">
-                    <div className="mb-2 pb-2 border-b border-border px-2 pt-1">
-                        <div className="font-semibold text-text-primary text-sm">
-                            {user.username}
-                        </div>
-                        <div className="text-xs text-text-muted">
-                            {roleLabel(user.role)} · {hostOf(serverURL)}
-                        </div>
-                    </div>
-                    {user.role === "admin" && (
-                        <>
-                            <button
-                                type="button"
-                                className="pl-popover-btn"
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    navigate("/admin/users");
-                                }}
-                            >
-                                <Settings className="size-3.5" />
-                                <span>Manage users</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="pl-popover-btn"
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    navigate("/admin/access-control");
-                                }}
-                            >
-                                <Settings className="size-3.5" />
-                                <span>Access control</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="pl-popover-btn"
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    navigate("/admin/settings");
-                                }}
-                            >
-                                <Settings className="size-3.5" />
-                                <span>Server settings</span>
-                            </button>
-                        </>
-                    )}
-                    <NavLink
-                        to="/account"
-                        className="pl-popover-btn"
-                        onClick={() => setMenuOpen(false)}
-                    >
-                        <User className="size-3.5" />
-                        <span>Account</span>
-                    </NavLink>
-                    <NavLink
-                        to="/preferences"
-                        className="pl-popover-btn"
-                        onClick={() => setMenuOpen(false)}
-                    >
-                        <SlidersHorizontal className="size-3.5" />
-                        <span>Preferences</span>
-                    </NavLink>
-                    <button type="button" className="pl-popover-btn" onClick={handleLogout}>
-                        <LogOut className="size-3.5" />
-                        <span>Log out</span>
-                    </button>
-                </PopoverContent>
+                {popoverContent}
             </Popover>
         </div>
     );
