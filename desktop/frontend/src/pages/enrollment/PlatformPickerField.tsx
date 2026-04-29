@@ -12,6 +12,8 @@ import {
     ARCH_ORDER,
     OS_ORDER,
     PlatformsState,
+    archLabel,
+    osLabel,
     preferredOrder,
 } from "./platforms";
 import { InstallFormValues } from "./schemas";
@@ -87,7 +89,7 @@ export default function PlatformPickerField({ form, platforms }: Props) {
                 >
                     {osList.map((os) => (
                         <ToggleGroupItem key={os} value={os}>
-                            {os}
+                            {osLabel(os)}
                         </ToggleGroupItem>
                     ))}
                 </ToggleGroup>
@@ -102,7 +104,7 @@ export default function PlatformPickerField({ form, platforms }: Props) {
                     >
                         {archList.map((arch) => (
                             <ToggleGroupItem key={arch} value={arch}>
-                                {arch}
+                                {archLabel(arch)}
                             </ToggleGroupItem>
                         ))}
                     </ToggleGroup>

@@ -15,17 +15,43 @@ interface Props {
 // RunStep is the terminal step of the EnrollAgentWizard. It renders
 // the freshly-issued install command in two parallel shapes:
 //
-//  • script  — `curl … | sh`             (the default; fastest path)
-//  • bundle  — `platypus-agent "$(curl …)"` (for air-gapped /
-//                                            scripted bootstraps)
+//  • script  — `curl … | sh`  (or `iwr … | iex` on Windows)
+//  • bundle  — `platypus-agent "$(curl …)"` (or PowerShell
+//                                            equivalent on Windows)
 //
 // Both consume the same single-use install token, so the operator
 // picks one — never both. After this step the wizard's "Done"
 // button arms the EnrollmentWaitBanner via `?await=enroll`; the
 // poll loop there picks up whichever shape was actually run.
+//
+// We branch on result.target_os when rendering the bundle one-liner
+// because curl is not guaranteed on stock Windows. The script tab
+// just echoes whatever the backend returned — it already picks the
+// right shell for us based on target_os when the install token was
+// minted.
 export default function RunStep({ result }: Props) {
     const [tab, setTab] = useState<"script" | "bundle">("script");
-    const bundleOneLiner = `platypus-agent "$(curl -fsSL ${result.bundle_url})"`;
+    const isWindows = result.target_os === "windows";
+    const scriptTabLabel = isWindows ? "iwr | iex" : "curl | sh";
+    const bundleOneLiner = isWindows
+        ? `& platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${result.bundle_url}')`
+        : `platypus-agent "$(curl -fsSL ${result.bundle_url})"`;
+    const bundleHint = isWindows ? (
+        <>
+            For air-gapped or scripted bootstraps where{" "}
+            <Mono>iwr | iex</Mono> isn't appropriate.{" "}
+            <Mono>Invoke-RestMethod</Mono> returns a self-contained{" "}
+            <Mono>pinst_</Mono> token; pass it straight to{" "}
+            <Mono>platypus-agent.exe</Mono>.
+        </>
+    ) : (
+        <>
+            For air-gapped or scripted bootstraps where <Mono>| sh</Mono>{" "}
+            isn't appropriate. <Mono>curl</Mono> returns a self-contained{" "}
+            <Mono>pinst_</Mono> token; pipe it straight to{" "}
+            <Mono>platypus-agent</Mono>.
+        </>
+    );
 
     async function copy(text: string) {
         await navigator.clipboard.writeText(text);
@@ -40,7 +66,7 @@ export default function RunStep({ result }: Props) {
             </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as "script" | "bundle")}>
                 <TabsList>
-                    <TabsTrigger value="script">curl | sh</TabsTrigger>
+                    <TabsTrigger value="script">{scriptTabLabel}</TabsTrigger>
                     <TabsTrigger value="bundle">offline bundle</TabsTrigger>
                 </TabsList>
                 <TabsContent value="script" className="mt-3 space-y-2">
@@ -49,10 +75,7 @@ export default function RunStep({ result }: Props) {
                 </TabsContent>
                 <TabsContent value="bundle" className="mt-3 space-y-2">
                     <div style={{ fontSize: 12, color: palette.textMuted }}>
-                        For air-gapped or scripted bootstraps where{" "}
-                        <Mono>| sh</Mono> isn't appropriate. <Mono>curl</Mono> returns
-                        a self-contained <Mono>pinst_</Mono> token; pipe it straight
-                        to <Mono>platypus-agent</Mono>.
+                        {bundleHint}
                     </div>
                     <CodeBlock>{bundleOneLiner}</CodeBlock>
                     <CopyRow text={bundleOneLiner} onCopy={copy} />

@@ -155,7 +155,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 	}
 	h.audit(c, "install.issue", "install_download", res.DownloadID, projectID, req, "success", "")
 
-	cmd := h.renderInstallCommand(c.Request, res.PlaintextDownloadToken)
+	cmd := h.renderInstallCommand(c.Request, res.PlaintextDownloadToken, res.TargetOS)
 	c.JSON(http.StatusCreated, issueInstallResponse{
 		DownloadID:     res.DownloadID,
 		DownloadToken:  res.PlaintextDownloadToken,
@@ -189,30 +189,28 @@ func (h *InstallTokensHandler) distributorBase(req *http.Request) string {
 	return scheme + "://" + host
 }
 
-// renderInstallCommand builds the curl command we return to the admin.
-// Preference order for the distributor base URL:
+// renderInstallCommand builds the bootstrap one-liner we hand back to
+// the admin. The shape depends on the chosen target OS:
 //
-//  1. Handler's configured defaultDistributorBase (from server.yml).
-//  2. X-Forwarded-Proto + Host headers (handy for reverse proxies).
-//  3. Plain http://Host (falls through to the incoming request's view).
+//   - windows  → `powershell -ExecutionPolicy Bypass -Command "iwr ... | iex"`
+//     (curl is not guaranteed on stock Windows; PowerShell ships with
+//     every supported version.) The distributor serves a PowerShell
+//     script when ?os=windows is set on the install endpoint.
 //
+//   - everything else (linux/darwin/*bsd/…/empty) → `curl -fsSL ... | sh`
+//     The distributor's default response is a POSIX shell script which
+//     auto-detects GOOS/GOARCH at runtime, so no explicit os hint is
+//     needed for the unix family.
+//
+// Preference order for the distributor base URL: see distributorBase.
 // The resulting command is safe to copy into a terminal — no shell
 // escaping is required because the download token only contains
 // base32-alphabet characters plus "." and "_".
-func (h *InstallTokensHandler) renderInstallCommand(req *http.Request, token string) string {
-	base := h.defaultDistributorBase
-	if base == "" {
-		scheme := "http"
-		if fwd := req.Header.Get("X-Forwarded-Proto"); fwd != "" {
-			scheme = fwd
-		} else if req.TLS != nil {
-			scheme = "https"
-		}
-		host := req.Host
-		if fwd := req.Header.Get("X-Forwarded-Host"); fwd != "" {
-			host = fwd
-		}
-		base = scheme + "://" + host
+func (h *InstallTokensHandler) renderInstallCommand(req *http.Request, token, targetOS string) string {
+	base := h.distributorBase(req)
+	if targetOS == "windows" {
+		url := base + "/api/v1/install/" + token + "?os=windows"
+		return `powershell -ExecutionPolicy Bypass -Command "iwr -useb '` + url + `' | iex"`
 	}
 	return "curl -fsSL " + base + "/api/v1/install/" + token + " | sh"
 }
