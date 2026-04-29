@@ -63,4 +63,11 @@ netbsd/amd64 netbsd/arm64}"
 
 mkdir -p "$RELEASES_DIR"
 
+# The publisher runs as root but platypus-server runs as the distroless
+# `nonroot` user (uid 65532) and needs to create platypus.db under
+# /app/data (== this container's /output). Bind-mount source dirs are
+# auto-created by Docker as root:root 0755, so without widening perms
+# here the server fails on boot with `unable to open database file (14)`.
+chmod 0777 /output "$RELEASES_DIR"
+
 exec bash scripts/release-publish.sh
