@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import Card from "../components/Card";
 import PageShell from "../components/PageShell";
+import SettingRow from "../components/SettingRow";
 import { palette, space } from "../layout/theme";
 import {
     PreferenceDefs,
@@ -12,7 +13,6 @@ import {
 } from "../lib/preferences";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,6 +75,9 @@ function DisplayTab() {
     const [fleetView, setFleetView] = usePreference("ui.fleet.defaultView");
     const [activitiesRange, setActivitiesRange] = usePreference(
         "ui.activities.defaultRange",
+    );
+    const [sidebarExpanded, setSidebarExpanded] = usePreference(
+        "ui.sidebarExpanded",
     );
 
     return (
@@ -143,11 +146,22 @@ function DisplayTab() {
                 </Select>
             </SettingRow>
 
+            <SettingRow
+                label="Sidebar mode"
+                description="Collapsed (icon-only) is the default and matches the dense terminal aesthetic. Expanded shows nav labels for keyboard-light operators. Toggle from the sidebar's chevron at any time; this row just exposes the same flag."
+            >
+                <Switch
+                    checked={sidebarExpanded}
+                    onCheckedChange={setSidebarExpanded}
+                />
+            </SettingRow>
+
             <ResetRow
                 keys={[
                     "ui.density",
                     "ui.fleet.defaultView",
                     "ui.activities.defaultRange",
+                    "ui.sidebarExpanded",
                 ]}
             />
         </Card>
@@ -237,53 +251,10 @@ function BehaviourTab() {
     );
 }
 
-interface SettingRowProps {
-    label: string;
-    description?: string;
-    children: React.ReactNode;
-}
-
-function SettingRow({ label, description, children }: SettingRowProps) {
-    return (
-        <div
-            style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: space[4],
-                padding: `${space[3]}px 0`,
-                borderBottom: `1px solid ${palette.border}`,
-            }}
-        >
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <Label
-                    style={{
-                        display: "block",
-                        marginBottom: 4,
-                        color: palette.textPrimary,
-                        fontSize: 13,
-                        fontWeight: 500,
-                    }}
-                >
-                    {label}
-                </Label>
-                {description && (
-                    <p
-                        style={{
-                            fontSize: 12,
-                            color: palette.textMuted,
-                            lineHeight: 1.5,
-                            margin: 0,
-                        }}
-                    >
-                        {description}
-                    </p>
-                )}
-            </div>
-            <div style={{ flexShrink: 0 }}>{children}</div>
-        </div>
-    );
-}
+// SettingRow was inlined here; it's now at
+// `components/SettingRow.tsx` so Account / AdminSettings can reuse
+// the same layout. Local call sites continue to use the imported
+// name without churn.
 
 function ResetRow({ keys }: { keys: Array<keyof PreferenceDefs> }) {
     const onReset = () => {
