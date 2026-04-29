@@ -18,6 +18,7 @@ message RpcRequest {
     ChmodRequest        chmod        = 25;
     SysInfoRequest      sys_info     = 30;
     ProcessListRequest  process_list = 31;
+    SecurityScanRequest security_scan = 32;
   }
 }
 
@@ -37,6 +38,7 @@ message RpcResponse {
     ChmodResponse        chmod        = 25;
     SysInfoResponse      sys_info     = 30;
     ProcessListResponse  process_list = 31;
+    SecurityScanResponse security_scan = 32;
   }
 }
 
@@ -279,4 +281,78 @@ message ProcessListResponse {
   // show "30 of 412 processes".
   uint32 total_count             = 2;
   string error                   = 3;
+}
+
+// --- Host security scan (one-shot) ---
+//
+// SecurityScan is the agent-side equivalent of running a curated set
+// of host-hardening checks: kernel-version freshness, sysctl posture,
+// SSH server config, world-writable / SUID outliers, etc. The set of
+// available checks is registered statically inside the agent (see
+// internal/agent/security); the request lets the caller restrict the
+// scan to a subset by id or category and place an overall deadline on
+// the scan.
+//
+// The response is intentionally a flat list of findings — not a
+// pass/fail per check — so a single check can surface multiple
+// hardening hits (e.g. one SSH config check returning both
+// "PermitRootLogin yes" and "PasswordAuthentication yes") without the
+// caller needing to interleave structured sub-fields.
+message SecurityScanRequest {
+  // If non-empty, only run checks whose id is in this list. Unknown
+  // ids are silently ignored.
+  repeated string check_ids   = 1;
+  // If non-empty, only run checks whose category is in this list.
+  // Combined with check_ids as a union (any matching id OR category
+  // runs).
+  repeated string categories  = 2;
+  // Per-check soft deadline in milliseconds; 0 = no per-check
+  // deadline beyond the parent context. The scan as a whole is
+  // bounded by the RPC stream's context.
+  uint32 per_check_timeout_ms = 3;
+}
+
+// SecurityFinding is one hit produced by one check. Severity follows
+// the conventional info / low / medium / high / critical ladder; the
+// agent never emits "info" findings for a clean check (clean checks
+// produce no finding at all — absence is the default-good signal).
+message SecurityFinding {
+  string id          = 1;  // stable id, e.g. "ssh.permit_root_login"
+  string check_id    = 2;  // owning check, e.g. "ssh.config"
+  string category    = 3;  // "kernel" | "sysctl" | "ssh" | "filesystem" | ...
+  string severity    = 4;  // "low" | "medium" | "high" | "critical"
+  string title       = 5;  // short human-readable headline
+  string description = 6;  // longer explanation; safe to render as Markdown
+  string evidence    = 7;  // the bit of state that triggered the finding
+  string remediation = 8;  // suggested fix, one or two sentences
+  // Optional CVE / advisory references. Free-form strings; the UI
+  // links any token that matches /^CVE-\d{4}-\d+$/.
+  repeated string references = 9;
+}
+
+// CheckResult tracks one check's lifecycle: did it run, did it fail
+// to run (e.g. /proc/version unreadable on a locked-down host), how
+// long did it take. Findings travel in the response-level list, not
+// here, to keep the wire shape flat for the UI.
+message CheckResult {
+  string id          = 1;
+  string category    = 2;
+  // "ok"      = check ran cleanly
+  // "skipped" = check not applicable on this host (e.g. linux-only on darwin)
+  // "error"   = check ran and failed (permission denied, parse error, ...)
+  string status      = 3;
+  string error       = 4;  // populated when status="error"
+  uint64 elapsed_ms  = 5;
+  uint32 finding_count = 6;
+}
+
+message SecurityScanResponse {
+  repeated SecurityFinding findings = 1;
+  repeated CheckResult     checks   = 2;
+  // Wall-clock UTC timestamp of when the scan started, agent-side.
+  int64 started_at_unix             = 3;
+  // Total scan duration in milliseconds (sum of per-check is <= this
+  // when checks ran sequentially; current implementation does).
+  uint64 elapsed_ms                 = 4;
+  string error                      = 5;
 }

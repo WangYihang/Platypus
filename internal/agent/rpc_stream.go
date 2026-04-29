@@ -28,8 +28,9 @@ type AgentRPCHandlers struct {
 	Rename      func(ctx context.Context, req *v2pb.RenameRequest) *v2pb.RenameResponse
 	Mkdir       func(ctx context.Context, req *v2pb.MkdirRequest) *v2pb.MkdirResponse
 	Chmod       func(ctx context.Context, req *v2pb.ChmodRequest) *v2pb.ChmodResponse
-	SysInfo     func(ctx context.Context, req *v2pb.SysInfoRequest) *v2pb.SysInfoResponse
-	ProcessList func(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse
+	SysInfo      func(ctx context.Context, req *v2pb.SysInfoRequest) *v2pb.SysInfoResponse
+	ProcessList  func(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse
+	SecurityScan func(ctx context.Context, req *v2pb.SecurityScanRequest) *v2pb.SecurityScanResponse
 }
 
 // streamCtxKey carries per-stream identifiers (correlation_id,
@@ -196,6 +197,11 @@ func dispatchRPCInner(ctx context.Context, req *v2pb.RpcRequest, h AgentRPCHandl
 			return unsupported("process_list")
 		}
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ProcessList{ProcessList: h.ProcessList(ctx, p.ProcessList)}}
+	case *v2pb.RpcRequest_SecurityScan:
+		if h.SecurityScan == nil {
+			return unsupported("security_scan")
+		}
+		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_SecurityScan{SecurityScan: h.SecurityScan(ctx, p.SecurityScan)}}
 	default:
 		return &v2pb.RpcResponse{Error: "agent: unknown RPC payload type"}
 	}

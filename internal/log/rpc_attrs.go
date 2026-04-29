@@ -33,6 +33,8 @@ func RPCMethodName(payload any) string {
 		return "sys_info"
 	case *v2pb.RpcRequest_ProcessList, *v2pb.RpcResponse_ProcessList:
 		return "process_list"
+	case *v2pb.RpcRequest_SecurityScan, *v2pb.RpcResponse_SecurityScan:
+		return "security_scan"
 	case nil:
 		return ""
 	default:
@@ -95,6 +97,13 @@ func RPCRequestAttr(payload any) slog.Attr {
 			"top_n", p.GetTopN(),
 			"sort_by", p.GetSortBy(),
 		)
+	case *v2pb.RpcRequest_SecurityScan:
+		s := r.SecurityScan
+		return slog.Group("request",
+			"check_id_count", len(s.GetCheckIds()),
+			"category_count", len(s.GetCategories()),
+			"per_check_timeout_ms", s.GetPerCheckTimeoutMs(),
+		)
 	default:
 		return slog.Group("request")
 	}
@@ -141,6 +150,13 @@ func RPCResponseAttr(payload any) slog.Attr {
 			"hostname", s.GetHostname(),
 			"platform", s.GetPlatform(),
 			"primary_ip", s.GetPrimaryIp(),
+		)
+	case *v2pb.RpcResponse_SecurityScan:
+		s := r.SecurityScan
+		return slog.Group("response",
+			"finding_count", len(s.GetFindings()),
+			"check_count", len(s.GetChecks()),
+			"elapsed_ms", s.GetElapsedMs(),
 		)
 	default:
 		return slog.Group("response")
