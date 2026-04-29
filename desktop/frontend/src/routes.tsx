@@ -21,7 +21,8 @@ const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const FleetPage = lazy(() => import("./pages/FleetPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
-const AuditPage = lazy(() => import("./pages/AuditPage"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const OperationsPage = lazy(() => import("./pages/OperationsPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const RecordingsPage = lazy(() => import("./pages/RecordingsPage"));
 const TransfersPage = lazy(() => import("./pages/TransfersPage"));
@@ -175,8 +176,8 @@ export const routeTree: RouteObject[] = [
                     // — the wizard opens via the `?enroll=1` URL
                     // param, no separate route needed. The historical
                     // management surface (browse / revoke past
-                    // artifacts + tokens) lives under
-                    // /audit/enrollment, see the audit subtree below.
+                    // artifacts + tokens) lives at
+                    // /operations/enrollment.
                     //
                     // The legacy /fleet/enroll URL still resolves so
                     // old bookmarks / docs / e2e specs land
@@ -184,7 +185,7 @@ export const routeTree: RouteObject[] = [
                     // canonical path.
                     {
                         path: "fleet/enroll",
-                        element: <Navigate to="../audit/enrollment" replace />,
+                        element: <Navigate to="../operations/enrollment" replace />,
                     },
                     { path: "fleet/approvals", element: withSuspense(<ApprovalsPage />) },
                     {
@@ -200,36 +201,57 @@ export const routeTree: RouteObject[] = [
                         element: <Navigate to="files" replace />,
                     },
                     { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
-                    // Audit consolidation: Activities / Recordings /
-                    // Transfers were three sibling routes before the
-                    // 2026-04 IA pass. Now they live under a parent
-                    // `audit` route that owns the page header + tab
-                    // strip (see pages/AuditPage.tsx). The parent
-                    // index redirects to `activities` so /audit lands
-                    // on a real tab; deep links to a specific tab
-                    // (/audit/recordings) keep working.
+                    // History is the read-only audit hub: Activities
+                    // (event log) + Recordings (session playback).
+                    // Sister surface Operations owns the write-capable
+                    // runtime state (Transfers, Enrollment).
                     {
-                        path: "audit",
-                        element: withSuspense(<AuditPage />),
+                        path: "history",
+                        element: withSuspense(<HistoryPage />),
                         children: [
-                            {
-                                index: true,
-                                element: <Navigate to="activities" replace />,
-                            },
+                            { index: true, element: <Navigate to="activities" replace /> },
                             { path: "activities", element: withSuspense(<ActivitiesPage />) },
                             { path: "recordings", element: withSuspense(<RecordingsPage />) },
+                        ],
+                    },
+                    // Operations is the write-capable runtime state hub
+                    // — Transfers (in-flight uploads/downloads) and
+                    // Enrollment (token + install-artifact management).
+                    {
+                        path: "operations",
+                        element: withSuspense(<OperationsPage />),
+                        children: [
+                            { index: true, element: <Navigate to="transfers" replace /> },
                             { path: "transfers", element: withSuspense(<TransfersPage />) },
-                            // Historical install-artifact + token
-                            // management. Reached from the Audit tab
-                            // strip (see AuditPage); the day-to-day
-                            // "issue one install command" flow goes
-                            // through the Fleet card-view wizard.
                             { path: "enrollment", element: withSuspense(<EnrollmentPage />) },
                         ],
                     },
+                    // Backwards-compat redirects: the Audit hub used to
+                    // bundle all four surfaces under one parent route.
+                    // Old URLs / bookmarks still resolve to whichever
+                    // hub now owns each surface. Each route is a flat
+                    // sibling of `/projects/:slug` so a single `..`
+                    // ascends to the project root.
+                    { path: "audit", element: <Navigate to="../history/activities" replace /> },
+                    {
+                        path: "audit/activities",
+                        element: <Navigate to="../history/activities" replace />,
+                    },
+                    {
+                        path: "audit/recordings",
+                        element: <Navigate to="../history/recordings" replace />,
+                    },
+                    {
+                        path: "audit/transfers",
+                        element: <Navigate to="../operations/transfers" replace />,
+                    },
+                    {
+                        path: "audit/enrollment",
+                        element: <Navigate to="../operations/enrollment" replace />,
+                    },
                     {
                         path: "enrollment",
-                        element: <Navigate to="../audit/enrollment" replace />,
+                        element: <Navigate to="../operations/enrollment" replace />,
                     },
                     { path: "members", element: withSuspense(<MembersRoute />) },
                     { path: "settings", element: withSuspense(<ProjectSettings />) },

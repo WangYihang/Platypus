@@ -26,18 +26,17 @@ interface Props {
 // NavTabs renders the second row of the top bar. It picks one of two
 // tab sets depending on whether a project is in scope:
 //
-//   project → Overview · Fleet · Members · Audit · Settings
+//   project → Overview · Fleet · Operations · History · Members · Settings
 //   global  → Projects
 //
-// Admin destinations (Users / Access Control / Server settings) are
-// reachable from UserMenu's popover — they're not promoted to top
-// tabs in this iteration. Account / Preferences also live in the
-// UserMenu.
+// Operations and History split the previous "Audit" hub into write-
+// capable runtime state (Transfers, Enrollment) and read-only audit
+// (Activities, Recordings) respectively. Old /audit/* URLs still
+// resolve via redirects in routes.tsx.
 //
-// The mapping mirrors today's IA exactly so the chrome migration
-// (sidebar → top bar) lands without changing any URLs. Subsequent
-// iterations will (a) split Audit into History/Operations and (b)
-// promote Servers + Admin to global top tabs.
+// Admin destinations (Users / Access Control / Server settings) are
+// reachable from UserMenu's popover until the dedicated Admin top-tab
+// lands. Account / Preferences also live in the UserMenu.
 export default function NavTabs({ user, currentSlug }: Props) {
     const { pathname } = useLocation();
     const I = icons;
@@ -60,16 +59,35 @@ export default function NavTabs({ user, currentSlug }: Props) {
                   matchPaths: [`${projectBase}/fleet`, `${projectBase}/hosts`],
               },
               {
+                  to: `${projectBase}/operations`,
+                  label: "Operations",
+                  icon: <I.operations className="size-3.5" />,
+                  // /audit/transfers and /audit/enrollment redirect
+                  // here; light up the tab during the transition so the
+                  // bar doesn't blink to "no tab active".
+                  matchPaths: [
+                      `${projectBase}/operations`,
+                      `${projectBase}/audit/transfers`,
+                      `${projectBase}/audit/enrollment`,
+                      `${projectBase}/enrollment`,
+                  ],
+              },
+              {
+                  to: `${projectBase}/history`,
+                  label: "History",
+                  icon: <I.history className="size-3.5" />,
+                  // /audit and /audit/{activities,recordings} redirect
+                  // here. Match those for the same reason as above.
+                  matchPaths: [
+                      `${projectBase}/history`,
+                      `${projectBase}/audit`,
+                  ],
+              },
+              {
                   to: `${projectBase}/members`,
                   label: "Members",
                   icon: <I.members className="size-3.5" />,
                   minRole: "operator",
-              },
-              {
-                  to: `${projectBase}/audit/activities`,
-                  label: "Audit",
-                  icon: <I.audit className="size-3.5" />,
-                  matchPaths: [`${projectBase}/audit`],
               },
               {
                   to: `${projectBase}/settings`,
