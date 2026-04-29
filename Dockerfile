@@ -32,26 +32,20 @@ ENTRYPOINT ["/usr/local/bin/platypus-agent"]
 # Stage 4: Dev agent publisher
 #
 # Cross-compiles platypus-agent for the release matrix, signs the
-# manifest with a dev Ed25519 key, and uploads everything to the
-# compose-local MinIO. Wired into docker-compose.yml as the
-# `agent-publisher` sidecar so a fresh `docker compose up` results in a
-# working enrollment flow without manual `make` steps. Not used in
-# production — production releases run scripts/release-publish.sh from
-# CI with a vault-stored signing key.
+# manifest with a dev Ed25519 key, and writes the result onto the
+# shared platypus_data volume at /output/releases/ (mounted by the
+# compose `agent-publisher` sidecar). The platypus-server's LocalStore
+# reads the same path through PLATYPUS_DATA_DIR=/app/data, so a fresh
+# `docker compose up` lands a working enrollment flow without any
+# extra credentials / object store. Not used in production —
+# production releases run scripts/release-publish.sh from CI with a
+# vault-stored signing key, then rsync the resulting tree onto the
+# server's data volume.
 FROM golang:1.25 AS publisher
 WORKDIR /workspace
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        openssl ca-certificates curl \
-    && ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in \
-        amd64) MC_ARCH="linux-amd64" ;; \
-        arm64) MC_ARCH="linux-arm64" ;; \
-        *) echo "unsupported build arch: $ARCH" >&2; exit 1 ;; \
-       esac \
-    && curl -fsSL "https://dl.min.io/client/mc/release/${MC_ARCH}/mc" \
-        -o /usr/local/bin/mc \
-    && chmod +x /usr/local/bin/mc \
+        openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 # Bind-mounted /workspace is owned by the host user (uid != 0) but the
 # container runs as root, so git refuses to read .git under its

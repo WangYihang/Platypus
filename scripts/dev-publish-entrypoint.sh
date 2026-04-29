@@ -3,10 +3,10 @@
 # dev-publish-entrypoint.sh — `agent-publisher` compose sidecar entrypoint.
 #
 # Wraps scripts/release-publish.sh so a fresh `docker compose up` lands a
-# signed manifest + agent binaries in the dev MinIO. Without this the
-# enrollment flow renders but every install link 404s on the manifest
-# fetch. Runs once per `up`; the platypus-server service waits on it
-# completing successfully.
+# signed manifest + agent binaries on the platypus-server's data volume
+# at /app/data/releases/. Without this the enrollment flow renders but
+# every install link 404s on the manifest fetch. Runs once per `up`;
+# the platypus-server service waits on it completing successfully.
 #
 # Persistent state lives in /keys (a docker volume) so the dev signing
 # keypair survives compose down/up — agents installed in earlier sessions
@@ -41,12 +41,11 @@ export VERSION="${VERSION:-0.0.0-dev}"
 export CHANNEL="${CHANNEL:-stable}"
 export AGENT_SIGNING_PRIVKEY_PEM="$PRIVKEY"
 export AGENT_SIGNING_PUBKEY_B64="$(cat "$PUBKEY_B64")"
-export S3_ENDPOINT="${S3_ENDPOINT:-minio:9000}"
-export S3_BUCKET="${S3_BUCKET:-platypus-artifacts}"
-export S3_PREFIX="${S3_PREFIX:-agent/}"
-export S3_ACCESS_KEY="${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}"
-export S3_SECRET_KEY="${S3_SECRET_KEY:?S3_SECRET_KEY is required}"
-export S3_SCHEME="${S3_SCHEME:-http}"
+# RELEASES_DIR points at the platypus-server's data volume mounted at
+# /output. release-publish.sh writes the manifest + binaries straight
+# under /output/releases/, exactly where the server's LocalStore reads
+# from when serving /v1/manifest/<channel>.
+export RELEASES_DIR="${RELEASES_DIR:-/output/releases}"
 
 # Default matrix mirrors the platforms we've smoke-tested with
 # CGO_ENABLED=0 (cmd/platypus-agent has only one platform-split file —
@@ -62,11 +61,6 @@ freebsd/amd64 freebsd/arm64 freebsd/386 \
 openbsd/amd64 openbsd/arm64 \
 netbsd/amd64 netbsd/arm64}"
 
-# release-publish.sh assumes the bucket already exists; create it
-# idempotently so first-run doesn't error out.
-mc alias set platypus-dev \
-    "$S3_SCHEME://$S3_ENDPOINT" \
-    "$S3_ACCESS_KEY" "$S3_SECRET_KEY" --api s3v4 >/dev/null
-mc mb --ignore-existing "platypus-dev/$S3_BUCKET" >/dev/null
+mkdir -p "$RELEASES_DIR"
 
 exec bash scripts/release-publish.sh

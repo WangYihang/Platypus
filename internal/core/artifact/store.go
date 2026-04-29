@@ -19,9 +19,11 @@ const (
 	ManifestSigKeyFmt = "manifest/%s.json.sig"
 )
 
-// Store is the minimal surface the Distributor needs. A single
-// implementation backed by S3/MinIO lives in s3.go; the interface exists
-// so tests can drop in a fake.
+// Store is the minimal surface the Distributor needs. The default
+// implementation in local.go is a filesystem-backed store rooted at
+// <data_dir>/releases. The interface stays so tests can drop in a
+// fake — and so a future S3 / GCS / similar backend can be added
+// without touching the Distributor's call sites.
 type Store interface {
 	// GetObject reads a whole object. Used for the manifest + sig, which
 	// are small and need to be inspected before serving.

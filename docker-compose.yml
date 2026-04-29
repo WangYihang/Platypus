@@ -25,22 +25,10 @@ services:
       # Keeping the KEK on the same volume as the encrypted DB defeats
       # the seal.
       PLATYPUS_DEV: "1"
-
-      # S3 distributor (MinIO sidecar). Endpoint + bucket enable it;
-      # credentials are injected via env so this file is safe to copy
-      # without leaking secrets. Production: use a docker / k8s secret.
-      PLATYPUS_S3_ENDPOINT: "minio:9000"
-      PLATYPUS_S3_BUCKET: "platypus-artifacts"
-      PLATYPUS_S3_PREFIX: "agent/"
-      PLATYPUS_S3_SECURE: "false"
-      PLATYPUS_S3_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-platypus_admin}"
-      PLATYPUS_S3_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-platypus_password}"
     restart: always
     depends_on:
       init-data:
         condition: service_completed_successfully
-      minio:
-        condition: service_healthy
       agent-publisher:
         condition: service_completed_successfully
 
@@ -48,22 +36,26 @@ services:
     image: alpine
     volumes:
       - platypus_data:/app/data
-    command: ["sh", "-c", "mkdir -p /app/data && chmod 777 /app/data"]
+    command: ["sh", "-c", "mkdir -p /app/data/releases && chmod 777 /app/data /app/data/releases"]
 
   # Dev-only sidecar: cross-compiles platypus-agent for the release
   # matrix, signs the manifest with a per-volume Ed25519 key, and
-  # uploads to the compose MinIO so the enrollment flow Just Works.
-  # Without this, /v1/manifest/<channel> 404s and every install link
-  # is broken on a fresh `docker compose up`. Production deployments
-  # should remove this service and run scripts/release-publish.sh
-  # from CI with a vault-stored signing key.
+  # writes the result onto the shared platypus_data volume at
+  # /app/data/releases/. The platypus-server's LocalStore picks the
+  # files up directly — no MinIO sidecar, no S3 credentials, no
+  # presigned URLs.
+  #
+  # Production deployments should remove this service and run
+  # scripts/release-publish.sh from CI with a vault-stored signing
+  # key, then rsync the resulting tree onto the server's data volume.
   agent-publisher:
     build:
       context: .
       target: publisher
     volumes:
       # Source tree is read-only — release-publish.sh writes binaries
-      # to a $(mktemp) under /tmp, never under /workspace.
+      # to a $(mktemp) under /tmp and only copies the final layout to
+      # /output/releases/.
       - ./:/workspace:ro
       # Persist the dev signing keypair across compose down/up so
       # agents installed in earlier sessions keep validating manifests
@@ -74,43 +66,18 @@ services:
       # targets from scratch.
       - publisher_gocache:/root/.cache/go-build
       - publisher_gomod:/go/pkg/mod
-    environment:
-      S3_ENDPOINT: "minio:9000"
-      S3_BUCKET: "platypus-artifacts"
-      S3_PREFIX: "agent/"
-      S3_ACCESS_KEY: "${MINIO_ROOT_USER:-platypus_admin}"
-      S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-platypus_password}"
-      S3_SCHEME: "http"
-      # Override PLATFORMS to skip targets you don't care about — e.g.
-      # PLATFORMS="linux/amd64 linux/arm64" cuts publish time to ~15 s.
-      # PLATFORMS: ""
+      # Shared with platypus-server. The publisher writes under
+      # /output/releases/...; platypus-server reads from the same
+      # path under PLATYPUS_DATA_DIR=/app/data.
+      - platypus_data:/output
+    # Override PLATFORMS to skip targets you don't care about — e.g.
+    # PLATFORMS="linux/amd64 linux/arm64" cuts publish time to ~15 s.
+    # environment:
+    #   PLATFORMS: "linux/amd64 linux/arm64"
     restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-
-  minio:
-    image: minio/minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      # Dev defaults; override via shell env (or a .env file) to point
-      # at non-default credentials before `docker compose up`.
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-platypus_admin}"
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-platypus_password}"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   platypus_data:
-  minio_data:
   publisher_keys:
   publisher_gocache:
   publisher_gomod:
