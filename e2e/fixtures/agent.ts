@@ -80,14 +80,12 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<AgentHandle> {
 
     const agentHome = fs.mkdtempSync(path.join(os.tmpdir(), "platypus-e2e-agent-"));
 
-    // New CLI shape: token is positional, --host/--port are hidden
-    // flags retained for the install-script flow, --identity-dir
-    // renamed to --data-dir. Mesh flags pass through unchanged.
+    // CLI shape: install token is positional, --server carries
+    // host:port in one flag, --data-dir overrides persistent state
+    // location. Mesh flags pass through unchanged.
     const args = [
-        "--host",
-        BACKEND_HOST,
-        "--port",
-        String(BACKEND_PORT),
+        "--server",
+        `${BACKEND_HOST}:${BACKEND_PORT}`,
         "--data-dir",
         agentHome,
     ];

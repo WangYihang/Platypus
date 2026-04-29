@@ -57,8 +57,8 @@ func main() {
 	// Self-contained install bundle: when the user pasted a
 	// `pinst_<base64>` token, expand it into the equivalent (token +
 	// server + CA bytes) trio so the rest of bootstrap stays
-	// unchanged. Explicit --host / --port still win — they're an
-	// escape hatch for an admin debugging an unrelated server.
+	// unchanged. Explicit --server still wins — escape hatch for an
+	// admin debugging an unrelated server.
 	bundleCAOverride, err := expandInstallBundle(opts)
 	if err != nil {
 		printUsage(err)
@@ -515,7 +515,7 @@ func projectIDFromURIs(uris []*url.URL) string {
 // and, when present, replaces opts.Token / opts.RemoteHost /
 // opts.RemotePort with the bundle's contents and returns the bundle's
 // CA PEM bytes for the caller to plug into the TLS path. Explicit
-// --host / --port flags win over the bundle's server endpoint.
+// --server (or PLATYPUS_SERVER) wins over the bundle's server endpoint.
 //
 // Returns nil bytes (and no error) when no bundle was supplied, so
 // the legacy code path stays a no-op.
@@ -599,26 +599,21 @@ func runPSKShow(logger *slog.Logger, opts *options.Options, dataDir string) int 
 	return 0
 }
 
-// printUsage writes a hand-rolled help block to stderr. Avoids the
-// stdlib flag dump (which would leak hidden flags) and gives a
-// concrete pointer at the env vars / subcommands.
+// printUsage writes a short hint to stderr when bootstrap inputs
+// (token / server address) are missing in a state that can't
+// recover from persisted identity. kong already produces a full
+// flags listing on --help; this is just the "you ran the binary
+// with no args and have no enrolled state on disk" guidance.
 func printUsage(err error) {
 	fmt.Fprintln(os.Stderr, "platypus-agent — connect a host to a Platypus server")
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  platypus-agent <install-token>")
-	fmt.Fprintln(os.Stderr, "  platypus-agent psk install <psk>")
-	fmt.Fprintln(os.Stderr, "  platypus-agent psk show")
+	fmt.Fprintln(os.Stderr, "First-run bootstrap needs both an install token and a server address.")
+	fmt.Fprintln(os.Stderr, "Pass them as: platypus-agent --server HOST:PORT <install-token>")
+	fmt.Fprintln(os.Stderr, "Or as a single token from the Web UI: platypus-agent <HOST:PORT@token>")
+	fmt.Fprintln(os.Stderr, "Or via env: "+options.EnvServerAddr+" + "+options.EnvInstallToken)
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Environment:")
-	fmt.Fprintln(os.Stderr, "  "+options.EnvInstallToken+"   alternative to positional install-token")
-	fmt.Fprintln(os.Stderr, "  "+options.EnvServerAddr+"           server host:port; alternative to --host/--port")
-	fmt.Fprintln(os.Stderr, "  "+options.EnvDataDir+"        writable state dir (default: ~/.platypus/agent)")
-	fmt.Fprintln(os.Stderr, "  "+options.EnvMeshPSKFile+"   absolute path to mesh PSK")
-	fmt.Fprintln(os.Stderr, "  "+options.EnvMeshPSK+"        inline mesh PSK contents (overrides "+options.EnvMeshPSKFile+")")
-	fmt.Fprintln(os.Stderr, "  PLATYPUS_PROJECT_CA       base64-encoded project CA cert (set by install scripts)")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "PSK resolution: "+options.PSKResolutionOrder)
+	fmt.Fprintln(os.Stderr, "After enrollment, persisted identity under --data-dir lets re-runs need")
+	fmt.Fprintln(os.Stderr, "neither value. Run with --help for the full flag listing.")
 	if err != nil {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Error:", err.Error())

@@ -408,10 +408,8 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		// fully server-controlled, never user input.
 		"curl -fsSL $CURL_TLS "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest -o \"$BIN\"",
 		"chmod +x \"$BIN\"",
-		// Token is the positional argument under the new minimal CLI;
-		// --host/--port stay as hidden flags for the install-script
-		// flow because the token doesn't carry the server endpoint.
-		"exec \"$BIN\" --host \"$AGENT_HOST\" --port \"$AGENT_PORT\" \"$AGENT_TOKEN\"",
+		// Single --server flag carries host:port, token stays positional.
+		"exec \"$BIN\" --server \"$AGENT_HOST:$AGENT_PORT\" \"$AGENT_TOKEN\"",
 	)
 	return strings.Join(lines, "\n") + "\n"
 }

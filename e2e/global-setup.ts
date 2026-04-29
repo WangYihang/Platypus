@@ -292,10 +292,8 @@ async function startBaselineAgent(
     const agent = spawn(
         AGENT_BINARY,
         [
-            "--host",
-            BACKEND_HOST,
-            "--port",
-            String(BACKEND_PORT),
+            "--server",
+            `${BACKEND_HOST}:${BACKEND_PORT}`,
             "--data-dir",
             agentHome,
             patResp.token,
