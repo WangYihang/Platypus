@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/core"
+	"github.com/WangYihang/Platypus/internal/ipinfo"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -63,15 +64,16 @@ type topologySysInfo struct {
 }
 
 type topologySession struct {
-	ID             string  `json:"id"`
-	Hash           string  `json:"hash,omitempty"`
-	User           string  `json:"user,omitempty"`
-	RemoteAddr     string  `json:"remote_addr,omitempty"`
-	Version        string  `json:"version,omitempty"`
-	ConnectedAt    string  `json:"connected_at"`
-	DisconnectedAt string  `json:"disconnected_at,omitempty"`
-	MeshNodeID     string  `json:"mesh_node_id,omitempty"`
-	Active         bool    `json:"active"`
+	ID             string       `json:"id"`
+	Hash           string       `json:"hash,omitempty"`
+	User           string       `json:"user,omitempty"`
+	RemoteAddr     string       `json:"remote_addr,omitempty"`
+	RemoteInfo     *ipinfo.Info `json:"remote_info,omitempty"`
+	Version        string       `json:"version,omitempty"`
+	ConnectedAt    string       `json:"connected_at"`
+	DisconnectedAt string       `json:"disconnected_at,omitempty"`
+	MeshNodeID     string       `json:"mesh_node_id,omitempty"`
+	Active         bool         `json:"active"`
 }
 
 type topologyMachine struct {
@@ -203,14 +205,19 @@ func (h *TopologyHandler) Get(c *gin.Context) {
 			}
 		}
 		for _, s := range liveByHost[host.ID] {
-			machine.Sessions = append(machine.Sessions, topologySession{
+			ts := topologySession{
 				ID:          s.ID,
 				User:        s.User,
 				RemoteAddr:  s.RemoteAddr,
 				Version:     s.Version,
 				ConnectedAt: s.ConnectedAt.UTC().Format(time.RFC3339Nano),
 				Active:      s.DisconnectedAt == nil,
-			})
+			}
+			if s.RemoteAddr != "" {
+				info := ipinfo.Lookup(s.RemoteAddr)
+				ts.RemoteInfo = &info
+			}
+			machine.Sessions = append(machine.Sessions, ts)
 		}
 		snap.Machines = append(snap.Machines, machine)
 	}

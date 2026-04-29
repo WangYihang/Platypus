@@ -169,6 +169,17 @@ export interface HostProcessList {
     error?: string;
 }
 
+export interface RemoteIpInfo {
+    ip: string;
+    version?: number;
+    is_private?: boolean;
+    is_loopback?: boolean;
+    country?: string;
+    province?: string;
+    city?: string;
+    isp?: string;
+}
+
 export interface SessionRow {
     id: string;
     project_id: string;
@@ -177,6 +188,7 @@ export interface SessionRow {
     alias?: string;
     user?: string;
     remote_addr?: string;
+    remote_info?: RemoteIpInfo;
     version?: string;
     group_dispatch: boolean;
     connected_at: string;
