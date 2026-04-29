@@ -4,18 +4,30 @@ import { loginAsAdmin } from "../../fixtures/auth";
 import { ADMIN_PASSWORD, ADMIN_USERNAME, backendURL } from "../../fixtures/env";
 import { caption, clearOverlays, highlight, pause } from "../../fixtures/demo";
 
-// 02-server-rail — the Slack-style left rail. Add a second server,
-// switch with the keyboard, rename via the themed dialog.
+// 02-server-switcher — the project switcher / server switcher folded
+// the standalone Slack-style rail into a sidebar dropdown in the
+// 2026-04 IA pass. Add a second profile, switch with the keyboard,
+// rename via the themed dialog.
 test("walk: switch between two servers from the rail", async ({ page }) => {
     await loginAsAdmin(page);
     await pause(page, 600);
+
+    // The sidebar collapses to an icon-only rail by default. Expand
+    // it once so the ServerSwitcher trigger renders inline (Cmd-K is
+    // the surface for collapsed-rail switching, but the demo narrates
+    // the visual switcher).
+    await page.getByRole("button", { name: /Expand sidebar/i }).click();
+    await pause(page, 400);
+
     await caption(
         page,
         "The rail shows one server right now — let's add a second.",
         1200,
     );
-    await highlight(page, page.getByTestId("server-rail-add"));
-    await page.getByTestId("server-rail-add").click();
+    await page.getByTestId("server-switcher-trigger").click();
+    await pause(page, 500);
+    await highlight(page, page.getByTestId("server-switcher-add"));
+    await page.getByTestId("server-switcher-add").click();
     await pause(page, 700);
 
     await caption(page, "Same server URL, different display name.", 1000);
@@ -45,7 +57,7 @@ test("walk: switch between two servers from the rail", async ({ page }) => {
 
     await caption(
         page,
-        "Mirror is now active. Tiles carry first-letter avatars, hashed bg from the URL.",
+        "Mirror is now active. Each row has a first-letter avatar with a hashed background.",
         1500,
     );
     await pause(page, 700);
@@ -60,13 +72,15 @@ test("walk: switch between two servers from the rail", async ({ page }) => {
 
     await caption(
         page,
-        "Right-click any tile for Rename / Sign out / Remove — themed dialogs, no native popups.",
+        "Open the switcher again to Rename / Remove a row — themed dialogs, no native popups.",
         1500,
     );
-    await page.getByTestId("server-tile-1").click({ button: "right" });
-    await pause(page, 700);
-    await highlight(page, page.getByRole("menuitem", { name: /Rename/ }));
-    await page.getByRole("menuitem", { name: /Rename/ }).click();
+    await page.getByTestId("server-switcher-trigger").click();
+    await pause(page, 500);
+    const row1 = page.getByTestId("server-row-1");
+    await row1.hover();
+    await highlight(page, row1.getByRole("button", { name: "Rename" }));
+    await row1.getByRole("button", { name: "Rename" }).click();
     await pause(page, 700);
 
     const renameInput = page.getByRole("dialog").getByRole("textbox");
@@ -77,7 +91,7 @@ test("walk: switch between two servers from the rail", async ({ page }) => {
     await page.getByRole("dialog").getByRole("button", { name: /Save/ }).click();
     await pause(page, 1000);
 
-    await caption(page, "Done — tile is renamed.", 1200);
+    await caption(page, "Done — row is renamed.", 1200);
     await pause(page, 600);
     await clearOverlays(page);
     await pause(page, 300);

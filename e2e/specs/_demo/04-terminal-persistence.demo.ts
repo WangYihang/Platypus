@@ -10,6 +10,12 @@ test("walk: terminal survives route changes", async ({ page }) => {
     await loginAsAdmin(page);
     await pause(page, 500);
 
+    // The sidebar collapses to an icon-only rail by default. Expand
+    // it so the demo's narrated Fleet / Audit / Settings clicks read
+    // visually.
+    await page.getByRole("button", { name: /Expand sidebar/i }).click();
+    await pause(page, 400);
+
     await page.getByRole("button", { name: /Default created/i }).click();
     await pause(page, 500);
     await page.getByRole("link", { name: /Fleet$/ }).click();
@@ -26,7 +32,12 @@ test("walk: terminal survives route changes", async ({ page }) => {
         "Open a shell with the page-header button — it docks into the global drawer.",
         1500,
     );
-    const openBtn = page.getByRole("button", { name: /Open terminal/i });
+    // Scope the "Open terminal" button to the page header so the
+    // status-bar's terminals-pill (aria-label "N open terminal")
+    // doesn't double-resolve once the drawer is up.
+    const openBtn = page
+        .getByTestId("shell-content-frame")
+        .getByRole("button", { name: "Open terminal" });
     await highlight(page, openBtn);
     await openBtn.click();
     await pause(page, 1800);
@@ -36,10 +47,10 @@ test("walk: terminal survives route changes", async ({ page }) => {
 
     await caption(
         page,
-        "Now navigate away — to Activities — without closing the shell.",
+        "Now navigate away — to Audit — without closing the shell.",
         1500,
     );
-    await page.getByRole("link", { name: /Activities$/ }).click();
+    await page.getByRole("link", { name: /Audit$/ }).click();
     await pause(page, 1100);
 
     await caption(

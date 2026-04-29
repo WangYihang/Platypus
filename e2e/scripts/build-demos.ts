@@ -56,6 +56,11 @@ const META: Record<string, DemoMeta> = {
         caption:
             "Keyboard-first nav: jump between pages, switch project, open a terminal on any host — all from the palette.",
     },
+    "06-auth-redesign": {
+        title: "Phase-2 auth: opaque session-token lifecycle",
+        caption:
+            "Login → server returns a single `pst_…` bearer (no JWT pair). Logout revokes it server-side; subsequent requests fail with 401 immediately.",
+    },
 };
 
 const ORDER = [
@@ -64,6 +69,7 @@ const ORDER = [
     "03-fleet-views",
     "04-terminal-persistence",
     "05-command-palette",
+    "06-auth-redesign",
 ];
 
 interface Found {
