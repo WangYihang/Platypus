@@ -171,9 +171,12 @@ func TestAgentUpgradeV1_AgentReportsFailure(t *testing.T) {
 	resp := a.authedPost(t, srv.URL, "/upgrade", `{}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadGateway {
+	// 200 OK with status:"failed" body — the REST layer itself ran
+	// end-to-end and has an authoritative answer for the operator.
+	// Reserves 5xx for "the request never reached the agent".
+	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d; want 502; body=%s", resp.StatusCode, b)
+		t.Fatalf("status = %d; want 200; body=%s", resp.StatusCode, b)
 	}
 	var got upgradeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {

@@ -38,6 +38,7 @@ import {
     BuildVersionValue,
     MachineTypePill,
 } from "./pills";
+import { UpgradeAgentButton } from "./UpgradeAgentButton";
 
 interface Props {
     host: Host;
@@ -257,10 +258,25 @@ export default function InfoTab({
                             {
                                 label: "build version",
                                 value: (
-                                    <BuildVersionValue
-                                        version={buildVersion}
-                                        latest={latestVersion}
-                                    />
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: space[3],
+                                            flexWrap: "wrap",
+                                        }}
+                                    >
+                                        <BuildVersionValue
+                                            version={buildVersion}
+                                            latest={latestVersion}
+                                        />
+                                        <UpgradeAgentButton
+                                            projectID={host.project_id}
+                                            hostID={host.id}
+                                            currentVersion={buildVersion}
+                                            latestVersion={latestVersion}
+                                        />
+                                    </span>
                                 ),
                             },
                             {

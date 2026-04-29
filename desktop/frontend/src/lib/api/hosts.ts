@@ -272,3 +272,53 @@ export async function listProjectSessions(
     const j = await authJSON<{ sessions: SessionRow[] }>(path);
     return j.sessions;
 }
+
+// AgentUpgradeRequest is the body the trigger endpoint accepts. Both
+// fields are optional: target_version="" defers to the channel head,
+// channel="" defaults to "stable" server-side.
+export interface AgentUpgradeRequest {
+    target_version?: string;
+    channel?: string;
+}
+
+// AgentUpgradeResponse is the synchronous response from the trigger
+// endpoint. The server holds the HTTP request open while the agent
+// runs the install, then returns the terminal phase + any error.
+//
+// status:
+//   "exited"      — agent reached PHASE_EXITING; supervisor will
+//                   restart it under the new binary
+//   "failed"      — agent reported PHASE_FAILED (see error_code /
+//                   error_message for the kind)
+//   "in_progress" — server timed out waiting for terminal frame
+//                   (slow link); upgrade may still complete
+//   "unknown"     — drainUpgradeProgress saw a non-terminal phase
+//                   and gave up (proto-version drift)
+export interface AgentUpgradeResponse {
+    status: "exited" | "failed" | "in_progress" | "unknown";
+    phase: string;
+    resolved_version?: string;
+    error_code?: string;
+    error_message?: string;
+    bytes_done?: number;
+    bytes_total?: number;
+}
+
+// triggerAgentUpgrade kicks off a server-driven upgrade against a
+// specific agent. Request is admin-only; the server records both an
+// "agent.upgrade.start" and an "agent.upgrade.end" activity row, so
+// closing the browser tab mid-flight still leaves a forensic trail.
+export async function triggerAgentUpgrade(
+    pid: string,
+    agentID: string,
+    body: AgentUpgradeRequest,
+): Promise<AgentUpgradeResponse> {
+    return authJSON<AgentUpgradeResponse>(
+        `/api/v1/projects/${pid}/agents/${agentID}/upgrade`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        },
+    );
+}

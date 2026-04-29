@@ -150,6 +150,14 @@ func (h *AgentUpgradeHandler) Trigger(c *gin.Context) {
 		ErrorCode:    final.GetErrorCode(),
 		ErrorMessage: final.GetErrorMessage(),
 	}
+	// Status-code policy: 200 for every outcome where the REST layer
+	// itself succeeded (the upgrade flow ran end-to-end and we have a
+	// terminal phase, even if that phase is FAILED). The body's
+	// `status` field carries the operational outcome; clients branch
+	// on it. 5xx is reserved for "couldn't run the flow at all" —
+	// agent offline, timeout, unknown phase. Keeps the JSON shape
+	// uniform across success / failure paths and avoids forcing
+	// frontends to special-case error-body parsing.
 	switch {
 	case drainErr != nil:
 		resp.Status = "in_progress"
@@ -169,7 +177,7 @@ func (h *AgentUpgradeHandler) Trigger(c *gin.Context) {
 		resp.Status = "failed"
 		recordUpgradeOutcome(c, &pid, agentID, sessionID, "failed",
 			final.GetErrorCode(), final.GetErrorMessage(), startedAt)
-		c.JSON(http.StatusBadGateway, resp)
+		c.JSON(http.StatusOK, resp)
 	default:
 		// Shouldn't happen — drainUpgradeProgress only returns nil
 		// drainErr on a terminal phase. Defend against future
