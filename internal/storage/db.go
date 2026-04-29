@@ -9,12 +9,12 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
+	"path"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"github.com/golang-migrate/migrate/v4"
-	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 
 	_ "modernc.org/sqlite" // pure-Go driver; keeps the server CGO-free for cross-compiles
 )
@@ -115,21 +115,111 @@ func closeWith(db *sql.DB, orig error) error {
 	return orig
 }
 
+// runMigrations replays every pending NNNNNN_*.sql under migrations/
+// against db, in lexicographic order. The leading 6-digit prefix is the
+// migration's version; schema_migrations records the highest version
+// applied so reopening a migrated DB is a no-op.
+//
+// All pending migrations execute inside a single transaction. SQLite
+// serialises writers anyway and our migrations are pure DDL — running
+// 23 of them in 23 separate BEGIN/COMMIT pairs is pure overhead,
+// especially under -race where each transaction commit pays the full
+// fsync + WAL bookkeeping cost. Bundling them halves the wall-clock
+// time of a fresh Open() and makes the test suite tractable under the
+// race detector. Failure semantics improve too: a broken migration
+// leaves the DB at the previous version cleanly instead of in a
+// partially-applied state.
+//
+// We dropped golang-migrate/v4 here because its sqlite driver leaked
+// one io.Pipe writer goroutine per Open() call (the prefetch ring is
+// never drained on early Up() exit, and the driver's Close() helpfully
+// closes the *sql.DB the caller still owns). Under -race those leaked
+// goroutines accumulated until the suite deadlocked at 120s.
 func runMigrations(db *sql.DB) error {
-	src, err := iofs.New(migrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("load embedded migrations: %w", err)
+	if _, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version    INTEGER PRIMARY KEY,
+            applied_at INTEGER NOT NULL
+        )`); err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
 	}
-	drv, err := migratesqlite.WithInstance(db, &migratesqlite.Config{})
-	if err != nil {
-		return fmt.Errorf("migrate sqlite driver: %w", err)
+
+	var current int64
+	if err := db.QueryRow(
+		`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`,
+	).Scan(&current); err != nil {
+		return fmt.Errorf("read current schema version: %w", err)
 	}
-	m, err := migrate.NewWithInstance("iofs", src, "sqlite", drv)
+
+	pending, err := loadMigrations(current)
 	if err != nil {
-		return fmt.Errorf("migrate instance: %w", err)
+		return err
 	}
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("migrate up: %w", err)
+	if len(pending) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, mig := range pending {
+		if _, err := tx.Exec(mig.body); err != nil {
+			return fmt.Errorf("apply migration %06d_%s: %w", mig.version, mig.name, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO schema_migrations(version, applied_at) VALUES (?, unixepoch())`,
+			mig.version,
+		); err != nil {
+			return fmt.Errorf("record migration %06d_%s: %w", mig.version, mig.name, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migrations: %w", err)
 	}
 	return nil
 }
+
+type migration struct {
+	version int64
+	name    string
+	body    string
+}
+
+// loadMigrations returns every migration with version > after, ordered by
+// version ascending. Filenames must match `NNNNNN_name.sql`; anything
+// else is rejected loudly so a typo doesn't silently get skipped.
+func loadMigrations(after int64) ([]migration, error) {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded migrations: %w", err)
+	}
+	out := make([]migration, 0, len(entries))
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".sql") {
+			continue
+		}
+		name := strings.TrimSuffix(ent.Name(), ".sql")
+		i := strings.IndexByte(name, '_')
+		if i <= 0 {
+			return nil, fmt.Errorf("malformed migration filename %q (want NNNNNN_name.sql)", ent.Name())
+		}
+		v, err := strconv.ParseInt(name[:i], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("malformed migration version in %q: %w", ent.Name(), err)
+		}
+		if v <= after {
+			continue
+		}
+		body, err := fs.ReadFile(migrationsFS, path.Join("migrations", ent.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read migration %q: %w", ent.Name(), err)
+		}
+		out = append(out, migration{version: v, name: name[i+1:], body: string(body)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
+	return out, nil
+}
+

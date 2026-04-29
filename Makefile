@@ -76,10 +76,12 @@ build: proto
 	done
 
 test:
-	# 300s per test binary covers slow packages (mesh / storage /
-	# auth) under -race overhead. Individual packages stay well
-	# below this; the timeout is a safety net, not a target.
-	$(GO) test -race -count=1 -timeout=300s ./...
+	# 600s per test binary covers slow packages (api / storage / mesh)
+	# under -race overhead. internal/api in particular runs ~150 tests
+	# that each spin up a fresh sqlite + migrations + http engine, and
+	# the race detector multiplies each by ~10x. Individual packages
+	# stay well below this; the timeout is a safety net, not a target.
+	$(GO) test -race -count=1 -timeout=600s ./...
 
 lint:
 	golangci-lint run ./...

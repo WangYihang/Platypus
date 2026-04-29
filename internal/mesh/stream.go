@@ -187,16 +187,17 @@ func (m *streamManager) handleClose(env *v2pb.MeshEnvelope) {
 		return
 	}
 	st.closeErr = msg.Reason
-	// Try the orderly path first: deliver the close as a frame so
-	// pumpInbound flushes anything queued ahead of it. If the queue
-	// is full (pumpInbound is blocked in conn.Write — typically because
-	// the local consumer stalled), we MUST tear the stream down
-	// directly so closeConn unblocks the write and the goroutine
-	// exits. Without this fall-through a silent peer + a stuck local
-	// consumer leaves pumpInbound parked forever.
-	if !m.enqueueInbound(st, inboundFrame{reason: msg.Reason}) {
-		go m.closeStream(st, msg.Reason, false)
-	}
+	// Tear down unconditionally. The earlier "enqueue close, fall back
+	// to direct close on queue-full" path looked nicer (in-order
+	// delivery of any data still queued ahead of the close) but had a
+	// race: a non-full queue does NOT imply pumpInbound is making
+	// progress. If pumpInbound is parked in conn.Write because the
+	// local consumer stalled, the queued close sits there forever and
+	// the stream never tears down. A silent peer plus a slow consumer
+	// is exactly the scenario this code path exists for, so we err on
+	// the side of liveness — closeStream is idempotent and closeConn
+	// unblocks the parked Write so pumpInbound exits cleanly.
+	go m.closeStream(st, msg.Reason, false)
 }
 
 func (m *streamManager) pumpOutbound(st *streamState) {
