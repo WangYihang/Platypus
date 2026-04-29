@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../layout/ProjectShell", () => ({
@@ -16,8 +16,17 @@ vi.mock("./fleet/SessionsPanel", () => ({ default: () => <div /> }));
 vi.mock("./fleet/TopologyPanel", () => ({ default: () => <div /> }));
 vi.mock("../components/EnrollmentWaitBanner", () => ({ default: () => null }));
 
+// FleetPage now reads `qk.hosts(project.id)` to derive the
+// PageHeader pill counts (online / offline). Mock listHosts so the
+// query resolves with a deterministic shape and the test doesn't
+// need a backend.
+vi.mock("../lib/api", () => ({
+    listHosts: vi.fn().mockResolvedValue([]),
+}));
+
 import FleetPage from "./FleetPage";
 import { writePreference } from "../lib/preferences";
+import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
 // FleetPage's view ToggleGroup is now wrapped in a span carrying a
 // title= attribute that names the user's stored default-view
@@ -28,7 +37,7 @@ import { writePreference } from "../lib/preferences";
 describe("<FleetPage>", () => {
     it("annotates the view toggle with the current default-view preference", () => {
         writePreference("ui.fleet.defaultView", "cards");
-        const { container } = render(
+        const { container } = renderWithQueryClient(
             <MemoryRouter>
                 <FleetPage />
             </MemoryRouter>,
@@ -51,7 +60,7 @@ describe("<FleetPage>", () => {
     // there's no discoverable path to onboarding once the sidebar
     // item is gone.
     it("renders an 'Enroll agent' link in the header pointing at /fleet/enroll", () => {
-        render(
+        renderWithQueryClient(
             <MemoryRouter>
                 <FleetPage />
             </MemoryRouter>,

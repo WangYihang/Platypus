@@ -11,6 +11,11 @@ interface Props {
     // current consumer; the slot is here so future tabbed pages don't
     // need a parallel layout component.
     tabs?: ReactNode;
+    // Inline status pills rendered between the title cluster and the
+    // tabs / actions zones. Mockups place a row of `· N online · M
+    // offline · K warn` after the title — see `<StatusPills>` for the
+    // pill row primitive.
+    pills?: ReactNode;
 }
 
 // PageHeader is the page-identity strip at the top of every main-panel
@@ -28,7 +33,7 @@ interface Props {
 // The bottom hairline is always drawn; consumers with `tabs` lean on
 // the tab underline as a secondary divider but the page-level border
 // stays so non-tab pages don't look open at the bottom.
-export default function PageHeader({ title, subtitle, actions, tabs }: Props) {
+export default function PageHeader({ title, subtitle, actions, tabs, pills }: Props) {
     return (
         <header
             style={{
@@ -81,6 +86,18 @@ export default function PageHeader({ title, subtitle, actions, tabs }: Props) {
                     </div>
                 )}
             </div>
+            {pills && (
+                <div
+                    style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: space[2],
+                        flexShrink: 0,
+                    }}
+                >
+                    {pills}
+                </div>
+            )}
             {tabs && (
                 <div
                     style={{

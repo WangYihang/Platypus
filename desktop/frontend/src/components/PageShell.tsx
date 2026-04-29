@@ -10,6 +10,7 @@ interface Props {
     subtitle?: ReactNode;
     actions?: ReactNode;
     tabs?: ReactNode;
+    pills?: ReactNode;
     // Body padding token. Pages used to spell `padding: space[8]`
     // inline (32 px) or `space[6]` / `space[4]`; centralising here so
     // a future density tweak edits one component, not seventeen.
@@ -42,6 +43,7 @@ export default function PageShell({
     subtitle,
     actions,
     tabs,
+    pills,
     bodyPadding = 4,
     bodyClassName,
     bodyStyle,
@@ -49,7 +51,7 @@ export default function PageShell({
 }: Props) {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader title={title} subtitle={subtitle} actions={actions} tabs={tabs} />
+            <PageHeader title={title} subtitle={subtitle} actions={actions} tabs={tabs} pills={pills} />
             <div
                 className={bodyClassName}
                 style={{

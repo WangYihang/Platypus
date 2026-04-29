@@ -1,11 +1,17 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, Network, Rows3, Timer } from "lucide-react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
 import PageShell from "../components/PageShell";
+import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { icons } from "../lib/icons";
+import { listHosts } from "../lib/api";
 import { usePreference } from "../lib/preferences";
+import { qk } from "../lib/queryKeys";
+import { isOnline } from "../lib/time";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
@@ -41,6 +47,23 @@ export default function FleetPage() {
     const [params, setParams] = useSearchParams();
     const [defaultView] = usePreference("ui.fleet.defaultView");
     const view = parseView(params.get("view"), defaultView);
+
+    // The pages/fleet/Hosts*Panel children already query
+    // `qk.hosts(project.id)` — we share that cache here so the
+    // PageHeader pills don't double-fetch and stay in sync with the
+    // table / cards body.
+    const { data: hosts } = useQuery({
+        queryKey: qk.hosts(project.id),
+        queryFn: () => listHosts(project.id),
+    });
+    const counts = useMemo(() => {
+        const list = hosts ?? [];
+        let online = 0;
+        for (const h of list) {
+            if (isOnline(h.last_seen_at)) online++;
+        }
+        return { online, offline: list.length - online };
+    }, [hosts]);
 
     const setView = (next: FleetView) => {
         const nextParams = new URLSearchParams(params);
@@ -110,6 +133,14 @@ export default function FleetPage() {
             title="Fleet"
             subtitle={SUBTITLES[view]}
             actions={actions}
+            pills={
+                <StatusPills
+                    pills={[
+                        { tone: "success", count: counts.online, label: "online" },
+                        { tone: "muted", count: counts.offline, label: "offline" },
+                    ]}
+                />
+            }
             bodyPadding={0}
             bodyStyle={{ overflow: "visible", display: "flex", flexDirection: "column", padding: 0 }}
         >
