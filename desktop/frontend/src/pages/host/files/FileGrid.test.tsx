@@ -45,9 +45,12 @@ function renderGrid(props: Partial<React.ComponentProps<typeof FileGrid>> = {}) 
 }
 
 describe("<FileGrid>", () => {
-    it("shows an empty state when there are no entries", () => {
-        renderGrid();
-        expect(screen.getByText(/empty directory/i)).toBeInTheDocument();
+    it("renders nothing when there are no entries (parent owns the empty state)", () => {
+        const { container } = renderGrid();
+        // FileBrowser renders the rich empty state with CTAs; the
+        // grid itself returns null so the parent's slot shows
+        // through. Sanity-check that no tile button leaked through.
+        expect(container.querySelectorAll("button").length).toBe(0);
     });
 
     it("renders one tile per entry with the file name", () => {

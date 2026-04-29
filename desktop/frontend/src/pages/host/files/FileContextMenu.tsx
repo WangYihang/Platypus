@@ -53,6 +53,11 @@ interface Props {
     onCopyPath?: () => void;
     onCopyName?: () => void;
     onDelete?: () => void;
+    // Cross-cutting: spawn a shell in the bottom drawer and seed it
+    // with `cd <thisDir>`. Wired on the empty-area menu (cd's into
+    // the current path) and on rows whose entry is a directory
+    // (cd's into that directory).
+    onOpenInTerminal?: () => void;
     // Empty-area callbacks.
     onNewFile?: () => void;
     onNewFolder?: () => void;
@@ -72,6 +77,7 @@ export default function FileContextMenu({
     onCopyPath,
     onCopyName,
     onDelete,
+    onOpenInTerminal,
     onNewFile,
     onNewFolder,
     onUploadHere,
@@ -90,12 +96,14 @@ export default function FileContextMenu({
                           onChmod,
                           onCopyPath,
                           onCopyName,
+                          onOpenInTerminal,
                           onDelete,
                       })
                     : renderEmptyItems({
                           onNewFile,
                           onNewFolder,
                           onUploadHere,
+                          onOpenInTerminal,
                           onRefresh,
                       })}
             </ContextMenuContent>
@@ -114,6 +122,7 @@ function renderRowItems(
         | "onChmod"
         | "onCopyPath"
         | "onCopyName"
+        | "onOpenInTerminal"
         | "onDelete"
     >,
 ) {
@@ -134,6 +143,11 @@ function renderRowItems(
             )}
             {cbs.onDownload && (
                 <ContextMenuItem onSelect={cbs.onDownload}>Download</ContextMenuItem>
+            )}
+            {single && cbs.onOpenInTerminal && (
+                <ContextMenuItem onSelect={cbs.onOpenInTerminal}>
+                    Open in terminal here
+                </ContextMenuItem>
             )}
             {/* Rename + Chmod only meaningful for a single entry. */}
             {single && cbs.onRename && (
@@ -166,7 +180,10 @@ function renderRowItems(
 }
 
 function renderEmptyItems(
-    cbs: Pick<Props, "onNewFile" | "onNewFolder" | "onUploadHere" | "onRefresh">,
+    cbs: Pick<
+        Props,
+        "onNewFile" | "onNewFolder" | "onUploadHere" | "onOpenInTerminal" | "onRefresh"
+    >,
 ) {
     return (
         <>
@@ -184,6 +201,11 @@ function renderEmptyItems(
             )}
             {cbs.onUploadHere && (
                 <ContextMenuItem onSelect={cbs.onUploadHere}>Upload here</ContextMenuItem>
+            )}
+            {cbs.onOpenInTerminal && (
+                <ContextMenuItem onSelect={cbs.onOpenInTerminal}>
+                    Open in terminal here
+                </ContextMenuItem>
             )}
             <ContextMenuSeparator />
             {/* Paste is wired-but-disabled until clipboard work lands;

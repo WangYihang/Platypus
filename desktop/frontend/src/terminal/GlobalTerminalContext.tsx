@@ -41,6 +41,12 @@ export interface ShellEntry {
     projectSlug: string;
     hostId: string;
     sessionHash: string;
+    // Optional one-shot command piped into the shell as soon as
+    // the agent reports the terminal as open. Only sent on the
+    // first attach for this entry; clearing it after the send
+    // prevents duplicate execution if <Terminal> remounts (e.g.
+    // drawer collapse / expand).
+    initialCommand?: string;
 }
 
 export interface OpenShellInput {
@@ -49,6 +55,7 @@ export interface OpenShellInput {
     hostId: string;
     sessionHash: string;
     label: string;
+    initialCommand?: string;
 }
 
 interface GlobalTerminalContextValue {
@@ -63,6 +70,12 @@ interface GlobalTerminalContextValue {
     openDrawer: () => void;
     closeDrawer: () => void;
     setDrawerHeight: (h: number) => void;
+    // consumeInitialCommand returns the pending one-shot command for
+    // a shell (if any) and atomically clears it. The Terminal mount
+    // calls this once the WebSocket reports open so the cd/seed only
+    // ever runs on first attach — a remount (drawer collapse /
+    // expand, route nav within the same host) returns undefined.
+    consumeInitialCommand: (id: string) => string | undefined;
 }
 
 const GlobalTerminalContext = createContext<GlobalTerminalContextValue | null>(null);
@@ -172,6 +185,7 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
                     projectSlug: input.projectSlug,
                     hostId: input.hostId,
                     sessionHash: input.sessionHash,
+                    initialCommand: input.initialCommand,
                 },
             ];
         });
@@ -210,6 +224,20 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
         setDrawerHeightState(clampHeight(h));
     }, []);
 
+    const consumeInitialCommand = useCallback((id: string): string | undefined => {
+        let cmd: string | undefined;
+        setShells((prev) => {
+            const idx = prev.findIndex((s) => s.id === id);
+            if (idx < 0) return prev;
+            cmd = prev[idx].initialCommand;
+            if (!cmd) return prev;
+            const next = prev.slice();
+            next[idx] = { ...prev[idx], initialCommand: undefined };
+            return next;
+        });
+        return cmd;
+    }, []);
+
     const value = useMemo<GlobalTerminalContextValue>(
         () => ({
             shells,
@@ -223,6 +251,7 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
             openDrawer,
             closeDrawer,
             setDrawerHeight,
+            consumeInitialCommand,
         }),
         [
             shells,
@@ -236,6 +265,7 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
             openDrawer,
             closeDrawer,
             setDrawerHeight,
+            consumeInitialCommand,
         ],
     );
 

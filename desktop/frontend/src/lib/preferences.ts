@@ -31,6 +31,22 @@ export interface PreferenceDefs {
     // Finder, and most file managers — the explorer's toolbar
     // exposes a one-click toggle when the user wants them back.
     "ui.files.showHidden": boolean;
+    // When true (default), directories always sort above files
+    // regardless of the active sort key. Mirrors the convention
+    // every desktop file manager uses since classic Finder. Power
+    // users who want a strict alphabetical merge can flip it off.
+    "ui.files.foldersFirst": boolean;
+    // Persisted list-view column widths so a user who tightens the
+    // Modified column doesn't have to redo it every session. Keyed
+    // by FileTable column id; missing keys fall back to the table's
+    // default sizing.
+    "ui.files.columnWidths": Record<string, number>;
+    // Move-to-Trash semantics: when true, the Delete action does a
+    // best-effort `mv` into a per-host trash dir instead of a hard
+    // unlink. The destination is a fixed root chosen for being on
+    // the same default volume as $HOME on most distros so a rename
+    // stays cheap. See trash.ts for the resolution rules.
+    "ui.files.useTrash": boolean;
 
     // --- Terminal
     "terminal.fontSize": number;
@@ -52,6 +68,9 @@ const DEFAULTS: PreferenceDefs = {
     "ui.files.viewMode": "list",
     "ui.files.previewOpen": true,
     "ui.files.showHidden": false,
+    "ui.files.foldersFirst": true,
+    "ui.files.columnWidths": {},
+    "ui.files.useTrash": false,
     "terminal.fontSize": 13,
     "terminal.cursorBlink": true,
     "terminal.scrollback": 5000,

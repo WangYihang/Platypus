@@ -44,6 +44,21 @@ function comparePrimary(a: FileEntryDTO, b: FileEntryDTO, id: FileSortId): numbe
     }
 }
 
+interface SortOptions {
+    // When true, directories always rank above files (and symlinks
+    // sit between the two) regardless of the user's active sort
+    // key. The flip side is "merge mode": every entry is sorted on
+    // the chosen key alone, which is what power users coming from a
+    // bare `ls -la` workflow tend to want.
+    foldersFirst?: boolean;
+}
+
+function typeRank(e: FileEntryDTO): number {
+    if (e.isDir) return 0;
+    if (e.isSymlink) return 1;
+    return 2;
+}
+
 // sortEntries returns a new array sorted by `sorting[0]` (we only ever
 // honour a single sort key today). Falls back to name-asc when no key
 // is provided. Always tie-breaks on name so the order is stable
@@ -52,12 +67,23 @@ function comparePrimary(a: FileEntryDTO, b: FileEntryDTO, id: FileSortId): numbe
 export function sortEntries(
     entries: FileEntryDTO[],
     sorting: SortingState,
+    opts: SortOptions = {},
 ): FileEntryDTO[] {
     const head = sorting[0];
     const id = (head?.id as FileSortId) ?? "name";
     const desc = !!head?.desc;
+    const foldersFirst = !!opts.foldersFirst;
     const out = entries.slice();
     out.sort((a, b) => {
+        // The folders-first axis sits *outside* the user's chosen
+        // direction so flipping to descending doesn't invert it —
+        // operators expect "newest first" to mean newest *files*
+        // among files, not the folders to drop to the bottom. The
+        // "type" sort already groups by rank and is unaffected.
+        if (foldersFirst && id !== "type") {
+            const rankDiff = typeRank(a) - typeRank(b);
+            if (rankDiff !== 0) return rankDiff;
+        }
         let cmp = comparePrimary(a, b, id);
         if (cmp === 0 && id !== "name") cmp = compareName(a, b);
         return desc ? -cmp : cmp;

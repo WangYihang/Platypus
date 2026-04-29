@@ -5,13 +5,18 @@ import {
     getCoreRowModel,
     useReactTable,
     type ColumnDef,
+    type ColumnSizingState,
     type SortingState,
 } from "@tanstack/react-table";
+
+import { usePreference } from "../../../lib/preferences";
 import { useDraggable, useDroppable, useDndMonitor } from "@dnd-kit/core";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import dayjs from "dayjs";
 
 import { isHiddenEntry, pickFileIcon } from "./fileIcons";
+import EntryTooltip from "./EntryTooltip";
+import { joinPath } from "./paths";
 
 import {
     Table,
@@ -132,6 +137,7 @@ const DraggableRow = React.forwardRef<HTMLTableRowElement, DraggableRowProps>(fu
 
 export default function FileTable({
     entries,
+    currentPath,
     selectedNames,
     setSelectedNames,
     onOpen,
@@ -170,18 +176,24 @@ export default function FileTable({
                     const { Icon, color } = pickFileIcon(e);
                     const dim = isHiddenEntry(e);
                     return (
-                        <div
-                            className={cn(
-                                "flex items-center gap-2 font-mono",
-                                dim && "opacity-60",
-                            )}
+                        <EntryTooltip
+                            entry={e}
+                            fullPath={joinPath(currentPath, e.name)}
+                            side="right"
                         >
-                            <Icon className={cn("size-4", color)} />
-                            <span>{e.name}</span>
-                            {e.isSymlink && e.symlinkTarget && (
-                                <span className="text-xs text-muted-foreground">→ {e.symlinkTarget}</span>
-                            )}
-                        </div>
+                            <div
+                                className={cn(
+                                    "flex items-center gap-2 font-mono",
+                                    dim && "opacity-60",
+                                )}
+                            >
+                                <Icon className={cn("size-4", color)} />
+                                <span>{e.name}</span>
+                                {e.isSymlink && e.symlinkTarget && (
+                                    <span className="text-xs text-muted-foreground">→ {e.symlinkTarget}</span>
+                                )}
+                            </div>
+                        </EntryTooltip>
                     );
                 },
             },
@@ -213,7 +225,11 @@ export default function FileTable({
                 },
             },
         ],
-        [],
+        // currentPath is included so the EntryTooltip closure
+        // captures the live directory after a cd. Without this the
+        // tooltip would still render paths relative to the directory
+        // the table was first mounted at.
+        [currentPath],
     );
 
     // Sorting is applied at the parent (FileBrowser) so the same key
@@ -222,14 +238,34 @@ export default function FileTable({
     // correct asc/desc indicator, but skip getSortedRowModel to avoid
     // double-sorting (and to support sort ids — e.g. "type" — that
     // don't have a corresponding column accessor).
+    // Column-sizing is fully managed by us so the user's choices
+    // survive cd / refetch / reload. We mirror tanstack's local
+    // state into the typed preference registry so the same widths
+    // apply across host pages and tabs.
+    const [persistedSizes, setPersistedSizes] = usePreference("ui.files.columnWidths");
+    const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>(
+        () => persistedSizes,
+    );
+    React.useEffect(() => {
+        // Push live changes into the prefs registry. Cheap shallow
+        // equality keeps us from writing on every drag tick — the
+        // preference event listener would re-fire and re-render.
+        const a = JSON.stringify(persistedSizes);
+        const b = JSON.stringify(columnSizing);
+        if (a !== b) setPersistedSizes(columnSizing);
+    }, [columnSizing, persistedSizes, setPersistedSizes]);
+
     const table = useReactTable({
         data: entries,
         columns,
-        state: { sorting },
+        state: { sorting, columnSizing },
         onSortingChange: (updater) => {
             const next = typeof updater === "function" ? updater(sorting) : updater;
             setSorting(next);
         },
+        onColumnSizingChange: setColumnSizing,
+        enableColumnResizing: true,
+        columnResizeMode: "onChange",
         getCoreRowModel: getCoreRowModel(),
         manualSorting: true,
     });
@@ -267,18 +303,28 @@ export default function FileTable({
                     <TableRow key={hg.id}>
                         {hg.headers.map((header) => {
                             const canSort = header.column.getCanSort();
+                            const canResize = header.column.getCanResize();
                             const sortDir = header.column.getIsSorted();
                             return (
                                 <TableHead
                                     key={header.id}
                                     style={{ width: header.getSize() || undefined }}
-                                    onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                                     className={cn(
-                                        "bg-background",
-                                        canSort && "cursor-pointer select-none",
+                                        "relative bg-background",
+                                        canSort && "select-none",
                                     )}
                                 >
-                                    <div className="flex items-center gap-1">
+                                    <div
+                                        onClick={
+                                            canSort
+                                                ? header.column.getToggleSortingHandler()
+                                                : undefined
+                                        }
+                                        className={cn(
+                                            "flex items-center gap-1",
+                                            canSort && "cursor-pointer",
+                                        )}
+                                    >
                                         {flexRender(header.column.columnDef.header, header.getContext())}
                                         {canSort &&
                                             (sortDir === "asc" ? (
@@ -289,6 +335,31 @@ export default function FileTable({
                                                 <ArrowUpDown className="size-3 opacity-40" />
                                             ))}
                                     </div>
+                                    {canResize && (
+                                        // The resize handle has to sit on top of
+                                        // the sort click target, so we use a
+                                        // small absolute strip on the right edge
+                                        // of the header. mousedown/touchstart go
+                                        // straight to tanstack's resize tracker;
+                                        // the click event is stopped so the
+                                        // sort handler upstream doesn't fire on
+                                        // the same gesture.
+                                        <div
+                                            onMouseDown={header.getResizeHandler()}
+                                            onTouchStart={header.getResizeHandler()}
+                                            onClick={(e) => e.stopPropagation()}
+                                            role="separator"
+                                            aria-orientation="vertical"
+                                            aria-label="Resize column"
+                                            className={cn(
+                                                "absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none",
+                                                "opacity-0 hover:opacity-100",
+                                                header.column.getIsResizing()
+                                                    ? "bg-primary opacity-100"
+                                                    : "bg-border",
+                                            )}
+                                        />
+                                    )}
                                 </TableHead>
                             );
                         })}
@@ -339,13 +410,9 @@ export default function FileTable({
                         rowNode
                     );
                 })}
-                {entries.length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={columns.length} className="py-10 text-center text-sm text-muted-foreground">
-                            Empty directory
-                        </TableCell>
-                    </TableRow>
-                )}
+                {/* Empty / filter-narrowed-empty state lives in the
+                    parent <FileBrowser> so it can offer CTAs. We
+                    just render no rows. */}
             </TableBody>
         </Table>
     );

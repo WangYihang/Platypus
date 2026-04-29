@@ -7,6 +7,7 @@ import type { FileEntryDTO } from "../../../platform/App.web";
 import { humanize } from "../../../lib/format";
 import Thumbnail from "./Thumbnail";
 import { isHiddenEntry, pickFileIcon } from "./fileIcons";
+import { entryTitleText } from "./entryTitle";
 
 interface Props {
     entries: FileEntryDTO[];
@@ -184,17 +185,23 @@ export default function FileGrid({
         setSelectedNames(next);
     }
 
-    if (entries.length === 0) {
-        return (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-                Empty directory
-            </div>
-        );
-    }
+    // The parent (FileBrowser) renders a richer empty state with
+    // CTAs when entries.length === 0 — including a different one
+    // for "filter narrowed to empty" vs. "directory is genuinely
+    // empty". We just render nothing here in that case so the
+    // parent's empty state shows through.
+    if (entries.length === 0) return null;
 
     return (
         <div className="flex flex-wrap content-start gap-1.5 p-1.5">
             {entries.map((e) => {
+                const tilePath = `${currentPath.replace(/\/$/, "")}/${e.name}`;
+                // Native `title` for grid hovers — Radix Tooltip's
+                // `asChild` can't compose cleanly with the
+                // ContextMenuTrigger wrap that surrounds each tile,
+                // so we use the browser's built-in tooltip here. The
+                // list view, where the cell content is a plain div,
+                // gets the prettier Radix tooltip.
                 const tile = (
                     <Tile
                         key={e.name}
@@ -206,10 +213,9 @@ export default function FileGrid({
                         projectID={projectID}
                         sessionHash={sessionHash}
                         fullPath={
-                            projectID && sessionHash
-                                ? `${currentPath.replace(/\/$/, "")}/${e.name}`
-                                : undefined
+                            projectID && sessionHash ? tilePath : undefined
                         }
+                        title={entryTitleText(e, tilePath)}
                     />
                 );
                 return wrapRow ? (

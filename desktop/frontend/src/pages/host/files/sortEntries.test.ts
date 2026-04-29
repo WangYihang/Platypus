@@ -64,4 +64,35 @@ describe("sortEntries", () => {
         );
         expect(out.map((e) => e.name)).toEqual(["src", "link", "photo.jpg", "notes.txt"]);
     });
+
+    it("with foldersFirst, dirs always come before files even when sort key reverses", () => {
+        const entries = [
+            file("a.txt", { modTimeUnix: 100 }),
+            file("zebra-dir", { isDir: true, modTimeUnix: 1 }),
+            file("b.txt", { modTimeUnix: 200 }),
+        ];
+        const out = sortEntries(
+            entries,
+            [{ id: "modTimeUnix", desc: true }],
+            { foldersFirst: true },
+        );
+        // The dir lands first regardless of its mtime; the files
+        // then sort newest-first among themselves.
+        expect(out.map((e) => e.name)).toEqual(["zebra-dir", "b.txt", "a.txt"]);
+    });
+
+    it("foldersFirst is bypassed when sort key is 'type'", () => {
+        // The "type" key already groups by rank, so layering
+        // foldersFirst on top would be a redundant constraint that
+        // could surprise users who flip "Files first" via a desc=true.
+        const out = sortEntries(
+            [
+                file("src", { isDir: true }),
+                file("a.txt"),
+            ],
+            [{ id: "type", desc: true }],
+            { foldersFirst: true },
+        );
+        expect(out.map((e) => e.name)).toEqual(["a.txt", "src"]);
+    });
 });

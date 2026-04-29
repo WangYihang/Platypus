@@ -32,6 +32,8 @@ import { useViewMode } from "./useViewMode";
 import { isHiddenEntry } from "./fileIcons";
 import { sortEntries } from "./sortEntries";
 import { usePreference } from "../../../lib/preferences";
+import { trashTargetPath, TRASH_ROOT } from "./trash";
+import { useGlobalTerminalSafe } from "../../../terminal/GlobalTerminalContext";
 import {
     ArchiveFormat,
     archiveExtension,
@@ -58,12 +60,21 @@ import { usePreviewPane } from "./usePreviewPane";
 
 import FilePreview, { SMALL_FILE_LIMIT } from "./FilePreview";
 import FilesChrome from "./FilesChrome";
+import EmptyDirectoryState from "./EmptyDirectoryState";
 import { pickViewerKind } from "./viewerKind";
 
 interface Props {
     projectID: string;
     sessionHash: string;
     host?: Host | null;
+}
+
+// shellQuote wraps a path in POSIX single-quotes so a `cd` command
+// fed to a remote shell survives spaces, $-expansions, and embedded
+// quotes. Single-quote-only is enough — bash, zsh, sh, and dash all
+// agree on the rule.
+function shellQuote(s: string): string {
+    return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 export default function FileBrowser({ projectID, sessionHash, host = null }: Props) {
@@ -81,7 +92,21 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [viewMode, setViewMode] = useViewMode();
     const [density, setDensity] = useDensity();
     const [showHidden, setShowHidden] = usePreference("ui.files.showHidden");
+    const [foldersFirst, setFoldersFirst] = usePreference("ui.files.foldersFirst");
+    const [useTrash, setUseTrash] = usePreference("ui.files.useTrash");
     const [editMode, setEditMode] = useState(false);
+    // Filter narrows the listing to entries whose name contains the
+    // operator's query (case-insensitive substring). It's a pure
+    // client-side filter — driven by Cmd+F in the toolbar.
+    const [filter, setFilter] = useState("");
+    // Increment-on-trigger signals that pop the path input or focus
+    // the filter box. Using a counter rather than a boolean lets the
+    // chrome subscribe via `useEffect([signal])` and re-trigger every
+    // press, even if the chrome was already in the open state when
+    // the previous press fired.
+    const [pathInputOpenSignal, setPathInputOpenSignal] = useState(0);
+    const [filterFocusSignal, setFilterFocusSignal] = useState(0);
+    const terminal = useGlobalTerminalSafe();
 
     // Apply hidden-file filtering + the active sort once at the
     // browser level so both views (FileTable / FileGrid) render the
@@ -90,16 +115,42 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     // grid view too, and lets us add sort ids ("type") that don't map
     // to a column accessor.
     const visibleEntries = useMemo(() => {
-        const filtered = showHidden
-            ? dir.entries
-            : dir.entries.filter((e) => !isHiddenEntry(e));
-        return sortEntries(filtered, sorting);
-    }, [dir.entries, showHidden, sorting]);
+        const needle = filter.trim().toLowerCase();
+        const filtered = dir.entries.filter((e) => {
+            if (!showHidden && isHiddenEntry(e)) return false;
+            if (needle && !e.name.toLowerCase().includes(needle)) return false;
+            return true;
+        });
+        return sortEntries(filtered, sorting, { foldersFirst });
+    }, [dir.entries, showHidden, sorting, foldersFirst, filter]);
 
     const hiddenCount = useMemo(
         () => dir.entries.reduce((n, e) => n + (isHiddenEntry(e) ? 1 : 0), 0),
         [dir.entries],
     );
+
+    // The filter narrows the visible set; statusText calls out how
+    // many were elided so an empty result doesn't read as "directory
+    // is empty" — it's the operator's query that ate everything.
+    const filterTrimmed = filter.trim();
+    const filterEliminated = filterTrimmed
+        ? dir.entries.length - hiddenCount - visibleEntries.length
+        : 0;
+
+    // Reset selection when the filter narrows below current selection;
+    // a row that scrolled out of view shouldn't keep its checkbox
+    // checked.
+    useEffect(() => {
+        if (!filterTrimmed) return;
+        const live = new Set(visibleEntries.map((e) => e.name));
+        setSelected((prev) => {
+            const next = new Set<string>();
+            prev.forEach((n) => {
+                if (live.has(n)) next.add(n);
+            });
+            return next.size === prev.size ? prev : next;
+        });
+    }, [visibleEntries, filterTrimmed]);
 
     const sensors = useDragSensors(5);
 
@@ -193,6 +244,11 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                             toast.error(`copy: ${humanizeError(err)}`);
                         }
                     }}
+                    onOpenInTerminal={
+                        terminal && entry.isDir
+                            ? () => handleOpenInTerminal(entry)
+                            : undefined
+                    }
                     onDelete={() => setShowDelete(true)}
                 >
                     {node}
@@ -352,17 +408,89 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     }
 
     async function handleDelete() {
+        const total = selectedEntries.length;
+        if (total === 0) return;
+        const verb = useTrash ? "Moving to Trash" : "Deleting";
+        const past = useTrash ? "Moved to Trash" : "Deleted";
+        // Single-id sonner toast that updates per item — gives the
+        // operator a live "n of N" instead of a silent UI when the
+        // batch takes a few seconds.
+        const toastId = `files-delete-${Date.now()}`;
+        if (total > 1) {
+            toast.loading(`${verb} 1 of ${total}…`, { id: toastId });
+        }
+        if (useTrash) {
+            // Best-effort mkdir of the trash root — ignore EEXIST and
+            // similar failures here; the rename below will surface
+            // any real problem (permissions, cross-device, …).
+            try {
+                await Mkdir(projectID, sessionHash, TRASH_ROOT, true, 0o700);
+            } catch {
+                // Swallow. If the rename can't proceed we'll catch it
+                // on the next call and show a useful error.
+            }
+        }
+        let processed = 0;
         for (const entry of selectedEntries) {
             try {
-                await DeleteFile(projectID, sessionHash, joinPath(dir.path, entry.name), entry.isDir);
+                if (useTrash) {
+                    await RenameFile(
+                        projectID,
+                        sessionHash,
+                        joinPath(dir.path, entry.name),
+                        trashTargetPath(entry.name),
+                    );
+                } else {
+                    await DeleteFile(
+                        projectID,
+                        sessionHash,
+                        joinPath(dir.path, entry.name),
+                        entry.isDir,
+                    );
+                }
             } catch (err) {
-                toast.error(`delete ${entry.name}: ${humanizeError(err)}`);
+                toast.error(
+                    `${useTrash ? "trash" : "delete"} ${entry.name}: ${humanizeError(err)}`,
+                    { id: total > 1 ? toastId : undefined },
+                );
                 dir.reload();
                 return;
             }
+            processed += 1;
+            if (total > 1 && processed < total) {
+                toast.loading(`${verb} ${processed + 1} of ${total}…`, { id: toastId });
+            }
         }
-        toast.success(`Deleted ${selectedEntries.length} item(s)`);
+        toast.success(`${past} ${total} item${total === 1 ? "" : "s"}`, {
+            id: total > 1 ? toastId : undefined,
+        });
         dir.reload();
+    }
+
+    function handleOpenInTerminal(entry?: FileEntryDTO) {
+        if (!terminal) {
+            toast.error("Terminal drawer is not available in this view");
+            return;
+        }
+        // Resolve the cd target: a directory entry → that dir; a file
+        // entry → its parent (we already cd'd into it to view); no
+        // entry → the current path.
+        const targetDir = entry && entry.isDir
+            ? joinPath(dir.path, entry.name)
+            : dir.path;
+        const label = host?.primary_alias || host?.hostname || "shell";
+        terminal.openShell({
+            projectID,
+            // FileBrowser doesn't have direct access to the project
+            // slug, but openShell only uses it as a router URL hint
+            // for "Reopen in tab" actions. The projectID is a safe
+            // fallback for label/hint purposes.
+            projectSlug: projectID,
+            hostId: host?.id || sessionHash,
+            sessionHash,
+            label,
+            initialCommand: `cd ${shellQuote(targetDir)}\n`,
+        });
     }
 
     function handleInternalMove(from: FileEntryDTO, toDirName: string) {
@@ -413,19 +541,45 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             } else if (ev.key === "Enter" && selectedEntries.length === 1) {
                 ev.preventDefault();
                 openEntry(selectedEntries[0]);
+            } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "l") {
+                // Cmd/Ctrl-L mirrors the browser's "focus location
+                // bar" — opens the path-input mode in the chrome.
+                ev.preventDefault();
+                setPathInputOpenSignal((n) => n + 1);
+            } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "f") {
+                ev.preventDefault();
+                setFilterFocusSignal((n) => n + 1);
+            } else if (ev.altKey && ev.key === "ArrowLeft") {
+                ev.preventDefault();
+                if (dir.canBack) dir.back();
+            } else if (ev.altKey && ev.key === "ArrowRight") {
+                ev.preventDefault();
+                if (dir.canForward) dir.forward();
+            } else if (ev.key === "F5") {
+                ev.preventDefault();
+                dir.reload();
             }
         }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [goUp, selectedEntries.map((e) => e.name).join("|"), dir.path, preview.open]);
+    }, [
+        goUp,
+        selectedEntries.map((e) => e.name).join("|"),
+        dir.path,
+        preview.open,
+        dir.canBack,
+        dir.canForward,
+    ]);
 
     const crumbs = splitCrumbs(dir.path);
     const quickPaths = quickPathsForHost(host);
     const visibleCount = visibleEntries.length;
     const statusText = `${visibleCount} item${visibleCount === 1 ? "" : "s"}${
-        !showHidden && hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""
-    }${
+        filterTrimmed && filterEliminated > 0
+            ? ` · ${filterEliminated} filtered`
+            : ""
+    }${!showHidden && hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}${
         selectedEntries.length > 0
             ? ` · ${selectedEntries.length} selected · ${humanize(
                   selectedEntries.reduce((acc, e) => acc + (e.size || 0), 0),
@@ -440,6 +594,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             onNewFile={() => setShowNewFile(true)}
             onNewFolder={() => setShowNewFolder(true)}
             onUploadHere={handleUploadClick}
+            onOpenInTerminal={terminal ? () => handleOpenInTerminal() : undefined}
             onRefresh={dir.reload}
         >
             <div
@@ -450,9 +605,49 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                 {...dropHandlers}
             >
                 {dir.error ? (
-                    <div className="p-6 text-sm text-red-500">
-                        Load error: {dir.error}
+                    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm">
+                        <div className="text-center">
+                            <div className="font-medium text-red-500">
+                                Could not load directory
+                            </div>
+                            <div className="mt-1 max-w-md break-all text-xs text-muted-foreground">
+                                {dir.error}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={dir.reload}
+                            >
+                                Retry
+                            </Button>
+                            {dir.canBack && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={dir.back}
+                                >
+                                    Back
+                                </Button>
+                            )}
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => dir.cd("/")}
+                            >
+                                Go to /
+                            </Button>
+                        </div>
                     </div>
+                ) : visibleEntries.length === 0 && !dir.loading ? (
+                    <EmptyDirectoryState
+                        hasFilter={!!filterTrimmed}
+                        onClearFilter={() => setFilter("")}
+                        onNewFile={() => setShowNewFile(true)}
+                        onNewFolder={() => setShowNewFolder(true)}
+                        onUploadHere={handleUploadClick}
+                    />
                 ) : viewMode === "grid" ? (
                     <FileGrid
                         entries={visibleEntries}
@@ -488,8 +683,13 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
             <div className="flex h-full min-h-0 flex-col gap-1.5">
                 <FilesChrome
                     crumbs={crumbs}
+                    currentPath={dir.path}
                     canGoUp={dir.path !== "/"}
                     onGoUp={goUp}
+                    canBack={dir.canBack}
+                    canForward={dir.canForward}
+                    onBack={dir.back}
+                    onForward={dir.forward}
                     onCd={dir.cd}
                     onRefresh={dir.reload}
                     refreshLoading={dir.loading}
@@ -501,8 +701,16 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     setDensity={setDensity}
                     showHidden={showHidden}
                     setShowHidden={setShowHidden}
+                    foldersFirst={foldersFirst}
+                    setFoldersFirst={setFoldersFirst}
+                    useTrash={useTrash}
+                    setUseTrash={setUseTrash}
                     sorting={sorting}
                     setSorting={setSorting}
+                    filter={filter}
+                    setFilter={setFilter}
+                    pathInputOpenSignal={pathInputOpenSignal}
+                    filterFocusSignal={filterFocusSignal}
                 />
 
                 {previewExpanded ? (

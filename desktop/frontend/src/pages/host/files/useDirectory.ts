@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ListDir } from "@wails/go/app/App";
@@ -51,6 +51,16 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
     const [path, setPath] = useState<string>(() =>
         readSavedPath(sessionHash, initialPath),
     );
+    // Per-session navigation history: a back stack of paths the user
+    // has visited and a forward stack populated when they go back.
+    // Modelled on a browser tab — clicking on a directory truncates
+    // the forward stack, the toolbar's < / > buttons pop between
+    // them. Reset when the session changes (see effect below) so the
+    // history doesn't bleed between hosts.
+    const [history, setHistory] = useState<{ back: string[]; forward: string[] }>({
+        back: [],
+        forward: [],
+    });
 
     const queryKey = ["directory", projectID, sessionHash, path] as const;
 
@@ -76,8 +86,57 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data, sessionHash, path]);
 
+    // Mirror `path` into a ref so back() / forward() can compute
+    // `currentPathRef.current` without re-creating the closures on
+    // every state change. Without the ref the back stack would
+    // capture a stale path snapshot and push the *previous* path
+    // onto forward instead of the current one.
+    const currentPathRef = useRef(path);
+    useEffect(() => {
+        currentPathRef.current = path;
+    }, [path]);
+
     const cd = useCallback((targetPath: string) => {
-        setPath(targetPath);
+        setPath((prev) => {
+            if (prev === targetPath) return prev;
+            // Forward-truncate: a fresh `cd` always starts a new
+            // branch in the history tree, just like a browser
+            // navigation invalidates the forward stack.
+            setHistory((h) => ({ back: [...h.back, prev], forward: [] }));
+            return targetPath;
+        });
+    }, []);
+
+    const back = useCallback(() => {
+        setHistory((h) => {
+            if (h.back.length === 0) return h;
+            const target = h.back[h.back.length - 1];
+            setPath((prev) => {
+                if (prev === target) return prev;
+                return target;
+            });
+            // Push the *current* path onto the forward stack so the
+            // forward arrow returns the user to where they were.
+            return {
+                back: h.back.slice(0, -1),
+                forward: [...h.forward, currentPathRef.current],
+            };
+        });
+    }, []);
+
+    const forward = useCallback(() => {
+        setHistory((h) => {
+            if (h.forward.length === 0) return h;
+            const target = h.forward[h.forward.length - 1];
+            setPath((prev) => {
+                if (prev === target) return prev;
+                return target;
+            });
+            return {
+                back: [...h.back, currentPathRef.current],
+                forward: h.forward.slice(0, -1),
+            };
+        });
     }, []);
 
     const reload = useCallback(() => {
@@ -91,6 +150,10 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
     // shouldn't carry a stale `/var/log` over from the previous one.
     useEffect(() => {
         setPath(readSavedPath(sessionHash, initialPath));
+        // History is per-session: switching hosts should give the
+        // user a fresh navigation slate, not a back stack pointing
+        // into a directory tree that doesn't exist on the new host.
+        setHistory({ back: [], forward: [] });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionHash]);
 
@@ -109,6 +172,10 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
         loading,
         error: errorString,
         cd,
+        back,
+        forward,
+        canBack: history.back.length > 0,
+        canForward: history.forward.length > 0,
         reload,
         // Expose the queryClient so consumers (e.g. mutations like
         // delete / rename / mkdir) can `invalidateQueries({ queryKey:

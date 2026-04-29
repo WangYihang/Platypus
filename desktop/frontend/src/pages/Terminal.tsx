@@ -12,10 +12,17 @@ import {
 import { EventsOff, EventsOn } from "@wails/runtime/runtime";
 import { palette } from "../layout/theme";
 import { readPreference } from "../lib/preferences";
+import { useGlobalTerminalSafe } from "../terminal/GlobalTerminalContext";
 
 interface Props {
     projectID: string;
     sessionHash: string;
+    // Optional GlobalTerminalContext shell id. When set, the terminal
+    // pulls a one-shot initial command (e.g. `cd /etc\n`) from the
+    // context once the agent reports the session as open. Components
+    // that mount Terminal outside the drawer (e.g. tests, future
+    // standalone surfaces) can omit it.
+    shellId?: string;
     onClose?: () => void;
 }
 
@@ -49,7 +56,7 @@ const xtermTheme = {
 // One <Terminal> per open session tab. Owns the xterm instance and the
 // underlying termID returned from OpenTerminal; reroutes Wails events to
 // xterm.write() and xterm.onData → SendTerminalInput.
-export default function Terminal({ projectID, sessionHash, onClose }: Props) {
+export default function Terminal({ projectID, sessionHash, shellId, onClose }: Props) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const xtermRef = useRef<Xterm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -61,6 +68,19 @@ export default function Terminal({ projectID, sessionHash, onClose }: Props) {
     useEffect(() => {
         onCloseRef.current = onClose;
     }, [onClose]);
+
+    const term = useGlobalTerminalSafe();
+    // Stash the consumer in a ref so the xterm setup effect (which
+    // depends only on projectID/sessionHash) doesn't re-run when the
+    // terminal context's identity changes.
+    const consumeInitialCommandRef = useRef(term?.consumeInitialCommand);
+    useEffect(() => {
+        consumeInitialCommandRef.current = term?.consumeInitialCommand;
+    }, [term]);
+    const shellIdRef = useRef(shellId);
+    useEffect(() => {
+        shellIdRef.current = shellId;
+    }, [shellId]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -182,6 +202,21 @@ export default function Terminal({ projectID, sessionHash, onClose }: Props) {
 
                 // Trigger initial size sync now that the terminal is open.
                 ResizeTerminal(id, xterm.cols, xterm.rows);
+
+                // Pull a one-shot seed command from the global
+                // terminal context. The "Open in terminal here"
+                // action in the file browser sets this to a
+                // `cd /some/path\n` so the operator lands directly
+                // in the directory they were just browsing instead
+                // of having to retype the cd by hand.
+                const sid = shellIdRef.current;
+                const consume = consumeInitialCommandRef.current;
+                if (sid && consume) {
+                    const cmd = consume(sid);
+                    if (cmd) {
+                        SendTerminalInput(id, Array.from(encoder.encode(cmd)));
+                    }
+                }
             })
             .catch((err: unknown) => {
                 xterm.write(`\r\n[failed to open: ${String(err)}]\r\n`);

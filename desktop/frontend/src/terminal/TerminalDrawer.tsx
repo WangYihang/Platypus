@@ -153,6 +153,7 @@ export default function TerminalDrawer() {
                             }}
                         >
                             <Terminal
+                                shellId={s.id}
                                 projectID={s.projectID}
                                 sessionHash={s.sessionHash}
                                 onClose={() => closeShell(s.id)}

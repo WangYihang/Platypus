@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import {
     ArrowDown,
+    ArrowLeft,
+    ArrowRight,
     ArrowUp,
     ArrowUpDown,
     ChevronUp,
@@ -8,14 +11,19 @@ import {
     LayoutGrid,
     LayoutList,
     Map as MapIcon,
+    Pencil,
     Rows2,
     Rows3,
+    Search,
     SlidersHorizontal,
+    Trash2,
+    X,
 } from "lucide-react";
 import type { SortingState } from "@tanstack/react-table";
 
 import RefreshButton from "../../../components/RefreshButton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -37,8 +45,13 @@ import type { FileSortId } from "./sortEntries";
 
 interface Props {
     crumbs: Array<{ path: string; label: string }>;
+    currentPath: string;
     canGoUp: boolean;
     onGoUp: () => void;
+    canBack: boolean;
+    canForward: boolean;
+    onBack: () => void;
+    onForward: () => void;
     onCd: (path: string) => void;
     onRefresh: () => void;
     refreshLoading: boolean;
@@ -50,17 +63,25 @@ interface Props {
     setDensity: (d: "compact" | "comfortable") => void;
     showHidden: boolean;
     setShowHidden: (next: boolean) => void;
+    foldersFirst: boolean;
+    setFoldersFirst: (next: boolean) => void;
+    useTrash: boolean;
+    setUseTrash: (next: boolean) => void;
     sorting: SortingState;
     setSorting: (next: SortingState) => void;
+    filter: string;
+    setFilter: (s: string) => void;
+    // Counter-style signals from parent: when they tick the chrome
+    // pops the corresponding affordance (path input / filter focus).
+    // Counters rather than booleans so re-pressing the shortcut
+    // re-triggers even if the chrome is already in that state.
+    pathInputOpenSignal: number;
+    filterFocusSignal: number;
 }
 
 interface SortOption {
     id: FileSortId;
     label: string;
-    // Direction-axis labels used in the menu so "Size" reads as
-    // "Smallest first" / "Largest first" instead of an abstract
-    // ascending / descending. This is the same convention Finder /
-    // Files apps use and removes a tiny cognitive bump for the user.
     ascLabel: string;
     descLabel: string;
 }
@@ -74,8 +95,13 @@ const SORT_OPTIONS: SortOption[] = [
 
 export default function FilesChrome({
     crumbs,
+    currentPath,
     canGoUp,
     onGoUp,
+    canBack,
+    canForward,
+    onBack,
+    onForward,
     onCd,
     onRefresh,
     refreshLoading,
@@ -87,17 +113,59 @@ export default function FilesChrome({
     setDensity,
     showHidden,
     setShowHidden,
+    foldersFirst,
+    setFoldersFirst,
+    useTrash,
+    setUseTrash,
     sorting,
     setSorting,
+    filter,
+    setFilter,
+    pathInputOpenSignal,
+    filterFocusSignal,
 }: Props) {
     const head = sorting[0];
     const activeSortId = (head?.id as FileSortId | undefined) ?? "name";
     const activeDesc = !!head?.desc;
     const activeOption = SORT_OPTIONS.find((o) => o.id === activeSortId) ?? SORT_OPTIONS[0];
 
+    // Path-input mode: replaces the breadcrumb with an editable input
+    // (Cmd+L / click-the-pencil). Submitting cd's; Escape cancels.
+    const [pathInputOpen, setPathInputOpen] = useState(false);
+    const [pathInputValue, setPathInputValue] = useState(currentPath);
+    const pathInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Open + select the current path each time the parent ticks the
+    // signal — Cmd+L and the pencil button both do this.
+    useEffect(() => {
+        if (pathInputOpenSignal === 0) return;
+        setPathInputOpen(true);
+        setPathInputValue(currentPath);
+        // Defer focus until React commits the input to the DOM.
+        queueMicrotask(() => {
+            pathInputRef.current?.focus();
+            pathInputRef.current?.select();
+        });
+    }, [pathInputOpenSignal, currentPath]);
+
+    // Sync the input with the live path when it's not being edited
+    // (the user clicks a breadcrumb or hits Back, the input should
+    // reflect the new location next time it opens).
+    useEffect(() => {
+        if (!pathInputOpen) setPathInputValue(currentPath);
+    }, [currentPath, pathInputOpen]);
+
+    // Filter focus signal: pop focus into the search field on Cmd+F.
+    const filterRef = useRef<HTMLInputElement | null>(null);
+    useEffect(() => {
+        if (filterFocusSignal === 0) return;
+        queueMicrotask(() => {
+            filterRef.current?.focus();
+            filterRef.current?.select();
+        });
+    }, [filterFocusSignal]);
+
     function chooseSort(id: FileSortId) {
-        // Click an inactive field → asc; click the active field → flip
-        // direction. Mirrors the column-header semantics in FileTable.
         if (activeSortId === id) {
             setSorting([{ id, desc: !activeDesc }]);
         } else {
@@ -105,19 +173,56 @@ export default function FilesChrome({
         }
     }
 
+    function commitPath() {
+        const trimmed = pathInputValue.trim();
+        if (!trimmed) {
+            setPathInputOpen(false);
+            return;
+        }
+        // Normalise: collapse double-slashes, strip trailing slash
+        // unless the path *is* the root.
+        const normalised = trimmed.replace(/\/{2,}/g, "/").replace(/\/$/, "") || "/";
+        onCd(normalised);
+        setPathInputOpen(false);
+    }
+
     return (
         <div data-testid="files-chrome" className="flex items-center gap-2">
             <div
                 data-testid="files-breadcrumb-row"
-                className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                className="flex min-w-0 flex-1 items-center gap-1"
             >
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onBack}
+                    disabled={!canBack}
+                    aria-label="Back"
+                    title="Back (Alt+←)"
+                    data-testid="files-back"
+                >
+                    <ArrowLeft className="size-3.5" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onForward}
+                    disabled={!canForward}
+                    aria-label="Forward"
+                    title="Forward (Alt+→)"
+                    data-testid="files-forward"
+                >
+                    <ArrowRight className="size-3.5" />
+                </Button>
                 <Button
                     type="button"
                     variant="ghost"
                     size="icon-sm"
                     onClick={onGoUp}
                     disabled={!canGoUp}
-                    title="Up"
+                    title="Up (Backspace)"
                 >
                     <ChevronUp className="size-3.5" />
                 </Button>
@@ -127,26 +232,104 @@ export default function FilesChrome({
                     loading={refreshLoading}
                     onClick={onRefresh}
                     aria-label="Refresh"
-                    title="Refresh"
+                    title="Refresh (F5)"
                     data-testid="files-refresh"
                 />
-                {crumbs.map((c, idx) => {
-                    // suppress the "/" separator when previous crumb is already "/"
-                    const showSep = idx > 0 && crumbs[idx - 1].label !== "/";
-                    return (
-                        <div key={c.path} className="flex items-center gap-1">
-                            {showSep && (
-                                <span className="text-muted-foreground">/</span>
-                            )}
-                            <Crumb
-                                path={c.path}
-                                label={c.label}
-                                onClick={() => onCd(c.path)}
-                                isLast={idx === crumbs.length - 1}
-                            />
-                        </div>
-                    );
-                })}
+
+                {pathInputOpen ? (
+                    <form
+                        className="flex min-w-0 flex-1 items-center gap-1"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            commitPath();
+                        }}
+                    >
+                        <Input
+                            ref={pathInputRef}
+                            value={pathInputValue}
+                            onChange={(e) => setPathInputValue(e.target.value)}
+                            onBlur={() => setPathInputOpen(false)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    setPathInputOpen(false);
+                                }
+                            }}
+                            placeholder="/path/to/dir"
+                            aria-label="Go to path"
+                            className="h-7 min-w-0 flex-1 font-mono text-xs"
+                            data-testid="files-path-input"
+                        />
+                    </form>
+                ) : (
+                    <div
+                        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                    >
+                        {crumbs.map((c, idx) => {
+                            const showSep = idx > 0 && crumbs[idx - 1].label !== "/";
+                            return (
+                                <div key={c.path} className="flex items-center gap-1">
+                                    {showSep && (
+                                        <span className="text-muted-foreground">/</span>
+                                    )}
+                                    <Crumb
+                                        path={c.path}
+                                        label={c.label}
+                                        onClick={() => onCd(c.path)}
+                                        isLast={idx === crumbs.length - 1}
+                                    />
+                                </div>
+                            );
+                        })}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Edit path"
+                            title="Edit path (Ctrl/Cmd+L)"
+                            onClick={() => {
+                                setPathInputValue(currentPath);
+                                setPathInputOpen(true);
+                                queueMicrotask(() => {
+                                    pathInputRef.current?.focus();
+                                    pathInputRef.current?.select();
+                                });
+                            }}
+                            data-testid="files-edit-path"
+                        >
+                            <Pencil className="size-3" />
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {/* Inline filter — narrows the visible listing by a
+                case-insensitive substring of the entry name. Cmd+F
+                pops focus into the field via filterFocusSignal. */}
+            <div className="relative hidden md:block">
+                <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    ref={filterRef}
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Escape") setFilter("");
+                    }}
+                    placeholder="Filter…"
+                    aria-label="Filter files"
+                    className="h-7 w-40 pl-7 pr-6 text-xs"
+                    data-testid="files-filter"
+                />
+                {filter && (
+                    <button
+                        type="button"
+                        onClick={() => setFilter("")}
+                        aria-label="Clear filter"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent"
+                    >
+                        <X className="size-3" />
+                    </button>
+                )}
             </div>
 
             <span
@@ -190,10 +373,6 @@ export default function FilesChrome({
                 </DropdownMenu>
             )}
 
-            {/* Sort menu: shared between list + grid views via the
-                lifted `sorting` state. The list view's column headers
-                still toggle the same key so both surfaces stay in
-                sync. */}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button
@@ -215,7 +394,7 @@ export default function FilesChrome({
                         )}
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[180px]">
+                <DropdownMenuContent align="end" className="min-w-[200px]">
                     <DropdownMenuLabel>Sort by</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {SORT_OPTIONS.map((opt) => {
@@ -252,13 +431,16 @@ export default function FilesChrome({
                     >
                         Reverse order
                     </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                        checked={foldersFirst}
+                        onCheckedChange={(checked) => setFoldersFirst(!!checked)}
+                        className="text-xs"
+                    >
+                        Folders first
+                    </DropdownMenuCheckboxItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Quick toggle: show / hide dotfiles. Promoted out of the
-                view-options popover because operators flip this often
-                enough (config dirs, .git, .ssh, …) that hiding it
-                under a second click hurts. */}
             <Button
                 type="button"
                 size="icon-sm"
@@ -276,9 +458,6 @@ export default function FilesChrome({
                 )}
             </Button>
 
-            {/* List ↔ grid toggle now lives in the toolbar itself
-                (was tucked inside the sliders popover) so it's
-                reachable in one click. */}
             <div
                 className="flex items-center rounded-md border"
                 data-testid="files-view-toggle"
@@ -307,9 +486,6 @@ export default function FilesChrome({
                 </Button>
             </div>
 
-            {/* Density still sits behind the sliders popover — it's a
-                set-and-forget preference rather than something the
-                user toggles per-task. */}
             <Popover>
                 <PopoverTrigger asChild>
                     <Button
@@ -325,7 +501,7 @@ export default function FilesChrome({
                 </PopoverTrigger>
                 <PopoverContent
                     align="end"
-                    className="w-auto min-w-[200px] p-3"
+                    className="w-auto min-w-[220px] p-3"
                 >
                     <div className="flex flex-col gap-3 text-xs">
                         <div className="flex flex-col gap-1.5">
@@ -356,6 +532,29 @@ export default function FilesChrome({
                                     <Rows2 className="size-3.5" />
                                 </Button>
                             </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                Behaviour
+                            </span>
+                            <label className="flex items-start gap-2 leading-tight">
+                                <input
+                                    type="checkbox"
+                                    checked={useTrash}
+                                    onChange={(e) => setUseTrash(e.target.checked)}
+                                    className="mt-0.5"
+                                />
+                                <span className="flex-1">
+                                    <span className="inline-flex items-center gap-1 font-medium">
+                                        <Trash2 className="size-3" />
+                                        Move to Trash on delete
+                                    </span>
+                                    <span className="block text-[10px] text-muted-foreground">
+                                        Renames into /tmp/.platypus-trash instead of unlinking. Cleared on host reboot.
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </PopoverContent>
