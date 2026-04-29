@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -320,6 +322,7 @@ func main() {
 			FileScan:    agent.HandleFileScanStream,
 			FileArchive: agent.HandleFileArchiveStream,
 			TunnelPull:  agent.HandleTunnelPullStream,
+			Upgrade:     buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
 		})
 		reason := "peer_close"
 		if serveErr != nil {
@@ -427,6 +430,56 @@ func certPoolFromPEM(caPEM []byte) (*x509.CertPool, error) {
 		return nil, errors.New("no valid CERTIFICATE blocks in CA PEM")
 	}
 	return pool, nil
+}
+
+// buildUpgradeHandler wires an UpgradeRunner against this binary's
+// resolved path, the project CA pool, and the baked-in signing
+// pubkey. Returns a UpgradeHandler closure suitable for
+// AgentHandlerDeps.Upgrade.
+//
+// The returned handler is nil — and therefore answers
+// STREAM_TYPE_AGENT_UPGRADE with StreamReject{"unsupported_type"} —
+// only when self-upgrade can't run safely on this binary: empty
+// pubkey (release pipeline didn't sign), or os.Executable failed.
+// Both cases are logged once at startup so operators see the
+// degraded mode without trawling the wire.
+func buildUpgradeHandler(logger *slog.Logger, distributorBaseURL string, caPool *x509.CertPool) agent.UpgradeHandler {
+	if agent.SigningPublicKey == "" {
+		logger.Warn("self-upgrade disabled: AGENT_SIGNING_PUBKEY not baked into this build (build with -ldflags '-X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=<base64-pubkey>')")
+		return nil
+	}
+	binPath, err := agent.ResolveBinaryPath()
+	if err != nil || binPath == "" {
+		logger.Warn("self-upgrade disabled: cannot resolve own binary path",
+			slog.String("error", fmt.Sprintf("%v", err)))
+		return nil
+	}
+	runner := &agent.UpgradeRunner{
+		DistributorBaseURL:  distributorBaseURL,
+		HTTPClient:          newDistributorHTTPClient(caPool),
+		SigningPublicKeyB64: agent.SigningPublicKey,
+		BinaryPath:          binPath,
+		ExitFn:              os.Exit,
+	}
+	return runner.Handle
+}
+
+// newDistributorHTTPClient mirrors the TLS posture of EnrollClient:
+// project CA in the root pool, http/1.1 only, generous timeout
+// because artifact downloads can run minutes on slow links. Reused
+// across all phases of one upgrade so the manifest, signature, and
+// artifact GETs share a single TLS handshake.
+func newDistributorHTTPClient(caPool *x509.CertPool) *http.Client {
+	return &http.Client{
+		Timeout: 10 * time.Minute, // big binaries on slow links
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+				RootCAs:    caPool,
+				NextProtos: []string{"http/1.1"},
+			},
+		},
+	}
 }
 
 // agentIDFromURIs extracts the agent_id encoded in the cert's

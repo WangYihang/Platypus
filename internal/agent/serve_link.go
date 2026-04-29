@@ -29,6 +29,7 @@ type AgentHandlerDeps struct {
 	FileScan    FileScanHandler
 	FileArchive FileArchiveHandler
 	TunnelPull  TunnelPullHandler
+	Upgrade     UpgradeHandler
 }
 
 // ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
@@ -55,6 +56,17 @@ type FileArchiveHandler func(ctx context.Context, stream io.ReadWriteCloser, req
 // TunnelPullHandler processes one STREAM_TYPE_TUNNEL_PULL stream.
 // Production impl: HandleTunnelPullStream.
 type TunnelPullHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.TunnelPullRequest) error
+
+// UpgradeHandler processes one STREAM_TYPE_AGENT_UPGRADE stream.
+// Terminal: when the install phase succeeds the handler emits a final
+// PHASE_EXITING progress frame and then deliberately terminates the
+// process so the supervisor restarts it under the new binary; the
+// handler therefore never returns from a successful upgrade. Errors
+// are reported on-stream as PHASE_FAILED frames and surface here as
+// non-nil returns for the dispatch loop to log.
+//
+// Production impl: (*UpgradeRunner).Handle in upgrade_stream.go.
+type UpgradeHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.AgentUpgradeRequest) error
 
 // ServeLink is the agent-side accept loop. For each incoming yamux
 // stream it reads the StreamHeader (already done by sess.Accept),
@@ -208,6 +220,19 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 		}
 		if err := deps.TunnelPull(ctx, stream, &req); err != nil {
 			log.Warn("agent: tunnel-pull stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_AGENT_UPGRADE:
+		if deps.Upgrade == nil {
+			rejectStream(stream, "unsupported_type", "upgrade handler not registered")
+			return
+		}
+		var req v2pb.AgentUpgradeRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse AgentUpgradeRequest: "+err.Error())
+			return
+		}
+		if err := deps.Upgrade(ctx, stream, &req); err != nil {
+			log.Warn("agent: upgrade stream for %s: %v", hdr.CorrelationId, err)
 		}
 	default:
 		rejectStream(stream, "unsupported_type", fmt.Sprintf("no handler for %s", hdr.Type))
