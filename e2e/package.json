@@ -11,9 +11,9 @@
         "demos": "playwright test --project=demo && tsx scripts/build-demos.ts"
     },
     "devDependencies": {
-        "@playwright/test": "^1.49.0",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.19.0",
-        "yaml": "^2.6.0"
+        "@playwright/test": "^1.59.1",
+        "@types/node": "^25.6.0",
+        "tsx": "^4.21.0",
+        "yaml": "^2.8.3"
     }
 }

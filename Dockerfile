@@ -5,8 +5,11 @@
 # under internal/webui/dist/ before `go build`. Doing it in a separate
 # stage keeps the Go image free of Node and lets pnpm install cache on
 # the lockfile alone.
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /fe
+# pnpm via corepack — matches CI's pnpm/action-setup@v6 (version: 10).
+# desktop/frontend/pnpm-lock.yaml is lockfileVersion 9.0, the format
+# pnpm 10 writes natively, so --frozen-lockfile stays strict.
 RUN corepack enable
 COPY desktop/frontend/package.json desktop/frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
