@@ -351,6 +351,20 @@ func fileExists(path string) bool {
 	return info.Mode().IsRegular()
 }
 
+// fileExistsDir returns true when path is a directory. Used to gate
+// the distributor wiring on the presence of a populated
+// <data_dir>/releases tree.
+func fileExistsDir(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
 func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) (http.Handler, *core.AgentLinkService) {
 	rest := api.CreateRESTfulAPIServer()
 
@@ -401,31 +415,28 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.SetActivityRecorder(api.NewActivityRecorder(db))
 	core.SetEnrollment(enrollSvc)
 
-	// Distributor (manifest + installer) is optional: if no S3
-	// endpoint is configured we skip it. Dev servers and pre-release
-	// deployments can run the full admin surface without wiring an
-	// object store first; operators who later configure one just add
-	// the endpoint and restart.
-	if cfg.S3Endpoint != "" {
-		store, err := artifact.NewS3Store(artifact.S3Config{
-			Endpoint:        cfg.S3Endpoint,
-			Region:          cfg.S3Region,
-			Bucket:          cfg.S3Bucket,
-			Prefix:          cfg.S3Prefix,
-			AccessKeyID:     cfg.S3AccessKeyID,
-			SecretAccessKey: cfg.S3SecretKey,
-			UseSSL:          cfg.S3Secure,
-		})
+	// Distributor (manifest + installer) is enabled when an operator
+	// has populated <data_dir>/releases/ with a signed manifest +
+	// matching binaries (or a CI rsync has). When the directory is
+	// missing we skip wiring entirely — agent self-upgrade fails
+	// gracefully (404 on manifest fetch) but every other admin
+	// surface keeps working.
+	releasesDir := cfg.ReleasesDir()
+	if fileExistsDir(releasesDir) {
+		store, err := artifact.NewLocalStore(releasesDir)
 		if err != nil {
-			log.Error("distributor: init artifact store: %v", err)
+			log.Error("distributor: init local artifact store at %s: %v", releasesDir, err)
 			os.Exit(1)
 		}
 		core.RegisterDistributorRoutes(rest, core.DistributorArgs{
 			Settings: settingsReg,
 			Store:    store,
 		})
+		log.L.Info("distributor_enabled", "root", releasesDir)
 	} else {
-		log.Info("Distributor disabled: configure distributor.store.endpoint to enable installer downloads.")
+		log.L.Info("distributor_disabled",
+			"hint", "drop a signed release tree under "+releasesDir+" to enable agent self-upgrade",
+		)
 	}
 
 	api.RegisterWebSocketRoutes(rest, auth)
