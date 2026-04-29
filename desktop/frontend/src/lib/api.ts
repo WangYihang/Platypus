@@ -44,7 +44,16 @@ export interface Host {
     primary_ip?: string;
     primary_mac?: string;
     boot_time_unix?: number;
-    agent_version?: string;
+
+    // Build identity (migration 000023). Populated from pkg/version on
+    // the agent; refreshed on every reconnect via SysInfo. build_version
+    // is semver, build_commit is short git SHA, build_date is RFC3339.
+    // protocol_version is a separate monotonic uint32 used for wire
+    // compatibility — see internal/link.ProtocolVersion. All optional.
+    build_version?: string;
+    build_commit?: string;
+    build_date?: string;
+    protocol_version?: number;
 
     // Hardware / chassis classification (migration 000012). All
     // optional; machine_type is the coarse category (container / vm /
@@ -164,7 +173,10 @@ export interface HostSysInfo {
     load15?: number;
     process_count?: number;
     current_user?: string;
-    agent_version?: string;
+    build_version?: string;
+    build_commit?: string;
+    build_date?: string;
+    protocol_version?: number;
     machine_id?: string;
     default_gateway?: string;
     primary_ip?: string;

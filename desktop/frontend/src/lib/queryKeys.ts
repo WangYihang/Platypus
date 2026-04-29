@@ -39,6 +39,7 @@ export const qk = {
     projects: () => ["projects"] as const,
     project: (slug: string) => ["project", slug] as const,
     serverInfo: () => ["serverInfo"] as const,
+    installPlatforms: () => ["installPlatforms"] as const,
 
     // --- Admin (server-wide) -------------------------------------
     adminUsers: () => ["adminUsers"] as const,

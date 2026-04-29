@@ -40,16 +40,49 @@ function ApprovalStatusPill({ status }: { status: "pending" | "approved" | "reje
     }
     return <StatusPill tone="warning">pending approval</StatusPill>;
 }
+
+// BuildVersionValue renders the host's running agent build_version
+// alongside an outdated/up-to-date indicator. Three visual states:
+//
+//   1. "—"        host hasn't reported a build_version yet (pre-
+//                  versioning agent or not enrolled)
+//   2. "1.6.0" + green "up to date" — host matches manifest head
+//   3. "1.5.1" + amber "outdated · latest 1.6.0" — host trails
+//
+// `latest` is the current channel head from /v1/install/platforms;
+// when it's empty (no manifest published, distributor disabled) we
+// can't compare and just render the version with no pill.
+function BuildVersionValue({
+    version,
+    latest,
+}: {
+    version: string | undefined;
+    latest: string | undefined;
+}) {
+    if (!version) return <span style={{ color: palette.textSecondary }}>—</span>;
+    const cmp = !latest ? "unknown" : version === latest ? "match" : "mismatch";
+    return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
+            <Mono>{version}</Mono>
+            {cmp === "match" && <StatusPill tone="success">up to date</StatusPill>}
+            {cmp === "mismatch" && (
+                <StatusPill tone="warning">{`outdated · latest ${latest}`}</StatusPill>
+            )}
+        </span>
+    );
+}
 import PageHeader from "../components/PageHeader";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
     Host,
     HostSysInfo,
+    InstallPlatformsResponse,
     SessionRow,
     getHost,
     getHostSysInfo,
     listHostSessions,
+    listInstallPlatforms,
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { qk } from "../lib/queryKeys";
@@ -467,7 +500,25 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
     const primaryIP = sysInfo?.primary_ip || host.primary_ip;
     const primaryMAC = sysInfo?.primary_mac || host.primary_mac;
     const bootTime = sysInfo?.boot_time_unix || host.boot_time_unix;
-    const agentVersion = sysInfo?.agent_version || host.agent_version;
+    const buildVersion = sysInfo?.build_version || host.build_version;
+    const buildCommit = sysInfo?.build_commit || host.build_commit;
+    const buildDate = sysInfo?.build_date || host.build_date;
+    const protocolVersion = sysInfo?.protocol_version ?? host.protocol_version;
+
+    // Latest channel head from the distributor manifest. Used to flag
+    // outdated agents in the build-version row. Refresh-cadence is
+    // generous (5min stale time) — manifest changes only when an
+    // operator publishes a release, so polling tightly buys nothing.
+    // 404 / distributor-disabled returns no data; the row falls back
+    // to "no comparison available".
+    const installPlatformsQuery = useQuery<InstallPlatformsResponse>({
+        queryKey: qk.installPlatforms(),
+        queryFn: () => listInstallPlatforms(),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        retry: false,
+    });
+    const latestVersion = installPlatformsQuery.data?.version || undefined;
 
     const liveBadge = sysInfoLoading ? (
         <StatusPill tone="neutral">refreshing…</StatusPill>
@@ -623,7 +674,27 @@ function InfoPanel({ host, sysInfo, sysInfoError, sysInfoLoading, onRefreshSysIn
                             label: "processes",
                             value: sysInfo?.process_count ? String(sysInfo.process_count) : "—",
                         },
-                        { label: "agent version", value: agentVersion ? <Mono>{agentVersion}</Mono> : "—" },
+                        {
+                            label: "build version",
+                            value: (
+                                <BuildVersionValue
+                                    version={buildVersion}
+                                    latest={latestVersion}
+                                />
+                            ),
+                        },
+                        {
+                            label: "build commit",
+                            value: buildCommit ? <Mono size={11}>{buildCommit}</Mono> : "—",
+                        },
+                        {
+                            label: "build date",
+                            value: buildDate ? <Mono>{buildDate}</Mono> : "—",
+                        },
+                        {
+                            label: "protocol version",
+                            value: protocolVersion ? String(protocolVersion) : "—",
+                        },
                     ]}
                 />
                 {sysInfoError && !sysInfo && (
