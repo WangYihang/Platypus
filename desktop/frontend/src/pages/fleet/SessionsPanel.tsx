@@ -189,7 +189,7 @@ export default function SessionsPanel() {
                                             className="cursor-pointer"
                                             onClick={() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/hosts/${s.host_id}/info`,
+                                                    `/projects/${project.slug}/hosts/${s.host_id}/files`,
                                                 )
                                             }
                                         >

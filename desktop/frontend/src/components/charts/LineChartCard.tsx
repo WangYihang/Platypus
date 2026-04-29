@@ -105,13 +105,13 @@ export default function LineChartCard({
                             <XAxis
                                 dataKey="label"
                                 stroke={palette.textMuted}
-                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.sans }}
+                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.mono }}
                                 tickLine={false}
                                 axisLine={{ stroke: palette.border }}
                             />
                             <YAxis
                                 stroke={palette.textMuted}
-                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.sans }}
+                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.mono }}
                                 tickLine={false}
                                 axisLine={false}
                                 allowDecimals={false}

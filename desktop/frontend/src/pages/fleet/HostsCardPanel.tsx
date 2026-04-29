@@ -128,7 +128,7 @@ export default function HostsCardPanel() {
                                 key={h.id}
                                 host={h}
                                 onOpen={() =>
-                                    navigate(`/projects/${project.slug}/hosts/${h.id}/info`)
+                                    navigate(`/projects/${project.slug}/hosts/${h.id}/files`)
                                 }
                             />
                         ))}
@@ -170,7 +170,7 @@ function HostCard({ host, onOpen }: HostCardProps) {
                 gap: space[3],
                 transition: "border-color 120ms ease, background 120ms ease",
                 color: palette.textPrimary,
-                fontFamily: "var(--font-geist-sans)",
+                fontFamily: "var(--font-geist-mono)",
             }}
             onMouseEnter={(e) =>
                 (e.currentTarget.style.borderColor = palette.borderStrong)

@@ -135,7 +135,7 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                         background: "transparent",
                         color: palette.textPrimary,
                         fontSize: 14,
-                        fontFamily: "var(--font-geist-sans)",
+                        fontFamily: "var(--font-geist-mono)",
                     }}
                 />
                 <Kbd>Esc</Kbd>

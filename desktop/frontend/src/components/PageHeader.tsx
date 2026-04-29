@@ -58,7 +58,7 @@ export default function PageHeader({ title, subtitle, actions, tabs, pills }: Pr
                 <div
                     style={{
                         color: palette.textPrimary,
-                        fontFamily: font.sans,
+                        fontFamily: font.mono,
                         fontWeight: 600,
                         fontSize: 14,
                         lineHeight: 1.3,

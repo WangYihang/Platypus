@@ -78,13 +78,14 @@ export const palette = {
 // magic numbers so density tweaks land in one place.
 export const radius = { sm: 4, md: 6, lg: 8, pill: 9999 } as const;
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
-// `font.sans` aliased to the mono family — every UI surface now
-// renders in Geist Mono per the Round-3 redesign. The two keys exist
-// only so existing inline-style consumers don't have to be migrated
-// one-by-one; Phase 6 deletes the `sans` export and rewrites those
-// callers to use plain Tailwind classes.
+// Every UI surface renders in Geist Mono per the Round-3 redesign;
+// the previous `font.sans` alias was dropped after all inline-style
+// consumers were migrated. Components that need to opt out of the
+// global mono can reach for `font-sans` Tailwind utility — but that
+// utility is also remapped to mono in style.css's @theme block, so
+// the entire app is mono-by-default with no escape hatch shipping
+// today.
 export const font = {
-    sans: "var(--font-geist-mono)",
     mono: "var(--font-geist-mono)",
 } as const;
 

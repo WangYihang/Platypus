@@ -99,7 +99,7 @@ function RootErrorBoundary() {
                 color: palette.textPrimary,
                 padding: "2rem",
                 textAlign: "center",
-                fontFamily: font.sans,
+                fontFamily: font.mono,
             }}
         >
             <h1 style={{ marginBottom: "1rem", fontSize: "1.5rem", fontWeight: "bold" }}>

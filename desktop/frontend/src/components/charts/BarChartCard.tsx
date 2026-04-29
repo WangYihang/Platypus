@@ -84,7 +84,7 @@ export default function BarChartCard({
                             <XAxis
                                 type="number"
                                 stroke={palette.textMuted}
-                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.sans }}
+                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.mono }}
                                 tickLine={false}
                                 axisLine={{ stroke: palette.border }}
                                 allowDecimals={false}
@@ -93,7 +93,7 @@ export default function BarChartCard({
                                 type="category"
                                 dataKey="label"
                                 stroke={palette.textMuted}
-                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.sans }}
+                                tick={{ fill: palette.textMuted, fontSize: 11, fontFamily: font.mono }}
                                 tickLine={false}
                                 axisLine={false}
                                 width={120}

@@ -127,7 +127,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 verb: s.disconnected_at ? "closed on" : "opened on",
                 target: <span style={{ color: palette.textPrimary }}>{hostLabel(s.host_id)}</span>,
                 onClick: () =>
-                    navigate(`/projects/${project.slug}/hosts/${s.host_id}/info`),
+                    navigate(`/projects/${project.slug}/hosts/${s.host_id}/files`),
             }));
     }, [sessions24h, hosts, navigate, project.slug]);
 

@@ -40,7 +40,7 @@ export default function MetricCard({ label, value, hint, accent = "default" }: P
                 <div
                     style={{
                         color: valueColor,
-                        fontFamily: font.sans,
+                        fontFamily: font.mono,
                         fontWeight: 600,
                         fontSize: 32,
                         lineHeight: 1.1,

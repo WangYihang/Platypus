@@ -61,9 +61,9 @@
     --radius-lg: 8px;
     --radius-pill: 9999px;
 
-    /* Fonts (Geist @font-face declared below). */
-    --font-geist-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        "Helvetica Neue", sans-serif;
+    /* Geist Mono is the only family loaded — every utility / inline
+     * style points at this token after the R3 redesign. The Sans
+     * @font-face was removed in Phase 6. */
     --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
         Consolas, "Liberation Mono", monospace;
 
@@ -168,15 +168,11 @@
    working through the migration).
    ────────────────────────────────────────────────────────────────────── */
 
-@font-face {
-    font-family: "Geist";
-    src: url("../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2")
-        format("woff2-variations");
-    font-weight: 100 900;
-    font-style: normal;
-    font-display: swap;
-}
-
+/* Geist Mono is the only font face the redesign loads — Geist Sans
+ * was removed in Phase 6 of R3 once every consumer (body / theme.ts
+ * font.sans / Tailwind --font-sans) was pointing at the mono
+ * family. The Sans woff2 file stays in node_modules from the
+ * `geist` package; we just don't @font-face it. */
 @font-face {
     font-family: "Geist Mono";
     src: url("../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2")

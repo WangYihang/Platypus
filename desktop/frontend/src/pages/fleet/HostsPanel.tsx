@@ -154,7 +154,7 @@ export default function HostsPanel() {
                                             className="cursor-pointer"
                                             onClick={() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/hosts/${h.id}/info`,
+                                                    `/projects/${project.slug}/hosts/${h.id}/files`,
                                                 )
                                             }
                                         >

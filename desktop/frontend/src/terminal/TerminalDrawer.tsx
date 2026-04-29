@@ -241,7 +241,7 @@ function TabBar({
                                 borderRadius: `${radius.sm}px ${radius.sm}px 0 0`,
                                 color: active ? palette.textPrimary : palette.textSecondary,
                                 fontSize: 12,
-                                fontFamily: "var(--font-geist-sans)",
+                                fontFamily: "var(--font-geist-mono)",
                                 cursor: "pointer",
                                 userSelect: "none",
                                 transition: "color 120ms ease, background 120ms ease",

@@ -135,7 +135,7 @@ export default function Login({ onLoggedIn, initialURL, pinnedServerId }: Props)
                         style={{
                             margin: 0,
                             color: palette.textPrimary,
-                            fontFamily: font.sans,
+                            fontFamily: font.mono,
                             fontWeight: 600,
                             fontSize: 28,
                             lineHeight: 1.2,
