@@ -329,6 +329,16 @@ func serveInstallScript(c *gin.Context) {
 		return
 	}
 
+	if c.Query("os") == "windows" {
+		script := renderInstallScriptPS1(res, c.Request.Host)
+		// text/plain so the response stays inside `iwr | iex` happily;
+		// PowerShell doesn't need a special MIME and treats anything
+		// printable as script text.
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+		c.String(http.StatusOK, script)
+		return
+	}
+
 	script := renderInstallScript(res, c.Request.Host)
 	c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
 	c.String(http.StatusOK, script)
@@ -412,6 +422,88 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		"exec \"$BIN\" --server \"$AGENT_HOST:$AGENT_PORT\" \"$AGENT_TOKEN\"",
 	)
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// renderInstallScriptPS1 builds the PowerShell counterpart to
+// renderInstallScript for Windows targets. Same shape as the POSIX
+// script: download the agent for the detected arch from the current
+// channel's manifest (pinned to the project CA when available), then
+// exec it with the freshly-minted PAT.
+//
+// Reachable only via `?os=windows` on the install endpoint — the
+// admin-facing one-liner forces that query string when the wizard's
+// OS picker is `windows`. Stock Windows ships with PowerShell but not
+// curl, so the unix script wouldn't run there.
+//
+// Kept short for the same reason the unix script is: an operator (or
+// SOC reviewer) should be able to read the whole thing in one screen
+// and verify it does nothing surprising.
+func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string) string {
+	endpoint := r.ServerEndpoint
+	host, port := splitHostPort(endpoint)
+	base := "https://" + distributorHost
+	lines := []string{
+		"# Platypus agent bootstrap (Windows / PowerShell).",
+		"# One-shot enrollment; the download token is burnt on first hit.",
+		"$ErrorActionPreference = 'Stop'",
+		"$AgentHost = " + psQuote(host),
+		"$AgentPort = " + psQuote(port),
+		"$AgentToken = " + psQuote(r.PATPlaintext),
+		"$DistBase  = " + psQuote(base),
+	}
+	if r.ProjectCAPEM != "" {
+		// CA pinning in PowerShell: install a per-process server-cert
+		// validator that accepts a chain only when it terminates at
+		// the project CA. Mirrors the unix script's `curl --cacert`.
+		lines = append(lines,
+			"$CaB64 = "+psQuote(base64.StdEncoding.EncodeToString([]byte(r.ProjectCAPEM))),
+			"$Ca = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(,[Convert]::FromBase64String($CaB64))",
+			"[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {",
+			"  param($s, $cert, $chain, $err)",
+			"  $c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($cert)",
+			"  $ch = New-Object System.Security.Cryptography.X509Certificates.X509Chain",
+			"  $ch.ChainPolicy.ExtraStore.Add($Ca) | Out-Null",
+			"  $ch.ChainPolicy.RevocationMode = 'NoCheck'",
+			"  $ch.ChainPolicy.VerificationFlags = 'AllowUnknownCertificateAuthority'",
+			"  if (-not $ch.Build($c)) { return $false }",
+			"  foreach ($e in $ch.ChainElements) {",
+			"    if ($e.Certificate.Thumbprint -eq $Ca.Thumbprint) { return $true }",
+			"  }",
+			"  return $false",
+			"}",
+		)
+	} else {
+		lines = append(lines,
+			"if ($env:PLATYPUS_INSECURE_DOWNLOAD -eq '1') {",
+			"  Write-Warning 'PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download'",
+			"  [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }",
+			"} else {",
+			"  Write-Error 'platypus: server has no project CA in this install script and PLATYPUS_INSECURE_DOWNLOAD is not set. Refusing to download agent binary without TLS trust anchor (MITM risk). Ask the server admin to initialise a project CA, or re-run with $env:PLATYPUS_INSECURE_DOWNLOAD=1 if you accept the risk.'",
+			"  exit 1",
+			"}",
+		)
+	}
+	lines = append(lines,
+		"switch ($env:PROCESSOR_ARCHITECTURE) {",
+		"  'AMD64' { $Arch = 'amd64' }",
+		"  'ARM64' { $Arch = 'arm64' }",
+		"  'x86'   { $Arch = '386' }",
+		"  default { Write-Error \"unsupported arch: $($env:PROCESSOR_ARCHITECTURE)\"; exit 1 }",
+		"}",
+		"$Bin = Join-Path $env:TEMP (\"platypus-agent-\" + [Guid]::NewGuid().ToString('N') + \".exe\")",
+		"Invoke-WebRequest -UseBasicParsing -Uri \"$DistBase/v1/artifacts/windows/$Arch/latest\" -OutFile $Bin",
+		// Single --server flag carries host:port, token stays positional.
+		"& $Bin --server \"${AgentHost}:${AgentPort}\" $AgentToken",
+	)
+	return strings.Join(lines, "\r\n") + "\r\n"
+}
+
+// psQuote wraps a string for safe interpolation inside a PowerShell
+// single-quoted literal. Inside single quotes PowerShell only treats
+// `'` specially (escaped by doubling), so this is sufficient for the
+// values we splice (host, port, token, base URL).
+func psQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // shellQuote returns the input wrapped in single quotes, with any

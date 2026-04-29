@@ -2,6 +2,8 @@ import Mono from "../../../../components/Mono";
 import { palette, space } from "../../../../layout/theme";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
+import { archLabel, osLabel } from "../../../enrollment/platforms";
+
 interface Props {
     os: string;
     archList: string[];
@@ -33,8 +35,8 @@ export default function ArchStep({ os, archList, value, onChange }: Props) {
     return (
         <div className="space-y-3">
             <div style={{ fontSize: 13, color: palette.textSecondary }}>
-                Pick an architecture for <Mono>{os}</Mono>. Skipping leaves the
-                arch unbound; the install script auto-detects.
+                Pick an architecture for <Mono>{osLabel(os)}</Mono>. Skipping
+                leaves the arch unbound; the install script auto-detects.
             </div>
             <ToggleGroup
                 type="single"
@@ -47,7 +49,7 @@ export default function ArchStep({ os, archList, value, onChange }: Props) {
             >
                 {archList.map((a) => (
                     <ToggleGroupItem key={a} value={a}>
-                        {a}
+                        {archLabel(a)}
                     </ToggleGroupItem>
                 ))}
             </ToggleGroup>

@@ -183,6 +183,15 @@ export default function EnrollAgentWizard() {
                             // drift out of sync silently.
                             setTargetArch("");
                         }}
+                        onPickPreset={(preset) => {
+                            // Quick-pick: lock both OS and arch and
+                            // skip past the arch step. The operator
+                            // can still go Back if they want a
+                            // different arch.
+                            setTargetOS(preset.os);
+                            setTargetArch(preset.arch);
+                            setStep("connect");
+                        }}
                     />
                 )}
                 {step === "arch" && (
