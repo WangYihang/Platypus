@@ -3,14 +3,15 @@ import { Fragment, useMemo } from "react";
 import {
     flexRender,
     getCoreRowModel,
-    getSortedRowModel,
     useReactTable,
     type ColumnDef,
     type SortingState,
 } from "@tanstack/react-table";
 import { useDraggable, useDroppable, useDndMonitor } from "@dnd-kit/core";
-import { ArrowDown, ArrowUp, ArrowUpDown, File, FileSymlink, Folder } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import dayjs from "dayjs";
+
+import { isHiddenEntry, pickFileIcon } from "./fileIcons";
 
 import {
     Table,
@@ -166,15 +167,16 @@ export default function FileTable({
                 header: "Name",
                 cell: ({ row }) => {
                     const e = row.original;
+                    const { Icon, color } = pickFileIcon(e);
+                    const dim = isHiddenEntry(e);
                     return (
-                        <div className="flex items-center gap-2 font-mono">
-                            {e.isDir ? (
-                                <Folder className="size-4 text-amber-500" />
-                            ) : e.isSymlink ? (
-                                <FileSymlink className="size-4 text-sky-500" />
-                            ) : (
-                                <File className="size-4 text-muted-foreground" />
+                        <div
+                            className={cn(
+                                "flex items-center gap-2 font-mono",
+                                dim && "opacity-60",
                             )}
+                        >
+                            <Icon className={cn("size-4", color)} />
                             <span>{e.name}</span>
                             {e.isSymlink && e.symlinkTarget && (
                                 <span className="text-xs text-muted-foreground">→ {e.symlinkTarget}</span>
@@ -214,6 +216,12 @@ export default function FileTable({
         [],
     );
 
+    // Sorting is applied at the parent (FileBrowser) so the same key
+    // reorders both the list and the grid view. We still pass the
+    // sort state into the table so the column header renders the
+    // correct asc/desc indicator, but skip getSortedRowModel to avoid
+    // double-sorting (and to support sort ids — e.g. "type" — that
+    // don't have a corresponding column accessor).
     const table = useReactTable({
         data: entries,
         columns,
@@ -223,7 +231,7 @@ export default function FileTable({
             setSorting(next);
         },
         getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
+        manualSorting: true,
     });
 
     function toggleRow(entry: FileEntryDTO, ev: React.MouseEvent) {

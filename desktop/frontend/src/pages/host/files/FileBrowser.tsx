@@ -29,6 +29,9 @@ import FileTable from "./FileTable";
 import FileGrid from "./FileGrid";
 import Split from "@/components/ui/Split";
 import { useViewMode } from "./useViewMode";
+import { isHiddenEntry } from "./fileIcons";
+import { sortEntries } from "./sortEntries";
+import { usePreference } from "../../../lib/preferences";
 import {
     ArchiveFormat,
     archiveExtension,
@@ -77,7 +80,26 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     const [showArchive, setShowArchive] = useState(false);
     const [viewMode, setViewMode] = useViewMode();
     const [density, setDensity] = useDensity();
+    const [showHidden, setShowHidden] = usePreference("ui.files.showHidden");
     const [editMode, setEditMode] = useState(false);
+
+    // Apply hidden-file filtering + the active sort once at the
+    // browser level so both views (FileTable / FileGrid) render the
+    // same ordering. FileTable used to drive its own getSortedRowModel;
+    // moving sorting up here lets the toolbar's sort menu reorder the
+    // grid view too, and lets us add sort ids ("type") that don't map
+    // to a column accessor.
+    const visibleEntries = useMemo(() => {
+        const filtered = showHidden
+            ? dir.entries
+            : dir.entries.filter((e) => !isHiddenEntry(e));
+        return sortEntries(filtered, sorting);
+    }, [dir.entries, showHidden, sorting]);
+
+    const hiddenCount = useMemo(
+        () => dir.entries.reduce((n, e) => n + (isHiddenEntry(e) ? 1 : 0), 0),
+        [dir.entries],
+    );
 
     const sensors = useDragSensors(5);
 
@@ -87,8 +109,8 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     }, [dir.path]);
 
     const selectedEntries = useMemo(
-        () => dir.entries.filter((e) => selected.has(e.name)),
-        [dir.entries, selected],
+        () => visibleEntries.filter((e) => selected.has(e.name)),
+        [visibleEntries, selected],
     );
 
     const previewEntry = useMemo<FileEntryDTO | null>(() => {
@@ -400,7 +422,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
     const crumbs = splitCrumbs(dir.path);
     const quickPaths = quickPathsForHost(host);
-    const statusText = `${dir.entries.length} item${dir.entries.length === 1 ? "" : "s"}${
+    const visibleCount = visibleEntries.length;
+    const statusText = `${visibleCount} item${visibleCount === 1 ? "" : "s"}${
+        !showHidden && hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""
+    }${
         selectedEntries.length > 0
             ? ` · ${selectedEntries.length} selected · ${humanize(
                   selectedEntries.reduce((acc, e) => acc + (e.size || 0), 0),
@@ -430,7 +455,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     </div>
                 ) : viewMode === "grid" ? (
                     <FileGrid
-                        entries={dir.entries}
+                        entries={visibleEntries}
                         currentPath={dir.path}
                         selectedNames={selected}
                         setSelectedNames={setSelected}
@@ -442,7 +467,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     />
                 ) : (
                     <FileTable
-                        entries={dir.entries}
+                        entries={visibleEntries}
                         currentPath={dir.path}
                         selectedNames={selected}
                         setSelectedNames={setSelected}
@@ -474,6 +499,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     setViewMode={setViewMode}
                     density={density}
                     setDensity={setDensity}
+                    showHidden={showHidden}
+                    setShowHidden={setShowHidden}
+                    sorting={sorting}
+                    setSorting={setSorting}
                 />
 
                 {previewExpanded ? (

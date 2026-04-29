@@ -1,12 +1,12 @@
 import * as React from "react";
 import { Fragment } from "react";
 import { useDraggable, useDroppable, useDndMonitor } from "@dnd-kit/core";
-import { File, FileSymlink, Folder } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { FileEntryDTO } from "../../../platform/App.web";
 import { humanize } from "../../../lib/format";
 import Thumbnail from "./Thumbnail";
+import { isHiddenEntry, pickFileIcon } from "./fileIcons";
 
 interface Props {
     entries: FileEntryDTO[];
@@ -95,6 +95,9 @@ const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile(
         sessionHash &&
         fullPath;
 
+    const { Icon, color } = pickFileIcon(entry);
+    const dim = isHiddenEntry(entry);
+
     return (
         <button
             ref={setRefs}
@@ -112,6 +115,7 @@ const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile(
                 isSelected && "border-primary bg-accent",
                 drop.isOver && isDroppable && "outline outline-2 outline-primary",
                 drag.isDragging && "opacity-60",
+                dim && !isSelected && "opacity-60",
             )}
             onClick={(e) => {
                 onSelectChange(e);
@@ -126,11 +130,7 @@ const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile(
             {...rest}
         >
             <div className="flex size-12 items-center justify-center overflow-hidden rounded bg-muted">
-                {entry.isDir ? (
-                    <Folder className="size-8 text-amber-500" />
-                ) : entry.isSymlink ? (
-                    <FileSymlink className="size-8 text-sky-500" />
-                ) : showThumb ? (
+                {showThumb ? (
                     <Thumbnail
                         projectID={projectID!}
                         sessionHash={sessionHash!}
@@ -138,7 +138,7 @@ const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile(
                         mime={entry.mime}
                     />
                 ) : (
-                    <File className="size-8 text-muted-foreground" />
+                    <Icon className={cn("size-8", color)} />
                 )}
             </div>
             <div className="w-full truncate font-mono">{entry.name}</div>

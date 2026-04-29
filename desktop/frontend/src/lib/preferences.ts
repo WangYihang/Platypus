@@ -26,6 +26,11 @@ export interface PreferenceDefs {
     "ui.activities.defaultRange": "24h" | "7d" | "30d" | "all";
     "ui.files.viewMode": "list" | "grid";
     "ui.files.previewOpen": boolean;
+    // When true, dotfiles (".git", ".bashrc", …) appear in the
+    // listing. Default `false` to match the muscle-memory of `ls`,
+    // Finder, and most file managers — the explorer's toolbar
+    // exposes a one-click toggle when the user wants them back.
+    "ui.files.showHidden": boolean;
 
     // --- Terminal
     "terminal.fontSize": number;
@@ -46,6 +51,7 @@ const DEFAULTS: PreferenceDefs = {
     "ui.activities.defaultRange": "7d",
     "ui.files.viewMode": "list",
     "ui.files.previewOpen": true,
+    "ui.files.showHidden": false,
     "terminal.fontSize": 13,
     "terminal.cursorBlink": true,
     "terminal.scrollback": 5000,
