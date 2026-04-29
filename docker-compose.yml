@@ -4,80 +4,26 @@ services:
       context: .
       target: server
     ports:
-      - "9443:9443" # Unified TLS ingress (REST + agent link + mesh + installer)
+      - "9443:9443"
     volumes:
-      - platypus_data:/app/data
+      - ./data:/app/data
     environment:
-      # All server config is env vars now — see `platypus-server --help`
-      # for the full list. The minimum needed to boot is
-      # PLATYPUS_EXTERNAL_ADDR; everything else has a default.
-
-      # External address agents reach. localhost works on the host running
-      # docker compose; for a remote deployment override to a real public
-      # IP / hostname (e.g. PLATYPUS_EXTERNAL_ADDR=1.2.3.4:9443).
       PLATYPUS_EXTERNAL_ADDR: "localhost:9443"
       PLATYPUS_DATA_DIR: "/app/data"
-
-      # PLATYPUS_DEV=1 opts into the dev-only on-disk KEK fallback at
-      # /app/data/ca.kek so a fresh `docker compose up` Just Works. For
-      # production, REMOVE this line and inject a real PLATYPUS_CA_KEK
-      # (32 bytes base64; `openssl rand 32 | base64`) via a secret.
-      # Keeping the KEK on the same volume as the encrypted DB defeats
-      # the seal.
       PLATYPUS_DEV: "1"
     restart: always
     depends_on:
-      init-data:
-        condition: service_completed_successfully
       agent-publisher:
         condition: service_completed_successfully
 
-  init-data:
-    image: alpine
-    volumes:
-      - platypus_data:/app/data
-    command: ["sh", "-c", "mkdir -p /app/data/releases && chmod 777 /app/data /app/data/releases"]
-
-  # Dev-only sidecar: cross-compiles platypus-agent for the release
-  # matrix, signs the manifest with a per-volume Ed25519 key, and
-  # writes the result onto the shared platypus_data volume at
-  # /app/data/releases/. The platypus-server's LocalStore picks the
-  # files up directly — no MinIO sidecar, no S3 credentials, no
-  # presigned URLs.
-  #
-  # Production deployments should remove this service and run
-  # scripts/release-publish.sh from CI with a vault-stored signing
-  # key, then rsync the resulting tree onto the server's data volume.
   agent-publisher:
     build:
       context: .
       target: publisher
     volumes:
-      # Source tree is read-only — release-publish.sh writes binaries
-      # to a $(mktemp) under /tmp and only copies the final layout to
-      # /output/releases/.
       - ./:/workspace:ro
-      # Persist the dev signing keypair across compose down/up so
-      # agents installed in earlier sessions keep validating manifests
-      # on upgrade. First boot generates the pair; later boots reuse it.
-      - publisher_keys:/keys
-      # Module + build caches survive container removal so warm
-      # publishes finish in a few seconds instead of recompiling 24
-      # targets from scratch.
-      - publisher_gocache:/root/.cache/go-build
-      - publisher_gomod:/go/pkg/mod
-      # Shared with platypus-server. The publisher writes under
-      # /output/releases/...; platypus-server reads from the same
-      # path under PLATYPUS_DATA_DIR=/app/data.
-      - platypus_data:/output
-    # Override PLATFORMS to skip targets you don't care about — e.g.
-    # PLATFORMS="linux/amd64 linux/arm64" cuts publish time to ~15 s.
-    # environment:
-    #   PLATFORMS: "linux/amd64 linux/arm64"
+      - ./.publisher/keys:/keys
+      - ./.publisher/gocache:/root/.cache/go-build
+      - ./.publisher/gomod:/go/pkg/mod
+      - ./data:/output
     restart: "no"
-
-volumes:
-  platypus_data:
-  publisher_keys:
-  publisher_gocache:
-  publisher_gomod:
