@@ -74,20 +74,25 @@ test.describe("recording playback", () => {
                 // a .cast file.
                 await loginAsAdminAt(page, origin);
                 await page.getByRole("button", { name: /Default created/i }).click();
-                await page.getByRole("link", { name: /Fleet$/ }).click();
+                // Post-2466550 IA: "Fleet" was renamed to "Hosts"
+                // and the URL moved from /fleet to /hosts. The
+                // table testid kept its old `fleet-panel-table`
+                // name even after the rename.
+                await page.getByRole("link", { name: /^Hosts$/ }).click();
                 await page
                     .getByTestId("fleet-panel-table")
                     .locator("table tbody tr")
                     .first()
                     .click();
                 await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
-                await expect(page.getByText(/^\d+ active · /).first()).toContainText(
-                    /^[1-9]\d* active/,
-                    { timeout: 15_000 },
-                );
+                // Post-2466550 IA: "Open terminal" is now an icon-
+                // only button in the host header (aria-label
+                // "Open terminal"). The button is enabled once the
+                // agent's link session exists, which happens
+                // immediately for our spawned agent.
                 await page
-                    .getByTestId("shell-content-frame")
-                    .getByRole("button", { name: "Open terminal" })
+                    .getByRole("button", { name: "Open terminal", exact: true })
+                    .first()
                     .click();
                 await expect(page.locator(".xterm-screen").first()).toBeAttached({
                     timeout: 15_000,
@@ -110,8 +115,21 @@ test.describe("recording playback", () => {
                 await page.waitForTimeout(1500);
 
                 // Open Audit > Recordings, find the just-completed
-                // recording, click Preview.
-                await page.goto(`${origin}/projects/default/audit/recordings`);
+                // recording, click Preview. Capture the cast bytes
+                // off the wire so we can also assert no bogus
+                // sub-floor resize events landed in the file (the
+                // "playback suddenly shows huge text mid-stream"
+                // regression — xterm-fit reading from a still-
+                // animating drawer would emit r=9x7 frames).
+                let castBytes: string | null = null;
+                page.on("response", async (resp) => {
+                    if (!resp.url().endsWith("/cast")) return;
+                    try {
+                        castBytes = (await resp.body()).toString("utf8");
+                    } catch {}
+                });
+                // Post-2466550 IA: /audit/recordings → /activity/recordings.
+                await page.goto(`${origin}/projects/default/activity/recordings`);
                 await expect(page.getByRole("tab", { name: /Recordings/ })).toBeVisible();
                 const previewBtn = page.getByRole("button", { name: /Preview/ }).first();
                 await expect(previewBtn).toBeVisible({ timeout: 15_000 });
@@ -150,6 +168,27 @@ test.describe("recording playback", () => {
                         { timeout: 5_000 },
                     )
                     .not.toBe("--:--");
+
+                // Cast hygiene: no sub-floor resize events. Each
+                // event line starts with `[t, "r", "<cols>x<rows>"]`
+                // — match those and assert cols >= 40 and rows >= 10
+                // (the floor enforced by Terminal.tsx +
+                // parseResizeFrame). Without this guard, xterm-fit's
+                // 9×7 transients during the drawer animation get
+                // baked into the recording and replay as a sudden
+                // "huge text" jump mid-stream.
+                expect(castBytes, "captured /cast body").not.toBeNull();
+                const resizeRe = /^\[\d+\.?\d*,\s*"r",\s*"(\d+)x(\d+)"\]/;
+                for (const line of (castBytes as unknown as string).split("\n")) {
+                    const m = resizeRe.exec(line);
+                    if (!m) continue;
+                    const cols = parseInt(m[1], 10);
+                    const rows = parseInt(m[2], 10);
+                    expect(
+                        cols >= 40 && rows >= 10,
+                        `[${label}] sub-floor resize event in cast: ${cols}x${rows} (line: ${line})`,
+                    ).toBe(true);
+                }
             } finally {
                 await agent.kill();
             }

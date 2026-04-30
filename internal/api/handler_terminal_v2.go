@@ -317,9 +317,21 @@ func runV2Terminal(ctx context.Context, ws *websocket.Conn, sess *link.Session, 
 	}
 }
 
+// Sub-MIN dims indicate a layout transient on the browser side
+// (xterm-fit reading from a drawer/panel that's still animating).
+// Forwarding them to the agent's PTY thrashes the live shell AND
+// pollutes the recorded .cast with "huge text" jumps mid-stream.
+// The browser already filters this; the server clamp is defense in
+// depth so an old / third-party client can't ship 9×7 either.
+const (
+	minTermCols = 40
+	minTermRows = 10
+)
+
 // parseResizeFrame unpacks the opcode-'1' JSON body into cols+rows.
 // Accepts a frame with or without the leading opcode byte so callers
-// that already stripped it still work.
+// that already stripped it still work. Floors absurdly-small values
+// to a sane minimum (see minTerm*) — see the comment on those consts.
 func parseResizeFrame(data []byte) (cols, rows uint32, err error) {
 	body := data
 	if len(body) > 0 && body[0] == termOpcodeResize {
@@ -329,11 +341,18 @@ func parseResizeFrame(data []byte) (cols, rows uint32, err error) {
 	if err := json.Unmarshal(body, &r); err != nil {
 		return 0, 0, err
 	}
+	// Treat a missing field (0) as "use the conventional default"
+	// rather than the floor — most callers that omit the field
+	// genuinely want 80×24, not 20×5.
 	if r.Columns == 0 {
 		r.Columns = 80
+	} else if r.Columns < minTermCols {
+		r.Columns = minTermCols
 	}
 	if r.Rows == 0 {
 		r.Rows = 24
+	} else if r.Rows < minTermRows {
+		r.Rows = minTermRows
 	}
 	return r.Columns, r.Rows, nil
 }

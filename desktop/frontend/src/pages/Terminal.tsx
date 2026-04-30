@@ -53,6 +53,28 @@ const xtermTheme = {
     brightWhite: "#ffffff",
 };
 
+// Minimum cols/rows we ever forward to the agent. xterm-fit reads
+// `clientWidth` / `clientHeight` of the host element and divides by
+// the rendered char dimensions; while the terminal drawer animates
+// open (or while a parent panel resizes) the host is briefly very
+// small, so fit() returns absurd dimensions like 9 cols × 7 rows.
+// Sending those over the wire makes the agent's PTY actually resize
+// to 9×7, which both wraps the live shell weirdly AND gets baked
+// into the recorded .cast — playback then jumps to "huge text" mid-
+// stream when the recording replays the bogus resize. The real
+// dims always settle to something sensible once layout finishes,
+// so we just suppress sub-threshold transients and let the next
+// ResizeObserver fire deliver the steady-state value.
+//
+// 40 × 10 is well below the DEC VT100 24-row historical minimum but
+// far above any layout glitch we've seen in the wild (9×7 was the
+// reported case). Picking the floor too low lets the player still
+// render "huge" text during the transient; too high and we'd lie
+// to the agent about a genuinely-small operator terminal. 40×10
+// keeps replay readable without inflating any realistic geometry.
+const MIN_TERM_COLS = 40;
+const MIN_TERM_ROWS = 10;
+
 // One <Terminal> per open session tab. Owns the xterm instance and the
 // underlying termID returned from OpenTerminal; reroutes Wails events to
 // xterm.write() and xterm.onData → SendTerminalInput.
@@ -154,6 +176,14 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
                     if (xterm.cols === lastCols && xterm.rows === lastRows) {
                         return;
                     }
+                    // Drop transient layout glitches (drawer animating
+                    // open, parent panel resizing). See MIN_TERM_*
+                    // comment above. Don't update lastCols/lastRows
+                    // either — the next observer fire will compare
+                    // against the previously valid steady-state value.
+                    if (xterm.cols < MIN_TERM_COLS || xterm.rows < MIN_TERM_ROWS) {
+                        return;
+                    }
                     lastCols = xterm.cols;
                     lastRows = xterm.rows;
                     ResizeTerminal(id, xterm.cols, xterm.rows);
@@ -200,8 +230,19 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
                     EventsOff(`terminal:closed:${id}`);
                 });
 
-                // Trigger initial size sync now that the terminal is open.
-                ResizeTerminal(id, xterm.cols, xterm.rows);
+                // Trigger initial size sync now that the terminal is
+                // open. The server's WS handler blocks reading the
+                // first frame as a resize, so we MUST send something.
+                // If layout hasn't settled yet (e.g. the drawer is
+                // mid-animation when OpenTerminal resolves) we still
+                // forward at least MIN_TERM_* — better than a 9×7
+                // PTY; the next ResizeObserver fire delivers the
+                // steady-state size.
+                ResizeTerminal(
+                    id,
+                    Math.max(xterm.cols, MIN_TERM_COLS),
+                    Math.max(xterm.rows, MIN_TERM_ROWS),
+                );
 
                 // Pull a one-shot seed command from the global
                 // terminal context. The "Open in terminal here"

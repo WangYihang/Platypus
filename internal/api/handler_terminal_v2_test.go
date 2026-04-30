@@ -277,3 +277,46 @@ func TestTerminalV2_UnknownAgent404(t *testing.T) {
 		t.Fatalf("status = %d; want 404", resp.StatusCode)
 	}
 }
+
+// parseResizeFrame must clamp absurdly-small dimensions to a sane
+// floor so a buggy or out-of-date browser client can't resize the
+// agent's PTY to e.g. 9×7 (xterm-fit's reading from a still-
+// animating drawer panel). The frontend already filters this; the
+// server clamp is defense in depth.
+func TestParseResizeFrame_ClampsTinyDims(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCols uint32
+		wantRows uint32
+	}{
+		// Conventional 80×24 passes through untouched.
+		{"normal", `{"columns":80,"rows":24}`, 80, 24},
+		// Reasonable terminal dims pass through.
+		{"realistic", `{"columns":120,"rows":40}`, 120, 40},
+		// 9×7 is the in-the-wild glitch this clamp exists for —
+		// xterm-fit reading from a still-animating drawer.
+		{"glitch_9x7", `{"columns":9,"rows":7}`, 40, 10},
+		// Cols ok, rows too small.
+		{"rows_only_glitch", `{"columns":80,"rows":4}`, 80, 10},
+		// Cols too small, rows ok.
+		{"cols_only_glitch", `{"columns":12,"rows":24}`, 40, 24},
+		// Missing fields default to conventional 80×24, NOT the
+		// tiny floor — a serializer that omits the field genuinely
+		// wants a usable default, not "as small as possible".
+		{"missing_fields", `{}`, 80, 24},
+		// Right at the floor stays at the floor.
+		{"at_floor", `{"columns":40,"rows":10}`, 40, 10},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cols, rows, err := parseResizeFrame([]byte(tc.body))
+			if err != nil {
+				t.Fatalf("parseResizeFrame: %v", err)
+			}
+			if cols != tc.wantCols || rows != tc.wantRows {
+				t.Fatalf("got %d×%d, want %d×%d", cols, rows, tc.wantCols, tc.wantRows)
+			}
+		})
+	}
+}
