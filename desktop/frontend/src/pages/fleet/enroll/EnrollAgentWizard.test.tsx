@@ -76,16 +76,16 @@ describe("<EnrollAgentWizard>", () => {
         expect(screen.queryByTestId("enroll-wizard")).not.toBeInTheDocument();
     });
 
-    it("opens with ?enroll=1 and lands on the OS step", async () => {
+    it("opens with ?enroll=1 and lands on the Server step", async () => {
         render("/projects/test-project/hosts?enroll=1");
         expect(await screen.findByTestId("enroll-wizard")).toBeInTheDocument();
-        // Step indicator marks `os` as the active step.
+        // Step indicator marks `server` as the active step.
         const indicator = await screen.findByTestId("enroll-wizard-steps");
-        const active = indicator.querySelector('[data-step="os"]');
+        const active = indicator.querySelector('[data-step="server"]');
         expect(active?.getAttribute("data-active")).toBe("true");
     });
 
-    it("walks through all four steps and submits with skipped OS/arch", async () => {
+    it("walks through refined steps and submits with skipped OS/arch", async () => {
         issueInstallArtifact.mockResolvedValue({
             download_id: "dl_x",
             download_token: "dl_x.secret",
@@ -97,29 +97,28 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
-        // Wait for the OS step to render its picker (depends on the
-        // platforms fetch landing).
-        await screen.findByTestId("enroll-wizard-os");
-
-        // Skip OS — click Next.
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        // Arch step renders the "no OS selected" hint, no toggle.
-        expect(screen.queryByTestId("enroll-wizard-arch")).not.toBeInTheDocument();
-
-        // Skip arch — click Next.
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        // Connect step renders.
-        const connect = await screen.findByTestId("enroll-wizard-connect");
-        expect(connect).toBeInTheDocument();
-
-        // Server endpoint should be prefilled from getServerInfo.
-        const endpoint = connect.querySelector(
+        const server = await screen.findByTestId("enroll-wizard-server");
+        const endpoint = server.querySelector(
             'input[placeholder="203.0.113.5:13337"]',
         ) as HTMLInputElement;
         expect(endpoint.value).toBe("203.0.113.5:13337");
 
-        // Submit the connect step → wizard advances to run.
-        await user.click(screen.getByTestId("enroll-wizard-submit"));
+        await user.click(screen.getByTestId("enroll-wizard-next")); // server -> tls
+        await screen.findByTestId("enroll-wizard-download-tls");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // tls -> os
+        await screen.findByTestId("enroll-wizard-os");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // os -> arch
+        await user.click(screen.getByTestId("enroll-wizard-next")); // arch -> ttl
+        await screen.findByTestId("enroll-wizard-ttl");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // ttl -> pat uses
+        await screen.findByTestId("enroll-wizard-pat-max-uses");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // pat uses -> auto approve
+        await screen.findByTestId("enroll-wizard-auto-approve");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // auto approve -> description
+        await screen.findByTestId("enroll-wizard-description");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // description -> review
+        await screen.findByTestId("enroll-wizard-review");
+        await user.click(screen.getByTestId("enroll-wizard-generate"));
 
         await waitFor(() =>
             expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
@@ -161,11 +160,10 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
-        await screen.findByTestId("enroll-wizard-os");
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await screen.findByTestId("enroll-wizard-connect");
-        await user.click(screen.getByTestId("enroll-wizard-submit"));
+        await screen.findByTestId("enroll-wizard-server");
+        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-review");
+        await user.click(screen.getByTestId("enroll-wizard-generate"));
 
         await waitFor(() =>
             expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
@@ -213,11 +211,10 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
-        await screen.findByTestId("enroll-wizard-os");
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await screen.findByTestId("enroll-wizard-connect");
-        await user.click(screen.getByTestId("enroll-wizard-submit"));
+        await screen.findByTestId("enroll-wizard-server");
+        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-review");
+        await user.click(screen.getByTestId("enroll-wizard-generate"));
 
         await waitFor(() =>
             expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
@@ -268,11 +265,10 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
-        await screen.findByTestId("enroll-wizard-os");
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await user.click(screen.getByTestId("enroll-wizard-next"));
-        await screen.findByTestId("enroll-wizard-connect");
-        await user.click(screen.getByTestId("enroll-wizard-submit"));
+        await screen.findByTestId("enroll-wizard-server");
+        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-review");
+        await user.click(screen.getByTestId("enroll-wizard-generate"));
 
         await waitFor(() =>
             expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),

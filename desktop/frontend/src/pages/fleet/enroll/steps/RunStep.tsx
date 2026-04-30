@@ -12,6 +12,7 @@ import DownloaderPicker, { defaultDownloader } from "../DownloaderPicker";
 
 interface Props {
     result: IssueInstallResponse;
+    initialSkipTLS?: boolean;
 }
 
 // RunStep is the terminal step of the EnrollAgentWizard. It renders
@@ -29,7 +30,7 @@ interface Props {
 // cert. After this step the wizard's "Done" button arms the
 // EnrollmentWaitBanner via `?await=enroll`; the poll loop there
 // picks up whichever shape was actually run.
-export default function RunStep({ result }: Props) {
+export default function RunStep({ result, initialSkipTLS = true }: Props) {
     const [tab, setTab] = useState<"script" | "bundle">("script");
     const [downloader, setDownloader] = useState<string>(
         defaultDownloader(result.target_os),
@@ -38,7 +39,7 @@ export default function RunStep({ result }: Props) {
     // self-signed cert, so the rendered command needs to skip
     // verification to actually run. Operators with a real cert turn
     // it off to copy a stricter, MITM-resistant one-liner.
-    const [skipTLS, setSkipTLS] = useState<boolean>(true);
+    const [skipTLS, setSkipTLS] = useState<boolean>(initialSkipTLS);
     const isWindows = (result.target_os ?? "").toLowerCase() === "windows";
     const scriptTabLabel = isWindows ? "iwr | iex" : "curl | sh";
 

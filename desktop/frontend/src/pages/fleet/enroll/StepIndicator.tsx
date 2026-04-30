@@ -3,12 +3,9 @@ import { Check } from "lucide-react";
 import { palette, space } from "../../../layout/theme";
 import { STEPS, STEP_LABEL, Step } from "./steps";
 
-// StepIndicator renders the four-pill progress strip at the top of
-// the wizard (OS → Arch → Connect → Run). Pills behind `current` are
-// rendered as "done" (filled circle with a check), `current` is
-// "active" (filled circle with the step number), the rest are
-// "pending" (hairline circle). Pure presentation — no state of its
-// own.
+// StepIndicator renders the linear progress strip at the top of the
+// wizard. To keep dense 10-step flows readable in a narrow dialog, it
+// only shows labels for the active step and its immediate neighbours.
 export default function StepIndicator({ current }: { current: Step }) {
     const currentIdx = STEPS.indexOf(current);
     return (
@@ -27,6 +24,7 @@ export default function StepIndicator({ current }: { current: Step }) {
             {STEPS.map((s, i) => {
                 const done = i < currentIdx;
                 const active = i === currentIdx;
+                const showLabel = Math.abs(i - currentIdx) <= 1 || done;
                 return (
                     <span
                         key={s}
@@ -62,14 +60,18 @@ export default function StepIndicator({ current }: { current: Step }) {
                         >
                             {done ? <Check className="size-3" /> : i + 1}
                         </span>
-                        <span
-                            style={{
-                                color: active ? palette.textPrimary : palette.textMuted,
-                                fontWeight: active ? 600 : 500,
-                            }}
-                        >
-                            {STEP_LABEL[s]}
-                        </span>
+                        {showLabel ? (
+                            <span
+                                style={{
+                                    color: active
+                                        ? palette.textPrimary
+                                        : palette.textMuted,
+                                    fontWeight: active ? 600 : 500,
+                                }}
+                            >
+                                {STEP_LABEL[s]}
+                            </span>
+                        ) : null}
                         {i < STEPS.length - 1 && (
                             <span style={{ color: palette.border, marginLeft: 2 }}>
                                 →

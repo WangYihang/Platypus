@@ -9,12 +9,29 @@
 // where it physically lives.
 export { type PlatformsState } from "../../enrollment/platforms";
 
-export const STEPS = ["os", "arch", "connect", "run"] as const;
+export const STEPS = [
+    "server",
+    "download_tls",
+    "os",
+    "arch",
+    "ttl",
+    "pat_max_uses",
+    "auto_approve",
+    "description",
+    "review",
+    "run",
+] as const;
 export type Step = (typeof STEPS)[number];
 
 export const STEP_LABEL: Record<Step, string> = {
+    server: "Server",
+    download_tls: "TLS",
     os: "OS",
     arch: "Arch",
-    connect: "Connect",
+    ttl: "TTL",
+    pat_max_uses: "PAT uses",
+    auto_approve: "Approval",
+    description: "Note",
+    review: "Review",
     run: "Run",
 };

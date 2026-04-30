@@ -20,37 +20,31 @@ import {
 import {
     ARCH_ORDER,
     OS_ORDER,
+    archLabel,
+    osLabel,
     preferredOrder,
 } from "../../enrollment/platforms";
 import StepIndicator from "./StepIndicator";
 import WizardFooter from "./WizardFooter";
 import OSStep from "./steps/OSStep";
 import ArchStep from "./steps/ArchStep";
-import ConnectStep from "./steps/ConnectStep";
+import ServerEndpointStep from "./steps/ServerEndpointStep";
+import DownloadTLSStep from "./steps/DownloadTLSStep";
+import TTLStep from "./steps/TTLStep";
+import PATMaxUsesStep from "./steps/PATMaxUsesStep";
+import AutoApproveStep from "./steps/AutoApproveStep";
+import DescriptionStep from "./steps/DescriptionStep";
+import ReviewStep from "./steps/ReviewStep";
 import RunStep from "./steps/RunStep";
-import { PlatformsState, Step } from "./steps";
+import { PlatformsState, STEPS, Step } from "./steps";
 import { useEnrollWizardOpen } from "./useEnrollWizardOpen";
 
-// EnrollAgentWizard is the inline-in-Fleet replacement for the dense
-// modal that used to live on the standalone /fleet/enroll page. It
-// walks the operator through OS → Arch → Connect → Run; the per-step
-// UI lives in ./steps/*, and this module only orchestrates state and
-// the open/close wiring.
-//
-// Open / closed state is driven by the URL search param `?enroll=1`
-// (see useEnrollWizardOpen). That keeps the entry points dumb (every
-// Link/Button just sets the param) and lets deep-links land directly
-// inside the wizard. On close, the param is stripped.
-//
-// After step 4, "Done — show me Fleet" closes the wizard and
-// switches the URL to `?await=enroll`, which arms the existing
-// EnrollmentWaitBanner so the operator gets a live "did the agent
-// dial back?" affordance without a separate UI surface.
 export default function EnrollAgentWizard() {
     const project = useCurrentProject();
     const { open, setOpen } = useEnrollWizardOpen();
 
-    const [step, setStep] = useState<Step>("os");
+    const [step, setStep] = useState<Step>("server");
+    const [skipTLSVerification, setSkipTLSVerification] = useState(true);
     const [targetOS, setTargetOS] = useState("");
     const [targetArch, setTargetArch] = useState("");
     const [serverEndpoint, setServerEndpoint] = useState("");
@@ -67,13 +61,14 @@ export default function EnrollAgentWizard() {
     // keep the wizard mounted and snap state back instead.
     useEffect(() => {
         if (!open) return;
-        setStep("os");
+        setStep("server");
         setTargetOS("");
         setTargetArch("");
         setTtlSeconds(undefined);
         setPatMaxUses(undefined);
         setAutoApprove(false);
         setDescription("");
+        setSkipTLSVerification(true);
         setIssued(null);
         setSubmitting(false);
 
@@ -127,7 +122,7 @@ export default function EnrollAgentWizard() {
     );
     const archList = targetOS ? (archsByOS.get(targetOS) ?? []) : [];
 
-    async function submitConnect() {
+    async function generateCommands() {
         if (!serverEndpoint.trim()) return;
         setSubmitting(true);
         try {
@@ -156,6 +151,73 @@ export default function EnrollAgentWizard() {
         setOpen(false, { key: "await", value: "enroll" });
     }
 
+    const currentIdx = STEPS.indexOf(step);
+    const isFirst = currentIdx <= 0;
+    const isLastBeforeRun = step === "review";
+    const canNext =
+        (step !== "server" || !!serverEndpoint.trim()) &&
+        (step !== "pat_max_uses" ||
+            patMaxUses === undefined ||
+            (Number.isFinite(patMaxUses) && patMaxUses > 0)) &&
+        (step !== "ttl" ||
+            ttlSeconds === undefined ||
+            (Number.isFinite(ttlSeconds) && ttlSeconds > 0));
+
+    function goNext() {
+        if (!canNext || isLastBeforeRun) return;
+        const next = STEPS[currentIdx + 1];
+        if (next && next !== "run") setStep(next);
+    }
+
+    function goBack() {
+        if (isFirst) return;
+        const prev = STEPS[currentIdx - 1];
+        if (prev) setStep(prev);
+    }
+
+    const reviewSummary: Array<{ label: string; value: string; editStep: Step }> = [
+        {
+            label: "Server endpoint",
+            value: serverEndpoint.trim() || "(required)",
+            editStep: "server",
+        },
+        {
+            label: "Download TLS",
+            value: skipTLSVerification ? "Skip verification" : "Strict verification",
+            editStep: "download_tls",
+        },
+        {
+            label: "Target OS",
+            value: targetOS ? osLabel(targetOS) : "Auto-detect",
+            editStep: "os",
+        },
+        {
+            label: "Target Arch",
+            value: targetArch ? archLabel(targetArch) : "Auto-detect",
+            editStep: "arch",
+        },
+        {
+            label: "Install URL TTL",
+            value: ttlSeconds ? `${ttlSeconds}s` : "Default (300s)",
+            editStep: "ttl",
+        },
+        {
+            label: "PAT max uses",
+            value: patMaxUses ? String(patMaxUses) : "Default (1)",
+            editStep: "pat_max_uses",
+        },
+        {
+            label: "Approval policy",
+            value: autoApprove ? "Auto-approve" : "Manual approval",
+            editStep: "auto_approve",
+        },
+        {
+            label: "Description",
+            value: description.trim() || "(none)",
+            editStep: "description",
+        },
+    ];
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent
@@ -172,6 +234,18 @@ export default function EnrollAgentWizard() {
 
                 <StepIndicator current={step} />
 
+                {step === "server" && (
+                    <ServerEndpointStep
+                        serverEndpoint={serverEndpoint}
+                        onChange={setServerEndpoint}
+                    />
+                )}
+                {step === "download_tls" && (
+                    <DownloadTLSStep
+                        skipTLS={skipTLSVerification}
+                        onSkipTLSChange={setSkipTLSVerification}
+                    />
+                )}
                 {step === "os" && (
                     <OSStep
                         platforms={platforms}
@@ -193,7 +267,7 @@ export default function EnrollAgentWizard() {
                             // different arch.
                             setTargetOS(preset.os);
                             setTargetArch(preset.arch);
-                            setStep("connect");
+                            setStep("ttl");
                         }}
                     />
                 )}
@@ -205,35 +279,46 @@ export default function EnrollAgentWizard() {
                         onChange={setTargetArch}
                     />
                 )}
-                {step === "connect" && (
-                    <ConnectStep
-                        serverEndpoint={serverEndpoint}
-                        onServerEndpointChange={setServerEndpoint}
-                        ttlSeconds={ttlSeconds}
-                        onTtlSecondsChange={setTtlSeconds}
+                {step === "ttl" && (
+                    <TTLStep ttlSeconds={ttlSeconds} onChange={setTtlSeconds} />
+                )}
+                {step === "pat_max_uses" && (
+                    <PATMaxUsesStep
                         patMaxUses={patMaxUses}
-                        onPatMaxUsesChange={setPatMaxUses}
-                        autoApprove={autoApprove}
-                        onAutoApproveChange={setAutoApprove}
-                        description={description}
-                        onDescriptionChange={setDescription}
+                        onChange={setPatMaxUses}
                     />
                 )}
-                {step === "run" && issued && <RunStep result={issued} />}
+                {step === "auto_approve" && (
+                    <AutoApproveStep
+                        autoApprove={autoApprove}
+                        onChange={setAutoApprove}
+                    />
+                )}
+                {step === "description" && (
+                    <DescriptionStep
+                        description={description}
+                        onChange={setDescription}
+                    />
+                )}
+                {step === "review" && (
+                    <ReviewStep summary={reviewSummary} onEdit={setStep} />
+                )}
+                {step === "run" && issued && (
+                    <RunStep
+                        result={issued}
+                        initialSkipTLS={skipTLSVerification}
+                    />
+                )}
 
                 <WizardFooter
                     step={step}
                     submitting={submitting}
-                    canSubmitConnect={!!serverEndpoint.trim()}
-                    onBack={() => {
-                        if (step === "arch") setStep("os");
-                        else if (step === "connect") setStep("arch");
-                    }}
-                    onNext={() => {
-                        if (step === "os") setStep("arch");
-                        else if (step === "arch") setStep("connect");
-                    }}
-                    onSubmit={submitConnect}
+                    canNext={canNext}
+                    canGenerate={!!serverEndpoint.trim()}
+                    isFirst={isFirst}
+                    onBack={goBack}
+                    onNext={goNext}
+                    onGenerate={generateCommands}
                     onCancel={() => setOpen(false)}
                     onFinish={finishToFleet}
                 />

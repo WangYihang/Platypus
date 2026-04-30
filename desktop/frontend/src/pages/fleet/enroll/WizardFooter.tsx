@@ -8,10 +8,12 @@ import { Step } from "./steps";
 interface Props {
     step: Step;
     submitting: boolean;
-    canSubmitConnect: boolean;
+    canNext: boolean;
+    canGenerate: boolean;
+    isFirst: boolean;
     onBack: () => void;
     onNext: () => void;
-    onSubmit: () => void;
+    onGenerate: () => void;
     onCancel: () => void;
     onFinish: () => void;
 }
@@ -24,10 +26,12 @@ interface Props {
 export default function WizardFooter({
     step,
     submitting,
-    canSubmitConnect,
+    canNext,
+    canGenerate,
+    isFirst,
     onBack,
     onNext,
-    onSubmit,
+    onGenerate,
     onCancel,
     onFinish,
 }: Props) {
@@ -62,7 +66,7 @@ export default function WizardFooter({
                 variant="ghost"
                 size="sm"
                 onClick={onBack}
-                disabled={step === "os"}
+                disabled={isFirst}
             >
                 Back
             </Button>
@@ -70,13 +74,13 @@ export default function WizardFooter({
                 <Button type="button" variant="outline" size="sm" onClick={onCancel}>
                     Cancel
                 </Button>
-                {step === "connect" ? (
+                {step === "review" ? (
                     <Button
                         type="button"
                         size="sm"
-                        disabled={!canSubmitConnect || submitting}
-                        onClick={onSubmit}
-                        data-testid="enroll-wizard-submit"
+                        disabled={!canGenerate || submitting}
+                        onClick={onGenerate}
+                        data-testid="enroll-wizard-generate"
                     >
                         {submitting && <Loader2 className="size-3.5 animate-spin" />}
                         Generate
@@ -85,6 +89,7 @@ export default function WizardFooter({
                     <Button
                         type="button"
                         size="sm"
+                        disabled={!canNext}
                         onClick={onNext}
                         data-testid="enroll-wizard-next"
                     >
