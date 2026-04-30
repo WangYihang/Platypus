@@ -317,6 +317,10 @@ export default function InfoTab({
                     primaryIP={primaryIP}
                     primaryIPInfo={host.primary_ip_info}
                     primaryMAC={primaryMAC}
+                    egressIP={host.egress_ip}
+                    egressIPInfo={host.egress_ip_info}
+                    publicIP={host.public_ip}
+                    publicIPInfo={host.public_ip_info}
                 />
 
                 <HardwareCard host={host} sysInfo={sysInfo} />
@@ -394,12 +398,28 @@ function NetworkCard({
     primaryIP,
     primaryIPInfo,
     primaryMAC,
+    egressIP,
+    egressIPInfo,
+    publicIP,
+    publicIPInfo,
 }: {
     sysInfo: HostSysInfo | null;
     primaryIP?: string;
     primaryIPInfo?: import("../../lib/api").RemoteIpInfo;
     primaryMAC?: string;
+    egressIP?: string;
+    egressIPInfo?: import("../../lib/api").RemoteIpInfo;
+    publicIP?: string;
+    publicIPInfo?: import("../../lib/api").RemoteIpInfo;
 }) {
+    // Prefer the server-side enriched public_ip cached on the host
+    // row over the live sysInfo value — same address, but the host
+    // version arrives with country/ISP already filled in. Falls back
+    // to sysInfo + fetchInfo for the brief window before the first
+    // SysInfo refresh persists.
+    const effectivePublicIP = publicIP || sysInfo?.public_ip;
+    const effectivePublicInfo =
+        publicIPInfo && publicIPInfo.ip === effectivePublicIP ? publicIPInfo : undefined;
     return (
         <Card header="Network" padding={5}>
             <DataList
@@ -429,6 +449,18 @@ function NetworkCard({
                         value: primaryMAC ? <Mono>{primaryMAC}</Mono> : "—",
                     },
                     {
+                        label: "egress IP",
+                        // Server-derived: whatever the WS upgrade peered
+                        // from on TCP. Diverges from primary IP for any
+                        // agent behind NAT, and from public IP under mesh
+                        // relay.
+                        value: egressIP ? (
+                            <RemoteAddr addr={egressIP} info={egressIPInfo} />
+                        ) : (
+                            "—"
+                        ),
+                    },
+                    {
                         label: "default gateway",
                         value: sysInfo?.default_gateway ? (
                             <RemoteAddr addr={sysInfo.default_gateway} fetchInfo />
@@ -438,8 +470,12 @@ function NetworkCard({
                     },
                     {
                         label: "public IP",
-                        value: sysInfo?.public_ip ? (
-                            <RemoteAddr addr={sysInfo.public_ip} fetchInfo />
+                        value: effectivePublicIP ? (
+                            <RemoteAddr
+                                addr={effectivePublicIP}
+                                info={effectivePublicInfo}
+                                fetchInfo={!effectivePublicInfo}
+                            />
                         ) : (
                             "—"
                         ),

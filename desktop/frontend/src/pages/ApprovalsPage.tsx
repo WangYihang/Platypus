@@ -127,6 +127,7 @@ export default function ApprovalsPage() {
                             <TableHead>Hostname</TableHead>
                             <TableHead>OS</TableHead>
                             <TableHead>Primary IP</TableHead>
+                            <TableHead>Egress</TableHead>
                             <TableHead>First seen</TableHead>
                             <TableHead>Fingerprint</TableHead>
                             <TableHead style={{ textAlign: "right" }}>Decision</TableHead>
@@ -181,6 +182,13 @@ function ApprovalRow({
             <TableCell>
                 {host.primary_ip ? (
                     <RemoteAddr addr={host.primary_ip} info={host.primary_ip_info} />
+                ) : (
+                    <span style={{ color: palette.textMuted }}>—</span>
+                )}
+            </TableCell>
+            <TableCell>
+                {host.egress_ip ? (
+                    <RemoteAddr addr={host.egress_ip} info={host.egress_ip_info} />
                 ) : (
                     <span style={{ color: palette.textMuted }}>—</span>
                 )}

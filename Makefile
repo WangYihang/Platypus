@@ -14,7 +14,7 @@ AGENT_SIGNING_PUBKEY ?=
 AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
 
 .PHONY: all build build-bundled proto test lint fmt vet tidy clean release snapshot help swag \
-        hooks pre-commit \
+        hooks pre-commit data data-v6 \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
         web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots
 
@@ -34,6 +34,8 @@ help:
 	@echo "  pre-commit      Run all pre-commit hooks against every tracked file"
 	@echo "  snapshot        Build cross-platform snapshot via goreleaser"
 	@echo "  release         Cut a release via goreleaser (requires tag + GITHUB_TOKEN)"
+	@echo "  data            Fetch ip2region v4 xdb into internal/ipinfo/data/"
+	@echo "  data-v6         Also fetch the v6 xdb (~36 MB; opt-in)"
 	@echo "  clean           Remove build artifacts"
 	@echo ""
 	@echo "Desktop app (./desktop):"
@@ -114,6 +116,17 @@ snapshot:
 
 release:
 	goreleaser release --clean
+
+# `data` pulls the ip2region v4 xdb into internal/ipinfo/data/ so the
+# server can do geo / ISP enrichment at runtime. The Go binary no
+# longer embeds it (saved ~11 MB). Run once after a fresh clone; the
+# fetch script is idempotent. `data-v6` adds the optional ~36 MB v6
+# dataset for v6 enrichment.
+data:
+	./scripts/fetch-ip2region.sh
+
+data-v6:
+	./scripts/fetch-ip2region.sh --v6
 
 clean:
 	rm -rf $(BUILD_DIR) dist

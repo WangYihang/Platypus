@@ -30,6 +30,16 @@ export interface Host {
     primary_mac?: string;
     boot_time_unix?: number;
 
+    // Egress / public IP (migration 000024). egress_ip is what the
+    // server saw as the WS upgrade peer (authoritative "where on the
+    // internet did this connect from"). public_ip is the agent's own
+    // DNS-TXT probe; the two diverge under mesh relay so we keep
+    // both.
+    egress_ip?: string;
+    egress_ip_info?: RemoteIpInfo;
+    public_ip?: string;
+    public_ip_info?: RemoteIpInfo;
+
     // Build identity (migration 000023). build_version is semver,
     // build_commit short git SHA, build_date RFC3339. protocol_version
     // is a separate monotonic uint32 used for wire compatibility.

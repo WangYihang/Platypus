@@ -1,6 +1,22 @@
 package ipinfo
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+// requireV4Geo skips the test when the v4 xdb file isn't reachable
+// from the test binary's working directory. Lets a fresh checkout
+// (no `make data`) still pass `go test ./...` while keeping a real
+// regression test in place once the file is fetched.
+func requireV4Geo(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("data/ip2region_v4.xdb"); err != nil {
+		if v := os.Getenv(envV4Override); v == "" {
+			t.Skip("v4 xdb not present (run `make data`)")
+		}
+	}
+}
 
 func TestLookupClassification(t *testing.T) {
 	cases := []struct {
@@ -18,6 +34,9 @@ func TestLookupClassification(t *testing.T) {
 		{"loopback v6", "::1", 6, false, true},
 		{"unspecified v6", "::", 6, true, false},
 		{"global v6", "2001:db8::1", 6, false, false},
+		{"ula v6 fc00", "fc00::1", 6, true, false},
+		{"ula v6 fd00", "fd12:3456::1", 6, true, false},
+		{"link-local v6", "fe80::1", 6, true, false},
 		{"unparseable", "not-an-ip", 0, false, false},
 	}
 	for _, tc := range cases {
@@ -49,6 +68,7 @@ func TestLookupHostPortAndBrackets(t *testing.T) {
 }
 
 func TestLookupPublicV4Geo(t *testing.T) {
+	requireV4Geo(t)
 	// Stable, well-known anycast — Google Public DNS. The xdb only
 	// guarantees country granularity for anycast, so we just check
 	// that *some* country was filled in, not the exact value.
