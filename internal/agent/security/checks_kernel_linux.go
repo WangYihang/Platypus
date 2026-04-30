@@ -23,9 +23,19 @@ func init() {
 // vuls / OVAL via the same RPC envelope from a dedicated checker.
 type kernelVersionCheck struct{}
 
-func (kernelVersionCheck) ID() string                       { return "kernel.version" }
-func (kernelVersionCheck) Category() string                 { return "kernel" }
+func (kernelVersionCheck) ID() string                        { return "kernel.version" }
+func (kernelVersionCheck) Category() string                  { return "kernel" }
 func (kernelVersionCheck) Applicable(_ context.Context) bool { return true }
+func (kernelVersionCheck) Metadata() CheckMetadata {
+	return CheckMetadata{
+		Title: "Kernel version freshness",
+		Description: "Reads /proc/sys/kernel/osrelease and flags hosts whose kernel sits below " +
+			"the recommended floor for its LTS branch (4.19 / 5.4 / 5.15 / 6.1). Heuristic — " +
+			"distros that backport security fixes onto an older upstream tag will appear " +
+			"vulnerable here even though they are patched; verify with the distro changelog " +
+			"before treating a finding as definitive.",
+	}
+}
 
 func (kernelVersionCheck) Run(_ context.Context) ([]Finding, error) {
 	raw, err := readKernelRelease()

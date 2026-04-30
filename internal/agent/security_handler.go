@@ -71,20 +71,24 @@ func deriveCheckID(findingID string) string {
 }
 
 // HandleListSecurityChecks enumerates every registered Checker so the
-// UI can render its checklist before any scan completes. Applicable
-// is evaluated against the live host so the UI can render
-// not-applicable rows dimmed (e.g. ssh.config skipped when
-// /etc/ssh/sshd_config is missing).
+// UI can render its checklist (and the Coverage panel) before any
+// scan completes. Applicable is evaluated against the live host so
+// the UI can render not-applicable rows dimmed (e.g. ssh.config
+// skipped when /etc/ssh/sshd_config is missing).
 func HandleListSecurityChecks(ctx context.Context, _ *v2pb.ListSecurityChecksRequest) *v2pb.ListSecurityChecksResponse {
 	checkers := security.Checkers()
 	resp := &v2pb.ListSecurityChecksResponse{
 		Checks: make([]*v2pb.AvailableSecurityCheck, 0, len(checkers)),
 	}
 	for _, c := range checkers {
+		meta := c.Metadata()
 		resp.Checks = append(resp.Checks, &v2pb.AvailableSecurityCheck{
-			Id:         c.ID(),
-			Category:   c.Category(),
-			Applicable: c.Applicable(ctx),
+			Id:          c.ID(),
+			Category:    c.Category(),
+			Applicable:  c.Applicable(ctx),
+			Title:       meta.Title,
+			Description: meta.Description,
+			References:  append([]string(nil), meta.References...),
 		})
 	}
 	return resp

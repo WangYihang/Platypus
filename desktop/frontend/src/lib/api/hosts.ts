@@ -433,10 +433,18 @@ export interface RescanHostOpts {
 // the agent's Applicable() decision at enumeration time — non-
 // applicable checks render dimmed (e.g. ssh.config when sshd_config
 // is missing).
+//
+// title / description / references come from the Checker's
+// Metadata() and power the Coverage panel — operators see what we
+// inspect, what we don't, and how each check maps to standards
+// (CIS sections, CVE ids).
 export interface AvailableCheck {
     id: string;
     category: string;
     applicable: boolean;
+    title?: string;
+    description?: string;
+    references?: string[];
 }
 
 // listAvailableChecks proxies the agent's ListSecurityChecks RPC.

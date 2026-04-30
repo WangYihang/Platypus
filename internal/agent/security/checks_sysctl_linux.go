@@ -21,9 +21,20 @@ func init() {
 // (c) actionable with a single sysctl line.
 type sysctlCheck struct{}
 
-func (sysctlCheck) ID() string                       { return "sysctl.posture" }
-func (sysctlCheck) Category() string                 { return "sysctl" }
+func (sysctlCheck) ID() string                        { return "sysctl.posture" }
+func (sysctlCheck) Category() string                  { return "sysctl" }
 func (sysctlCheck) Applicable(_ context.Context) bool { return dirExists("/proc/sys") }
+func (sysctlCheck) Metadata() CheckMetadata {
+	return CheckMetadata{
+		Title: "Sysctl hardening posture",
+		Description: "Reads a curated set of /proc/sys keys (kptr_restrict, " +
+			"unprivileged_bpf_disabled, rp_filter, accept_redirects, fs.protected_*, " +
+			"fs.suid_dumpable, tcp_syncookies, kernel.dmesg_restrict) and reports any " +
+			"that diverge from the recommended hardened value. One finding per misaligned " +
+			"key — the row's evidence shows the live value vs the expected one.",
+		References: []string{"CIS 3.2", "CIS 1.5"},
+	}
+}
 
 type sysctlExpectation struct {
 	key string // sysctl key in dotted notation

@@ -58,6 +58,17 @@ type Finding struct {
 	References  []string
 }
 
+// CheckMetadata describes a Checker's coverage to the operator: a
+// short title, one paragraph describing what's actually inspected,
+// and any external references (CVE ids, CIS sections, advisories).
+// The UI's Coverage panel renders this so users can see the
+// scanner's capability boundary before clicking Run.
+type CheckMetadata struct {
+	Title       string
+	Description string
+	References  []string
+}
+
 // Checker is the extension point. Implementations should be
 // stateless — Run is called from a fresh goroutine per scan, and the
 // registry holds the same instance across scans, so any mutable state
@@ -73,11 +84,17 @@ type Finding struct {
 // Use it for OS-specific checks (linux-only sysctl, ssh-only when
 // /etc/ssh/sshd_config is absent, etc.) so the wire shape stays
 // honest about what was attempted.
+//
+// Metadata is queried at registration time and (more importantly) on
+// every ListSecurityChecks RPC, so the UI can render the full set of
+// checks regardless of whether they've ever run. Implementations
+// should return a stable struct — don't compute anything live.
 type Checker interface {
 	ID() string
 	Category() string
 	Applicable(ctx context.Context) bool
 	Run(ctx context.Context) ([]Finding, error)
+	Metadata() CheckMetadata
 }
 
 // CheckResult is the per-checker lifecycle record (mirrors the

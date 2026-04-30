@@ -610,11 +610,14 @@ func (h *HostsHandler) GetSecurityScan(c *gin.Context) {
 
 // availableCheckResponse mirrors v2pb.AvailableSecurityCheck on the
 // wire. Returned by the GET .../security-checks endpoint so the UI
-// can render its checklist before any scan completes.
+// can render its checklist + Coverage panel before any scan completes.
 type availableCheckResponse struct {
-	ID         string `json:"id"`
-	Category   string `json:"category"`
-	Applicable bool   `json:"applicable"`
+	ID          string   `json:"id"`
+	Category    string   `json:"category"`
+	Applicable  bool     `json:"applicable"`
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	References  []string `json:"references,omitempty"`
 }
 
 // ListAvailableSecurityChecks handles
@@ -667,9 +670,12 @@ func (h *HostsHandler) ListAvailableSecurityChecks(c *gin.Context) {
 	out := make([]availableCheckResponse, 0, len(listProto.GetChecks()))
 	for _, ch := range listProto.GetChecks() {
 		out = append(out, availableCheckResponse{
-			ID:         ch.GetId(),
-			Category:   ch.GetCategory(),
-			Applicable: ch.GetApplicable(),
+			ID:          ch.GetId(),
+			Category:    ch.GetCategory(),
+			Applicable:  ch.GetApplicable(),
+			Title:       ch.GetTitle(),
+			Description: ch.GetDescription(),
+			References:  append([]string(nil), ch.GetReferences()...),
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"checks": out})

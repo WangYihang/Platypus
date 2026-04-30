@@ -378,6 +378,12 @@ message AvailableSecurityCheck {
   string id          = 1;  // stable id, e.g. "ssh.config"
   string category    = 2;  // "kernel" | "sysctl" | "ssh" | "filesystem" | ...
   bool   applicable  = 3;
+  // Operator-facing metadata. Populated from each Checker's
+  // Metadata() so the UI's Coverage panel can render the scanner's
+  // capability boundary without inspecting source.
+  string title       = 4;
+  string description = 5;
+  repeated string references = 6;  // CVE ids, CIS sections, …
 }
 
 message ListSecurityChecksResponse {

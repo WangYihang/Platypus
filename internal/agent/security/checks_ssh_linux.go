@@ -25,9 +25,21 @@ type sshConfigCheck struct {
 	path string
 }
 
-func (c *sshConfigCheck) ID() string                       { return "ssh.config" }
-func (c *sshConfigCheck) Category() string                 { return "ssh" }
+func (c *sshConfigCheck) ID() string                        { return "ssh.config" }
+func (c *sshConfigCheck) Category() string                  { return "ssh" }
 func (c *sshConfigCheck) Applicable(_ context.Context) bool { return fileExists(c.path) }
+func (c *sshConfigCheck) Metadata() CheckMetadata {
+	return CheckMetadata{
+		Title: "SSH server configuration",
+		Description: "Parses /etc/ssh/sshd_config for the directives most often cited in " +
+			"hardening guides: PermitRootLogin, PasswordAuthentication, PermitEmptyPasswords, " +
+			"X11Forwarding, Protocol, LoginGraceTime. Match blocks and Include directives are " +
+			"NOT honored — the parse is global-scope only, which matches the typical " +
+			"\"top-level posture\" question. Run `sshd -T` for the effective config including " +
+			"Match expansion when a row is unclear.",
+		References: []string{"CIS 5.2", "STIG SV-204576"},
+	}
+}
 
 type sshExpectation struct {
 	directive string

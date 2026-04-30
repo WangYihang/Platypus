@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     AlertTriangle,
+    BookOpen,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
@@ -187,12 +188,243 @@ export default function SecurityTab({ projectID, hostID, active }: Props) {
                 />
             )}
 
+            {available && available.length > 0 && (
+                <CoveragePanel checks={available} />
+            )}
+
             {rows.length > 0 && (
                 <Checklist
                     rows={rows}
                     onRerunOne={(id) => rescan.mutate({ check_ids: [id] })}
                     isAnyRunning={isAnyRunning}
                 />
+            )}
+        </div>
+    );
+}
+
+// CoveragePanel renders the full set of registered checks grouped
+// by category, with each entry expandable to show its description
+// and references. Collapsed by default to keep the per-host view
+// from feeling cluttered; the "What do we check?" trigger expands
+// it on demand. Honest scope-note at the top so operators
+// immediately see this is not a CIS replacement.
+function CoveragePanel({ checks }: { checks: AvailableCheck[] }) {
+    const { t } = useTranslation("security");
+    const [open, setOpen] = useState(false);
+
+    const grouped = useMemo(() => {
+        const map = new Map<string, AvailableCheck[]>();
+        for (const c of checks) {
+            const arr = map.get(c.category) ?? [];
+            arr.push(c);
+            map.set(c.category, arr);
+        }
+        // Stable order: render categories alphabetically; within a
+        // category render check ids alphabetically.
+        return Array.from(map.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([cat, items]) => [
+                cat,
+                items.slice().sort((a, b) => a.id.localeCompare(b.id)),
+            ] as const);
+    }, [checks]);
+
+    return (
+        <div
+            style={{
+                border: `1px solid ${palette.border}`,
+                borderRadius: radius.md,
+                background: palette.surface,
+                overflow: "hidden",
+            }}
+        >
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                style={{
+                    all: "unset",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: space[2],
+                    padding: `${space[2]}px ${space[3]}px`,
+                    width: "100%",
+                    boxSizing: "border-box",
+                }}
+                aria-expanded={open}
+            >
+                {open ? (
+                    <ChevronDown className="size-3.5" />
+                ) : (
+                    <ChevronRight className="size-3.5" />
+                )}
+                <BookOpen className="size-3.5" style={{ color: palette.info }} />
+                <strong style={{ fontSize: 13, color: palette.textPrimary }}>
+                    {t("coverage.heading")}
+                </strong>
+                <span style={{ fontSize: 12, color: palette.textSecondary }}>
+                    {t("coverage.totalChecks", { count: checks.length })}
+                </span>
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 12, color: palette.textMuted }}>
+                    {open ? t("coverage.hide") : t("coverage.show")}
+                </span>
+            </button>
+            {open && (
+                <div
+                    style={{
+                        padding: `${space[3]}px ${space[3]}px`,
+                        borderTop: `1px solid ${palette.border}`,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: space[3],
+                    }}
+                >
+                    <p style={{ margin: 0, fontSize: 12, color: palette.textSecondary }}>
+                        {t("coverage.intro")}
+                    </p>
+                    <div
+                        style={{
+                            border: `1px solid ${palette.warning}`,
+                            borderRadius: radius.sm,
+                            padding: `${space[2]}px ${space[3]}px`,
+                            background: "rgba(245, 166, 35, 0.08)",
+                            fontSize: 12,
+                            color: palette.textSecondary,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                        }}
+                    >
+                        <strong style={{ color: palette.warning }}>
+                            {t("coverage.scopeNote")}
+                        </strong>
+                        <span>{t("coverage.scopeBody")}</span>
+                    </div>
+                    {grouped.map(([category, items]) => (
+                        <CoverageGroup
+                            key={category}
+                            category={category}
+                            items={items}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CoverageGroup({
+    category,
+    items,
+}: {
+    category: string;
+    items: AvailableCheck[];
+}) {
+    const { t } = useTranslation("security");
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: space[2] }}>
+            <span
+                style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    color: palette.textMuted,
+                    letterSpacing: 0.4,
+                }}
+            >
+                {t(`category.${category}`, { defaultValue: category })}
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: space[1] }}>
+                {items.map((c) => (
+                    <CoverageRow key={c.id} c={c} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function CoverageRow({ c }: { c: AvailableCheck }) {
+    const { t } = useTranslation("security");
+    const [open, setOpen] = useState(false);
+    const expandable = !!(c.description || (c.references && c.references.length > 0));
+
+    return (
+        <div
+            style={{
+                border: `1px solid ${palette.border}`,
+                borderRadius: radius.sm,
+                opacity: c.applicable ? 1 : 0.6,
+                background: palette.main,
+            }}
+        >
+            <button
+                type="button"
+                onClick={() => expandable && setOpen((v) => !v)}
+                style={{
+                    all: "unset",
+                    cursor: expandable ? "pointer" : "default",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: space[2],
+                    padding: `${space[2]}px ${space[3]}px`,
+                    width: "100%",
+                    boxSizing: "border-box",
+                }}
+                aria-expanded={expandable ? open : undefined}
+            >
+                <span style={{ width: 16, display: "inline-flex" }}>
+                    {expandable ? (
+                        open ? (
+                            <ChevronDown className="size-3" />
+                        ) : (
+                            <ChevronRight className="size-3" />
+                        )
+                    ) : null}
+                </span>
+                <Mono size={12}>{c.id}</Mono>
+                <span style={{ flex: 1, fontSize: 12, color: palette.textSecondary }}>
+                    {c.title || ""}
+                </span>
+                <span
+                    style={{
+                        fontSize: 11,
+                        color: c.applicable ? palette.success : palette.textMuted,
+                    }}
+                >
+                    {c.applicable ? t("coverage.applicable") : t("coverage.notApplicable")}
+                </span>
+            </button>
+            {open && expandable && (
+                <div
+                    style={{
+                        padding: `${space[2]}px ${space[3]}px ${space[3]}px ${space[6]}px`,
+                        borderTop: `1px solid ${palette.border}`,
+                        fontSize: 12,
+                        color: palette.textSecondary,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: space[2],
+                    }}
+                >
+                    {c.description && (
+                        <span style={{ whiteSpace: "pre-wrap" }}>{c.description}</span>
+                    )}
+                    {c.references && c.references.length > 0 && (
+                        <div>
+                            <strong style={{ fontSize: 11, color: palette.textMuted }}>
+                                {t("coverage.referencesLabel")}:
+                            </strong>{" "}
+                            {c.references.map((r, i) => (
+                                <span key={`${r}-${i}`}>
+                                    {i > 0 ? ", " : ""}
+                                    {linkifyReference(r)}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

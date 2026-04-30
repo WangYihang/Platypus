@@ -25,9 +25,19 @@ func init() {
 // finding we care about is at the directory level.
 type worldWritablePathCheck struct{}
 
-func (worldWritablePathCheck) ID() string                       { return "fs.path_writable" }
-func (worldWritablePathCheck) Category() string                 { return "filesystem" }
+func (worldWritablePathCheck) ID() string                        { return "fs.path_writable" }
+func (worldWritablePathCheck) Category() string                  { return "filesystem" }
 func (worldWritablePathCheck) Applicable(_ context.Context) bool { return true }
+func (worldWritablePathCheck) Metadata() CheckMetadata {
+	return CheckMetadata{
+		Title: "World-writable directories on PATH",
+		Description: "For every directory on the live PATH (plus the standard fallback set " +
+			"/usr/local/sbin, /usr/local/bin, /usr/sbin, /usr/bin, /sbin, /bin, /snap/bin), " +
+			"flags any that are world-writable AND non-sticky — the textbook setup for an " +
+			"unprivileged user to replace a binary that root will later invoke. Sticky " +
+			"directories like /tmp are excluded because that mode is intentional.",
+	}
+}
 
 func (worldWritablePathCheck) Run(_ context.Context) ([]Finding, error) {
 	dirs := candidatePathDirs()
@@ -97,9 +107,21 @@ func candidatePathDirs() []string {
 // files) can't stall the scan.
 type suidOutlierCheck struct{}
 
-func (suidOutlierCheck) ID() string                       { return "fs.suid_outliers" }
-func (suidOutlierCheck) Category() string                 { return "filesystem" }
+func (suidOutlierCheck) ID() string                        { return "fs.suid_outliers" }
+func (suidOutlierCheck) Category() string                  { return "filesystem" }
 func (suidOutlierCheck) Applicable(_ context.Context) bool { return true }
+func (suidOutlierCheck) Metadata() CheckMetadata {
+	return CheckMetadata{
+		Title: "Unexpected setuid/setgid binaries",
+		Description: "Walks /usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin, /bin, " +
+			"/sbin, /opt and reports any setuid/setgid binary not on the agent's " +
+			"allowlist of well-known distro helpers (sudo, mount, ping, …). Capped at " +
+			"20,000 visited files to bound runtime on pathological filesystems. " +
+			"Surfaces attacker-installed or vendor-bundled SUID files for human review " +
+			"— the classic LPE vector.",
+		References: []string{"CIS 6.1.13"},
+	}
+}
 
 const suidScanCap = 20000
 

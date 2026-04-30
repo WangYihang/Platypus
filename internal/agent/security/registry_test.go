@@ -16,9 +16,10 @@ type fakeChecker struct {
 	called    int
 }
 
-func (f *fakeChecker) ID() string                          { return f.id }
-func (f *fakeChecker) Category() string                    { return f.cat }
-func (f *fakeChecker) Applicable(_ context.Context) bool   { return f.app }
+func (f *fakeChecker) ID() string                        { return f.id }
+func (f *fakeChecker) Category() string                  { return f.cat }
+func (f *fakeChecker) Applicable(_ context.Context) bool { return f.app }
+func (f *fakeChecker) Metadata() CheckMetadata           { return CheckMetadata{Title: f.id} }
 func (f *fakeChecker) Run(_ context.Context) ([]Finding, error) {
 	f.called++
 	if f.panicWith != nil {
