@@ -405,10 +405,9 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 
 	notBefore := time.Now().Add(-5 * time.Minute).UTC()
 	notAfter := notBefore.Add(DefaultAgentCertTTL + 5*time.Minute)
-	// Mesh peer identity rides in the same cert via a URI SAN. The
-	// server is a mesh node like any agent; the dispatcher-free
-	// transport extracts NodeID = "server-<projectID>" from this URI
-	// after mTLS instead of receiving it inside a Noise handshake.
+	// Mesh peer identity rides in the same cert via a URI SAN
+	// (platypus://server/<projectID>). Mesh peers extract NodeID
+	// from this after mTLS.
 	uris, err := serverURISANs(projectID)
 	if err != nil {
 		return nil, err

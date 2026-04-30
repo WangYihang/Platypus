@@ -26,10 +26,8 @@ var (
 // SQLite DB (./platypus.db) to keep operator files together.
 const logPath = "./platypus.log"
 
-// resolveLevel honours PLATYPUS_LOG_LEVEL for operators who need to
-// peek at dispatcher / handshake debug lines (ingress_unknown_alpn,
-// ingress_handshake_failed) without rebuilding. Unrecognised values
-// fall back to INFO.
+// resolveLevel honours PLATYPUS_LOG_LEVEL so operators can flip on
+// debug output without rebuilding. Unrecognised values fall back to INFO.
 func resolveLevel() slog.Level {
 	switch strings.ToLower(os.Getenv("PLATYPUS_LOG_LEVEL")) {
 	case "debug":

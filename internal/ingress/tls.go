@@ -1,3 +1,6 @@
+// Package ingress holds the TLS bootstrap helpers for the
+// platypus-server's HTTPS surface — cert sourcing, the auto-issued
+// fallback, and the standard NextProtos slice.
 package ingress
 
 import (
@@ -9,6 +12,11 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/utils/crypto"
 )
+
+// DefaultProtocols is the canonical NextProtos slice for the server's
+// TLS config. h2 first because the server registers
+// http2.ConfigureServer.
+var DefaultProtocols = []string{"h2", "http/1.1"}
 
 // PersistTarget names the on-disk PEM paths where the self-signed
 // fallback should write its freshly-generated keypair so the next

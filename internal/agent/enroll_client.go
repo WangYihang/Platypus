@@ -147,16 +147,8 @@ func Enroll(ctx context.Context, opts EnrollOptions) (*EnrollResult, error) {
 					MinVersion:         tls.VersionTLS12,
 					RootCAs:            opts.ProjectCA,
 					InsecureSkipVerify: opts.InsecureSkipVerify, //nolint:gosec // opt-in via opts
-					// Server's unified ingress dispatches by ALPN
-					// (internal/ingress/dispatcher.go). Without an
-					// explicit NextProtos the server's default-case
-					// closes the connection silently — a quiet EOF
-					// that took several debugging sessions to track
-					// down. Pin http/1.1 because http.Transport here
-					// isn't wrapped with the http2 configurator;
-					// advertising "h2" would make the server speak
-					// h2 but the client would try to parse h1,
-					// producing a malformed-response error.
+					// http.Transport here isn't wrapped with the
+					// http2 configurator, so pin http/1.1 in ALPN.
 					NextProtos: []string{"http/1.1"},
 				},
 			},

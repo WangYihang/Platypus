@@ -13,7 +13,6 @@
 //	recordings/                — terminal session captures (auto)
 //	releases/<channel>/...     — agent release artifacts (operator drops in)
 //	cert.pem + key.pem         — custom TLS leaf (optional; otherwise self-signed)
-//	mesh.psk                   — mesh PSK (optional; presence enables overlay)
 //
 // Anything not in this list is admin-UI policy (TTLs, channels,
 // discovery toggles) and lives in the admin_settings DB table, not
@@ -38,7 +37,7 @@ type Options struct {
 
 	ExternalAddr string `name:"external-addr" env:"PLATYPUS_EXTERNAL_ADDR" required:"" placeholder:"HOST:PORT" help:"Address agents reach (drives TLS cert SAN). For deployments behind NAT or DNS this differs from --listen."`
 
-	DataDir string `name:"data-dir" env:"PLATYPUS_DATA_DIR" default:"./data" placeholder:"PATH" help:"Persistent state root: SQLite DB, recordings, release artifacts, mesh PSK, optional TLS cert."`
+	DataDir string `name:"data-dir" env:"PLATYPUS_DATA_DIR" default:"./data" placeholder:"PATH" help:"Persistent state root: SQLite DB, recordings, release artifacts, optional TLS cert."`
 
 	// --- Network ------------------------------------------------------
 
@@ -89,11 +88,6 @@ func (o *Options) DBPath() string { return joinPath(o.DataDir, "platypus.db") }
 // RecordingDir is the directory under which terminal session
 // recordings are written. Always <data_dir>/recordings.
 func (o *Options) RecordingDir() string { return joinPath(o.DataDir, "recordings") }
-
-// MeshPSKPath is the conventional mesh PSK location. Mesh is enabled
-// when this file exists at server startup; otherwise the mesh
-// subsystem stays inert.
-func (o *Options) MeshPSKPath() string { return joinPath(o.DataDir, "mesh.psk") }
 
 // CertPath / KeyPath name the optional custom TLS leaf locations.
 // When both files exist at startup the ingress uses them; otherwise

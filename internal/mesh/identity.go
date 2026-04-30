@@ -1,14 +1,13 @@
 // Package mesh implements Platypus's self-organising agent overlay.
 //
-// Every node (agent or server) holds a project-CA-signed leaf cert.
-// NodeID = the platypus://agent/<id> or platypus://server/<id> URI
-// SAN. Inbound and outbound mesh links ride mTLS-authenticated
-// WebSocket upgrades on /api/v1/mesh/link, served by the same
-// http.Server that hosts the rest of the HTTPS surface — no custom
-// ALPN multiplexer, no application-layer Noise handshake. Project CA
-// membership is the admission gate; the URI SAN is the identity
-// binding; gossip + LSA distribution rides the WebSocket as
-// length-prefixed protobuf MeshEnvelope frames.
+// Every node holds a project-CA-signed leaf cert; NodeID = the
+// platypus://agent/<id> or platypus://server/<id> URI SAN. Mesh
+// links ride mTLS-authenticated WebSocket upgrades on
+// /api/v1/mesh/link served by the same http.Server that hosts the
+// rest of the HTTPS surface. Project-CA membership is the admission
+// gate, the URI SAN is the identity binding, and gossip + LSA
+// distribution ride the WebSocket as length-prefixed protobuf
+// MeshEnvelope frames.
 package mesh
 
 import (

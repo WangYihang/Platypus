@@ -153,37 +153,6 @@ func TestMigrateLegacyIdentity_Idempotent(t *testing.T) {
 	}
 }
 
-// Migration also moves any per-server mesh state alongside the
-// identity files so it stays scoped to its CA.
-func TestMigrateLegacyIdentity_MovesMeshState(t *testing.T) {
-	root := t.TempDir()
-	caPEM := mintCAPEM(t, "mesh-ca")
-	_, priv, _ := ed25519.GenerateKey(rand.Reader)
-	_ = SaveIdentity(root, priv, []byte("cert-bytes"), caPEM)
-	legacyMesh := filepath.Join(root, "mesh")
-	if err := os.Mkdir(legacyMesh, 0o700); err != nil {
-		t.Fatalf("mkdir legacy mesh: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyMesh, "psk"), []byte("PSK"), 0o600); err != nil {
-		t.Fatalf("write legacy mesh psk: %v", err)
-	}
-
-	if err := MigrateLegacyIdentity(root); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	if _, err := os.Stat(legacyMesh); !os.IsNotExist(err) {
-		t.Fatalf("legacy mesh dir still present after migration: stat err %v", err)
-	}
-	fp, _ := ReadActive(root)
-	psk, err := os.ReadFile(filepath.Join(MeshStateDir(root, fp), "psk"))
-	if err != nil {
-		t.Fatalf("read migrated psk: %v", err)
-	}
-	if string(psk) != "PSK" {
-		t.Fatalf("psk content lost in migration: got %q", psk)
-	}
-}
-
 // Two CAs land in distinct subdirs — re-enrollment into a different
 // server (or a CA rotation on the same server) must not overwrite the
 // previous identity. The active pointer follows the latest.

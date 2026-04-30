@@ -36,9 +36,8 @@ type App struct {
 	// RESTful subsystem is disabled in config.
 	Storage *storage.DB
 
-	// Mesh is the overlay node when config.Mesh.PSKFile is set.
-	// Typed as interface{} to avoid a cycle with core/*; the
-	// concrete type is *mesh.Node.
+	// Mesh is the overlay node. Typed as interface{} to avoid a
+	// cycle with core/*; the concrete type is *mesh.Node.
 	Mesh interface{}
 }
 

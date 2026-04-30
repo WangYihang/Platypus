@@ -95,7 +95,6 @@ func TestDerivedPaths(t *testing.T) {
 	}{
 		{opts.DBPath(), "/var/lib/platypus/platypus.db"},
 		{opts.RecordingDir(), "/var/lib/platypus/recordings"},
-		{opts.MeshPSKPath(), "/var/lib/platypus/mesh.psk"},
 		{opts.CertPath(), "/var/lib/platypus/cert.pem"},
 		{opts.KeyPath(), "/var/lib/platypus/key.pem"},
 		{opts.CAKEKPath(), "/var/lib/platypus/ca.kek"},

@@ -20,11 +20,8 @@ type PeerRecord struct {
 	BootstrapService bool
 
 	// CertPEM is the project-CA-signed leaf cert this peer
-	// advertised. Empty when the peer runs in legacy self-certifying
-	// mode (NodeID = DeriveNodeID(pubkey)) or predates the cert-bound
-	// identity migration. When non-empty, verifiers chain the cert to
-	// a trusted project CA pool and key identity off the cert's URI
-	// SAN instead of the hash-of-pubkey convention.
+	// advertised. Verifiers chain it to the trusted project CA
+	// pool and key identity off the cert's URI SAN.
 	CertPEM []byte
 }
 

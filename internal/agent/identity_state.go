@@ -3,9 +3,7 @@ package agent
 import (
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base32"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -13,20 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// MeshBootstrapState is the persisted local bootstrap material the agent can
-// reuse across restarts to join the same mesh overlay before contacting the
-// server again.
-type MeshBootstrapState struct {
-	PSKFile   string
-	ProjectID string
-	Peers     []string
-}
-
-type meshBootstrapMetadata struct {
-	ProjectID string   `json:"project_id,omitempty"`
-	Peers     []string `json:"peers,omitempty"`
-}
 
 // activeFile holds the CA fingerprint of the currently-active enrollment
 // under the identity root. Restarts that don't carry PLATYPUS_PROJECT_CA
@@ -76,20 +60,6 @@ func CAFingerprint(caPEM []byte) (string, error) {
 // fingerprints coexist under the same root.
 func IdentitySubdir(root, fingerprint string) string {
 	return filepath.Join(root, fingerprint)
-}
-
-// MeshStateDir returns the subdirectory used for persisted mesh state
-// belonging to the enrollment with the given CA fingerprint.
-func MeshStateDir(root, fingerprint string) string {
-	return filepath.Join(IdentitySubdir(root, fingerprint), "mesh")
-}
-
-func meshPSKPath(root, fingerprint string) string {
-	return filepath.Join(MeshStateDir(root, fingerprint), "psk")
-}
-
-func meshBootstrapMetadataPath(root, fingerprint string) string {
-	return filepath.Join(MeshStateDir(root, fingerprint), "bootstrap.json")
 }
 
 // activePath is the small text file at the identity root whose content
@@ -178,74 +148,5 @@ func MigrateLegacyIdentity(root string) error {
 			return fmt.Errorf("agent: migrate legacy identity: move %s: %w", name, err)
 		}
 	}
-	// Mesh state, if it was persisted under the old flat layout, moves
-	// alongside the identity files so it stays scoped to its CA.
-	legacyMesh := filepath.Join(root, "mesh")
-	if info, err := os.Stat(legacyMesh); err == nil && info.IsDir() {
-		newMesh := MeshStateDir(root, fp)
-		if err := os.Rename(legacyMesh, newMesh); err != nil {
-			return fmt.Errorf("agent: migrate legacy identity: move mesh: %w", err)
-		}
-	}
 	return WriteActive(root, fp)
-}
-
-// PersistMeshBootstrap stores mesh bootstrap material under the given
-// fingerprint's subtree so future runs can bring up the overlay before
-// talking to the server.
-func PersistMeshBootstrap(root, fingerprint string, psk []byte, projectID string, peers []string) error {
-	meshDir := MeshStateDir(root, fingerprint)
-	if err := os.MkdirAll(meshDir, 0o700); err != nil {
-		return err
-	}
-	if len(psk) > 0 {
-		tmpPSK := meshPSKPath(root, fingerprint) + ".tmp"
-		encoded := base32.StdEncoding.EncodeToString(psk) + "\n"
-		if err := os.WriteFile(tmpPSK, []byte(encoded), 0o600); err != nil {
-			return err
-		}
-		if err := os.Rename(tmpPSK, meshPSKPath(root, fingerprint)); err != nil {
-			return err
-		}
-	}
-	meta := meshBootstrapMetadata{ProjectID: projectID}
-	if len(peers) > 0 {
-		meta.Peers = append([]string(nil), peers...)
-	}
-	blob, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal mesh bootstrap metadata: %w", err)
-	}
-	tmpMeta := meshBootstrapMetadataPath(root, fingerprint) + ".tmp"
-	if err := os.WriteFile(tmpMeta, append(blob, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmpMeta, meshBootstrapMetadataPath(root, fingerprint))
-}
-
-// LoadPersistedMeshBootstrap returns previously stored mesh bootstrap
-// material for the given fingerprint. A nil result means no persisted
-// mesh state was found.
-func LoadPersistedMeshBootstrap(root, fingerprint string) (*MeshBootstrapState, error) {
-	pskPath := meshPSKPath(root, fingerprint)
-	if _, err := os.Stat(pskPath); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	state := &MeshBootstrapState{PSKFile: pskPath}
-	metaPath := meshBootstrapMetadataPath(root, fingerprint)
-	blob, err := os.ReadFile(metaPath)
-	if err == nil {
-		var meta meshBootstrapMetadata
-		if err := json.Unmarshal(blob, &meta); err != nil {
-			return nil, fmt.Errorf("parse mesh bootstrap metadata: %w", err)
-		}
-		state.ProjectID = meta.ProjectID
-		state.Peers = append([]string(nil), meta.Peers...)
-	} else if !os.IsNotExist(err) {
-		return nil, err
-	}
-	return state, nil
 }

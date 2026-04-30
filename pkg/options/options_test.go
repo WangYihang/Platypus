@@ -14,7 +14,6 @@ func clearAgentEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
 		EnvInstallToken, EnvServerAddr, EnvDataDir,
-		EnvMeshPSK, EnvMeshPSKFile,
 	} {
 		t.Setenv(k, "")
 	}
@@ -25,9 +24,6 @@ func TestParseArgs_RunWithPositionalToken(t *testing.T) {
 	opts, err := parseArgs([]string{"--server", "1.2.3.4:9443", "plt_abc.def"})
 	if err != nil {
 		t.Fatalf("parseArgs: %v", err)
-	}
-	if opts.Sub != SubcommandRun {
-		t.Fatalf("Sub = %v, want SubcommandRun", opts.Sub)
 	}
 	if opts.Token != "plt_abc.def" {
 		t.Fatalf("Token = %q", opts.Token)
@@ -98,59 +94,6 @@ func TestParseArgs_ExtraPositional(t *testing.T) {
 	}
 }
 
-func TestParseArgs_PSKInstall(t *testing.T) {
-	clearAgentEnv(t)
-	opts, err := parseArgs([]string{"psk", "install", "ABCDEF1234"})
-	if err != nil {
-		t.Fatalf("parseArgs: %v", err)
-	}
-	if opts.Sub != SubcommandPSKInstall {
-		t.Fatalf("Sub = %v, want SubcommandPSKInstall", opts.Sub)
-	}
-	if opts.PSKArg != "ABCDEF1234" {
-		t.Fatalf("PSKArg = %q", opts.PSKArg)
-	}
-}
-
-func TestParseArgs_PSKInstall_DataDirFlag(t *testing.T) {
-	clearAgentEnv(t)
-	opts, err := parseArgs([]string{"psk", "install", "--data-dir", "/srv/platypus", "AAAA"})
-	if err != nil {
-		t.Fatalf("parseArgs: %v", err)
-	}
-	if opts.DataDir != "/srv/platypus" {
-		t.Fatalf("DataDir = %q", opts.DataDir)
-	}
-	if opts.PSKArg != "AAAA" {
-		t.Fatalf("PSKArg = %q", opts.PSKArg)
-	}
-}
-
-func TestParseArgs_PSKShow(t *testing.T) {
-	clearAgentEnv(t)
-	opts, err := parseArgs([]string{"psk", "show"})
-	if err != nil {
-		t.Fatalf("parseArgs: %v", err)
-	}
-	if opts.Sub != SubcommandPSKShow {
-		t.Fatalf("Sub = %v, want SubcommandPSKShow", opts.Sub)
-	}
-}
-
-func TestParseArgs_PSKMissingVerb(t *testing.T) {
-	clearAgentEnv(t)
-	if _, err := parseArgs([]string{"psk"}); err == nil {
-		t.Fatal("want error on `psk` with no verb")
-	}
-}
-
-func TestParseArgs_PSKUnknownVerb(t *testing.T) {
-	clearAgentEnv(t)
-	if _, err := parseArgs([]string{"psk", "rotate", "abcd"}); err == nil {
-		t.Fatal("want error on unknown psk verb")
-	}
-}
-
 // TestSplitTokenWithServer covers the parser helper directly: a
 // well-formed prefix splits cleanly, a missing @ leaves the token
 // untouched, and a malformed prefix degrades to the same.
@@ -190,17 +133,12 @@ func TestParseArgs_RepeatablePeers(t *testing.T) {
 }
 
 // TestParseArgs_NoArgsAllowed: a re-run with persisted identity
-// should be possible without any args. Kong's "default:withargs" on
-// the run cmd lets the parse succeed when nothing's passed; main.go
-// later checks whether persisted state exists.
+// should be possible without any args.
 func TestParseArgs_NoArgsAllowed(t *testing.T) {
 	clearAgentEnv(t)
 	opts, err := parseArgs(nil)
 	if err != nil {
 		t.Fatalf("parseArgs([]) should succeed for re-run with persisted identity: %v", err)
-	}
-	if opts.Sub != SubcommandRun {
-		t.Fatalf("Sub = %v, want SubcommandRun", opts.Sub)
 	}
 	if opts.Token != "" {
 		t.Fatalf("Token unexpectedly populated: %q", opts.Token)

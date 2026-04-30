@@ -57,10 +57,8 @@ type Node struct {
 // NewNode constructs and initialises a Node from cfg. It does NOT start
 // any network activity — call Start for that.
 //
-// cfg.Identity is required (non-nil). It MUST have been produced by
-// LoadIdentityFromCert so NodeID is SAN-bound and cert-verifiable
-// — there is no legacy self-certifying fallback.
-// cfg.TrustedCAs is required for gossip chain verification.
+// cfg.Identity (cert-bound, produced by LoadIdentityFromCert) and
+// cfg.TrustedCAs (project CA pool) are required.
 func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 	if logger == nil {
 		logger = slog.Default()

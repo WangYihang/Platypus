@@ -170,7 +170,7 @@ func TestIssueAgentCert_ValidChain(t *testing.T) {
 	// the cert as a client when dialing the server, AND as a server
 	// cert when running its own mesh peer listener (--mesh-listen, the
 	// NAT-relay scenario). Locking this in test because the
-	// dispatcher-free mesh transport relies on it.
+	// mesh peer-listening relies on the same cert serving both roles.
 	gotEKU := map[x509.ExtKeyUsage]bool{}
 	for _, eku := range leaf.ExtKeyUsage {
 		gotEKU[eku] = true
@@ -446,10 +446,9 @@ func TestIssueServerCert_IngressLeafIsECDSAWithSHA256(t *testing.T) {
 		t.Fatalf("ingress leaf does not verify against project CA: %v", err)
 	}
 
-	// Mesh-peer URI SAN: the dispatcher-free transport extracts
-	// NodeID from this URI after mTLS, so it's the regression lock
-	// for the server's mesh identity. Format must be
-	// platypus://server/<projectID>.
+	// Mesh peers extract NodeID from this URI SAN after mTLS, so
+	// it's the regression lock for the server's mesh identity.
+	// Format must be platypus://server/<projectID>.
 	want := "platypus://server/" + proj.ID
 	var found bool
 	for _, u := range leaf.URIs {

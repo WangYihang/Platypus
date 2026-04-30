@@ -12,11 +12,6 @@
 //	              bundle lets the agent log it before enrollment
 //	              completes
 //
-// **Mesh PSK is intentionally NOT in the bundle.** PSK distribution
-// stays out-of-band per the threat model — leaking the bundle gets
-// you exactly one agent cert (revocable, single-use), but never
-// mesh-network membership.
-//
 // The bundle is base64(JSON) prefixed with `pinst_`. Choosing JSON
 // over a binary protobuf keeps the codec auditable in 80 lines and
 // makes the token survive accidental log-line truncation (the prefix

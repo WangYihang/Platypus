@@ -174,9 +174,8 @@ func main() {
 	settingsReg := settings.New(db, cfg)
 
 	// Mesh runs unconditionally on the server: project CA membership
-	// is the admission gate, no PSK to require. On any wiring failure
-	// mesh is skipped with an error log; server startup never aborts
-	// over mesh.
+	// is the admission gate. On any wiring failure mesh is skipped
+	// with an error log; server startup never aborts over mesh.
 	var meshNode *mesh.Node
 	if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr, settingsReg); node != nil {
 		core.Ctx.Mesh = node
@@ -338,8 +337,8 @@ func parseFlags() *config.Options {
 }
 
 // fileExists is a tiny test seam that returns true when path exists
-// and is readable as a regular file. Used by the cert.pem / key.pem /
-// mesh.psk file-convention probes during startup.
+// and is readable as a regular file. Used by the cert.pem / key.pem
+// file-convention probes during startup.
 func fileExists(path string) bool {
 	if path == "" {
 		return false

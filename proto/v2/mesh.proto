@@ -3,23 +3,19 @@ package platypus.v2;
 option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 
 // Mesh protocol messages. Platypus agents + server form a self-
-// organising overlay: each node has an Ed25519 long-term identity key,
-// NodeID = base32(SHA256(pubkey))[:32] (self-certifying). Links are
-// gated by an application-level handshake (MeshHello / MeshHelloAck)
-// over an already-established TLS transport, and a network-wide PSK
-// proves both sides belong to the same overlay. Once a link is up,
-// nodes exchange known-peer tables (MeshPeerAnnounce / Delta) and
-// link-state advertisements (MeshLSA); every node runs Dijkstra on
-// its LSDB and installs a next-hop table for forwarding.
+// organising overlay. Identity = the platypus://agent/<id> or
+// platypus://server/<id> URI SAN of the project-CA-signed leaf cert
+// each node holds; gossip and LSA distribution sign with the same
+// Ed25519 keypair the cert binds. mTLS at the transport layer
+// (WebSocket on /api/v1/mesh/link) gates link admission against the
+// project CA — there is no separate application-layer handshake or
+// PSK.
 //
-// Wire format on each TLS connection: [4B BE length][MeshEnvelope
-// proto bytes]. The receiver unmarshals the envelope, dispatches on
-// the oneof, and decrements TTL + forwards when target_node is set
-// and doesn't match the local NodeID.
-//
-// These messages used to live in pkg/proto/agent/v1/agent.proto as
-// part of the catch-all Envelope oneof. They moved here as part of
-// Phase IV (Mesh hardening) so the v1 proto package can be deleted.
+// Wire format on each link: WebSocket binary frames carrying
+// [4B BE length][MeshEnvelope proto bytes]. The receiver unmarshals
+// the envelope, dispatches on the oneof, and decrements TTL +
+// forwards when target_node is set and doesn't match the local
+// NodeID.
 
 // MeshEnvelope is the top-level mesh frame. One envelope per send.
 message MeshEnvelope {
@@ -35,13 +31,6 @@ message MeshEnvelope {
   uint32 ttl         = 6;
 
   oneof payload {
-    // Link handshake + keepalive (handshake is Noise_XXpsk3;
-    // Hello / HelloAck / HelloFinish are the three Noise messages
-    // plus each carries an application payload after the session
-    // key is established).
-    MeshHello        hello        = 10;
-    MeshHelloAck     hello_ack    = 11;
-    MeshHelloFinish  hello_finish = 13;
     MeshKeepalive    keepalive    = 12;
 
     // Peer-table gossip
@@ -60,85 +49,29 @@ message MeshEnvelope {
 
     // Opaque payload: reserved for non-mesh-control data that still
     // wants to ride the routing layer (end-to-end app messages,
-    // routing-reachability tests). The node dispatcher hands these
-    // off to the application-level PayloadHandler rather than
-    // interpreting them.
+    // routing-reachability tests). The node hands these off to the
+    // application-level PayloadHandler rather than interpreting them.
     bytes opaque = 50;
   }
+
+  // Reserved tags from the legacy Noise handshake oneof
+  // (MeshHello / MeshHelloAck / MeshHelloFinish). Don't reuse.
+  reserved 10, 11, 13;
 }
 
 // NodeInfo is the minimal peer-table record: enough to attempt a
-// connection plus the pubkey so recipients can re-derive + verify
-// the node_id locally.
-//
-// Two identity modes coexist on the wire:
-//
-//   - self-certifying (legacy): node_id = DeriveNodeID(pubkey),
-//     cert_pem empty. Receiver verifies via the hash relation.
-//
-//   - cert-bound     (v2):      node_id = the "platypus://agent/<id>"
-//     SAN from cert_pem, and pubkey matches cert_pem's public key.
-//     Receiver verifies the cert against a trusted project-CA pool
-//     and reads the SAN.
-//
-// Both modes carry the same pubkey so LSA/gossip signatures verify
-// identically; the only difference is where node_id comes from.
+// connection plus the pubkey so recipients can verify gossip
+// signatures. node_id is the cert URI SAN; pubkey is the cert's
+// SPKI; cert_pem is the project-CA-signed leaf so receivers can
+// chain-verify against their TrustedCAs pool.
 message NodeInfo {
-  string node_id    = 1; // cert-bound: SAN id; legacy: base32(sha256(pubkey))[:32]
+  string node_id    = 1;
   bytes  pubkey     = 2; // 32-byte Ed25519 public key
   repeated string addresses = 3; // host:port entries the node listens on
   int64  last_seen  = 4; // unix seconds — observer's wall clock
   string role       = 5; // "agent", "server", ...
   bool   bootstrap_service = 6; // true if node accepts bootstrap streams
-  bytes  cert_pem   = 7; // project-CA-signed leaf; empty = legacy self-cert
-}
-
-// Mesh handshake is Noise_XXpsk3 over Curve25519/ChaChaPoly/BLAKE2b:
-// three messages (Hello → HelloAck → HelloFinish). The responder's
-// second message and the initiator's third message each carry an
-// encrypted HandshakePayload that binds the Noise X25519 identity
-// to an Ed25519 NodeID used for LSA/gossip signing. A network-wide
-// PSK is mixed in at position 3 so mesh membership is gated by a
-// shared secret on top of Noise's mutual auth — equivalent to the
-// old PSK-MAC design but with standard crypto primitives.
-
-// HandshakePayload is the application data wrapped inside the
-// Noise handshake from HelloAck onward. It is encrypted + MAC'd
-// by the Noise session.
-//
-// The peer's project-CA-signed leaf is included here so the
-// receiver can bind the Noise X25519 session to a cert-verified
-// Ed25519 identity at handshake time — not just at the first
-// gossip message. SAN ↔ node_id and cert SPKI ↔ ed25519_pubkey
-// are enforced locally; chain verification happens against the
-// receiving node's TrustedCAs pool.
-message HandshakePayload {
-  string node_id           = 1;
-  bytes  ed25519_pubkey    = 2; // must equal the cert's SPKI
-  uint32 protocol          = 3; // mesh protocol version (current = 1)
-  repeated string addresses = 4; // advertised listen addresses
-  bytes  cert_pem          = 5; // project-CA-signed leaf; non-empty
-}
-
-// MeshHello = Noise message 1 (initiator → responder). Just the
-// initiator's ephemeral; no payload.
-message MeshHello {
-  bytes noise_msg = 1;
-}
-
-// MeshHelloAck = Noise message 2 (responder → initiator). Carries
-// the responder's ephemeral + static + a HandshakePayload
-// advertising the responder's NodeID/Ed25519 pubkey/addresses.
-message MeshHelloAck {
-  bytes noise_msg = 1;
-}
-
-// MeshHelloFinish = Noise message 3 (initiator → responder).
-// Carries the initiator's static + its HandshakePayload + finalises
-// the PSK mix. After this, both sides hold paired CipherStates;
-// mesh traffic continues in plaintext on the underlying TLS link.
-message MeshHelloFinish {
-  bytes noise_msg = 1;
+  bytes  cert_pem   = 7; // project-CA-signed leaf, used for chain verify
 }
 
 // MeshKeepalive is a periodic heartbeat. Either side may send one;
@@ -153,47 +86,36 @@ message MeshKeepalive {
   uint64 lifetime_msgs_out  = 5;
 }
 
-// MeshPeerAnnounce: sent once per direction after a handshake
-// completes, carrying the sender's full known-peer table so the
-// other side can quickly learn the wider mesh. Signed by the
-// sender (origin_node_id) so the receiver can reject a forged
-// announce from a relay that compromised an upstream link.
-//
-// origin_cert_pem is the sender's project-CA-signed leaf cert
-// (when the sender runs in cert-bound mode). Receivers with a
-// TrustedCAs pool configured chain this against the pool and
-// read the SAN to verify origin_node_id; receivers without a
-// pool (and legacy senders without the field) fall back to the
-// DeriveNodeID(pubkey) == origin_node_id check.
+// MeshPeerAnnounce: sent once per direction after a link comes up,
+// carrying the sender's full known-peer table so the other side can
+// quickly learn the wider mesh. Signed by the sender so receivers
+// reject forgeries from compromised relays.
 message MeshPeerAnnounce {
   repeated NodeInfo nodes = 1;
   string origin_node_id   = 2;
-  bytes  pubkey           = 3; // must match origin_node_id (legacy) or cert SPKI
+  bytes  pubkey           = 3; // must equal cert SPKI
   bytes  sig              = 4; // Ed25519_sign(priv, canonical(announce without sig))
-  bytes  origin_cert_pem  = 5; // project-CA-signed leaf; empty = legacy self-cert
+  bytes  origin_cert_pem  = 5; // project-CA-signed leaf
 }
 
 // MeshPeerDelta: incremental update broadcast to every directly-
 // connected neighbour when the sender's known-peer set changes.
 // seq is monotonic per origin_node_id so receivers deduplicate
-// across flooding paths. Signed by origin so floods can't be
-// forged by intermediate hops. See MeshPeerAnnounce for the
-// cert-mode vs. legacy semantics of origin_cert_pem.
+// across flooding paths.
 message MeshPeerDelta {
   string origin_node_id = 1;
   uint64 seq            = 2;
   repeated NodeInfo added = 3;
   repeated string removed_ids = 4;
   uint32 ttl            = 5; // flood TTL, distinct from envelope.ttl
-  bytes  pubkey         = 6; // must match origin_node_id (legacy) or cert SPKI
+  bytes  pubkey         = 6;
   bytes  sig            = 7; // Ed25519_sign(priv, canonical(delta without sig + ttl))
-  bytes  origin_cert_pem = 8; // project-CA-signed leaf; empty = legacy self-cert
+  bytes  origin_cert_pem = 8;
 }
 
 // MeshLSA: link-state advertisement. Each node periodically (and on
 // adjacency change) signs and floods a description of its directly
-// connected neighbours. Only the node identified by origin_node_id
-// can produce a valid signature; receivers discard duplicates by
+// connected neighbours. Receivers discard duplicates by
 // (origin_node_id, seq).
 message MeshLSA {
   message Link {
@@ -205,10 +127,10 @@ message MeshLSA {
   uint64 seq            = 2; // monotonic per origin
   int64  expires_at     = 3; // unix seconds
   repeated Link links   = 4;
-  bytes  pubkey         = 5; // must match origin_node_id (legacy) or cert SPKI
+  bytes  pubkey         = 5;
   bytes  sig            = 6; // Ed25519_sign(priv, canonical(lsa without sig))
   uint32 flood_ttl      = 7;
-  bytes  origin_cert_pem = 8; // project-CA-signed leaf; empty = legacy self-cert
+  bytes  origin_cert_pem = 8;
 }
 
 // MeshUnreachable: sent back along the reverse path when a

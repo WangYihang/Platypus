@@ -70,15 +70,6 @@ func main() {
 
 	identityDir := agent.ResolveIdentityDir(opts.DataDir)
 
-	// Subcommand dispatch — `psk install` and `psk show` are
-	// one-shot helpers that exit before we touch network state.
-	switch opts.Sub {
-	case options.SubcommandPSKInstall:
-		os.Exit(runPSKInstall(logger, opts, identityDir))
-	case options.SubcommandPSKShow:
-		os.Exit(runPSKShow(logger, opts, identityDir))
-	}
-
 	if opts.Token == "" {
 		// On a fresh install the token is required; on a re-run with
 		// a persisted identity we tolerate an empty token (loadOrEnroll
@@ -98,17 +89,6 @@ func main() {
 	}
 
 	state := agent.Init()
-	pskPath, err := agent.ResolvePSKFile(agent.PSKResolveOptions{
-		CLIPath:   opts.MeshPSKFile,
-		EnvFile:   os.Getenv(options.EnvMeshPSKFile),
-		EnvInline: os.Getenv(options.EnvMeshPSK),
-		DataDir:   identityDir,
-	})
-	if err != nil {
-		logger.Error("resolve mesh PSK", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
-	meshPSKFile := pskPath
 	meshPeers := append([]string(nil), opts.MeshPeers...)
 
 	// Project ID is derived from the enrolled cert when an identity
@@ -128,21 +108,6 @@ func main() {
 	// becomes meaningful before we read it.
 	if err := agent.MigrateLegacyIdentity(identityDir); err != nil {
 		logger.Warn("migrate legacy identity", slog.String("error", err.Error()))
-	}
-	if activeFP, err := agent.ReadActive(identityDir); err == nil && activeFP != "" {
-		if persisted, err := agent.LoadPersistedMeshBootstrap(identityDir, activeFP); err != nil {
-			logger.Warn("load persisted mesh bootstrap", slog.String("error", err.Error()))
-		} else if persisted != nil {
-			if meshPSKFile == "" {
-				meshPSKFile = persisted.PSKFile
-			}
-			if meshProjectID == "" {
-				meshProjectID = persisted.ProjectID
-			}
-			if len(meshPeers) == 0 {
-				meshPeers = append(meshPeers, persisted.Peers...)
-			}
-		}
 	}
 	endpoint := fmt.Sprintf("%s:%d", opts.RemoteHost, opts.RemotePort)
 	if opts.RemoteHost == "" {
@@ -171,14 +136,6 @@ func main() {
 		),
 		ctx,
 	)
-
-	// v2 connect loop: BootstrapV2 (enroll or load identity + dial) →
-	// ServeLink (accept streams, dispatch to per-type handlers) →
-	// return on any error so backoff retries. meshProjectID is
-	// retained as a local for when Phase IV rebuilds mesh on top
-	// of the v2 link primitives; nothing else in the v2 path
-	// touches it yet.
-	_ = meshProjectID
 
 	// Bundle-expanded CA bytes win over the env-var path: the bundle
 	// is the most specific source for "this enrollment's project CA".
@@ -580,48 +537,6 @@ func splitBundleHostPort(s string) (string, int, error) {
 		return "", 0, fmt.Errorf("port: %w", err)
 	}
 	return host, port, nil
-}
-
-// runPSKInstall handles `platypus-agent psk install <psk>`. Writes the
-// PSK to <data-dir>/mesh.psk (or --psk-file when overridden) and
-// exits. Returns the desired process exit code.
-func runPSKInstall(logger *slog.Logger, opts *options.Options, dataDir string) int {
-	target := opts.MeshPSKFile
-	if target == "" {
-		target = agent.DefaultPSKTarget(dataDir)
-	}
-	if err := agent.InstallPSK(target, opts.PSKArg); err != nil {
-		logger.Error("psk install failed", slog.String("error", err.Error()))
-		return 1
-	}
-	logger.Info("psk installed",
-		slog.String("path", target),
-		slog.String("hint", "subsequent agent runs will pick this up automatically"),
-	)
-	return 0
-}
-
-// runPSKShow handles `platypus-agent psk show`. Prints the resolved
-// PSK file path and whether the file exists. Does NOT print the PSK
-// itself — the file's contents stay on disk under 0600.
-func runPSKShow(logger *slog.Logger, opts *options.Options, dataDir string) int {
-	resolved, err := agent.ResolvePSKFile(agent.PSKResolveOptions{
-		CLIPath:   opts.MeshPSKFile,
-		EnvFile:   os.Getenv(options.EnvMeshPSKFile),
-		EnvInline: os.Getenv(options.EnvMeshPSK),
-		DataDir:   dataDir,
-	})
-	if err != nil {
-		logger.Error("resolve psk", slog.String("error", err.Error()))
-		return 1
-	}
-	if resolved == "" {
-		fmt.Fprintln(os.Stdout, "no PSK installed; mesh participation is disabled")
-		fmt.Fprintln(os.Stdout, "to install one, run: platypus-agent psk install <psk>")
-		return 0
-	}
-	fmt.Fprintln(os.Stdout, resolved)
-	return 0
 }
 
 // printUsage writes a short hint to stderr when bootstrap inputs

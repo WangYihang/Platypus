@@ -127,8 +127,8 @@ func generate(prefix string) (id string, secretBytes, hash []byte, full string, 
 type Service struct {
 	db *storage.DB
 	// pki is optional — when set, enrollment responses include a
-	// freshly-signed agent identity cert. When nil, enrollment still
-	// works using PSK + session_token only (Phase 1–3 behaviour).
+	// freshly-signed agent identity cert. When nil, only the
+	// session_token is returned (test-only path).
 	pki PKIIssuer
 	// settings is optional — when set, MintInstallArtifact consults
 	// it for the default PAT TTL so admins can tune the default from
