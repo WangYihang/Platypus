@@ -471,6 +471,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1AuthRoutes(rest, authH, usersH, rbac)
 	api.RegisterV1ProjectsRoutes(rest, projectsH, rbac)
 	api.RegisterV1HostsRoutes(rest, hostsH, rbac)
+	api.RegisterV1SecurityFindingsRoutes(rest, api.NewSecurityFindingsHandler(db), rbac)
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 	api.RegisterV1EnrollmentTokenRoutes(rest, enrollTokensH, rbac)
 	api.RegisterV1AccountPATRoutes(rest, accountPATH, rbac)
