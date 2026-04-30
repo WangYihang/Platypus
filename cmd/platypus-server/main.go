@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"golang.org/x/net/http2"
 
 	"github.com/WangYihang/Platypus/internal/activity"
 	"github.com/WangYihang/Platypus/internal/api"
@@ -287,6 +288,20 @@ func main() {
 	httpSrv := &http.Server{
 		Handler:           rest,
 		ReadHeaderTimeout: 10 * time.Second,
+	}
+	// Wire HTTP/2 into the per-conn TLSNextProto map so a TLS
+	// connection that negotiated `h2` via ALPN actually gets served
+	// — without this, Go's http.Server.serve() takes an unconditional
+	// `return` branch when proto=="h2" but TLSNextProto["h2"]==nil,
+	// silently closing the socket. Some Schannel-backed clients
+	// (Windows PowerShell 5.1's HttpWebRequest among them) end up
+	// advertising h2 in ALPN even when they only speak HTTP/1.1, so
+	// the server picks h2 and the connection dies before any HTTP
+	// handler runs. ConfigureServer registers the h2 handler, which
+	// gracefully demotes truly-HTTP/1.1 clients via the standard h2
+	// fallback path.
+	if err := http2.ConfigureServer(httpSrv, &http2.Server{}); err != nil {
+		log.Error("http2.ConfigureServer: %v", err)
 	}
 	go func() {
 		if err := httpSrv.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
