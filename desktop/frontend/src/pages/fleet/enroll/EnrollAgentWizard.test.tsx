@@ -1,9 +1,27 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { renderWithQueryClient } from "../../../testing/renderWithQueryClient";
+
+// Radix Select uses Pointer Events APIs that jsdom doesn't implement
+// (hasPointerCapture / releasePointerCapture / scrollIntoView). The
+// downloader-picker test below opens the dropdown and clicks an
+// option, which exercises all three. Stubbing once at module load
+// time keeps the test ergonomic without dragging in a heavier
+// pointer-events polyfill.
+beforeAll(() => {
+    const proto = Element.prototype as unknown as Record<string, unknown>;
+    if (typeof proto.hasPointerCapture !== "function") {
+        proto.hasPointerCapture = () => false;
+        proto.releasePointerCapture = () => {};
+        proto.setPointerCapture = () => {};
+    }
+    if (typeof proto.scrollIntoView !== "function") {
+        proto.scrollIntoView = () => {};
+    }
+});
 
 // EnrollAgentWizard's open / closed state is driven by `?enroll=1`
 // on the URL. Mounting with that param therefore opens the wizard
@@ -118,5 +136,55 @@ describe("<EnrollAgentWizard>", () => {
                 "curl -fsSL https://example.test/install/dl_x | sh",
             ),
         ).toBeInTheDocument();
+    });
+
+    // Multi-downloader picker: when the server returns a populated
+    // install_commands map, the RunStep dropdown lets the operator
+    // switch between variants without re-issuing the (single-use)
+    // install token. Pinned because the macOS LibreSSL fix relies on
+    // this switching working — the operator may need to bail off
+    // curl onto wget / python3 to get past a broken default tool.
+    it("switches the install command when the downloader picker changes", async () => {
+        issueInstallArtifact.mockResolvedValue({
+            download_id: "dl_y",
+            download_token: "dl_y.secret",
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+            server_endpoint: "203.0.113.5:13337",
+            install_command: "curl-cmd",
+            install_commands: {
+                curl: "curl-cmd",
+                wget: "wget-cmd",
+                python3: "py-cmd",
+            },
+            bundle_url: "https://example.test/install/dl_y",
+        });
+        const user = userEvent.setup();
+        render("/projects/test-project/hosts?enroll=1");
+
+        await screen.findByTestId("enroll-wizard-os");
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-connect");
+        await user.click(screen.getByTestId("enroll-wizard-submit"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
+        );
+
+        // Default selection renders the curl variant.
+        expect(screen.getByText("curl-cmd")).toBeInTheDocument();
+
+        // Open the picker (Radix Select renders the trigger as a
+        // combobox), pick the wget option.
+        const triggers = screen.getAllByTestId("downloader-picker");
+        await user.click(triggers[0]);
+        const wgetOption = await screen.findByRole("option", { name: "wget" });
+        await user.click(wgetOption);
+
+        // Code block now shows the wget command and the curl one is gone.
+        await waitFor(() =>
+            expect(screen.getByText("wget-cmd")).toBeInTheDocument(),
+        );
+        expect(screen.queryByText("curl-cmd")).not.toBeInTheDocument();
     });
 });

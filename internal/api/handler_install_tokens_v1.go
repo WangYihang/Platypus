@@ -56,7 +56,7 @@ type issueInstallRequest struct {
 
 // issueInstallResponse is the only place the plaintext download token
 // appears in the API. The `install_command` field is a convenience:
-// a ready-to-paste curl that admins can drop into chat / terminal.
+// a ready-to-paste one-liner admins can drop into chat / terminal.
 type issueInstallResponse struct {
 	DownloadID     string    `json:"download_id"`
 	DownloadToken  string    `json:"download_token"` // dl_<id>.<secret>
@@ -64,7 +64,15 @@ type issueInstallResponse struct {
 	ServerEndpoint string    `json:"server_endpoint"`
 	TargetOS       string    `json:"target_os,omitempty"`
 	TargetArch     string    `json:"target_arch,omitempty"`
-	InstallCommand string    `json:"install_command"` // "curl -fsSL ... | sh"
+	// InstallCommand is the OS-default downloader's one-liner (curl on
+	// unix, powershell on windows). Kept for older FE / API consumers
+	// that don't know about InstallCommands.
+	InstallCommand string `json:"install_command"`
+	// InstallCommands is keyed by downloader name (curl / wget /
+	// python3 / php / ruby on unix; powershell / pwsh on windows) so
+	// the wizard can offer a picker without re-issuing the install
+	// token (single-use atomically — re-mint would force re-paste).
+	InstallCommands map[string]string `json:"install_commands"`
 	// BundleURL is the alternative single-string bootstrap form.
 	// `curl -fsSL <bundle_url>` returns a `pinst_<base64>` token the
 	// operator pastes straight into `platypus-agent`. Use when the
@@ -155,16 +163,17 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 	}
 	h.audit(c, "install.issue", "install_download", res.DownloadID, projectID, req, "success", "")
 
-	cmd := h.renderInstallCommand(c.Request, res.PlaintextDownloadToken, res.TargetOS)
+	commands, defaultCmd := h.renderInstallCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
 	c.JSON(http.StatusCreated, issueInstallResponse{
-		DownloadID:     res.DownloadID,
-		DownloadToken:  res.PlaintextDownloadToken,
-		ExpiresAt:      res.ExpiresAt,
-		ServerEndpoint: res.ServerEndpoint,
-		TargetOS:       res.TargetOS,
-		TargetArch:     res.TargetArch,
-		InstallCommand: cmd,
-		BundleURL:      h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
+		DownloadID:      res.DownloadID,
+		DownloadToken:   res.PlaintextDownloadToken,
+		ExpiresAt:       res.ExpiresAt,
+		ServerEndpoint:  res.ServerEndpoint,
+		TargetOS:        res.TargetOS,
+		TargetArch:      res.TargetArch,
+		InstallCommand:  defaultCmd,
+		InstallCommands: commands,
+		BundleURL:       h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
 	})
 }
 
@@ -189,40 +198,37 @@ func (h *InstallTokensHandler) distributorBase(req *http.Request) string {
 	return scheme + "://" + host
 }
 
-// renderInstallCommand builds the bootstrap one-liner we hand back to
-// the admin. The shape depends on the chosen target OS:
+// renderInstallCommands builds the family of bootstrap one-liners we
+// hand back to the admin: one per supported downloader (curl, wget,
+// python3, php, ruby on unix; powershell, pwsh on windows). The
+// caller stores the whole map in install_commands so the FE picker
+// can switch between them without re-issuing the install token, and
+// also picks the family default for the legacy install_command
+// field.
 //
-//   - windows  → `powershell -ExecutionPolicy Bypass -Command "iwr ... | iex"`
-//     (curl is not guaranteed on stock Windows; PowerShell ships with
-//     every supported version.) The distributor serves a PowerShell
-//     script when ?os=windows is set on the install endpoint.
+// Why a registry instead of OS-dispatch shell text inline: the
+// macOS LibreSSL "unsupported algorithm" cascade taught us that one
+// downloader is never enough — operators need a fallback when their
+// system curl is broken against the server's TLS cert. Pre-rendering
+// every variant lets the wizard offer the choice without an extra
+// round-trip and keeps every clipboard-bound shape reviewable in one
+// file (see internal/api/install_downloaders.go).
 //
-//   - everything else (linux/darwin/*bsd/…/empty) → `curl -fsSL --tlsv1.2 ... | sh`
-//     The distributor's default response is a POSIX shell script which
-//     auto-detects GOOS/GOARCH at runtime, so no explicit os hint is
-//     needed for the unix family.
-//
-// Why --tlsv1.2: macOS ships curl linked against LibreSSL / Secure
-// Transport, which under some IP-literal / self-signed / ALPN
-// combinations advertises a TLS 1.0 floor in its ClientHello. The
-// ingress listener pins MinVersion=TLS 1.2 (internal/ingress/tls.go),
-// so that handshake gets rejected and the operator sees a cryptic
-// "SSL_ERROR_PROTOCOL_VERSION_ALERT". Forcing curl to start at TLS 1.2
-// sidesteps the downgrade entirely. On Linux / modern curl the flag
-// is a no-op (1.2 is already the floor), so we ship it
-// unconditionally rather than sniffing OS at render time.
-//
-// Preference order for the distributor base URL: see distributorBase.
-// The resulting command is safe to copy into a terminal — no shell
-// escaping is required because the download token only contains
-// base32-alphabet characters plus "." and "_".
-func (h *InstallTokensHandler) renderInstallCommand(req *http.Request, token, targetOS string) string {
+// The download token is base32-alphabet plus "." and "_" — safe to
+// embed in a single-quoted shell string without escaping. The render
+// helpers in the registry rely on that.
+func (h *InstallTokensHandler) renderInstallCommands(
+	req *http.Request, token, targetOS string,
+) (map[string]string, string) {
 	base := h.distributorBase(req)
-	if targetOS == "windows" {
-		url := base + "/api/v1/install/" + token + "?os=windows"
-		return `powershell -ExecutionPolicy Bypass -Command "iwr -useb '` + url + `' | iex"`
+	url := base + "/api/v1/install/" + token
+	if downloaderOSFamily(targetOS) == osFamilyWindows {
+		// Server-side os hint helps the distributor pick PS1 vs the
+		// POSIX script when it serves the URL. Unix targets get the
+		// default response, which is the auto-detecting POSIX script.
+		url += "?os=windows"
 	}
-	return "curl -fsSL --tlsv1.2 " + base + "/api/v1/install/" + token + " | sh"
+	return renderInstallCommandsFor(url, targetOS)
 }
 
 // List handles GET /projects/:pid/install-artifacts.

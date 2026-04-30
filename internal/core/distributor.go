@@ -398,25 +398,66 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		"esac",
 		"CA_FILE=\"\"",
 		"trap 'if [ -n \"$CA_FILE\" ] && [ -f \"$CA_FILE\" ]; then rm -f \"$CA_FILE\"; fi' EXIT",
-		"CURL_TLS=\"\"",
+		// TLS_MODE is the per-tool trust mode the download function
+		// consults. "ca" → use $CA_FILE; "insecure" → skip
+		// verification. We compute it once here so each downloader
+		// branch in download_with_fallback stays branch-light.
+		"TLS_MODE=\"\"",
 		"if [ -n \"${PLATYPUS_PROJECT_CA-}\" ]; then",
 		"  CA_FILE=$(mktemp /tmp/platypus-ca-XXXXXX.pem)",
 		"  printf '%s' \"$PLATYPUS_PROJECT_CA\" | base64 -d > \"$CA_FILE\"",
-		"  CURL_TLS=\"--cacert $CA_FILE\"",
+		"  TLS_MODE=ca",
 		"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}"+"\" = \"1\" ]; then",
 		"  echo 'warning: PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download' >&2",
-		"  CURL_TLS=\"-k\"",
+		"  TLS_MODE=insecure",
 		"else",
 		"  echo 'platypus: server has no project CA in this install script and PLATYPUS_INSECURE_DOWNLOAD is not set' >&2",
 		"  echo 'platypus: refusing to download agent binary without TLS trust anchor (MITM risk)' >&2",
 		"  echo 'platypus: ask the server admin to initialise a project CA, or re-run with PLATYPUS_INSECURE_DOWNLOAD=1 if you accept the risk' >&2",
 		"  exit 1",
 		"fi",
+		// download_with_fallback fetches $1 → $2 by trying curl, then
+		// wget, then python3, then fetch (BSD), in that order. Each
+		// branch honours $TLS_MODE. Returns 0 on first success, 1 if
+		// every tool either is missing or failed. Keeping the cascade
+		// inline (instead of a helper script) preserves the
+		// "auditable in one screen" property of the install payload.
+		//
+		// Why a cascade is necessary even after the outer one-liner
+		// works: macOS ships curl linked against an old LibreSSL that
+		// throws "unsupported algorithm" against some self-signed
+		// server certs. The outer command may have used wget/python3
+		// to get past that, but the inner fetch of the agent binary
+		// hits the same broken curl unless we fall through.
+		"download_with_fallback() {",
+		"  _url=$1",
+		"  _out=$2",
+		"  if command -v curl >/dev/null 2>&1; then",
+		"    _flag=\"-k\"",
+		"    [ \"$TLS_MODE\" = ca ] && _flag=\"--cacert $CA_FILE\"",
+		"    if curl -fsSL --tlsv1.2 $_flag \"$_url\" -o \"$_out\" 2>/dev/null; then return 0; fi",
+		"    echo 'platypus: curl failed, trying wget...' >&2",
+		"  fi",
+		"  if command -v wget >/dev/null 2>&1; then",
+		"    _flag=\"--no-check-certificate\"",
+		"    [ \"$TLS_MODE\" = ca ] && _flag=\"--ca-certificate=$CA_FILE\"",
+		"    if wget -q $_flag \"$_url\" -O \"$_out\" 2>/dev/null; then return 0; fi",
+		"    echo 'platypus: wget failed, trying python3...' >&2",
+		"  fi",
+		"  if command -v python3 >/dev/null 2>&1; then",
+		"    if PLATYPUS_URL=\"$_url\" PLATYPUS_OUT=\"$_out\" PLATYPUS_TLS=\"$TLS_MODE\" PLATYPUS_CA=\"$CA_FILE\" python3 -c '\nimport os, ssl, sys, urllib.request\nmode=os.environ.get(\"PLATYPUS_TLS\",\"\")\nif mode==\"ca\":\n    ctx=ssl.create_default_context(cafile=os.environ[\"PLATYPUS_CA\"])\nelse:\n    ctx=ssl._create_unverified_context()\nwith urllib.request.urlopen(os.environ[\"PLATYPUS_URL\"], context=ctx) as r, open(os.environ[\"PLATYPUS_OUT\"],\"wb\") as f:\n    while True:\n        b=r.read(65536)\n        if not b: break\n        f.write(b)\n' 2>/dev/null; then return 0; fi",
+		"    echo 'platypus: python3 failed, trying fetch...' >&2",
+		"  fi",
+		"  if command -v fetch >/dev/null 2>&1; then",
+		"    _flag=\"--no-verify-peer\"",
+		"    [ \"$TLS_MODE\" = ca ] && _flag=\"--ca-cert=$CA_FILE\"",
+		"    if fetch -q $_flag -o \"$_out\" \"$_url\" 2>/dev/null; then return 0; fi",
+		"  fi",
+		"  echo 'platypus: no working downloader (curl/wget/python3/fetch all missing or failed)' >&2",
+		"  return 1",
+		"}",
 		"BIN=$(mktemp /tmp/platypus-agent-XXXXXX)",
-		// CURL_TLS is intentionally unquoted so it word-splits into the
-		// flag pair (--cacert PATH or -k); the values it can hold are
-		// fully server-controlled, never user input.
-		"curl -fsSL $CURL_TLS "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest -o \"$BIN\"",
+		"download_with_fallback "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest \"$BIN\"",
 		"chmod +x \"$BIN\"",
 		// Single --server flag carries host:port, token stays positional.
 		"exec \"$BIN\" --server \"$AGENT_HOST:$AGENT_PORT\" \"$AGENT_TOKEN\"",
@@ -491,7 +532,23 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string)
 		"  default { Write-Error \"unsupported arch: $($env:PROCESSOR_ARCHITECTURE)\"; exit 1 }",
 		"}",
 		"$Bin = Join-Path $env:TEMP (\"platypus-agent-\" + [Guid]::NewGuid().ToString('N') + \".exe\")",
-		"Invoke-WebRequest -UseBasicParsing -Uri \"$DistBase/v1/artifacts/windows/$Arch/latest\" -OutFile $Bin",
+		"$Url = \"$DistBase/v1/artifacts/windows/$Arch/latest\"",
+		// Try Invoke-WebRequest first (works on every supported PS
+		// version), fall through to Start-BitsTransfer (built-in
+		// since Windows 7) when IWR fails — useful when corporate
+		// proxies block IWR but allow BITS, or when older PS chokes
+		// on a TLS combination the CertificateValidationCallback
+		// override didn't appease.
+		"$DownloadOk = $false",
+		"try {",
+		"  Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Bin",
+		"  $DownloadOk = $true",
+		"} catch {",
+		"  Write-Warning \"Invoke-WebRequest failed: $($_.Exception.Message). Trying Start-BitsTransfer...\"",
+		"  try { Start-BitsTransfer -Source $Url -Destination $Bin -ErrorAction Stop; $DownloadOk = $true }",
+		"  catch { Write-Error \"Start-BitsTransfer also failed: $($_.Exception.Message)\"; exit 1 }",
+		"}",
+		"if (-not $DownloadOk) { Write-Error 'platypus: no working downloader on this Windows host'; exit 1 }",
 		// Single --server flag carries host:port, token stays positional.
 		"& $Bin --server \"${AgentHost}:${AgentPort}\" $AgentToken",
 	)

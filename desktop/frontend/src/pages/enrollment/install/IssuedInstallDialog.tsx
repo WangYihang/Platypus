@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,6 +15,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import DownloaderPicker, {
+    bundleOneLinerFor,
+    defaultDownloader,
+} from "../../fleet/enroll/DownloaderPicker";
 
 interface Props {
     result: IssueInstallResponse | null;
@@ -43,6 +47,9 @@ export default function IssuedInstallDialog({
 }: Props) {
     const navigate = useNavigate();
     const [tab, setTab] = useState<"script" | "bundle">("script");
+    const [downloader, setDownloader] = useState<string>(
+        defaultDownloader(result?.target_os),
+    );
 
     async function copy(text: string) {
         await navigator.clipboard.writeText(text);
@@ -54,8 +61,25 @@ export default function IssuedInstallDialog({
         navigate(`/projects/${projectSlug}/hosts?await=enroll`);
     }
 
+    // Backwards-compat with older server builds: synthesise a
+    // single-entry map from install_command when install_commands is
+    // missing, so the picker still has something to select.
+    const commands = useMemo<Record<string, string>>(() => {
+        if (!result) return {};
+        if (
+            result.install_commands &&
+            Object.keys(result.install_commands).length > 0
+        ) {
+            return result.install_commands;
+        }
+        return { [defaultDownloader(result.target_os)]: result.install_command };
+    }, [result]);
+
+    const scriptOneLiner = result
+        ? commands[downloader] ?? result.install_command
+        : "";
     const bundleOneLiner = result
-        ? `platypus-agent "$(curl -fsSL ${result.bundle_url})"`
+        ? bundleOneLinerFor(downloader, result.bundle_url)
         : "";
 
     return (
@@ -70,7 +94,7 @@ export default function IssuedInstallDialog({
                 </DialogHeader>
                 <Tabs value={tab} onValueChange={(v) => setTab(v as "script" | "bundle")}>
                     <TabsList>
-                        <TabsTrigger value="script">curl | sh</TabsTrigger>
+                        <TabsTrigger value="script">script | sh</TabsTrigger>
                         <TabsTrigger value="bundle">offline bundle</TabsTrigger>
                     </TabsList>
                     <TabsContent value="script" className="mt-3 space-y-2">
@@ -78,17 +102,35 @@ export default function IssuedInstallDialog({
                             Run on the target machine. Downloads the agent binary, then
                             enrols using the freshly-minted PAT.
                         </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-text-muted">Downloader</span>
+                            <DownloaderPicker
+                                value={downloader}
+                                onChange={setDownloader}
+                                available={Object.keys(commands)}
+                                targetOS={result?.target_os}
+                            />
+                        </div>
                         <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
-                            {result?.install_command}
+                            {scriptOneLiner}
                         </pre>
                     </TabsContent>
                     <TabsContent value="bundle" className="mt-3 space-y-2">
                         <div className="text-xs text-text-muted">
                             For air-gapped or scripted bootstraps where{" "}
-                            <Mono>| sh</Mono> isn't appropriate. <Mono>curl</Mono> returns
+                            <Mono>| sh</Mono> isn't appropriate. The downloader returns
                             a self-contained <Mono>pinst_</Mono> token; pipe it straight
                             to <Mono>platypus-agent</Mono> (binary must already be on the
                             host).
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-text-muted">Downloader</span>
+                            <DownloaderPicker
+                                value={downloader}
+                                onChange={setDownloader}
+                                available={Object.keys(commands)}
+                                targetOS={result?.target_os}
+                            />
                         </div>
                         <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
                             {bundleOneLiner}
@@ -103,11 +145,7 @@ export default function IssuedInstallDialog({
                     <Button
                         variant="outline"
                         onClick={() =>
-                            copy(
-                                tab === "script"
-                                    ? result?.install_command ?? ""
-                                    : bundleOneLiner,
-                            )
+                            copy(tab === "script" ? scriptOneLiner : bundleOneLiner)
                         }
                     >
                         <Copy className="size-3.5" />

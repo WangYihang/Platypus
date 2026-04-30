@@ -31,7 +31,17 @@ export interface IssueInstallResponse {
     server_endpoint: string;
     target_os?: string;
     target_arch?: string;
-    install_command: string; // "curl -fsSL ... | sh"
+    // OS-default downloader's one-liner (curl on unix, powershell on
+    // windows). Older callers / tests that don't know about the
+    // per-downloader map still get something sensible here.
+    install_command: string;
+    // Per-downloader one-liners keyed by downloader name. Unix:
+    // curl, wget, python3, php, ruby. Windows: powershell, pwsh.
+    // The wizard's RunStep picker reads from this without re-issuing
+    // the install token (single-use atomically — re-mint would force
+    // re-paste). Optional in the type for backwards-compat with old
+    // server builds that didn't return it yet.
+    install_commands?: Record<string, string>;
     // pinst_<base64> self-contained token (when curled). For targets
     // that can't pipe to a shell — paste the resulting token straight
     // into platypus-agent. Same single-use install token as install_command.
