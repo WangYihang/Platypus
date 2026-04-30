@@ -34,6 +34,7 @@ import HostHeaderBar from "./host/HostHeaderBar";
 import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
 import SecurityTab from "./host/SecurityTab";
+import ConfigTab from "./host/ConfigTab";
 import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
 
@@ -370,6 +371,18 @@ export default function HostView({ projectID, hostID }: Props) {
                                 projectID={projectID}
                                 hostID={hostID}
                                 active={activeActivity === "security"}
+                            />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "config" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <ConfigTab
+                                projectID={projectID}
+                                hostID={hostID}
+                                active={activeActivity === "config"}
                             />
                         </div>
                         <div

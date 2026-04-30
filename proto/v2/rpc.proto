@@ -20,6 +20,8 @@ message RpcRequest {
     ProcessListRequest  process_list = 31;
     SecurityScanRequest security_scan = 32;
     ListSecurityChecksRequest list_security_checks = 33;
+    ConfigAuditRequest config_audit = 34;
+    ListConfigAuditorsRequest list_config_auditors = 35;
   }
 }
 
@@ -41,6 +43,8 @@ message RpcResponse {
     ProcessListResponse  process_list = 31;
     SecurityScanResponse security_scan = 32;
     ListSecurityChecksResponse list_security_checks = 33;
+    ConfigAuditResponse config_audit = 34;
+    ListConfigAuditorsResponse list_config_auditors = 35;
   }
 }
 
@@ -389,4 +393,88 @@ message AvailableSecurityCheck {
 message ListSecurityChecksResponse {
   repeated AvailableSecurityCheck checks = 1;
   string error                            = 2;
+}
+
+// --- Host configuration audit (one-shot) ---
+//
+// ConfigAudit is the sibling of SecurityScan but focused on
+// sensitive-information exposure rather than host hardening: it asks
+// "is anything credential-shaped sitting in well-known places on this
+// host?" Sources include process environment variables, per-user
+// shell history files, well-known cloud / package-manager dotfiles
+// (~/.aws/credentials, ~/.docker/config.json, ~/.kube/config, ...),
+// database server configs (my.cnf, pg_hba.conf, redis.conf,
+// mongod.conf), web app config files (.env, wp-config.php,
+// settings.py, application.yml, appsettings.json), and ~/.ssh
+// material. Detection uses the gitleaks default ruleset; secrets are
+// redacted before the response leaves the agent.
+message ConfigAuditRequest {
+  // If non-empty, only run auditors whose id is in this list. Unknown
+  // ids are silently ignored.
+  repeated string auditor_ids       = 1;
+  // If non-empty, only run auditors whose category is in this list.
+  // Combined with auditor_ids as a union (any matching id OR
+  // category runs).
+  repeated string categories        = 2;
+  // Per-auditor soft deadline in milliseconds; 0 = no per-auditor
+  // deadline beyond the parent context.
+  uint32 per_auditor_timeout_ms     = 3;
+}
+
+// ConfigLeak is one hit produced by one auditor. The match field is
+// ALREADY REDACTED on the agent (first 4 + last 4 characters of the
+// secret with a fixed-width "****" between them); plaintext
+// credentials never travel over the wire.
+message ConfigLeak {
+  string id           = 1;  // stable id, e.g. "shell.history.gitleaks.aws-access-token"
+  string auditor_id   = 2;  // owning auditor, e.g. "shell.history"
+  string category     = 3;  // env | shell | cloud | database | webapp | ssh
+  string risk         = 4;  // info | low | medium | high
+  string title        = 5;  // short human-readable headline
+  string location     = 6;  // "/root/.bash_history:142", "pid=1234 comm=nginx env=DB_PASS"
+  string match        = 7;  // already-redacted snippet (e.g. "AKIA****WXYZ")
+  string pattern      = 8;  // gitleaks RuleID, or "behavior:<id>" for our own rules
+  string description  = 9;  // longer explanation; safe to render as Markdown
+  string remediation  = 10; // suggested fix
+  repeated string references = 11;
+}
+
+// AuditorResult tracks one auditor's lifecycle: did it run, did it
+// fail to run, how long did it take. Modelled on CheckResult.
+message AuditorResult {
+  string id            = 1;
+  string category      = 2;
+  // "ok"      = auditor ran cleanly
+  // "skipped" = not applicable on this host
+  // "error"   = auditor ran and failed
+  string status        = 3;
+  string error         = 4;
+  uint64 elapsed_ms    = 5;
+  uint32 leak_count    = 6;
+}
+
+message ConfigAuditResponse {
+  repeated ConfigLeak    leaks    = 1;
+  repeated AuditorResult auditors = 2;
+  int64  started_at_unix          = 3;
+  uint64 elapsed_ms               = 4;
+  string error                    = 5;
+}
+
+// --- Enumerate registered configuration auditors ---
+
+message ListConfigAuditorsRequest {}
+
+message AvailableAuditor {
+  string id          = 1;
+  string category    = 2;
+  bool   applicable  = 3;
+  string title       = 4;
+  string description = 5;
+  repeated string references = 6;
+}
+
+message ListConfigAuditorsResponse {
+  repeated AvailableAuditor auditors = 1;
+  string error                       = 2;
 }

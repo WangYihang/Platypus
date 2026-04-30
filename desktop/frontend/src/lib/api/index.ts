@@ -4,6 +4,7 @@
 
 export * from "./projects";
 export * from "./hosts";
+export * from "./config_audit";
 export * from "./users";
 export * from "./settings";
 export * from "./server";

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { File, Info, Plug, AppWindow, ShieldCheck, Cable } from "lucide-react";
+import { File, Info, Plug, AppWindow, ShieldCheck, KeyRound, Cable } from "lucide-react";
 
 import { palette } from "../../layout/theme";
 
@@ -9,6 +9,7 @@ export const ACTIVITIES = [
     "sessions",
     "processes",
     "security",
+    "config",
     "tunnels",
 ] as const;
 export type Activity = (typeof ACTIVITIES)[number];
@@ -27,6 +28,7 @@ export const ACTIVITY_SPECS: ActivitySpec[] = [
     { key: "sessions", label: "Sessions", icon: <Plug className={ICON_SIZE} /> },
     { key: "processes", label: "Processes", icon: <AppWindow className={ICON_SIZE} /> },
     { key: "security", label: "Security", icon: <ShieldCheck className={ICON_SIZE} /> },
+    { key: "config", label: "Config", icon: <KeyRound className={ICON_SIZE} /> },
     { key: "tunnels", label: "Tunnels", icon: <Cable className={ICON_SIZE} /> },
 ];
 

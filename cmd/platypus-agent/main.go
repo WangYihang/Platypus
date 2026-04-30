@@ -317,6 +317,8 @@ func main() {
 				ProcessList:        agent.HandleProcessList,
 				SecurityScan:       agent.HandleSecurityScan,
 				ListSecurityChecks: agent.HandleListSecurityChecks,
+				ConfigAudit:        agent.HandleConfigAudit,
+				ListConfigAuditors: agent.HandleListConfigAuditors,
 			},
 			Process:     agent.HandleProcessStream,
 			FileRead:    agent.HandleFileReadStream,

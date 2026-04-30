@@ -37,6 +37,10 @@ func RPCMethodName(payload any) string {
 		return "security_scan"
 	case *v2pb.RpcRequest_ListSecurityChecks, *v2pb.RpcResponse_ListSecurityChecks:
 		return "list_security_checks"
+	case *v2pb.RpcRequest_ConfigAudit, *v2pb.RpcResponse_ConfigAudit:
+		return "config_audit"
+	case *v2pb.RpcRequest_ListConfigAuditors, *v2pb.RpcResponse_ListConfigAuditors:
+		return "list_config_auditors"
 	case nil:
 		return ""
 	default:
@@ -108,6 +112,15 @@ func RPCRequestAttr(payload any) slog.Attr {
 		)
 	case *v2pb.RpcRequest_ListSecurityChecks:
 		return slog.Group("request")
+	case *v2pb.RpcRequest_ConfigAudit:
+		c := r.ConfigAudit
+		return slog.Group("request",
+			"auditor_id_count", len(c.GetAuditorIds()),
+			"category_count", len(c.GetCategories()),
+			"per_auditor_timeout_ms", c.GetPerAuditorTimeoutMs(),
+		)
+	case *v2pb.RpcRequest_ListConfigAuditors:
+		return slog.Group("request")
 	default:
 		return slog.Group("request")
 	}
@@ -166,6 +179,18 @@ func RPCResponseAttr(payload any) slog.Attr {
 		s := r.ListSecurityChecks
 		return slog.Group("response",
 			"check_count", len(s.GetChecks()),
+		)
+	case *v2pb.RpcResponse_ConfigAudit:
+		c := r.ConfigAudit
+		return slog.Group("response",
+			"leak_count", len(c.GetLeaks()),
+			"auditor_count", len(c.GetAuditors()),
+			"elapsed_ms", c.GetElapsedMs(),
+		)
+	case *v2pb.RpcResponse_ListConfigAuditors:
+		c := r.ListConfigAuditors
+		return slog.Group("response",
+			"auditor_count", len(c.GetAuditors()),
 		)
 	default:
 		return slog.Group("response")

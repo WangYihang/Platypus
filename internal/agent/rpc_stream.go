@@ -32,6 +32,8 @@ type AgentRPCHandlers struct {
 	ProcessList        func(ctx context.Context, req *v2pb.ProcessListRequest) *v2pb.ProcessListResponse
 	SecurityScan       func(ctx context.Context, req *v2pb.SecurityScanRequest) *v2pb.SecurityScanResponse
 	ListSecurityChecks func(ctx context.Context, req *v2pb.ListSecurityChecksRequest) *v2pb.ListSecurityChecksResponse
+	ConfigAudit        func(ctx context.Context, req *v2pb.ConfigAuditRequest) *v2pb.ConfigAuditResponse
+	ListConfigAuditors func(ctx context.Context, req *v2pb.ListConfigAuditorsRequest) *v2pb.ListConfigAuditorsResponse
 }
 
 // streamCtxKey carries per-stream identifiers (correlation_id,
@@ -208,6 +210,16 @@ func dispatchRPCInner(ctx context.Context, req *v2pb.RpcRequest, h AgentRPCHandl
 			return unsupported("list_security_checks")
 		}
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ListSecurityChecks{ListSecurityChecks: h.ListSecurityChecks(ctx, p.ListSecurityChecks)}}
+	case *v2pb.RpcRequest_ConfigAudit:
+		if h.ConfigAudit == nil {
+			return unsupported("config_audit")
+		}
+		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ConfigAudit{ConfigAudit: h.ConfigAudit(ctx, p.ConfigAudit)}}
+	case *v2pb.RpcRequest_ListConfigAuditors:
+		if h.ListConfigAuditors == nil {
+			return unsupported("list_config_auditors")
+		}
+		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ListConfigAuditors{ListConfigAuditors: h.ListConfigAuditors(ctx, p.ListConfigAuditors)}}
 	default:
 		return &v2pb.RpcResponse{Error: "agent: unknown RPC payload type"}
 	}
