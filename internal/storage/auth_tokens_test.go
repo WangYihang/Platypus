@@ -33,19 +33,6 @@ func makeUser(t *testing.T, db *storage.DB, id string) {
 	}
 }
 
-func makeProject(t *testing.T, db *storage.DB, id string) {
-	t.Helper()
-	makeUser(t, db, "owner-"+id)
-	_, err := db.Exec(`
-		INSERT INTO projects (id, name, slug, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?)`,
-		id, id, id, "owner-"+id, time.Now().UTC(),
-	)
-	if err != nil {
-		t.Fatalf("seed project %s: %v", id, err)
-	}
-}
-
 // The kind-agnostic auth_tokens behaviour (Verify dispatch, Revoke
 // idempotency, TouchLastUsed) is exercised against the user-session
 // shape because that's the only kind currently stored in this table.

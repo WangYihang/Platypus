@@ -42,25 +42,25 @@ func (h *TopologyHandler) WithAgentLinks(svc *core.AgentLinkService) *TopologyHa
 // Field naming mirrors the TypeScript TopologySnapshot exactly so a
 // rename on either side surfaces at compile time.
 type topologySnapshot struct {
-	GeneratedAt string                  `json:"generated_at"`
-	ProjectID   string                  `json:"project_id"`
-	MeshEnabled bool                    `json:"mesh_enabled"`
-	Machines    []topologyMachine       `json:"machines"`
-	MeshNodes   []topologyMeshNodeRef   `json:"mesh_nodes"`
-	Links       []topologyLink          `json:"links"`
+	GeneratedAt string                `json:"generated_at"`
+	ProjectID   string                `json:"project_id"`
+	MeshEnabled bool                  `json:"mesh_enabled"`
+	Machines    []topologyMachine     `json:"machines"`
+	MeshNodes   []topologyMeshNodeRef `json:"mesh_nodes"`
+	Links       []topologyLink        `json:"links"`
 }
 
 type topologySysInfo struct {
-	KernelVersion   string  `json:"kernel_version,omitempty"`
-	OSDistribution  string  `json:"os_distribution,omitempty"`
-	Platform        string  `json:"platform,omitempty"`
-	PlatformVersion string  `json:"platform_version,omitempty"`
+	KernelVersion   string   `json:"kernel_version,omitempty"`
+	OSDistribution  string   `json:"os_distribution,omitempty"`
+	Platform        string   `json:"platform,omitempty"`
+	PlatformVersion string   `json:"platform_version,omitempty"`
 	CPUPercent      *float64 `json:"cpu_percent,omitempty"`
 	MemPercent      *float64 `json:"mem_percent,omitempty"`
-	MemTotalBytes   int64   `json:"mem_total_bytes,omitempty"`
-	MemUsedBytes    int64   `json:"mem_used_bytes,omitempty"`
-	UptimeSeconds   int64   `json:"uptime_seconds,omitempty"`
-	SampledAtUnix   int64   `json:"sampled_at_unix,omitempty"`
+	MemTotalBytes   int64    `json:"mem_total_bytes,omitempty"`
+	MemUsedBytes    int64    `json:"mem_used_bytes,omitempty"`
+	UptimeSeconds   int64    `json:"uptime_seconds,omitempty"`
+	SampledAtUnix   int64    `json:"sampled_at_unix,omitempty"`
 }
 
 type topologySession struct {
@@ -77,16 +77,16 @@ type topologySession struct {
 }
 
 type topologyMachine struct {
-	HostID       string            `json:"host_id"`
-	ProjectID    string            `json:"project_id"`
-	Hostname     string            `json:"hostname,omitempty"`
-	MachineID    string            `json:"machine_id,omitempty"`
-	OS           string            `json:"os,omitempty"`
-	Fingerprint  string            `json:"fingerprint"`
-	FirstSeenAt  string            `json:"first_seen_at"`
-	LastSeenAt   string            `json:"last_seen_at"`
-	SysInfo      *topologySysInfo  `json:"sys_info,omitempty"`
-	Sessions     []topologySession `json:"sessions"`
+	HostID      string            `json:"host_id"`
+	ProjectID   string            `json:"project_id"`
+	Hostname    string            `json:"hostname,omitempty"`
+	MachineID   string            `json:"machine_id,omitempty"`
+	OS          string            `json:"os,omitempty"`
+	Fingerprint string            `json:"fingerprint"`
+	FirstSeenAt string            `json:"first_seen_at"`
+	LastSeenAt  string            `json:"last_seen_at"`
+	SysInfo     *topologySysInfo  `json:"sys_info,omitempty"`
+	Sessions    []topologySession `json:"sessions"`
 }
 
 type topologyMeshNodeRef struct {
@@ -114,14 +114,14 @@ type topologyLink struct {
 // link telemetry isn't fully ported yet, so we build a "best
 // available" graph from the data we already have:
 //
-//   * one "self" mesh node for the server (always present so the
+//   - one "self" mesh node for the server (always present so the
 //     graph isn't empty before any agent enrolls);
-//   * one machine per host row in the project, plus an "agent" mesh
+//   - one machine per host row in the project, plus an "agent" mesh
 //     node per host whose agent is currently registered in
 //     AgentLinkService;
-//   * each live agent gets a link from "self" to its mesh node, so
+//   - each live agent gets a link from "self" to its mesh node, so
 //     the graph at least shows reachability;
-//   * sessions for each host pulled from the persistent sessions
+//   - sessions for each host pulled from the persistent sessions
 //     table so the compound-parent layout still has its child
 //     diamonds.
 //

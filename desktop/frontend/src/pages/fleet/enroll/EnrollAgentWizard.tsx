@@ -55,6 +55,7 @@ export default function EnrollAgentWizard() {
     const [targetArch, setTargetArch] = useState("");
     const [serverEndpoint, setServerEndpoint] = useState("");
     const [ttlSeconds, setTtlSeconds] = useState<number | undefined>(undefined);
+    const [patMaxUses, setPatMaxUses] = useState<number | undefined>(undefined);
     const [autoApprove, setAutoApprove] = useState(false);
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -70,6 +71,7 @@ export default function EnrollAgentWizard() {
         setTargetOS("");
         setTargetArch("");
         setTtlSeconds(undefined);
+        setPatMaxUses(undefined);
         setAutoApprove(false);
         setDescription("");
         setIssued(null);
@@ -134,6 +136,7 @@ export default function EnrollAgentWizard() {
                 target_os: targetOS || undefined,
                 target_arch: targetArch || undefined,
                 ttl_seconds: ttlSeconds,
+                pat_max_uses: patMaxUses,
                 auto_approve: autoApprove,
                 pat_description: description.trim() || undefined,
             });
@@ -208,6 +211,8 @@ export default function EnrollAgentWizard() {
                         onServerEndpointChange={setServerEndpoint}
                         ttlSeconds={ttlSeconds}
                         onTtlSecondsChange={setTtlSeconds}
+                        patMaxUses={patMaxUses}
+                        onPatMaxUsesChange={setPatMaxUses}
                         autoApprove={autoApprove}
                         onAutoApproveChange={setAutoApprove}
                         description={description}

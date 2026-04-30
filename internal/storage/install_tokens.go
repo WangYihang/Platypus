@@ -25,6 +25,7 @@ type InstallDownloadToken struct {
 	TargetArch          string
 	ServerEndpoint      string
 	PATTTLSeconds       int
+	PATMaxUses          int
 	PATBindingMachineID string
 	PATDescription      string
 	ConsumedAt          *time.Time
@@ -82,6 +83,9 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 	if t.ServerEndpoint == "" {
 		return errors.New("install_download_tokens: server_endpoint required")
 	}
+	if t.PATMaxUses <= 0 {
+		t.PATMaxUses = 1
+	}
 	autoApprove := 0
 	if t.AutoApprove {
 		autoApprove = 1
@@ -90,16 +94,16 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 		INSERT INTO install_download_tokens (
 			download_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, target_os, target_arch,
-			server_endpoint, pat_ttl_seconds, pat_binding_machine_id,
+			server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
 			pat_description, auto_approve,
 			consumed_at, consumed_ip, consumed_ua,
 			consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		          NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL)`,
 		t.DownloadID, t.SecretHash, t.ProjectID, t.IssuedByUser,
 		t.IssuedAt.UTC(), t.ExpiresAt.UTC(),
 		nullableString(t.TargetOS), nullableString(t.TargetArch),
-		t.ServerEndpoint, t.PATTTLSeconds,
+		t.ServerEndpoint, t.PATTTLSeconds, t.PATMaxUses,
 		nullableString(t.PATBindingMachineID),
 		nullableString(t.PATDescription),
 		autoApprove,
@@ -255,7 +259,7 @@ func (r *InstallDownloadTokenRepo) Revoke(ctx context.Context, id, byUser, reaso
 const installDownloadColumns = `
 	SELECT download_id, secret_hash, project_id, issued_by_user,
 	       issued_at, expires_at, target_os, target_arch,
-	       server_endpoint, pat_ttl_seconds, pat_binding_machine_id,
+	       server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
 	       pat_description, auto_approve, consumed_at, consumed_ip, consumed_ua,
 	       consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
 	  FROM install_download_tokens`
@@ -288,7 +292,7 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	err := row.Scan(
 		&t.DownloadID, &t.SecretHash, &t.ProjectID, &t.IssuedByUser,
 		&t.IssuedAt, &t.ExpiresAt, &tOS, &tArch,
-		&t.ServerEndpoint, &t.PATTTLSeconds, &bindMID,
+		&t.ServerEndpoint, &t.PATTTLSeconds, &t.PATMaxUses, &bindMID,
 		&patDesc, &autoApprove, &consAt, &consIP, &consUA,
 		&consPAT, &revoked, &revAt, &revBy, &revReas,
 	)

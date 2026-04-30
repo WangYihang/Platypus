@@ -192,4 +192,3 @@ func cveAffectsKernel(e kernelCVE, maj, min, pat int) bool {
 	}
 	return true
 }
-

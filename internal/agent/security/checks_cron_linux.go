@@ -20,9 +20,11 @@ func init() {
 // turns into a privilege escalation.
 type cronPermsCheck struct{}
 
-func (cronPermsCheck) ID() string                        { return "cron.permissions" }
-func (cronPermsCheck) Category() string                  { return "cron" }
-func (cronPermsCheck) Applicable(_ context.Context) bool { return fileExists("/etc/crontab") || dirExists("/etc/cron.d") }
+func (cronPermsCheck) ID() string       { return "cron.permissions" }
+func (cronPermsCheck) Category() string { return "cron" }
+func (cronPermsCheck) Applicable(_ context.Context) bool {
+	return fileExists("/etc/crontab") || dirExists("/etc/cron.d")
+}
 func (cronPermsCheck) Metadata() CheckMetadata {
 	return CheckMetadata{
 		Title: "Cron file & directory permissions",

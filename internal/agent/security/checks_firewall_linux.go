@@ -24,8 +24,8 @@ func init() {
 // "is there ANY filter at all in front of this box".
 type firewallCheck struct{}
 
-func (firewallCheck) ID() string                       { return "network.firewall" }
-func (firewallCheck) Category() string                 { return "network" }
+func (firewallCheck) ID() string                        { return "network.firewall" }
+func (firewallCheck) Category() string                  { return "network" }
 func (firewallCheck) Applicable(_ context.Context) bool { return dirExists("/proc/net") }
 func (firewallCheck) Metadata() CheckMetadata {
 	return CheckMetadata{
@@ -55,7 +55,7 @@ func (firewallCheck) Run(_ context.Context) ([]Finding, error) {
 			"upstream network controls (cloud SG, switch ACLs). That can be a " +
 			"deliberate posture, but on operator-managed hosts a local default-deny " +
 			"is the recommended last line of defence.",
-		Evidence: "no firewall kernel module or daemon detected",
+		Evidence:    "no firewall kernel module or daemon detected",
 		Remediation: "Pick the frontend your distro prefers and apply a default-deny baseline: `ufw enable && ufw default deny incoming` (Debian/Ubuntu), `systemctl enable --now firewalld` (RHEL/Fedora), or write an explicit nftables ruleset.",
 	}}, nil
 }

@@ -18,8 +18,8 @@ func init() {
 // pwqualityCheck audits the libpwquality settings that govern the
 // strength of new passwords. The actual rules sit in two places:
 //
-//   /etc/security/pwquality.conf  — preferred since libpwquality 1.4
-//   /etc/pam.d/{common-password, system-auth}  — legacy / overrides
+//	/etc/security/pwquality.conf  — preferred since libpwquality 1.4
+//	/etc/pam.d/{common-password, system-auth}  — legacy / overrides
 //
 // We parse pwquality.conf when present (key=value) and fall back to
 // scanning the PAM stack for the `pam_pwquality.so` line and
@@ -30,8 +30,8 @@ func init() {
 // lockout policy (also its own checker).
 type pwqualityCheck struct{}
 
-func (pwqualityCheck) ID() string                       { return "auth.pwquality" }
-func (pwqualityCheck) Category() string                 { return "accounts" }
+func (pwqualityCheck) ID() string                        { return "auth.pwquality" }
+func (pwqualityCheck) Category() string                  { return "accounts" }
 func (pwqualityCheck) Applicable(_ context.Context) bool { return pwqualityApplicable() }
 func (pwqualityCheck) Metadata() CheckMetadata {
 	return CheckMetadata{

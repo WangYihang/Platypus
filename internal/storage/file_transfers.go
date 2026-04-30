@@ -33,10 +33,10 @@ const (
 //
 // BytesTransferred and WireBytes split what used to be a single
 // counter:
-//   * BytesTransferred is the *uncompressed source* progress — bytes
+//   - BytesTransferred is the *uncompressed source* progress — bytes
 //     read from disk (or written to disk for uploads). Comparable to
 //     TotalBytes, so the UI can render a meaningful percentage.
-//   * WireBytes is the *post-encoding* count — what flowed through
+//   - WireBytes is the *post-encoding* count — what flowed through
 //     the HTTP response body. For archive downloads this is gzip /
 //     deflate output; for plain transfers it equals BytesTransferred.
 //     The UI uses it to surface compression ratio + network speed.

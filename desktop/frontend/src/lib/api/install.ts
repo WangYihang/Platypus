@@ -13,6 +13,7 @@ export interface InstallArtifactListItem {
     target_os?: string;
     target_arch?: string;
     pat_ttl_seconds: number;
+    pat_max_uses: number;
     pat_binding_machine_id?: string;
     pat_description?: string;
     consumed_at?: string;
@@ -67,6 +68,7 @@ export interface IssueInstallRequest {
     target_arch?: string;
     ttl_seconds?: number;
     pat_ttl_seconds?: number;
+    pat_max_uses?: number;
     pat_binding_machine_id?: string;
     pat_description?: string;
     // false (default) → host enrolls in `pending`. true skips approval

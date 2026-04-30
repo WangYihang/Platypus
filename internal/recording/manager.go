@@ -91,18 +91,18 @@ func (m *Manager) Begin(ctx context.Context, in BeginInput) (*Session, error) {
 	}
 
 	rec := &storage.TerminalRecording{
-		ID:         id,
-		ProjectID:  in.ProjectID,
-		HostID:     in.HostID,
-		AgentID:    in.AgentID,
-		UserID:     in.UserID,
-		Cols:       int(safeDim(in.Cols, 80)),
-		Rows:       int(safeDim(in.Rows, 24)),
-		Shell:      in.Shell,
-		Title:      in.Title,
-		FilePath:   relPath,
-		Status:     storage.RecordingStatusRecording,
-		StartedAt:  startedAt,
+		ID:        id,
+		ProjectID: in.ProjectID,
+		HostID:    in.HostID,
+		AgentID:   in.AgentID,
+		UserID:    in.UserID,
+		Cols:      int(safeDim(in.Cols, 80)),
+		Rows:      int(safeDim(in.Rows, 24)),
+		Shell:     in.Shell,
+		Title:     in.Title,
+		FilePath:  relPath,
+		Status:    storage.RecordingStatusRecording,
+		StartedAt: startedAt,
 	}
 	if err := m.db.TerminalRecordings().Create(ctx, rec); err != nil {
 		_ = w.Close()

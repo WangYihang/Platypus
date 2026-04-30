@@ -16,9 +16,9 @@ func TestCVEAffectsKernel_DirtyPipe(t *testing.T) {
 		t.Fatalf("test out of date with table; first entry is %q", dp.cve)
 	}
 	cases := []struct {
-		name           string
-		maj, min, pat  int
-		want           bool
+		name          string
+		maj, min, pat int
+		want          bool
 	}{
 		{"before introduction (5.7)", 5, 7, 0, false},
 		{"at introduction (5.8)", 5, 8, 0, true},
@@ -58,14 +58,14 @@ func TestCVEAffectsKernel_OverlayFS(t *testing.T) {
 		maj, min, pat int
 		want          bool
 	}{
-		{5, 10, 0, false},   // pre-introduction
-		{5, 11, 0, true},    // at introduction
-		{5, 15, 90, true},   // 5.15 pre-fix
-		{5, 15, 91, false},  // 5.15 at fix
-		{6, 1, 0, true},     // 6.1 pre-fix
-		{6, 1, 9, false},    // 6.1 at fix
-		{6, 2, 0, false},    // upstream cutoff
-		{6, 5, 0, false},    // way past
+		{5, 10, 0, false},  // pre-introduction
+		{5, 11, 0, true},   // at introduction
+		{5, 15, 90, true},  // 5.15 pre-fix
+		{5, 15, 91, false}, // 5.15 at fix
+		{6, 1, 0, true},    // 6.1 pre-fix
+		{6, 1, 9, false},   // 6.1 at fix
+		{6, 2, 0, false},   // upstream cutoff
+		{6, 5, 0, false},   // way past
 	}
 	for _, c := range cases {
 		got := cveAffectsKernel(ovl, c.maj, c.min, c.pat)
@@ -91,16 +91,16 @@ func TestCVEAffectsKernel_NfTables(t *testing.T) {
 		maj, min, pat int
 		want          bool
 	}{
-		{5, 13, 0, false},     // pre-introduction
-		{5, 14, 0, true},      // at introduction
-		{5, 15, 100, true},    // 5.15 pre-fix
-		{5, 15, 149, false},   // 5.15 at fix
-		{6, 1, 50, true},      // 6.1 pre-fix
-		{6, 1, 76, false},     // 6.1 at fix
-		{6, 6, 14, true},      // 6.6 pre-fix
-		{6, 6, 15, false},     // 6.6 at fix
-		{6, 7, 0, false},      // upstream cutoff
-		{6, 8, 0, false},      // way past
+		{5, 13, 0, false},   // pre-introduction
+		{5, 14, 0, true},    // at introduction
+		{5, 15, 100, true},  // 5.15 pre-fix
+		{5, 15, 149, false}, // 5.15 at fix
+		{6, 1, 50, true},    // 6.1 pre-fix
+		{6, 1, 76, false},   // 6.1 at fix
+		{6, 6, 14, true},    // 6.6 pre-fix
+		{6, 6, 15, false},   // 6.6 at fix
+		{6, 7, 0, false},    // upstream cutoff
+		{6, 8, 0, false},    // way past
 	}
 	for _, c := range cases {
 		got := cveAffectsKernel(nf, c.maj, c.min, c.pat)

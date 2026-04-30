@@ -34,7 +34,7 @@ type Counts struct {
 func (db *DB) Counts(ctx context.Context, onlineWindow time.Duration) (Counts, error) {
 	cutoff := time.Now().UTC().Add(-onlineWindow)
 
-	rows, err := db.DB.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT 'hosts',         COUNT(*) FROM hosts
 		UNION ALL
 		SELECT 'live_hosts',    COUNT(*) FROM hosts WHERE last_seen_at > ?
@@ -46,7 +46,7 @@ func (db *DB) Counts(ctx context.Context, onlineWindow time.Duration) (Counts, e
 	if err != nil {
 		return Counts{}, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out Counts
 	for rows.Next() {

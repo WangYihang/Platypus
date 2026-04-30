@@ -69,7 +69,7 @@ type FileArchiveDeps struct {
 	Service     *core.AgentLinkService
 	RBAC        *RBAC
 	Recorder    TransferRecorder
-	Broadcaster *EventBroadcaster // optional; nil to skip WS events
+	Broadcaster *EventBroadcaster  // optional; nil to skip WS events
 	Activity    *activity.Recorder // optional; nil to skip audit logging
 	Cancels     *TransferCancelRegistry
 	IDGenerator func() string // optional; defaults to uuid.NewString
@@ -189,8 +189,9 @@ type scanRequestBody struct {
 }
 
 // RegisterV2FileArchiveRoutes mounts:
-//   POST /fs/scan      — walk paths, return totals (used to size progress)
-//   POST /fs/archive   — stream a tar/tar.gz/zip archive of paths
+//
+//	POST /fs/scan      — walk paths, return totals (used to size progress)
+//	POST /fs/archive   — stream a tar/tar.gz/zip archive of paths
 //
 // scan is viewer-tier (read), archive is also viewer-tier (it's a
 // download); cancellation lives under the operator-tier API for
@@ -303,14 +304,14 @@ func runScan(ctx context.Context, sess *link.Session, body scanRequestBody) (*v2
 
 // v2FileArchive streams a tar/tar.gz/zip archive of the requested
 // paths. Wire shape:
-//   1. Pre-scan (best-effort) so we can set X-Total-Bytes.
-//   2. Create file_transfers row in status=running.
-//   3. Open STREAM_TYPE_FILE_ARCHIVE on the agent.
-//   4. Read FileArchiveResponse ack.
-//   5. Pipe FileChunk frames to HTTP response, counting bytes,
-//      flushing progress on size+time triggers.
-//   6. On EOF / error / cancel: finalize the transfer row +
-//      broadcast a final WS event.
+//  1. Pre-scan (best-effort) so we can set X-Total-Bytes.
+//  2. Create file_transfers row in status=running.
+//  3. Open STREAM_TYPE_FILE_ARCHIVE on the agent.
+//  4. Read FileArchiveResponse ack.
+//  5. Pipe FileChunk frames to HTTP response, counting bytes,
+//     flushing progress on size+time triggers.
+//  6. On EOF / error / cancel: finalize the transfer row +
+//     broadcast a final WS event.
 func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sess, ok := lookupAgent(c, deps.Service)
@@ -451,7 +452,7 @@ func v2FileArchive(deps FileArchiveDeps) gin.HandlerFunc {
 		for {
 			var ch v2pb.FileChunk
 			if err := link.ReadFrame(stream, &ch); err != nil {
-				finalStatus := storage.TransferStatusFailed
+				var finalStatus string
 				errMsg := ""
 				if errors.Is(err, io.EOF) {
 					// EOF without explicit eof=true frame is treated
@@ -581,15 +582,15 @@ func broadcastTransfer(deps FileArchiveDeps, ft *storage.FileTransfer, paths []s
 // returns FileReadResponse + a stream of FileChunk frames; we pipe
 // them straight to the HTTP response body). The two differences:
 //
-//   1. We open a file_transfers row before the first byte flows so
-//      operators see the download in the global Transfers drawer
-//      while it's running. total_bytes comes from the agent's
-//      FileReadResponse.Size header so the progress bar is sized.
-//   2. Bytes-out tick into UpdateProgress + a WS broadcast on the
-//      same size+time triggers the archive download uses, so the
-//      drawer's progress bar updates live (and the operator can
-//      cancel mid-stream from the UI without aborting the browser
-//      tab).
+//  1. We open a file_transfers row before the first byte flows so
+//     operators see the download in the global Transfers drawer
+//     while it's running. total_bytes comes from the agent's
+//     FileReadResponse.Size header so the progress bar is sized.
+//  2. Bytes-out tick into UpdateProgress + a WS broadcast on the
+//     same size+time triggers the archive download uses, so the
+//     drawer's progress bar updates live (and the operator can
+//     cancel mid-stream from the UI without aborting the browser
+//     tab).
 //
 // When the recorder is nil (tests register without it) the handler
 // degrades to a plain streaming pass-through so the existing wire
@@ -662,7 +663,7 @@ func v2FileDownloadTracked(deps FileArchiveDeps) gin.HandlerFunc {
 
 		var ft *storage.FileTransfer
 		var transferID string
-		var streamCtx context.Context = c.Request.Context()
+		streamCtx := c.Request.Context()
 		if deps.Recorder != nil {
 			transferID = deps.IDGenerator()
 			pathsJSON := pathsJSONOne(path)

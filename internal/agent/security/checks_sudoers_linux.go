@@ -29,9 +29,11 @@ func init() {
 //     system accounts is worth surfacing for review.
 type sudoersCheck struct{}
 
-func (sudoersCheck) ID() string                       { return "auth.sudoers" }
-func (sudoersCheck) Category() string                 { return "accounts" }
-func (sudoersCheck) Applicable(_ context.Context) bool { return fileExists("/etc/sudoers") || dirExists("/etc/sudoers.d") }
+func (sudoersCheck) ID() string       { return "auth.sudoers" }
+func (sudoersCheck) Category() string { return "accounts" }
+func (sudoersCheck) Applicable(_ context.Context) bool {
+	return fileExists("/etc/sudoers") || dirExists("/etc/sudoers.d")
+}
 func (sudoersCheck) Metadata() CheckMetadata {
 	return CheckMetadata{
 		Title: "Sudoers permissions and NOPASSWD entries",

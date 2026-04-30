@@ -21,8 +21,8 @@ func init() {
 // /proc walk is cheaper and works whether or not we're root.
 type timeSyncCheck struct{}
 
-func (timeSyncCheck) ID() string                       { return "system.time_sync" }
-func (timeSyncCheck) Category() string                 { return "system" }
+func (timeSyncCheck) ID() string                        { return "system.time_sync" }
+func (timeSyncCheck) Category() string                  { return "system" }
 func (timeSyncCheck) Applicable(_ context.Context) bool { return true }
 func (timeSyncCheck) Metadata() CheckMetadata {
 	return CheckMetadata{

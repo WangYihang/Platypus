@@ -26,11 +26,11 @@ import "time"
 // a typed accessor on Registry, a default constant, and a descriptor
 // row in allDescriptors.
 const (
-	KeyAuthAccessTokenTTL       = "auth.access_token_ttl"
-	KeyAuthRefreshTokenTTL      = "auth.refresh_token_ttl"
-	KeyAuthPATDefaultTTL        = "auth.pat_default_ttl"
-	KeyDistributorChannel       = "distributor.channel"
-	KeyDistributorPresignedTTL  = "distributor.presigned_ttl"
+	KeyAuthAccessTokenTTL        = "auth.access_token_ttl"
+	KeyAuthRefreshTokenTTL       = "auth.refresh_token_ttl"
+	KeyAuthPATDefaultTTL         = "auth.pat_default_ttl"
+	KeyDistributorChannel        = "distributor.channel"
+	KeyDistributorPresignedTTL   = "distributor.presigned_ttl"
 	KeyMeshDiscoveryLAN          = "mesh.discovery_lan"
 	KeyMeshDiscoveryIntervalSec  = "mesh.discovery_interval_seconds"
 	KeyAuditRetentionDays        = "audit.retention_days"

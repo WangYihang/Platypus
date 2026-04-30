@@ -222,4 +222,3 @@ func loadMigrations(after int64) ([]migration, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	return out, nil
 }
-

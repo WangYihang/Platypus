@@ -56,9 +56,9 @@ func TestPreviewSigner_MismatchedFields(t *testing.T) {
 	tok, exp := s.Sign("p", "a", "/x")
 
 	cases := []struct {
-		name                 string
-		pid, aid, path       string
-		exp                  int64
+		name           string
+		pid, aid, path string
+		exp            int64
 	}{
 		{"different pid", "p2", "a", "/x", exp},
 		{"different agentID", "p", "a2", "/x", exp},

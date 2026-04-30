@@ -22,10 +22,11 @@ type TransferRoutesDeps struct {
 }
 
 // RegisterV1TransferRoutes mounts:
-//   GET  /api/v1/projects/:pid/transfers
-//   GET  /api/v1/projects/:pid/hosts/:hid/transfers
-//   POST /api/v1/projects/:pid/transfers/:id/cancel
-//   GET  /api/v1/transfers              (admin only — global)
+//
+//	GET  /api/v1/projects/:pid/transfers
+//	GET  /api/v1/projects/:pid/hosts/:hid/transfers
+//	POST /api/v1/projects/:pid/transfers/:id/cancel
+//	GET  /api/v1/transfers              (admin only — global)
 //
 // All read endpoints are viewer-tier; cancel is operator-tier
 // (mutating effect on an in-flight resource).

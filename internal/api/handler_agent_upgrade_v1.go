@@ -199,11 +199,11 @@ func (h *AgentUpgradeHandler) Trigger(c *gin.Context) {
 // will plug into. For the synchronous REST endpoint only the
 // terminal frame survives in the JSON response.
 func drainUpgradeProgress(ctx context.Context, stream io.ReadWriteCloser) (*v2pb.UpgradeProgress, error) {
-	var last v2pb.UpgradeProgress
+	last := &v2pb.UpgradeProgress{}
 	for {
 		select {
 		case <-ctx.Done():
-			return &last, ctx.Err()
+			return last, ctx.Err()
 		default:
 		}
 		var p v2pb.UpgradeProgress
@@ -214,11 +214,11 @@ func drainUpgradeProgress(ctx context.Context, stream io.ReadWriteCloser) (*v2pb
 			if last.GetPhase() == v2pb.UpgradeProgress_PHASE_EXITING ||
 				last.GetPhase() == v2pb.UpgradeProgress_PHASE_FAILED {
 				// Already-terminal frames are a clean close.
-				return &last, nil
+				return last, nil
 			}
-			return &last, err
+			return last, err
 		}
-		last = p
+		last = proto.Clone(&p).(*v2pb.UpgradeProgress)
 		log.L.Debug("agent.upgrade.progress",
 			"phase", p.GetPhase().String(),
 			"bytes_done", p.GetBytesDone(),
@@ -228,7 +228,7 @@ func drainUpgradeProgress(ctx context.Context, stream io.ReadWriteCloser) (*v2pb
 		switch p.Phase {
 		case v2pb.UpgradeProgress_PHASE_EXITING,
 			v2pb.UpgradeProgress_PHASE_FAILED:
-			return &last, nil
+			return last, nil
 		}
 	}
 }

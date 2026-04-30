@@ -79,7 +79,7 @@ func TestCache_PutResetsTTL(t *testing.T) {
 
 	c.Put("tk_x", sample("tk_x"))
 	clock.advance(29 * time.Second)
-	c.Put("tk_x", sample("tk_x")) // re-Put with same id resets TTL
+	c.Put("tk_x", sample("tk_x"))   // re-Put with same id resets TTL
 	clock.advance(29 * time.Second) // 58s since first Put, but only 29s since second
 	if _, ok := c.Get("tk_x"); !ok {
 		t.Error("Get after re-Put + 29s = miss, want hit (TTL should reset)")

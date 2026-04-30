@@ -18,23 +18,23 @@ func init() {
 // accountSafetyCheck runs three high-signal passwd/shadow audits
 // that show up at the top of every CIS / lynis report:
 //
-//   1. /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow ownership
-//      and mode bits — these files are sensitive enough that a wrong
-//      mode is a hardening regression on its own.
-//   2. UID 0 duplicates — any account whose UID is 0 except `root`.
-//      Almost always either an attacker backdoor or a long-forgotten
-//      service account from a misguided shortcut.
-//   3. Empty password fields in /etc/shadow — accounts that can be
-//      logged into without a password. Usually a sign of a half-
-//      finished provisioning script.
+//  1. /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow ownership
+//     and mode bits — these files are sensitive enough that a wrong
+//     mode is a hardening regression on its own.
+//  2. UID 0 duplicates — any account whose UID is 0 except `root`.
+//     Almost always either an attacker backdoor or a long-forgotten
+//     service account from a misguided shortcut.
+//  3. Empty password fields in /etc/shadow — accounts that can be
+//     logged into without a password. Usually a sign of a half-
+//     finished provisioning script.
 //
 // Some of these need root to read /etc/shadow. The agent typically
 // runs as root; if it can't read shadow we surface that as a check-
 // level error rather than silently passing.
 type accountSafetyCheck struct{}
 
-func (accountSafetyCheck) ID() string                       { return "accounts.safety" }
-func (accountSafetyCheck) Category() string                 { return "accounts" }
+func (accountSafetyCheck) ID() string                        { return "accounts.safety" }
+func (accountSafetyCheck) Category() string                  { return "accounts" }
 func (accountSafetyCheck) Applicable(_ context.Context) bool { return fileExists("/etc/passwd") }
 func (accountSafetyCheck) Metadata() CheckMetadata {
 	return CheckMetadata{
@@ -60,7 +60,7 @@ type permSpec struct {
 	path     string
 	maxMode  os.FileMode // any bit set above this is a finding
 	wantUID  int
-	wantGID  int    // -1 = don't check
+	wantGID  int // -1 = don't check
 	severity string
 }
 

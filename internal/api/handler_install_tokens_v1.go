@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,6 +46,7 @@ type issueInstallRequest struct {
 	TargetArch          string `json:"target_arch"`
 	TTLSeconds          int    `json:"ttl_seconds"`
 	PATTTLSeconds       int    `json:"pat_ttl_seconds"`
+	PATMaxUses          int    `json:"pat_max_uses"`
 	PATBindingMachineID string `json:"pat_binding_machine_id"`
 	PATDescription      string `json:"pat_description"`
 	// AutoApprove pre-authorizes the host that redeems this install
@@ -112,6 +114,7 @@ type installListItem struct {
 	TargetOS            string     `json:"target_os,omitempty"`
 	TargetArch          string     `json:"target_arch,omitempty"`
 	PATTTLSeconds       int        `json:"pat_ttl_seconds"`
+	PATMaxUses          int        `json:"pat_max_uses"`
 	PATBindingMachineID string     `json:"pat_binding_machine_id,omitempty"`
 	PATDescription      string     `json:"pat_description,omitempty"`
 	ConsumedAt          *time.Time `json:"consumed_at,omitempty"`
@@ -134,6 +137,7 @@ func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installLi
 		TargetOS:            t.TargetOS,
 		TargetArch:          t.TargetArch,
 		PATTTLSeconds:       t.PATTTLSeconds,
+		PATMaxUses:          t.PATMaxUses,
 		PATBindingMachineID: t.PATBindingMachineID,
 		PATDescription:      t.PATDescription,
 		ConsumedAt:          t.ConsumedAt,
@@ -169,6 +173,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		TargetArch:          req.TargetArch,
 		TTL:                 time.Duration(req.TTLSeconds) * time.Second,
 		PATTTL:              time.Duration(req.PATTTLSeconds) * time.Second,
+		PATMaxUses:          req.PATMaxUses,
 		PATBindingMachineID: req.PATBindingMachineID,
 		PATDescription:      req.PATDescription,
 		AutoApprove:         req.AutoApprove,
@@ -249,7 +254,13 @@ func (h *InstallTokensHandler) renderInstallCommands(
 		// default response, which is the auto-detecting POSIX script.
 		url += "?os=windows"
 	}
-	return renderInstallCommandsFor(url, targetOS)
+	insecureURL := url
+	if strings.Contains(insecureURL, "?") {
+		insecureURL += "&download_tls=insecure"
+	} else {
+		insecureURL += "?download_tls=insecure"
+	}
+	return renderCommandsForURLs(insecureURL, url, targetOS, false)
 }
 
 // renderBundleCommands is the bundle-shape sibling — same registry,

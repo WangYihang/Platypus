@@ -25,8 +25,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
+
+	"github.com/WangYihang/Platypus/internal/log"
 )
 
 const (

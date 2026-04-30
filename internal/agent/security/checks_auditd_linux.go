@@ -14,22 +14,22 @@ func init() {
 
 // auditdCheck reports two related conditions:
 //
-//   1. auditd is not running — auditd-or-equivalent is the canonical
-//      Linux audit pipeline (CIS 4.1). Without it, post-incident
-//      forensic data is limited to whatever syslog captured.
-//   2. /etc/audit/auditd.conf is missing — even when the daemon is
-//      not running, the absence of the configuration file means the
-//      package isn't installed, which is its own (lower-severity)
-//      finding because it implies the audit pipeline can't be
-//      brought up without provisioning.
+//  1. auditd is not running — auditd-or-equivalent is the canonical
+//     Linux audit pipeline (CIS 4.1). Without it, post-incident
+//     forensic data is limited to whatever syslog captured.
+//  2. /etc/audit/auditd.conf is missing — even when the daemon is
+//     not running, the absence of the configuration file means the
+//     package isn't installed, which is its own (lower-severity)
+//     finding because it implies the audit pipeline can't be
+//     brought up without provisioning.
 //
 // We don't audit the rule set itself — CIS lists ~30 specific rules
 // (4.1.3, 4.1.4, …) and the right rules vary by use case. That's a
 // future "auditd.rules" checker if there's appetite.
 type auditdCheck struct{}
 
-func (auditdCheck) ID() string                       { return "audit.auditd" }
-func (auditdCheck) Category() string                 { return "audit" }
+func (auditdCheck) ID() string                        { return "audit.auditd" }
+func (auditdCheck) Category() string                  { return "audit" }
 func (auditdCheck) Applicable(_ context.Context) bool { return true }
 func (auditdCheck) Metadata() CheckMetadata {
 	return CheckMetadata{
@@ -50,10 +50,10 @@ func (auditdCheck) Run(_ context.Context) ([]Finding, error) {
 
 	if !confPresent {
 		out = append(out, Finding{
-			ID:       "audit.auditd.not_installed",
-			Category: "audit",
-			Severity: SeverityLow,
-			Title:    "auditd not installed",
+			ID:          "audit.auditd.not_installed",
+			Category:    "audit",
+			Severity:    SeverityLow,
+			Title:       "auditd not installed",
 			Description: "/etc/audit/auditd.conf is absent. The audit subsystem can't be enabled without provisioning the package (auditd on Debian/Ubuntu, audit on RHEL/Fedora). Operators with another audit pipeline (laurel + auditbeat, ebpf-based collectors, …) can ignore this.",
 			Evidence:    "/etc/audit/auditd.conf does not exist",
 			Remediation: "Install the audit package: `apt install auditd` (Debian/Ubuntu) or `dnf install audit` (RHEL/Fedora), then `systemctl enable --now auditd`.",
@@ -62,10 +62,10 @@ func (auditdCheck) Run(_ context.Context) ([]Finding, error) {
 	}
 	if !running {
 		out = append(out, Finding{
-			ID:       "audit.auditd.not_running",
-			Category: "audit",
-			Severity: SeverityMedium,
-			Title:    "auditd installed but not running",
+			ID:          "audit.auditd.not_running",
+			Category:    "audit",
+			Severity:    SeverityMedium,
+			Title:       "auditd installed but not running",
 			Description: "/etc/audit/auditd.conf exists but no auditd process is alive. Audit events are dropped by the kernel when no listener is attached, so post-incident forensic data is limited to whatever syslog captured.",
 			Evidence:    "/etc/audit/auditd.conf present; no auditd process found in /proc",
 			Remediation: "Start the daemon: `systemctl enable --now auditd` (or `service auditd start` on sysv hosts).",
@@ -77,12 +77,12 @@ func (auditdCheck) Run(_ context.Context) ([]Finding, error) {
 	// portable (no audit-log path API).
 	if st, err := os.Stat("/var/log/audit/audit.log"); err == nil && st.Size() > 1024*1024*1024 {
 		out = append(out, Finding{
-			ID:       "audit.auditd.log_oversized",
-			Category: "audit",
-			Severity: SeverityLow,
-			Title:    "audit.log over 1 GiB",
+			ID:          "audit.auditd.log_oversized",
+			Category:    "audit",
+			Severity:    SeverityLow,
+			Title:       "audit.log over 1 GiB",
 			Description: "Audit log on disk has grown past 1 GiB without rotation. Likely either the rotate policy in /etc/audit/auditd.conf is too generous, or auditd hasn't been restarted to pick up new settings.",
-			Evidence:  "/var/log/audit/audit.log size " + formatSize(st.Size()),
+			Evidence:    "/var/log/audit/audit.log size " + formatSize(st.Size()),
 			Remediation: "Tune `max_log_file` and `num_logs` in /etc/audit/auditd.conf, then `service auditd reload`.",
 		})
 	}

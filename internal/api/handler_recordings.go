@@ -22,8 +22,8 @@ import (
 // summary metadata (size, duration, status) that the UI list page
 // uses to render cards without hitting the filesystem.
 type RecordingsHandler struct {
-	db      *storage.DB
-	recMgr  *recording.Manager
+	db     *storage.DB
+	recMgr *recording.Manager
 }
 
 func NewRecordingsHandler(db *storage.DB, recMgr *recording.Manager) *RecordingsHandler {
@@ -34,25 +34,25 @@ func NewRecordingsHandler(db *storage.DB, recMgr *recording.Manager) *Recordings
 // host_alias are looked up so the UI can render readable cards
 // without fan-out fetches per item.
 type recordingResponse struct {
-	ID            string     `json:"id"`
-	ProjectID     string     `json:"project_id"`
-	HostID        string     `json:"host_id"`
-	HostAlias     string     `json:"host_alias,omitempty"`
-	HostHostname  string     `json:"host_hostname,omitempty"`
-	AgentID       string     `json:"agent_id,omitempty"`
-	UserID        string     `json:"user_id,omitempty"`
-	Username      string     `json:"username,omitempty"`
-	Cols          int        `json:"cols"`
-	Rows          int        `json:"rows"`
-	Shell         string     `json:"shell,omitempty"`
-	Title         string     `json:"title,omitempty"`
-	SizeBytes     int64      `json:"size_bytes"`
-	DurationMs    int64      `json:"duration_ms"`
-	FrameCount    int64      `json:"frame_count"`
-	Status        string     `json:"status"`
-	ErrorMessage  string     `json:"error_message,omitempty"`
-	StartedAt     time.Time  `json:"started_at"`
-	EndedAt       *time.Time `json:"ended_at,omitempty"`
+	ID           string     `json:"id"`
+	ProjectID    string     `json:"project_id"`
+	HostID       string     `json:"host_id"`
+	HostAlias    string     `json:"host_alias,omitempty"`
+	HostHostname string     `json:"host_hostname,omitempty"`
+	AgentID      string     `json:"agent_id,omitempty"`
+	UserID       string     `json:"user_id,omitempty"`
+	Username     string     `json:"username,omitempty"`
+	Cols         int        `json:"cols"`
+	Rows         int        `json:"rows"`
+	Shell        string     `json:"shell,omitempty"`
+	Title        string     `json:"title,omitempty"`
+	SizeBytes    int64      `json:"size_bytes"`
+	DurationMs   int64      `json:"duration_ms"`
+	FrameCount   int64      `json:"frame_count"`
+	Status       string     `json:"status"`
+	ErrorMessage string     `json:"error_message,omitempty"`
+	StartedAt    time.Time  `json:"started_at"`
+	EndedAt      *time.Time `json:"ended_at,omitempty"`
 }
 
 func (h *RecordingsHandler) toResponse(c *gin.Context, r *storage.TerminalRecording, hostCache map[string]hostBrief, userCache map[string]string) recordingResponse {

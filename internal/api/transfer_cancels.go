@@ -14,13 +14,13 @@ import (
 // response.
 //
 // Implementation notes:
-//   * The registry is a process-local in-memory map. Cancellation
+//   - The registry is a process-local in-memory map. Cancellation
 //     therefore only works when the cancel-issuing API request lands
 //     on the same server process as the in-flight transfer. In a
 //     load-balanced deployment we'd persist a "cancel requested" bit
 //     in the DB and have the streaming goroutine poll it; that
 //     refactor stays an option without breaking this API.
-//   * Cancel returns false when the ID is unknown — useful so the
+//   - Cancel returns false when the ID is unknown — useful so the
 //     HTTP cancel handler can respond 404 cleanly rather than
 //     pretending the cancel succeeded.
 type TransferCancelRegistry struct {

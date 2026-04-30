@@ -80,7 +80,7 @@ func renderInstallCommandsFor(url, targetOS string) (
 	insecureCommands, strictCommands map[string]string,
 	insecureDefault, strictDefault string,
 ) {
-	return renderCommandsFor(url, targetOS, false)
+	return renderCommandsForURLs(url, url, targetOS, false)
 }
 
 // renderBundleCommandsFor is the bundle-shape sibling: same registry,
@@ -90,13 +90,13 @@ func renderBundleCommandsFor(url, targetOS string) (
 	insecureCommands, strictCommands map[string]string,
 	insecureDefault, strictDefault string,
 ) {
-	return renderCommandsFor(url, targetOS, true)
+	return renderCommandsForURLs(url, url, targetOS, true)
 }
 
 // renderCommandsFor is the shared driver. Walks the registry filtered
 // by OS family, runs each entry's render twice (insecure + strict),
 // records the first family entry's render as the family default.
-func renderCommandsFor(url, targetOS string, asBundle bool) (
+func renderCommandsForURLs(insecureURL, strictURL, targetOS string, asBundle bool) (
 	insecure, strict map[string]string,
 	insecureDefault, strictDefault string,
 ) {
@@ -107,8 +107,8 @@ func renderCommandsFor(url, targetOS string, asBundle bool) (
 		if d.osFamily != family {
 			continue
 		}
-		insecureCmd := d.render(url, renderOpts{asBundle: asBundle, insecure: true})
-		strictCmd := d.render(url, renderOpts{asBundle: asBundle, insecure: false})
+		insecureCmd := d.render(insecureURL, renderOpts{asBundle: asBundle, insecure: true})
+		strictCmd := d.render(strictURL, renderOpts{asBundle: asBundle, insecure: false})
 		insecure[d.name] = insecureCmd
 		strict[d.name] = strictCmd
 		if insecureDefault == "" {

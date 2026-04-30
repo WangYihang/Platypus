@@ -59,51 +59,51 @@ type sshExpectation struct {
 type missingPolicy int
 
 const (
-	missingOK     missingPolicy = iota // absence = safe default
-	missingFlag                        // absence = report as if value is the bad default
+	missingOK   missingPolicy = iota // absence = safe default
+	missingFlag                      // absence = report as if value is the bad default
 )
 
 var sshExpectations = []sshExpectation{
 	{
 		directive: "PermitRootLogin", want: "no", severity: SeverityHigh,
-		title: "Root SSH login allowed",
-		desc:  "PermitRootLogin should be 'no' so direct root logins go through sudo / per-user audit trails.",
-		fix:   "Set 'PermitRootLogin no' in /etc/ssh/sshd_config and restart sshd.",
+		title:     "Root SSH login allowed",
+		desc:      "PermitRootLogin should be 'no' so direct root logins go through sudo / per-user audit trails.",
+		fix:       "Set 'PermitRootLogin no' in /etc/ssh/sshd_config and restart sshd.",
 		onMissing: missingFlag,
 	},
 	{
 		directive: "PasswordAuthentication", want: "no", severity: SeverityHigh,
-		title: "Password authentication enabled",
-		desc:  "Password auth exposes accounts to credential-stuffing and slow online brute force; key-based auth is the modern baseline.",
-		fix:   "Set 'PasswordAuthentication no' once you've confirmed every operator has a working SSH key.",
+		title:     "Password authentication enabled",
+		desc:      "Password auth exposes accounts to credential-stuffing and slow online brute force; key-based auth is the modern baseline.",
+		fix:       "Set 'PasswordAuthentication no' once you've confirmed every operator has a working SSH key.",
 		onMissing: missingFlag,
 	},
 	{
 		directive: "PermitEmptyPasswords", want: "no", severity: SeverityCritical,
-		title: "Empty passwords accepted",
-		desc:  "PermitEmptyPasswords=yes lets accounts without a password log in over SSH — the worst-case configuration.",
-		fix:   "Set 'PermitEmptyPasswords no' immediately.",
+		title:     "Empty passwords accepted",
+		desc:      "PermitEmptyPasswords=yes lets accounts without a password log in over SSH — the worst-case configuration.",
+		fix:       "Set 'PermitEmptyPasswords no' immediately.",
 		onMissing: missingOK,
 	},
 	{
 		directive: "X11Forwarding", want: "no", severity: SeverityLow,
-		title: "X11 forwarding enabled",
-		desc:  "X11Forwarding=yes widens the trust boundary to every X client on the remote display; rarely needed on servers.",
-		fix:   "Set 'X11Forwarding no' unless an explicit workflow needs it.",
+		title:     "X11 forwarding enabled",
+		desc:      "X11Forwarding=yes widens the trust boundary to every X client on the remote display; rarely needed on servers.",
+		fix:       "Set 'X11Forwarding no' unless an explicit workflow needs it.",
 		onMissing: missingOK,
 	},
 	{
 		directive: "Protocol", badValues: []string{"1", "1,2", "2,1"}, severity: SeverityCritical,
-		title: "SSH Protocol 1 enabled",
-		desc:  "SSH protocol 1 has been broken since 2001; it must not appear in 'Protocol' lines.",
-		fix:   "Remove the Protocol directive (modern sshd is v2-only) or set 'Protocol 2'.",
+		title:     "SSH Protocol 1 enabled",
+		desc:      "SSH protocol 1 has been broken since 2001; it must not appear in 'Protocol' lines.",
+		fix:       "Remove the Protocol directive (modern sshd is v2-only) or set 'Protocol 2'.",
 		onMissing: missingOK,
 	},
 	{
 		directive: "LoginGraceTime", badValues: []string{"0"}, severity: SeverityMedium,
-		title: "LoginGraceTime disabled",
-		desc:  "LoginGraceTime=0 removes the connection-establishment timeout, helping connection-exhaustion DoS.",
-		fix:   "Set 'LoginGraceTime 30' (or your site standard).",
+		title:     "LoginGraceTime disabled",
+		desc:      "LoginGraceTime=0 removes the connection-establishment timeout, helping connection-exhaustion DoS.",
+		fix:       "Set 'LoginGraceTime 30' (or your site standard).",
 		onMissing: missingOK,
 	},
 }

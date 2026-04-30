@@ -54,9 +54,9 @@ func setupArchiveAgentWithSlicableRead(t *testing.T, agentID string, body []byte
 			}
 			switch hdr.Type {
 			case v2pb.StreamType_STREAM_TYPE_FILE_READ:
-				var req v2pb.FileReadRequest
-				_ = proto.Unmarshal(hdr.Metadata, &req)
-				go func(s io.ReadWriteCloser, r v2pb.FileReadRequest) {
+				req := &v2pb.FileReadRequest{}
+				_ = proto.Unmarshal(hdr.Metadata, req)
+				go func(s io.ReadWriteCloser, r *v2pb.FileReadRequest) {
 					defer s.Close()
 					size := int64(len(body))
 					off := r.Offset
@@ -338,4 +338,3 @@ func TestFileRead_Range_PreviewToken_Works(t *testing.T) {
 		t.Errorf("body = %q; want %q", got, rangeFixture100[10:20])
 	}
 }
-

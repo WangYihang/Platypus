@@ -51,6 +51,7 @@ type MintInstallArtifactInput struct {
 	TargetArch          string        // optional: "amd64", "arm64"
 	TTL                 time.Duration // default DefaultInstallTTL
 	PATTTL              time.Duration // propagated into the minted PAT
+	PATMaxUses          int
 	PATBindingMachineID string
 	PATDescription      string
 	// AutoApprove makes the host that redeems this install link
@@ -88,6 +89,10 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 	if patTTL <= 0 {
 		patTTL = DefaultEnrollmentTokenTTL
 	}
+	patMaxUses := in.PATMaxUses
+	if patMaxUses <= 0 {
+		patMaxUses = 1
+	}
 
 	id, _, hash, full, err := generate(InstallPrefix)
 	if err != nil {
@@ -105,6 +110,7 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 		TargetArch:          in.TargetArch,
 		ServerEndpoint:      in.ServerEndpoint,
 		PATTTLSeconds:       int(patTTL / time.Second),
+		PATMaxUses:          patMaxUses,
 		PATBindingMachineID: in.PATBindingMachineID,
 		PATDescription:      in.PATDescription,
 		AutoApprove:         in.AutoApprove,
@@ -201,7 +207,7 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		IssuedByUser:     tok.IssuedByUser,
 		Description:      patDescFor(tok),
 		TTL:              time.Duration(tok.PATTTLSeconds) * time.Second,
-		MaxUses:          1,
+		MaxUses:          tok.PATMaxUses,
 		BindingMachineID: tok.PATBindingMachineID,
 		AutoApprove:      tok.AutoApprove,
 	})

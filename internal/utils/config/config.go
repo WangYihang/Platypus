@@ -104,4 +104,3 @@ func (o *Options) CAKEKPath() string { return joinPath(o.DataDir, "ca.kek") }
 // by the future local-file distributor (commit 3); the current S3
 // distributor doesn't read from here.
 func (o *Options) ReleasesDir() string { return joinPath(o.DataDir, "releases") }
-

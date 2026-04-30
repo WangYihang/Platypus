@@ -16,7 +16,7 @@ func TestRenderInstallScript_PinsProjectCA(t *testing.T) {
 		PATPlaintext:   "plt_id.secret",
 		ProjectCAPEM:   "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
 	}
-	got := renderInstallScript(r, "distributor.example.com")
+	got := renderInstallScript(r, "distributor.example.com", false)
 
 	if strings.Contains(got, "curl -fsSLk ") {
 		t.Errorf("rendered script still uses 'curl -fsSLk' — TLS verification skipped\n%s", got)
@@ -43,7 +43,7 @@ func TestRenderInstallScriptPS1_PinsProjectCA(t *testing.T) {
 		PATPlaintext:   "plt_id.secret",
 		ProjectCAPEM:   "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
 	}
-	got := renderInstallScriptPS1(r, "distributor.example.com")
+	got := renderInstallScriptPS1(r, "distributor.example.com", false)
 
 	if !strings.Contains(got, "$CaB64 = ") {
 		t.Errorf("PS1 script missing project-CA blob\n%s", got)
@@ -79,7 +79,7 @@ func TestRenderInstallScriptPS1_RefusesInsecureByDefault(t *testing.T) {
 		PATPlaintext:   "plt_id.secret",
 		// ProjectCAPEM intentionally empty.
 	}
-	got := renderInstallScriptPS1(r, "distributor.example.com")
+	got := renderInstallScriptPS1(r, "distributor.example.com", false)
 
 	if strings.Contains(got, "$CaB64 = ") {
 		t.Errorf("PS1 script unexpectedly embeds CA blob when none was configured\n%s", got)
@@ -101,7 +101,7 @@ func TestRenderInstallScript_RefusesInsecureByDefault(t *testing.T) {
 		PATPlaintext:   "plt_id.secret",
 		// ProjectCAPEM intentionally empty.
 	}
-	got := renderInstallScript(r, "distributor.example.com")
+	got := renderInstallScript(r, "distributor.example.com", false)
 
 	if strings.Contains(got, "PLATYPUS_PROJECT_CA=") {
 		t.Errorf("script unexpectedly exports PLATYPUS_PROJECT_CA when none was configured\n%s", got)
@@ -131,7 +131,7 @@ func TestRenderInstallScript_DownloadCascade(t *testing.T) {
 		PATPlaintext:   "plt_id.secret",
 		ProjectCAPEM:   "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
 	}
-	got := renderInstallScript(r, "distributor.example.com")
+	got := renderInstallScript(r, "distributor.example.com", false)
 
 	// The download_with_fallback shell function must be present and
 	// must call download_with_fallback for the binary fetch.
@@ -177,5 +177,35 @@ func TestRenderInstallScript_DownloadCascade(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("cascade missing CA-pin flag for one downloader: %q\n%s", want, got)
 		}
+	}
+}
+
+func TestRenderInstallScript_ForceInsecureDownload(t *testing.T) {
+	r := &enrollment.ConsumeResult{
+		ServerEndpoint: "agent.example.com:13337",
+		PATPlaintext:   "plt_id.secret",
+		ProjectCAPEM:   "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+	}
+	got := renderInstallScript(r, "distributor.example.com", true)
+	if !strings.Contains(got, "TLS_MODE=insecure") {
+		t.Fatalf("script should force insecure TLS mode when download_tls=insecure\n%s", got)
+	}
+	if strings.Contains(got, "TLS_MODE=ca") {
+		t.Fatalf("script should not switch to CA mode when force-insecure is enabled\n%s", got)
+	}
+}
+
+func TestRenderInstallScriptPS1_ForceInsecureDownload(t *testing.T) {
+	r := &enrollment.ConsumeResult{
+		ServerEndpoint: "agent.example.com:13337",
+		PATPlaintext:   "plt_id.secret",
+		ProjectCAPEM:   "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+	}
+	got := renderInstallScriptPS1(r, "distributor.example.com", true)
+	if !strings.Contains(got, "ServerCertificateValidationCallback = { $true }") {
+		t.Fatalf("PS1 script should force callback=true when download_tls=insecure\n%s", got)
+	}
+	if strings.Contains(got, "$CaB64 = ") {
+		t.Fatalf("PS1 script should not install CA-pinning callback in force-insecure mode\n%s", got)
 	}
 }

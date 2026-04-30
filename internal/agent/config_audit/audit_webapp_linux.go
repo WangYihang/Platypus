@@ -147,4 +147,3 @@ func (a webAppAuditor) Run(ctx context.Context) ([]Leak, error) {
 	}
 	return leaks, nil
 }
-

@@ -78,15 +78,15 @@ func TestInfoV1_Happy(t *testing.T) {
 // TestInfoV1_RuntimeAndCounts pins the new status-bar telemetry
 // fields:
 //
-//   1. Runtime stats — goroutines (>0), mem_alloc_bytes (>0), and a
-//      stable started_at_unix that doesn't drift between calls.
-//   2. Cross-project counts — host_count / live_host_count /
-//      total_session_count / live_session_count, threaded through
-//      the Counts func var so production main.go can wire it to
-//      db.Counts() without dragging the storage layer into this
-//      handler.
-//   3. The repo path so the frontend can render clickable
-//      release links.
+//  1. Runtime stats — goroutines (>0), mem_alloc_bytes (>0), and a
+//     stable started_at_unix that doesn't drift between calls.
+//  2. Cross-project counts — host_count / live_host_count /
+//     total_session_count / live_session_count, threaded through
+//     the Counts func var so production main.go can wire it to
+//     db.Counts() without dragging the storage layer into this
+//     handler.
+//  3. The repo path so the frontend can render clickable
+//     release links.
 func TestInfoV1_RuntimeAndCounts(t *testing.T) {
 	r, tok := setupInfoV1Router(t)
 	prev := Counts

@@ -21,11 +21,12 @@ func init() {
 // hashing algorithm. CIS 5.5.1 territory.
 //
 // Skipping intentionally:
-//   · LOGIN_RETRIES — most distros override via PAM, where the truth
-//     lives in /etc/security/faillock.conf or similar; auditing both
-//     sources is its own checker.
-//   · UMASK — not directly a security finding (and the spec values
-//     vary by use case).
+//
+//	· LOGIN_RETRIES — most distros override via PAM, where the truth
+//	  lives in /etc/security/faillock.conf or similar; auditing both
+//	  sources is its own checker.
+//	· UMASK — not directly a security finding (and the spec values
+//	  vary by use case).
 type loginDefsCheck struct {
 	path string
 }
@@ -77,8 +78,8 @@ func (c *loginDefsCheck) Run(_ context.Context) ([]Finding, error) {
 		if minDays < 1 {
 			out = append(out, Finding{
 				ID: "auth.login_defs.pass_min_days", Category: "accounts",
-				Severity: SeverityLow,
-				Title:    "PASS_MIN_DAYS allows immediate password rotation",
+				Severity:    SeverityLow,
+				Title:       "PASS_MIN_DAYS allows immediate password rotation",
 				Description: "Without a minimum age, users (or attackers with a temporary credential) can churn through passwords to escape a history check.",
 				Evidence:    fmt.Sprintf("PASS_MIN_DAYS=%d", minDays),
 				Remediation: "Set PASS_MIN_DAYS to at least 1.",

@@ -195,11 +195,11 @@ func (h *SessionsV2Handler) Dispatch(c *gin.Context) {
 		DurationMs: &dispatchDur,
 		At:         dispatchStart,
 		Meta: map[string]any{
-			"command":      truncateForAudit(req.Command, 256),
-			"timeout_s":    req.Timeout,
-			"dispatched":   len(results),
-			"errors":       errCount,
-			"live_agents":  len(liveAgents),
+			"command":     truncateForAudit(req.Command, 256),
+			"timeout_s":   req.Timeout,
+			"dispatched":  len(results),
+			"errors":      errCount,
+			"live_agents": len(liveAgents),
 		},
 	})
 }

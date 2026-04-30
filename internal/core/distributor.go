@@ -329,8 +329,9 @@ func serveInstallScript(c *gin.Context) {
 		return
 	}
 
+	forceInsecureDownload := strings.EqualFold(c.Query("download_tls"), "insecure")
 	if c.Query("os") == "windows" {
-		script := renderInstallScriptPS1(res, c.Request.Host)
+		script := renderInstallScriptPS1(res, c.Request.Host, forceInsecureDownload)
 		// text/plain so the response stays inside `iwr | iex` happily;
 		// PowerShell doesn't need a special MIME and treats anything
 		// printable as script text.
@@ -339,7 +340,7 @@ func serveInstallScript(c *gin.Context) {
 		return
 	}
 
-	script := renderInstallScript(res, c.Request.Host)
+	script := renderInstallScript(res, c.Request.Host, forceInsecureDownload)
 	c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
 	c.String(http.StatusOK, script)
 }
@@ -356,7 +357,7 @@ func serveInstallScript(c *gin.Context) {
 // Kept deliberately tiny — admins and security reviewers should be able
 // to read the whole thing in one screen and verify it doesn't do
 // anything surprising.
-func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) string {
+func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string, forceInsecureDownload bool) string {
 	endpoint := r.ServerEndpoint
 	host, port := splitHostPort(endpoint)
 	// The distributor base URL (scheme://host[:port]) the agent will
@@ -403,19 +404,30 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 		// verification. We compute it once here so each downloader
 		// branch in download_with_fallback stays branch-light.
 		"TLS_MODE=\"\"",
-		"if [ -n \"${PLATYPUS_PROJECT_CA-}\" ]; then",
-		"  CA_FILE=$(mktemp /tmp/platypus-ca-XXXXXX.pem)",
-		"  printf '%s' \"$PLATYPUS_PROJECT_CA\" | base64 -d > \"$CA_FILE\"",
-		"  TLS_MODE=ca",
-		"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}"+"\" = \"1\" ]; then",
-		"  echo 'warning: PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download' >&2",
-		"  TLS_MODE=insecure",
-		"else",
-		"  echo 'platypus: server has no project CA in this install script and PLATYPUS_INSECURE_DOWNLOAD is not set' >&2",
-		"  echo 'platypus: refusing to download agent binary without TLS trust anchor (MITM risk)' >&2",
-		"  echo 'platypus: ask the server admin to initialise a project CA, or re-run with PLATYPUS_INSECURE_DOWNLOAD=1 if you accept the risk' >&2",
-		"  exit 1",
-		"fi",
+	)
+	if forceInsecureDownload {
+		lines = append(lines,
+			"echo 'warning: insecure download mode forced by install command selection; skipping TLS verification on agent download' >&2",
+			"TLS_MODE=insecure",
+		)
+	} else {
+		lines = append(lines,
+			"if [ -n \"${PLATYPUS_PROJECT_CA-}\" ]; then",
+			"  CA_FILE=$(mktemp /tmp/platypus-ca-XXXXXX.pem)",
+			"  printf '%s' \"$PLATYPUS_PROJECT_CA\" | base64 -d > \"$CA_FILE\"",
+			"  TLS_MODE=ca",
+			"elif [ \"${PLATYPUS_INSECURE_DOWNLOAD-0}"+"\" = \"1\" ]; then",
+			"  echo 'warning: PLATYPUS_INSECURE_DOWNLOAD=1, skipping TLS verification on agent download' >&2",
+			"  TLS_MODE=insecure",
+			"else",
+			"  echo 'platypus: server has no project CA in this install script and PLATYPUS_INSECURE_DOWNLOAD is not set' >&2",
+			"  echo 'platypus: refusing to download agent binary without TLS trust anchor (MITM risk)' >&2",
+			"  echo 'platypus: ask the server admin to initialise a project CA, or re-run with PLATYPUS_INSECURE_DOWNLOAD=1 if you accept the risk' >&2",
+			"  exit 1",
+			"fi",
+		)
+	}
+	lines = append(lines,
 		// download_with_fallback fetches $1 → $2 by trying curl, then
 		// wget, then python3, then fetch (BSD), in that order. Each
 		// branch honours $TLS_MODE. Returns 0 on first success, 1 if
@@ -479,7 +491,7 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string) st
 // Kept short for the same reason the unix script is: an operator (or
 // SOC reviewer) should be able to read the whole thing in one screen
 // and verify it does nothing surprising.
-func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string) string {
+func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string, forceInsecureDownload bool) string {
 	endpoint := r.ServerEndpoint
 	host, port := splitHostPort(endpoint)
 	base := "https://" + distributorHost
@@ -501,7 +513,12 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string)
 		"$AgentToken = " + psQuote(r.PATPlaintext),
 		"$DistBase  = " + psQuote(base),
 	}
-	if r.ProjectCAPEM != "" {
+	if forceInsecureDownload {
+		lines = append(lines,
+			"Write-Warning 'insecure download mode forced by install command selection; skipping TLS verification on agent download'",
+			"[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }",
+		)
+	} else if r.ProjectCAPEM != "" {
 		// CA pinning in PowerShell: install a per-process server-cert
 		// validator that accepts a chain only when it terminates at
 		// the project CA. Mirrors the unix script's `curl --cacert`.

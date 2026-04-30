@@ -8,6 +8,8 @@ interface Props {
     onServerEndpointChange: (v: string) => void;
     ttlSeconds: number | undefined;
     onTtlSecondsChange: (v: number | undefined) => void;
+    patMaxUses: number | undefined;
+    onPatMaxUsesChange: (v: number | undefined) => void;
     autoApprove: boolean;
     onAutoApproveChange: (v: boolean) => void;
     description: string;
@@ -25,6 +27,8 @@ export default function ConnectStep({
     onServerEndpointChange,
     ttlSeconds,
     onTtlSecondsChange,
+    patMaxUses,
+    onPatMaxUsesChange,
     autoApprove,
     onAutoApproveChange,
     description,
@@ -56,6 +60,23 @@ export default function ConnectStep({
                     value={ttlSeconds ?? ""}
                     onChange={(e) =>
                         onTtlSecondsChange(
+                            e.target.value === "" ? undefined : Number(e.target.value),
+                        )
+                    }
+                />
+            </Field>
+
+            <Field
+                label="PAT max uses"
+                hint="How many times the enrollment token minted from this install link can be redeemed. Default 1."
+            >
+                <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="1"
+                    value={patMaxUses ?? ""}
+                    onChange={(e) =>
+                        onPatMaxUsesChange(
                             e.target.value === "" ? undefined : Number(e.target.value),
                         )
                     }

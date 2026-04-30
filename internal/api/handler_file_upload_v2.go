@@ -23,12 +23,12 @@ import (
 // wire shape is the same (PUT body → agent FILE_WRITE stream), but
 // every upload also:
 //
-//   1. creates a file_transfers row in 'running' state;
-//   2. registers a cancel func so /transfers/:id/cancel can tear it
-//      down mid-stream;
-//   3. ticks progress (DB + WS broadcast) every progressFlushBytes /
-//      progressFlushInterval;
-//   4. finalises to done/failed/canceled and writes an activity row.
+//  1. creates a file_transfers row in 'running' state;
+//  2. registers a cancel func so /transfers/:id/cancel can tear it
+//     down mid-stream;
+//  3. ticks progress (DB + WS broadcast) every progressFlushBytes /
+//     progressFlushInterval;
+//  4. finalises to done/failed/canceled and writes an activity row.
 //
 // total_bytes query param sizes the progress bar before the body
 // starts flowing. When 0 the progress bar stays indeterminate; the
@@ -318,4 +318,3 @@ func pathsJSONOne(p string) string {
 	b.WriteString(`"]`)
 	return b.String()
 }
-

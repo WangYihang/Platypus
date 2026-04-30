@@ -30,14 +30,14 @@ const SCAN_KEEP_PER_HOST = 30
 // fleet/host-list endpoint can render severity badges without
 // joining N findings.
 type SecurityScan struct {
-	ID              string
-	ProjectID       string
-	HostID          string
-	StartedAtUnix   int64
-	ElapsedMs       int64
-	Error           string
-	SeverityCounts  SeverityCounts
-	ChecksJSON      string // raw JSON; opaque to the storage layer
+	ID             string
+	ProjectID      string
+	HostID         string
+	StartedAtUnix  int64
+	ElapsedMs      int64
+	Error          string
+	SeverityCounts SeverityCounts
+	ChecksJSON     string // raw JSON; opaque to the storage layer
 }
 
 // SecurityFinding is one row in host_security_findings.

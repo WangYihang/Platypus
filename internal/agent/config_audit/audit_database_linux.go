@@ -279,4 +279,3 @@ func isAlreadyReported(out []Leak, snippet string) bool {
 	}
 	return false
 }
-

@@ -173,4 +173,3 @@ func isOpensshEncrypted(data []byte) bool {
 	const unencryptedMarker = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmU"
 	return !bytes.Contains(data, []byte(unencryptedMarker))
 }
-

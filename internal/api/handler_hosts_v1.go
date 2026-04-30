@@ -60,17 +60,17 @@ type hostResponse struct {
 	ApprovalDecidedBy string     `json:"approval_decided_by,omitempty"`
 	ApprovalReason    string     `json:"approval_reason,omitempty"`
 
-	AgentID         string `json:"agent_id,omitempty"`
-	Arch            string `json:"arch,omitempty"`
-	Platform        string `json:"platform,omitempty"`
-	PlatformFamily  string `json:"platform_family,omitempty"`
-	PlatformVersion string `json:"platform_version,omitempty"`
-	KernelVersion   string `json:"kernel_version,omitempty"`
-	CPUModel        string `json:"cpu_model,omitempty"`
-	NumCPU          int    `json:"num_cpu,omitempty"`
-	MemTotalBytes   int64  `json:"mem_total_bytes,omitempty"`
-	CurrentUser     string `json:"current_user,omitempty"`
-	Timezone        string `json:"timezone,omitempty"`
+	AgentID         string       `json:"agent_id,omitempty"`
+	Arch            string       `json:"arch,omitempty"`
+	Platform        string       `json:"platform,omitempty"`
+	PlatformFamily  string       `json:"platform_family,omitempty"`
+	PlatformVersion string       `json:"platform_version,omitempty"`
+	KernelVersion   string       `json:"kernel_version,omitempty"`
+	CPUModel        string       `json:"cpu_model,omitempty"`
+	NumCPU          int          `json:"num_cpu,omitempty"`
+	MemTotalBytes   int64        `json:"mem_total_bytes,omitempty"`
+	CurrentUser     string       `json:"current_user,omitempty"`
+	Timezone        string       `json:"timezone,omitempty"`
 	PrimaryIP       string       `json:"primary_ip,omitempty"`
 	PrimaryIPInfo   *ipinfo.Info `json:"primary_ip_info,omitempty"`
 	PrimaryMAC      string       `json:"primary_mac,omitempty"`
@@ -388,14 +388,14 @@ func (h *HostsHandler) GetProcesses(c *gin.Context) {
 // findings list, with the proto-style snake_case fields the rest of
 // the API uses.
 type scanResponse struct {
-	ID              string                 `json:"id"`
-	HostID          string                 `json:"host_id"`
-	ProjectID       string                 `json:"project_id"`
-	StartedAtUnix   int64                  `json:"started_at_unix"`
-	ElapsedMs       int64                  `json:"elapsed_ms"`
-	Error           string                 `json:"error,omitempty"`
-	SeverityCounts  storage.SeverityCounts `json:"severity_counts"`
-	Findings        []findingResponse      `json:"findings"`
+	ID             string                 `json:"id"`
+	HostID         string                 `json:"host_id"`
+	ProjectID      string                 `json:"project_id"`
+	StartedAtUnix  int64                  `json:"started_at_unix"`
+	ElapsedMs      int64                  `json:"elapsed_ms"`
+	Error          string                 `json:"error,omitempty"`
+	SeverityCounts storage.SeverityCounts `json:"severity_counts"`
+	Findings       []findingResponse      `json:"findings"`
 	// Checks travels as the raw JSON array stored on the row — the
 	// shape (id/category/status/error/elapsed_ms/finding_count)
 	// matches the agent's CheckResult proto and the UI consumes it
@@ -413,8 +413,8 @@ type scanSummaryResponse struct {
 }
 
 type findingResponse struct {
-	ID            string   `json:"id"`            // storage row id
-	FindingID     string   `json:"finding_id"`    // stable id like "ssh.permitrootlogin"
+	ID            string   `json:"id"`         // storage row id
+	FindingID     string   `json:"finding_id"` // stable id like "ssh.permitrootlogin"
 	CheckID       string   `json:"check_id"`
 	Category      string   `json:"category"`
 	Severity      string   `json:"severity"`

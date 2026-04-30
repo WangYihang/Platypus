@@ -11,9 +11,9 @@ import (
 
 func TestSplitSSHDLine(t *testing.T) {
 	cases := []struct {
-		in            string
-		key, val      string
-		ok            bool
+		in       string
+		key, val string
+		ok       bool
 	}{
 		{"PermitRootLogin no", "PermitRootLogin", "no", true},
 		{"PermitRootLogin\tno", "PermitRootLogin", "no", true},

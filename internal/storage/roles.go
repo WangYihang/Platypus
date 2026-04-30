@@ -272,9 +272,9 @@ func (r *RoleRepo) listPermissions(ctx context.Context, roleSlug string) ([]stri
 
 func scanRole(s rowScanner) (*Role, error) {
 	var (
-		role                                Role
-		desc                                sql.NullString
-		isBuiltin, isGlobal, isProject      int
+		role                           Role
+		desc                           sql.NullString
+		isBuiltin, isGlobal, isProject int
 	)
 	err := s.Scan(
 		&role.Slug, &role.Name, &desc,
