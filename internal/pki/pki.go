@@ -1,9 +1,20 @@
 // Package pki holds the per-project certificate authority + cert
-// issuance logic used by the enrollment flow. It is deliberately small:
-// one self-signed Ed25519 root per project, short-lived leaf certs
-// binding (agent_id, pubkey). No intermediate CAs, no ECDSA, no cross-
-// signing. If the deployment ever needs those we add them here rather
-// than scattering pem encoding across the codebase.
+// issuance logic used by the enrollment flow. It is deliberately
+// small: one self-signed ECDSA P-256 root per project, short-lived
+// leaf certs binding (agent_id, pubkey). No intermediate CAs, no
+// cross-signing.
+//
+// Why ECDSA P-256 (and not Ed25519, the previous choice): browsers,
+// macOS LibreSSL curl, and Windows PowerShell 5.1's Schannel all
+// fail to PARSE Ed25519-signed TLS cert chains — the cert signature
+// algorithm is examined before any user-supplied
+// ServerCertificateValidationCallback / -k callback runs, so the
+// override can't bypass the failure. ECDSA P-256 is universally
+// supported (CA/Browser Forum default, Let's Encrypt, every modern
+// TLS stack since ~2010) and the leaf already uses it. Agent
+// identities, mesh gossip keys, and the agent upgrade-manifest
+// signing key all stay Ed25519 — none of those are TLS server cert
+// signatures parsed by browsers / curl / PowerShell.
 //
 // The private key for each project CA is encrypted on disk using
 // AES-256-GCM with a KEK supplied by the operator via PLATYPUS_CA_KEK
@@ -135,19 +146,19 @@ func (s *Service) EnsureCA(ctx context.Context, projectID, createdBy string) (*s
 	return s.createCA(ctx, projectID, createdBy)
 }
 
-// createCA generates a fresh Ed25519 keypair, self-signs a root cert,
-// encrypts the private key under the KEK, and persists the row.
+// createCA generates a fresh ECDSA P-256 keypair, self-signs a root
+// cert, encrypts the private key under the KEK, and persists the row.
 func (s *Service) createCA(ctx context.Context, projectID, createdBy string) (*storage.ProjectCA, error) {
 	kek, err := readKEK()
 	if err != nil {
 		return nil, err
 	}
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("pki: generate CA key: %w", err)
 	}
-	certPEM, err := makeSelfSignedRoot(projectID, priv, pub)
+	certPEM, err := makeSelfSignedRoot(projectID, priv)
 	if err != nil {
 		return nil, err
 	}
@@ -367,13 +378,9 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 		return nil, err
 	}
 
-	// ECDSA P-256 rather than Ed25519: Chromium refuses TLS server
-	// certs signed with Ed25519 (ERR_SSL_VERSION_OR_CIPHER_MISMATCH
-	// with no further detail) even though the spec permits it, so
-	// mixing an Ed25519 ingress leaf with a browser-driven Web UI
-	// breaks the very path we're trying to support. ECDSA P-256 is
-	// universally supported and the CA's own Ed25519 sig over the
-	// leaf is still fine.
+	// ECDSA P-256 across the board (CA + leaf) — universally
+	// supported by browsers / curl / PowerShell. See the package doc
+	// for why Ed25519 was abandoned for the CA.
 	leafPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("pki: IssueServerCert keygen: %w", err)
@@ -442,11 +449,11 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 
 // signServerLeaf is the sibling of signLeaf that stamps DNS / IP SANs
 // instead of platypus:// URI SANs. hosts can be a mix of hostnames and
-// numeric IPs; net.ParseIP decides the bucket. The leaf's key is
-// ECDSA (see IssueServerCert's rationale); the CA signer stays
-// Ed25519 so this crosses key algorithms, which x509.CreateCertificate
-// accepts as long as both are valid crypto.Signer / crypto.PublicKey.
-func signServerLeaf(caPriv ed25519.PrivateKey, caPEM string, hosts []string, pub *ecdsa.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
+// numeric IPs; net.ParseIP decides the bucket. Both leaf and CA are
+// ECDSA P-256; the resulting leaf's SignatureAlgorithm is
+// ECDSAWithSHA256, which every Schannel / Secure Transport / OpenSSL
+// build parses fine.
+func signServerLeaf(caPriv *ecdsa.PrivateKey, caPEM string, hosts []string, pub *ecdsa.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
 	caCert, err := parseCAFromPEM(caPEM)
 	if err != nil {
 		return "", err
@@ -570,7 +577,7 @@ func aesGCMOpen(kek, nonce, ct []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, ct, nil)
 }
 
-func unsealCAPriv(kek, nonce, ct []byte) (ed25519.PrivateKey, error) {
+func unsealCAPriv(kek, nonce, ct []byte) (*ecdsa.PrivateKey, error) {
 	pkcs8, err := aesGCMOpen(kek, nonce, ct)
 	if err != nil {
 		return nil, fmt.Errorf("pki: unseal CA priv: %w", err)
@@ -579,22 +586,33 @@ func unsealCAPriv(kek, nonce, ct []byte) (ed25519.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pki: parse CA priv: %w", err)
 	}
-	priv, ok := parsed.(ed25519.PrivateKey)
+	priv, ok := parsed.(*ecdsa.PrivateKey)
 	if !ok {
-		return nil, errors.New("pki: CA key isn't Ed25519")
+		return nil, fmt.Errorf("pki: project CA is not ECDSA P-256 (got %T; legacy key types are no longer supported, delete the project_ca row to mint a fresh CA)", parsed)
+	}
+	if priv.Curve != elliptic.P256() {
+		return nil, fmt.Errorf("pki: project CA ECDSA curve must be P-256 (got %s)", priv.Curve.Params().Name)
 	}
 	return priv, nil
 }
 
-// makeSelfSignedRoot produces a 10-year self-signed Ed25519 root with
-// subject CN = "Platypus project <projectID>" and basicConstraints CA=true.
-func makeSelfSignedRoot(projectID string, priv ed25519.PrivateKey, pub ed25519.PublicKey) (string, error) {
+// makeSelfSignedRoot produces a 10-year self-signed ECDSA P-256 root
+// with subject CN = "Platypus project <projectID>" and
+// basicConstraints CA=true. SKID is the SHA-256 hash of the
+// SubjectPublicKeyInfo's BIT STRING, truncated to 20 bytes (the
+// standard form for non-RSA keys).
+func makeSelfSignedRoot(projectID string, priv *ecdsa.PrivateKey) (string, error) {
 	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serial, err := rand.Int(rand.Reader, serialLimit)
 	if err != nil {
 		return "", err
 	}
-	skid := sha256.Sum256(pub)
+	pub := &priv.PublicKey
+	spki, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return "", fmt.Errorf("pki: marshal CA pubkey: %w", err)
+	}
+	skid := sha256.Sum256(spki)
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
@@ -615,10 +633,13 @@ func makeSelfSignedRoot(projectID string, priv ed25519.PrivateKey, pub ed25519.P
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
 }
 
-// signLeaf issues a leaf cert for an agent. The subject CN embeds the
-// agent_id for easy identification in a packet capture / openssl view;
-// the actual trust binding is the pubkey the cert commits to.
-func signLeaf(caPriv ed25519.PrivateKey, caPEM, agentID string, pub ed25519.PublicKey, uris []*url.URL, serial int64, notBefore, notAfter time.Time) (string, error) {
+// signLeaf issues a leaf cert for an agent. The agent's pubkey stays
+// Ed25519; the resulting leaf is Ed25519-public-key + ECDSAWithSHA256
+// signed-by-CA, which Go x509 stitches together fine. The subject CN
+// embeds the agent_id for easy identification in a packet capture /
+// openssl view; the actual trust binding is the pubkey the cert
+// commits to.
+func signLeaf(caPriv *ecdsa.PrivateKey, caPEM, agentID string, pub ed25519.PublicKey, uris []*url.URL, serial int64, notBefore, notAfter time.Time) (string, error) {
 	caCert, err := parseCAFromPEM(caPEM)
 	if err != nil {
 		return "", err

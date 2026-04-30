@@ -11,9 +11,9 @@
 
 CREATE TABLE project_ca (
     project_id      TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
-    cert_pem        TEXT NOT NULL,           -- self-signed Ed25519 root, PEM
+    cert_pem        TEXT NOT NULL,           -- self-signed ECDSA P-256 root, PEM
     privkey_nonce   BLOB NOT NULL,           -- 12-byte AES-GCM nonce
-    privkey_ct      BLOB NOT NULL,           -- AES-GCM(pkcs8-encoded Ed25519 priv)
+    privkey_ct      BLOB NOT NULL,           -- AES-GCM(pkcs8-encoded ECDSA P-256 priv)
     serial_counter  INTEGER NOT NULL DEFAULT 0,
     created_at      DATETIME NOT NULL,
     created_by_user TEXT NOT NULL REFERENCES users(id),

@@ -47,6 +47,14 @@ export interface IssueInstallResponse {
     // MITM-resistant one-liner. Surfaced via the wizard's "Skip
     // TLS verification" toggle when OFF.
     install_commands_strict?: Record<string, string>;
+    // Per-downloader bundle one-liners — `platypus-agent "$(...)"`
+    // (unix) or PowerShell equivalent. Same single-use install
+    // token under the hood (consuming script burns it equally).
+    // The FE used to compose these client-side; now they come from
+    // the BE registry so insecure-flag conventions live in one
+    // place.
+    bundle_commands?: Record<string, string>;
+    bundle_commands_strict?: Record<string, string>;
     // pinst_<base64> self-contained token (when curled). For targets
     // that can't pipe to a shell — paste the resulting token straight
     // into platypus-agent. Same single-use install token as install_command.

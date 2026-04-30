@@ -78,51 +78,10 @@ export default function DownloaderPicker({ value, onChange, available, targetOS 
     );
 }
 
-// bundleOneLinerFor wraps the bundle URL in the equivalent of
-// `platypus-agent "$(<downloader-cmd> <url>)"` for whichever
-// downloader the operator picked. The `insecure` flag mirrors the
-// backend registry: true emits skip-TLS-verification flavour
-// (default for self-signed install endpoints), false emits a strict
-// flavour that relies on the host's system trust store.
-//
-// On Windows the TLS 1.2 force stays in BOTH flavours — Windows
-// PowerShell 5.1 defaults to TLS 1.0 and would otherwise fail with
-// "Could not create SSL/TLS secure channel" before cert validation
-// even runs.
-export function bundleOneLinerFor(
-    downloader: string,
-    bundleURL: string,
-    insecure: boolean,
-): string {
-    switch (downloader) {
-        case "wget":
-            return insecure
-                ? `platypus-agent "$(wget -qO- --no-check-certificate ${bundleURL})"`
-                : `platypus-agent "$(wget -qO- ${bundleURL})"`;
-        case "python3":
-            return insecure
-                ? `platypus-agent "$(python3 -c "import ssl,urllib.request as u;print(u.urlopen('${bundleURL}',context=ssl._create_unverified_context()).read().decode())")"`
-                : `platypus-agent "$(python3 -c "import urllib.request as u;print(u.urlopen('${bundleURL}').read().decode())")"`;
-        case "php":
-            return insecure
-                ? `platypus-agent "$(php -r "echo file_get_contents('${bundleURL}',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));")"`
-                : `platypus-agent "$(php -r "echo file_get_contents('${bundleURL}');")"`;
-        case "ruby":
-            return insecure
-                ? `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}',ssl_verify_mode: 0).read")"`
-                : `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}').read")"`;
-        case "powershell":
-            return insecure
-                ? `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; [Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`
-                : `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
-        case "pwsh":
-            return insecure
-                ? `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -SkipCertificateCheck -UseBasicParsing -Uri '${bundleURL}') }`
-                : `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
-        case "curl":
-        default:
-            return insecure
-                ? `platypus-agent "$(curl -fsSL --tlsv1.2 -k ${bundleURL})"`
-                : `platypus-agent "$(curl -fsSL --tlsv1.2 ${bundleURL})"`;
-    }
-}
+// Bundle one-liner templates used to live here as `bundleOneLinerFor`,
+// duplicating the per-tool insecure-flag conventions from the BE
+// registry (`internal/api/install_downloaders.go`). They now ship in
+// the install-token API response as `bundle_commands` /
+// `bundle_commands_strict`, so the FE just selects from those maps.
+// The single-source-of-truth lives server-side; new downloaders are
+// added once.

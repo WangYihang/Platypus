@@ -76,7 +76,7 @@ func TestEnsureCA_IdempotentAndPersistent(t *testing.T) {
 	if first.CertPEM != second.CertPEM {
 		t.Fatal("EnsureCA minted a second CA; must be idempotent")
 	}
-	// Cert is a valid self-signed Ed25519 root.
+	// Cert is a valid self-signed ECDSA P-256 root.
 	block, _ := pem.Decode([]byte(first.CertPEM))
 	if block == nil {
 		t.Fatal("CA CertPEM decoded empty")
@@ -88,6 +88,15 @@ func TestEnsureCA_IdempotentAndPersistent(t *testing.T) {
 	}
 	if !caCert.IsCA {
 		t.Fatal("CA cert missing BasicConstraintsValid/IsCA")
+	}
+	// Algorithm pin: the CA must be ECDSA P-256 going forward.
+	// Schannel and old LibreSSL can't parse Ed25519-signed TLS chains,
+	// so any silent regression here re-breaks Windows + macOS clients.
+	if caCert.PublicKeyAlgorithm != x509.ECDSA {
+		t.Errorf("CA PublicKeyAlgorithm = %v; want ECDSA", caCert.PublicKeyAlgorithm)
+	}
+	if caCert.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+		t.Errorf("CA SignatureAlgorithm = %v; want ECDSAWithSHA256", caCert.SignatureAlgorithm)
 	}
 	// Private key persisted encrypted.
 	row, err := db.ProjectCA().Get(ctx, proj.ID)
@@ -362,6 +371,54 @@ func TestEnsureCA_KEKFileFallback(t *testing.T) {
 	}
 	if ca1.CertPEM != ca2.CertPEM {
 		t.Fatalf("CA cert changed between calls; file reuse broken")
+	}
+}
+
+// IssueServerCert mints an ingress leaf signed by the project CA.
+// The leaf must be ECDSA P-256 + ECDSAWithSHA256-signed: this is
+// the algorithm Schannel / macOS LibreSSL / browsers all parse, and
+// it's the regression lock for the "Could not create SSL/TLS
+// secure channel" bug class on Windows PowerShell.
+func TestIssueServerCert_IngressLeafIsECDSAWithSHA256(t *testing.T) {
+	svc, _, admin, proj := setup(t)
+	ctx := context.Background()
+
+	if _, err := svc.EnsureCA(ctx, proj.ID, admin.ID); err != nil {
+		t.Fatalf("EnsureCA: %v", err)
+	}
+	res, err := svc.IssueServerCert(ctx, proj.ID, []string{"example.com", "192.168.1.10"}, admin.ID)
+	if err != nil {
+		t.Fatalf("IssueServerCert: %v", err)
+	}
+
+	leafBlock, _ := pem.Decode([]byte(res.CertPEM))
+	if leafBlock == nil {
+		t.Fatal("leaf PEM decoded empty")
+	}
+	leaf, err := x509.ParseCertificate(leafBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse leaf: %v", err)
+	}
+	if leaf.PublicKeyAlgorithm != x509.ECDSA {
+		t.Errorf("leaf PublicKeyAlgorithm = %v; want ECDSA", leaf.PublicKeyAlgorithm)
+	}
+	if leaf.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+		t.Errorf("leaf SignatureAlgorithm = %v; want ECDSAWithSHA256 (Schannel/LibreSSL must be able to parse it)", leaf.SignatureAlgorithm)
+	}
+
+	// Chain validates against the CA — sanity check the new ECDSA
+	// CA actually signs the leaf in a way Go's verifier accepts.
+	caBlock, _ := pem.Decode([]byte(res.CAPem))
+	caCert, _ := x509.ParseCertificate(caBlock.Bytes)
+	pool := x509.NewCertPool()
+	pool.AddCert(caCert)
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		Roots:       pool,
+		CurrentTime: time.Now(),
+		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSName:     "example.com",
+	}); err != nil {
+		t.Fatalf("ingress leaf does not verify against project CA: %v", err)
 	}
 }
 

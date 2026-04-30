@@ -8,10 +8,7 @@ import { IssueInstallResponse } from "../../../../lib/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import DownloaderPicker, {
-    bundleOneLinerFor,
-    defaultDownloader,
-} from "../DownloaderPicker";
+import DownloaderPicker, { defaultDownloader } from "../DownloaderPicker";
 
 interface Props {
     result: IssueInstallResponse;
@@ -45,21 +42,20 @@ export default function RunStep({ result }: Props) {
     const isWindows = (result.target_os ?? "").toLowerCase() === "windows";
     const scriptTabLabel = isWindows ? "iwr | iex" : "curl | sh";
 
-    // Backwards-compat: older server builds that haven't shipped
-    // install_commands yet only return install_command. Synthesise a
-    // single-entry map keyed by the family default so the picker
-    // still has something to select (and renders that default).
-    const commands = useMemo<Record<string, string>>(() => {
+    // Pick the per-flavour map for both the script and bundle tabs.
+    // Both are server-rendered so the FE just selects by downloader
+    // key. If the server is on an older build that hasn't shipped
+    // these maps yet, fall back to the legacy single-string fields
+    // (script) and degrade the bundle one-liner to "unsupported on
+    // this server" — strictly cosmetic since the backend would also
+    // be missing the wizard for them.
+    const scriptCommands = useMemo<Record<string, string>>(() => {
         const fromServer = skipTLS
             ? result.install_commands
             : result.install_commands_strict;
         if (fromServer && Object.keys(fromServer).length > 0) {
             return fromServer;
         }
-        // Fallback to the legacy single-string field. The strict map
-        // can't be synthesised from install_command (server didn't
-        // render that flavour) — degrade gracefully by reusing the
-        // insecure default rather than rendering empty.
         return { [defaultDownloader(result.target_os)]: result.install_command };
     }, [
         skipTLS,
@@ -69,8 +65,15 @@ export default function RunStep({ result }: Props) {
         result.target_os,
     ]);
 
-    const scriptOneLiner = commands[downloader] ?? result.install_command;
-    const bundleOneLiner = bundleOneLinerFor(downloader, result.bundle_url, skipTLS);
+    const bundleCommands = useMemo<Record<string, string>>(() => {
+        const fromServer = skipTLS
+            ? result.bundle_commands
+            : result.bundle_commands_strict;
+        return fromServer ?? {};
+    }, [skipTLS, result.bundle_commands, result.bundle_commands_strict]);
+
+    const scriptOneLiner = scriptCommands[downloader] ?? result.install_command;
+    const bundleOneLiner = bundleCommands[downloader] ?? "";
 
     const bundleHint = isWindows ? (
         <>
@@ -109,7 +112,7 @@ export default function RunStep({ result }: Props) {
                     <OptionsRow
                         downloader={downloader}
                         onDownloaderChange={setDownloader}
-                        available={Object.keys(commands)}
+                        available={Object.keys(scriptCommands)}
                         targetOS={result.target_os}
                         skipTLS={skipTLS}
                         onSkipTLSChange={setSkipTLS}
@@ -124,7 +127,7 @@ export default function RunStep({ result }: Props) {
                     <OptionsRow
                         downloader={downloader}
                         onDownloaderChange={setDownloader}
-                        available={Object.keys(commands)}
+                        available={Object.keys(scriptCommands)}
                         targetOS={result.target_os}
                         skipTLS={skipTLS}
                         onSkipTLSChange={setSkipTLS}

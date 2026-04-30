@@ -17,7 +17,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DownloaderPicker, {
-    bundleOneLinerFor,
     defaultDownloader,
 } from "../../fleet/enroll/DownloaderPicker";
 
@@ -67,10 +66,12 @@ export default function IssuedInstallDialog({
         navigate(`/projects/${projectSlug}/hosts?await=enroll`);
     }
 
-    // Backwards-compat with older server builds: synthesise a
-    // single-entry map from install_command when install_commands is
-    // missing, so the picker still has something to select.
-    const commands = useMemo<Record<string, string>>(() => {
+    // Pick the per-flavour map for both the script and bundle tabs.
+    // Both are server-rendered; the FE just selects by downloader
+    // key. Older server builds without these maps fall back to the
+    // legacy install_command for the script side and degrade the
+    // bundle one-liner gracefully.
+    const scriptCommands = useMemo<Record<string, string>>(() => {
         if (!result) return {};
         const fromServer = skipTLS
             ? result.install_commands
@@ -81,12 +82,18 @@ export default function IssuedInstallDialog({
         return { [defaultDownloader(result.target_os)]: result.install_command };
     }, [result, skipTLS]);
 
+    const bundleCommands = useMemo<Record<string, string>>(() => {
+        if (!result) return {};
+        const fromServer = skipTLS
+            ? result.bundle_commands
+            : result.bundle_commands_strict;
+        return fromServer ?? {};
+    }, [result, skipTLS]);
+
     const scriptOneLiner = result
-        ? commands[downloader] ?? result.install_command
+        ? scriptCommands[downloader] ?? result.install_command
         : "";
-    const bundleOneLiner = result
-        ? bundleOneLinerFor(downloader, result.bundle_url, skipTLS)
-        : "";
+    const bundleOneLiner = bundleCommands[downloader] ?? "";
 
     return (
         <Dialog open={result !== null} onOpenChange={(o) => !o && onClose()}>
@@ -114,7 +121,7 @@ export default function IssuedInstallDialog({
                                 <DownloaderPicker
                                     value={downloader}
                                     onChange={setDownloader}
-                                    available={Object.keys(commands)}
+                                    available={Object.keys(scriptCommands)}
                                     targetOS={result?.target_os}
                                 />
                             </div>
@@ -148,7 +155,7 @@ export default function IssuedInstallDialog({
                                 <DownloaderPicker
                                     value={downloader}
                                     onChange={setDownloader}
-                                    available={Object.keys(commands)}
+                                    available={Object.keys(scriptCommands)}
                                     targetOS={result?.target_os}
                                 />
                             </div>

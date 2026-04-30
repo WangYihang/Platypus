@@ -82,6 +82,14 @@ type issueInstallResponse struct {
 	// switches to this map when the operator turns off the "Skip
 	// TLS verification" toggle.
 	InstallCommandsStrict map[string]string `json:"install_commands_strict"`
+	// BundleCommands and BundleCommandsStrict mirror install_commands
+	// but emit the bundle shape: `platypus-agent "$(<fetch>)"` (unix)
+	// or the PowerShell equivalent. Used when the operator picks the
+	// "offline bundle" tab. Same single-use install token —
+	// consuming the script form burns it just like consuming the
+	// bundle form does.
+	BundleCommands       map[string]string `json:"bundle_commands"`
+	BundleCommandsStrict map[string]string `json:"bundle_commands_strict"`
 	// BundleURL is the alternative single-string bootstrap form.
 	// `curl -fsSL <bundle_url>` returns a `pinst_<base64>` token the
 	// operator pastes straight into `platypus-agent`. Use when the
@@ -172,7 +180,8 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 	}
 	h.audit(c, "install.issue", "install_download", res.DownloadID, projectID, req, "success", "")
 
-	insecure, strict, insecureDefault, _ := h.renderInstallCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
+	scriptInsecure, scriptStrict, scriptDefault, _ := h.renderInstallCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
+	bundleInsecure, bundleStrict, _, _ := h.renderBundleCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
 	c.JSON(http.StatusCreated, issueInstallResponse{
 		DownloadID:            res.DownloadID,
 		DownloadToken:         res.PlaintextDownloadToken,
@@ -180,9 +189,11 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		ServerEndpoint:        res.ServerEndpoint,
 		TargetOS:              res.TargetOS,
 		TargetArch:            res.TargetArch,
-		InstallCommand:        insecureDefault,
-		InstallCommands:       insecure,
-		InstallCommandsStrict: strict,
+		InstallCommand:        scriptDefault,
+		InstallCommands:       scriptInsecure,
+		InstallCommandsStrict: scriptStrict,
+		BundleCommands:        bundleInsecure,
+		BundleCommandsStrict:  bundleStrict,
 		BundleURL:             h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
 	})
 }
@@ -239,6 +250,20 @@ func (h *InstallTokensHandler) renderInstallCommands(
 		url += "?os=windows"
 	}
 	return renderInstallCommandsFor(url, targetOS)
+}
+
+// renderBundleCommands is the bundle-shape sibling — same registry,
+// same flavours, but each command runs `platypus-agent` on the
+// fetched pinst_ token instead of piping it to a shell. The bundle
+// URL uses `?format=bundle` so the distributor returns the bare
+// pinst_ token instead of the install script. The os hint is
+// orthogonal: bundle responses are OS-agnostic (the agent CLI parses
+// the token).
+func (h *InstallTokensHandler) renderBundleCommands(
+	req *http.Request, token, targetOS string,
+) (insecure, strict map[string]string, insecureDefault, strictDefault string) {
+	bundleURL := h.distributorBase(req) + "/api/v1/install/" + token + "?format=bundle"
+	return renderBundleCommandsFor(bundleURL, targetOS)
 }
 
 // List handles GET /projects/:pid/install-artifacts.

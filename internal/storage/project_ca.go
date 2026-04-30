@@ -7,14 +7,15 @@ import (
 	"time"
 )
 
-// ProjectCA is the per-project root certificate authority. Exactly one
-// row per project; the Ed25519 private key is stored AES-GCM-encrypted
-// against an operator-supplied KEK so a raw DB leak can't forge certs.
+// ProjectCA is the per-project root certificate authority. Exactly
+// one row per project; the ECDSA P-256 private key is stored
+// AES-GCM-encrypted against an operator-supplied KEK so a raw DB leak
+// can't forge certs.
 type ProjectCA struct {
 	ProjectID     string
-	CertPEM       string // PEM-encoded self-signed Ed25519 root
+	CertPEM       string // PEM-encoded self-signed ECDSA P-256 root
 	PrivKeyNonce  []byte // 12-byte AES-GCM nonce
-	PrivKeyCT     []byte // AES-GCM-sealed PKCS#8 bytes
+	PrivKeyCT     []byte // AES-GCM-sealed PKCS#8 bytes (ECDSA P-256)
 	SerialCounter int64
 	CreatedAt     time.Time
 	CreatedByUser string

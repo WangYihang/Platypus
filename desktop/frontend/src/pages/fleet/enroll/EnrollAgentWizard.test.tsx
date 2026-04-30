@@ -235,4 +235,60 @@ describe("<EnrollAgentWizard>", () => {
         );
         expect(screen.queryByText("curl-insecure")).not.toBeInTheDocument();
     });
+
+    // Bundle commands now ship in the API response (used to be
+    // composed FE-side via bundleOneLinerFor). Verify the wizard
+    // reads from result.bundle_commands and that the same
+    // downloader picker drives both the script and bundle tabs.
+    it("renders server-supplied bundle commands in the bundle tab", async () => {
+        issueInstallArtifact.mockResolvedValue({
+            download_id: "dl_b",
+            download_token: "dl_b.secret",
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+            server_endpoint: "203.0.113.5:13337",
+            install_command: "curl-script-insecure",
+            install_commands: {
+                curl: "curl-script-insecure",
+                wget: "wget-script-insecure",
+            },
+            install_commands_strict: {
+                curl: "curl-script-strict",
+                wget: "wget-script-strict",
+            },
+            bundle_commands: {
+                curl: "curl-bundle-insecure",
+                wget: "wget-bundle-insecure",
+            },
+            bundle_commands_strict: {
+                curl: "curl-bundle-strict",
+                wget: "wget-bundle-strict",
+            },
+            bundle_url: "https://example.test/install/dl_b?format=bundle",
+        });
+        const user = userEvent.setup();
+        render("/projects/test-project/hosts?enroll=1");
+
+        await screen.findByTestId("enroll-wizard-os");
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-connect");
+        await user.click(screen.getByTestId("enroll-wizard-submit"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
+        );
+
+        // Switch to the bundle tab.
+        await user.click(screen.getByRole("tab", { name: "offline bundle" }));
+        // Bundle tab shows the curl bundle (default downloader = curl, toggle on).
+        await waitFor(() =>
+            expect(screen.getByText("curl-bundle-insecure")).toBeInTheDocument(),
+        );
+        // Toggle off → strict bundle.
+        const toggles = screen.getAllByTestId("skip-tls-toggle");
+        await user.click(toggles[0]);
+        await waitFor(() =>
+            expect(screen.getByText("curl-bundle-strict")).toBeInTheDocument(),
+        );
+    });
 });

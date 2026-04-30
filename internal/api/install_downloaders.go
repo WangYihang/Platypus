@@ -5,28 +5,36 @@ import "strings"
 // downloader is one row in the registry of bootstrap one-liners we
 // hand admins on the enrollment wizard's RunStep. Each entry knows
 // its OS family (so the wizard can filter the dropdown by target_os)
-// and how to wrap a fully-qualified install URL into a tool-specific
-// "fetch + pipe to shell" command.
+// and a `render` function that produces the full one-liner for either
+// the `script` or `bundle` install shape, with or without TLS skip.
 //
-// The render fn takes an `insecure` bool: true emits the
-// skip-cert-verification flavour (for self-signed servers, the
-// default for first-boot deployments), false emits the strict
-// flavour that relies on the host's system trust store. Both
-// flavours are pre-computed server-side and shipped together in the
-// install token response so the wizard can toggle between them
-// without re-issuing the (single-use) install token.
-//
-// Why we keep this server-side instead of letting the FE templatise
-// the URL itself: the install URL ships through `install_command` /
-// `install_commands` fields in the issue-install response, which
-// admins copy verbatim. Generating the strings on the server keeps
-// every shape that gets written to a clipboard reviewable in one
-// place — adding a new downloader is a single registry entry plus a
-// table-driven test row.
+// One entry powers FOUR cells per downloader (script / bundle ×
+// insecure / strict) — the FE used to compose the bundle shape
+// itself, which meant the per-tool insecure-flag conventions lived
+// in two places (BE registry + FE bundleOneLinerFor) and could
+// drift. We collapsed that by moving every clipboard-bound shape
+// here so adding a new downloader is one entry that powers
+// install_commands + install_commands_strict + bundle_commands +
+// bundle_commands_strict.
 type downloader struct {
 	name     string
 	osFamily string // "unix" | "windows"
-	render   func(url string, insecure bool) string
+	render   func(url string, opts renderOpts) string
+}
+
+// renderOpts collapses the {script, bundle} × {insecure, strict}
+// matrix into two flags. Each downloader handles all four corners
+// of that grid in one function.
+type renderOpts struct {
+	// asBundle=true wraps the fetch in `platypus-agent "$(...)"` (or
+	// PowerShell equivalent) so the resulting pinst_ token is fed to
+	// the agent CLI. asBundle=false pipes the fetch into `| sh` /
+	// `| iex` for direct shell execution.
+	asBundle bool
+	// insecure=true emits the per-tool skip-cert flavour
+	// (-k / --no-check-certificate / ServerCertificateValidationCallback).
+	// false omits those flags for prod servers with a real cert.
+	insecure bool
 }
 
 const (
@@ -47,10 +55,6 @@ var installDownloaders = []downloader{
 	{name: "ruby", osFamily: osFamilyUnix, render: renderRuby},
 
 	// --- windows ---
-	// The legacy Windows-PowerShell variant pokes
-	// ServerCertificateValidationCallback because Windows PS 5.1's
-	// Invoke-WebRequest has no -SkipCertificateCheck flag (added in
-	// PS Core 6+); the callback override is the standard workaround.
 	{name: "powershell", osFamily: osFamilyWindows, render: renderPowerShell},
 	{name: "pwsh", osFamily: osFamilyWindows, render: renderPwsh},
 }
@@ -66,7 +70,7 @@ func downloaderOSFamily(targetOS string) string {
 	return osFamilyUnix
 }
 
-// renderInstallCommandsFor returns the per-downloader bootstrap
+// renderInstallCommandsFor returns the per-downloader install
 // commands for the given target OS in BOTH flavours: insecure
 // (skip-cert-verify, default for self-signed) and strict (relies on
 // the system trust store, for prod servers with a real cert). Each
@@ -76,101 +80,158 @@ func renderInstallCommandsFor(url, targetOS string) (
 	insecureCommands, strictCommands map[string]string,
 	insecureDefault, strictDefault string,
 ) {
+	return renderCommandsFor(url, targetOS, false)
+}
+
+// renderBundleCommandsFor is the bundle-shape sibling: same registry,
+// same flavours, but the rendered command runs `platypus-agent` on
+// the fetched pinst_ token instead of piping the body to a shell.
+func renderBundleCommandsFor(url, targetOS string) (
+	insecureCommands, strictCommands map[string]string,
+	insecureDefault, strictDefault string,
+) {
+	return renderCommandsFor(url, targetOS, true)
+}
+
+// renderCommandsFor is the shared driver. Walks the registry filtered
+// by OS family, runs each entry's render twice (insecure + strict),
+// records the first family entry's render as the family default.
+func renderCommandsFor(url, targetOS string, asBundle bool) (
+	insecure, strict map[string]string,
+	insecureDefault, strictDefault string,
+) {
 	family := downloaderOSFamily(targetOS)
-	insecureCommands = make(map[string]string, 4)
-	strictCommands = make(map[string]string, 4)
+	insecure = make(map[string]string, 4)
+	strict = make(map[string]string, 4)
 	for _, d := range installDownloaders {
 		if d.osFamily != family {
 			continue
 		}
-		insecureCmd := d.render(url, true)
-		strictCmd := d.render(url, false)
-		insecureCommands[d.name] = insecureCmd
-		strictCommands[d.name] = strictCmd
+		insecureCmd := d.render(url, renderOpts{asBundle: asBundle, insecure: true})
+		strictCmd := d.render(url, renderOpts{asBundle: asBundle, insecure: false})
+		insecure[d.name] = insecureCmd
+		strict[d.name] = strictCmd
 		if insecureDefault == "" {
-			// First entry of the family wins — see the ordering
-			// rationale in the installDownloaders comment.
 			insecureDefault = insecureCmd
 			strictDefault = strictCmd
 		}
 	}
-	return insecureCommands, strictCommands, insecureDefault, strictDefault
+	return insecure, strict, insecureDefault, strictDefault
 }
 
 // --- per-tool render helpers ---
+//
+// Pattern for unix tools: build the bare "fetch + print to stdout"
+// command, then wrap it in `| sh` (script) or `platypus-agent "$(...)"`
+// (bundle). Pattern for PowerShell tools: build the inner Command
+// string with the SecurityProtocol force + (when insecure) the cert
+// callback, then either pipe to `| iex` or substitute into a
+// platypus-agent.exe invocation.
 
-func renderCurl(url string, insecure bool) string {
+func renderCurl(url string, opts renderOpts) string {
 	// --tlsv1.2 sidesteps macOS LibreSSL curl's TLS 1.0 ClientHello
 	// downgrade on strict-1.2 servers regardless of trust mode; -k
 	// is added only when the operator opted into skip-verify.
 	flag := ""
-	if insecure {
+	if opts.insecure {
 		flag = "-k "
 	}
-	return "curl -fsSL --tlsv1.2 " + flag + url + " | sh"
+	fetch := "curl -fsSL --tlsv1.2 " + flag + url
+	return wrapUnix(fetch, opts.asBundle)
 }
 
-func renderWget(url string, insecure bool) string {
+func renderWget(url string, opts renderOpts) string {
 	flag := ""
-	if insecure {
+	if opts.insecure {
 		flag = "--no-check-certificate "
 	}
-	return "wget -qO- " + flag + url + " | sh"
+	fetch := "wget -qO- " + flag + url
+	return wrapUnix(fetch, opts.asBundle)
 }
 
-func renderPython3(url string, insecure bool) string {
+func renderPython3(url string, opts renderOpts) string {
 	// Single-quoted URL to keep shell-escaping minimal — the install
 	// URL is base32+token-safe so no embedded quotes can leak through.
-	if insecure {
-		return "python3 -c \"import ssl,urllib.request as u;print(u.urlopen('" +
-			url + "',context=ssl._create_unverified_context()).read().decode())\" | sh"
+	var fetch string
+	if opts.insecure {
+		fetch = "python3 -c \"import ssl,urllib.request as u;print(u.urlopen('" +
+			url + "',context=ssl._create_unverified_context()).read().decode())\""
+	} else {
+		fetch = "python3 -c \"import urllib.request as u;print(u.urlopen('" +
+			url + "').read().decode())\""
 	}
-	return "python3 -c \"import urllib.request as u;print(u.urlopen('" +
-		url + "').read().decode())\" | sh"
+	return wrapUnix(fetch, opts.asBundle)
 }
 
-func renderPHP(url string, insecure bool) string {
-	if insecure {
-		return "php -r \"echo file_get_contents('" + url +
-			"',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));\" | sh"
+func renderPHP(url string, opts renderOpts) string {
+	var fetch string
+	if opts.insecure {
+		fetch = "php -r \"echo file_get_contents('" + url +
+			"',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));\""
+	} else {
+		fetch = "php -r \"echo file_get_contents('" + url + "');\""
 	}
-	return "php -r \"echo file_get_contents('" + url + "');\" | sh"
+	return wrapUnix(fetch, opts.asBundle)
 }
 
-func renderRuby(url string, insecure bool) string {
-	if insecure {
-		return "ruby -ropen-uri -e \"puts URI.open('" + url +
-			"',ssl_verify_mode: 0).read\" | sh"
+func renderRuby(url string, opts renderOpts) string {
+	var fetch string
+	if opts.insecure {
+		fetch = "ruby -ropen-uri -e \"puts URI.open('" + url +
+			"',ssl_verify_mode: 0).read\""
+	} else {
+		fetch = "ruby -ropen-uri -e \"puts URI.open('" + url + "').read\""
 	}
-	return "ruby -ropen-uri -e \"puts URI.open('" + url + "').read\" | sh"
+	return wrapUnix(fetch, opts.asBundle)
 }
 
-func renderPowerShell(url string, insecure bool) string {
+func renderPowerShell(url string, opts renderOpts) string {
 	// Windows PowerShell 5.1 defaults SecurityProtocol to Ssl3|Tls
 	// (TLS 1.0), which the ingress listener rejects (MinVersion=
-	// TLS 1.2). Force Tls12 BEFORE iwr regardless of trust mode so
-	// the protocol layer succeeds; ServerCertificateValidationCallback
+	// TLS 1.2). Force Tls12 BEFORE the request regardless of trust
+	// mode so the protocol layer succeeds; ServerCertificateValidationCallback
 	// is added only when skipping verification.
-	tlsForce := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
-	skip := ""
-	if insecure {
-		skip = "[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};"
+	setup := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
+	if opts.insecure {
+		setup += "[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};"
 	}
-	return `powershell -ExecutionPolicy Bypass -Command "` + tlsForce + skip +
-		`iwr -useb '` + url + `' | iex"`
+	if opts.asBundle {
+		// Invoke-RestMethod returns the body as a string; parens make
+		// it a positional arg to platypus-agent.exe. The whole thing
+		// runs in a script block so the SecurityProtocol override is
+		// scoped to this invocation only (defensive — we don't want
+		// to leave the runspace's TLS state mutated).
+		body := setup + "& platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '" + url + "')"
+		return `powershell -ExecutionPolicy Bypass -Command "& { ` + body + ` }"`
+	}
+	body := setup + "iwr -useb '" + url + "' | iex"
+	return `powershell -ExecutionPolicy Bypass -Command "` + body + `"`
 }
 
-func renderPwsh(url string, insecure bool) string {
+func renderPwsh(url string, opts renderOpts) string {
 	// pwsh (PowerShell 7+) inherits system-default protocols (TLS
 	// 1.2/1.3) on every supported Windows; the SecurityProtocol
 	// force is defensive for hosts that disabled 1.2 at the OS
 	// level. -SkipCertificateCheck is the PS 7+ replacement for the
 	// callback hack.
-	tlsForce := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
+	setup := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
 	skip := ""
-	if insecure {
+	if opts.insecure {
 		skip = "-SkipCertificateCheck "
 	}
-	return `pwsh -ExecutionPolicy Bypass -Command "` + tlsForce +
-		`iwr -useb ` + skip + `'` + url + `' | iex"`
+	if opts.asBundle {
+		body := setup + "& platypus-agent.exe (Invoke-RestMethod " + skip + "-UseBasicParsing -Uri '" + url + "')"
+		return `pwsh -ExecutionPolicy Bypass -Command "& { ` + body + ` }"`
+	}
+	body := setup + "iwr -useb " + skip + "'" + url + "' | iex"
+	return `pwsh -ExecutionPolicy Bypass -Command "` + body + `"`
+}
+
+// wrapUnix takes a bare "fetch URL → stdout" command and wraps it in
+// either `| sh` (script) or `platypus-agent "$(...)"` (bundle).
+func wrapUnix(fetch string, asBundle bool) string {
+	if asBundle {
+		return `platypus-agent "$(` + fetch + `)"`
+	}
+	return fetch + " | sh"
 }
