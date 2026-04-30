@@ -59,6 +59,16 @@ export default function NavTabs({ user, currentSlug }: Props) {
                   matchPaths: [`${projectBase}/fleet`, `${projectBase}/hosts`],
               },
               {
+                  // Project-level security tab — cross-host findings
+                  // table. Per-host tab lives at /hosts/:id/security
+                  // (owned by Fleet's matchPaths above), so this tab
+                  // doesn't need to match it.
+                  to: `${projectBase}/security`,
+                  label: "Security",
+                  icon: <I.security className="size-3.5" />,
+                  matchPaths: [`${projectBase}/security`],
+              },
+              {
                   to: `${projectBase}/operations`,
                   label: "Operations",
                   icon: <I.operations className="size-3.5" />,

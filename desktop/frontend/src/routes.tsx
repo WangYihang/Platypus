@@ -20,6 +20,7 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const FleetPage = lazy(() => import("./pages/FleetPage"));
+const SecurityPage = lazy(() => import("./pages/SecurityPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const OperationsPage = lazy(() => import("./pages/OperationsPage"));
@@ -170,6 +171,7 @@ export const routeTree: RouteObject[] = [
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
                     { path: "fleet", element: withSuspense(<FleetPage />) },
+                    { path: "security", element: withSuspense(<SecurityPage />) },
                     // Day-to-day enrollment (issue an install
                     // command for one new host) happens through the
                     // EnrollAgentWizard inside FleetPage's card view
