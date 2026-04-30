@@ -30,6 +30,17 @@ COPY . .
 # //go:embed picks up the real frontend.
 COPY --from=frontend-builder /fe/dist-web/ ./internal/webui/dist/
 
+# Pull the ip2region v4 xdb. The Go binary stopped embedding it (saved
+# ~11 MB on the server binary) and now resolves it at runtime from
+# <exec dir>/data/, the XDG data dir, or ./data/. We stage it under
+# /out/xdb/ here and the server runtime stage copies it next to the
+# binary so the loader's "<exec dir>/data/" probe finds it. The v6 xdb
+# stays opt-in: bind-mount or COPY one in to PLATYPUS_IP2REGION_V6_XDB
+# (or /usr/local/bin/data/ip2region_v6.xdb) at deploy time.
+RUN ./scripts/fetch-ip2region.sh \
+    && mkdir -p /out/xdb \
+    && cp internal/ipinfo/data/ip2region_v4.xdb /out/xdb/
+
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
     -o /out/platypus-server ./cmd/platypus-server
 
@@ -48,6 +59,10 @@ RUN mkdir -p /out/data
 FROM gcr.io/distroless/static-debian12:nonroot AS server
 WORKDIR /app
 COPY --from=builder /out/platypus-server /usr/local/bin/platypus-server
+# ip2region xdb at <exec dir>/data/ — first hit in the runtime
+# resolution order, and unaffected by the platypus_data volume mount
+# at /app/data (which would otherwise shadow it).
+COPY --from=builder /out/xdb/ip2region_v4.xdb /usr/local/bin/data/ip2region_v4.xdb
 COPY --from=builder --chown=nonroot:nonroot /out/data /app/data
 USER nonroot:nonroot
 EXPOSE 9443
