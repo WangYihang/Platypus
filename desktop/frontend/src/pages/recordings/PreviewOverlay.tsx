@@ -37,8 +37,21 @@ export default function PreviewOverlay({ rec, projectId, onClose, onDownload }: 
     const hostLabel = rec.host_alias || rec.host_hostname || rec.host_id || "—";
 
     return (
+        // Backdrop: clicking the dimmed area outside the modal closes
+        // it. We CANNOT block child-click bubbling with stopPropagation
+        // on the inner content — asciinema-player (Solid.js)
+        // delegates click events at the document level (see
+        // delegateEvents() in node_modules/asciinema-player/dist/
+        // opts-*.js). Stopping propagation kills the player's own
+        // click bubble before it reaches document, which silently
+        // breaks the big "Play" overlay (the bug fixed here: click
+        // does nothing, no error). Instead we gate close on the
+        // event target being the backdrop itself, so descendants'
+        // clicks reach document normally.
         <div
-            onClick={onClose}
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
             style={{
                 position: "fixed",
                 inset: 0,
@@ -51,7 +64,6 @@ export default function PreviewOverlay({ rec, projectId, onClose, onDownload }: 
             }}
         >
             <div
-                onClick={(e) => e.stopPropagation()}
                 style={{
                     width: "min(960px, 100%)",
                     maxHeight: "90vh",
