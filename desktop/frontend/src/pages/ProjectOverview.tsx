@@ -128,7 +128,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                 verb: s.disconnected_at ? "closed on" : "opened on",
                 target: <span style={{ color: palette.textPrimary }}>{hostLabel(s.host_id)}</span>,
                 onClick: () =>
-                    navigate(`/projects/${project.slug}/fleet/hosts/${s.host_id}/files`),
+                    navigate(`/projects/${project.slug}/hosts/${s.host_id}/files`),
             }));
     }, [sessions24h, hosts, navigate, project.slug]);
 
@@ -258,9 +258,9 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
                     <AutoGrid minSize={240} gap={3}>
                         <QuickAction
                             icon={<Monitor className="size-4" />}
-                            title="Open Fleet"
-                            description="Table, timeline, and topology views of every host in this project."
-                            onClick={() => navigate(`/projects/${project.slug}/fleet`)}
+                            title="Open Hosts"
+                            description="List and topology views of every host in this project."
+                            onClick={() => navigate(`/projects/${project.slug}/hosts`)}
                         />
                         {onOpenMembers && (
                             <QuickAction

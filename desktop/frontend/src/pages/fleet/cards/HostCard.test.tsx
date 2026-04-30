@@ -10,7 +10,7 @@ import type { Host } from "../../../lib/api";
 // shows the standard card without the action row, rejected adds a
 // muted pill but no actions. The 2026-04 IA pulled approvals into
 // the card itself so admins don't have to detour through
-// /fleet/approvals for the common single-host case.
+// /enrollment/approvals for the common single-host case.
 
 function host(extra: Partial<Host> = {}): Host {
     return {

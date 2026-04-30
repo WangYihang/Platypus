@@ -4,8 +4,6 @@ import {
     useCallback,
     useContext,
     useEffect,
-    useMemo,
-    useRef,
     useState,
 } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
@@ -22,12 +20,10 @@ import { Project, createProject, listProjects } from "../lib/api";
 import { humanizeError } from "../lib/humanizeError";
 import { getSessionUser, getSession } from "../lib/auth";
 import { listServers, setActiveServerId } from "../lib/servers";
-import { cn } from "@/lib/cn";
 import {
     GlobalTerminalProvider,
     useGlobalTerminal,
 } from "../terminal/GlobalTerminalContext";
-import TerminalDrawer, { TAB_BAR_HEIGHT } from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
 import AddServerDialog from "./AddServerDialog";
 import NavTabs from "./NavTabs";
@@ -271,10 +267,10 @@ function CreateProjectDialog({
             onOpenChange(false);
             form.reset({ name: "", slug: "" });
             onCreated();
-            // Land inside the new project on Fleet — Overview at zero
-            // hosts is uninformative; Fleet is the canonical "now
+            // Land inside the new project on Hosts — Overview at zero
+            // hosts is uninformative; Hosts is the canonical "now
             // enrol your first agent" surface.
-            navigate(`/projects/${v.slug}/fleet`);
+            navigate(`/projects/${v.slug}/hosts`);
         } catch (e) {
             toast.error(`create: ${humanizeError(e)}`);
         }
@@ -351,67 +347,17 @@ function CreateProjectDialog({
     );
 }
 
-// MainColumn stacks the main content area on top of the global
-// terminal drawer. The drawer has three regimes:
-//   · no shells visible on this host  → 0 px (drawer hidden, seam invisible)
-//   · drawer collapsed (Ctrl+`)        → TAB_BAR_HEIGHT (tab strip only)
-//   · drawer open                      → drawerHeight (operator-chosen)
-// drawerHeight is owned by GlobalTerminalContext (per-server
-// localStorage) and the seam's pointermove handler feeds drag deltas
-// straight back into setDrawerHeight.
+// MainColumn renders the routed page inside a width-capped column
+// and overlays the TransfersDrawer.
+//
+// The bottom terminal drawer used to live here too, but every shell
+// is host-scoped — it now lives inside HostsShell so it only appears
+// on `/hosts/*` routes. GlobalTerminalProvider stays at this level so
+// open shells survive cross-tab navigation (open a shell, switch to
+// /activity, come back — same shell, same scrollback).
 function MainColumn({ children }: { children: ReactNode }) {
-    const { shells, drawerOpen, drawerHeight, setDrawerHeight } = useGlobalTerminal();
-    const { hostId: routeHostId } = useParams<{
-        projectSlug?: string;
-        hostId?: string;
-        tab?: string;
-    }>();
-    const visibleShells = useMemo(
-        () => shells.filter((s) => s.hostId === routeHostId),
-        [shells, routeHostId],
-    );
-    const drawerActive = !!routeHostId && visibleShells.length > 0;
-    const seamLive = drawerActive && drawerOpen;
-
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    const onSeamPointerDown = useCallback(
-        (event: React.PointerEvent<HTMLDivElement>) => {
-            if (!seamLive) return;
-            event.preventDefault();
-            const seam = event.currentTarget;
-            seam.setPointerCapture(event.pointerId);
-
-            const onMove = (ev: PointerEvent) => {
-                const container = containerRef.current;
-                if (!container) return;
-                const rect = container.getBoundingClientRect();
-                // Drawer height = distance from the pointer to the
-                // bottom of the column. setDrawerHeight clamps to
-                // [MIN_HEIGHT, 0.85 × innerHeight] inside the
-                // GlobalTerminalContext so we don't second-guess it.
-                setDrawerHeight(rect.bottom - ev.clientY);
-            };
-            const onUp = (ev: PointerEvent) => {
-                if (seam.hasPointerCapture(ev.pointerId)) {
-                    seam.releasePointerCapture(ev.pointerId);
-                }
-                window.removeEventListener("pointermove", onMove);
-                window.removeEventListener("pointerup", onUp);
-                window.removeEventListener("pointercancel", onUp);
-            };
-            window.addEventListener("pointermove", onMove);
-            window.addEventListener("pointerup", onUp);
-            window.addEventListener("pointercancel", onUp);
-        },
-        [seamLive, setDrawerHeight],
-    );
-
-    const drawerPx = !drawerActive ? 0 : drawerOpen ? drawerHeight : TAB_BAR_HEIGHT;
-
     return (
         <div
-            ref={containerRef}
             style={{
                 flex: 1,
                 minWidth: 0,
@@ -438,11 +384,6 @@ function MainColumn({ children }: { children: ReactNode }) {
                     style={{
                         maxWidth: 1280,
                         margin: "0 auto",
-                        // height (not minHeight) so child pages that
-                        // rely on `height: 100%` for absolute-positioned
-                        // regions (e.g. FleetPage's three swap-via-
-                        // display panels) keep a defined parent height
-                        // to compute against.
                         height: "100%",
                         display: "flex",
                         flexDirection: "column",
@@ -451,39 +392,6 @@ function MainColumn({ children }: { children: ReactNode }) {
                     {children}
                 </div>
             </main>
-            {/* Drag seam between content and drawer. Hidden when no
-                drawer is active; visible-but-inert when the drawer is
-                collapsed (the tab strip is still showing). The hit
-                area is widened via an `::after` pseudo so the 1-px
-                visible bar is grabbable. */}
-            <div
-                role="separator"
-                aria-orientation="horizontal"
-                aria-disabled={!seamLive}
-                onPointerDown={onSeamPointerDown}
-                className={cn(
-                    "relative h-px shrink-0 touch-none",
-                    drawerActive ? "bg-border" : "invisible",
-                    seamLive
-                        ? "cursor-row-resize hover:bg-primary/40"
-                        : "pointer-events-none",
-                    "after:absolute after:inset-x-0 after:-inset-y-1 after:bg-transparent",
-                )}
-            />
-            {/* TerminalDrawer stays mounted across all three regimes —
-                the xterm WebSocket is owned by its children and would
-                tear down on unmount. We just clamp its height: 0 when
-                inactive, TAB_BAR_HEIGHT when collapsed, drawerHeight
-                when open. overflow:hidden hides the contents at 0 px. */}
-            <div
-                style={{
-                    height: drawerPx,
-                    flexShrink: 0,
-                    overflow: "hidden",
-                }}
-            >
-                <TerminalDrawer />
-            </div>
             <TransfersDrawer />
         </div>
     );

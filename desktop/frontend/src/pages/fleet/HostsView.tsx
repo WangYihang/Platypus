@@ -22,10 +22,10 @@ const VIEWS: readonly HostsLensView[] = ["cards", "table"] as const;
 
 const RAIL_PX = 260;
 
-// HostsView is the Hosts sub-tab body. Two states:
-//   · No host selected (URL `…/fleet/hosts`): full-width list with
+// HostsView is the Hosts list view. Two states:
+//   · No host selected (URL `…/hosts`): full-width list with
 //     a Cards / Table toggle, mounting HostsCardPanel or HostsPanel.
-//   · Host selected (URL `…/fleet/hosts/<id>/<activity>`): a
+//   · Host selected (URL `…/hosts/<id>/<activity>`): a
 //     compact 260 px rail on the left listing every host (status
 //     dot + alias + last-seen), and the rest of the surface filled
 //     by the right pane (HostView, rendered via <Outlet />).
@@ -184,7 +184,7 @@ function HostsMasterDetail({ hostId }: { hostId: string }) {
                             active={h.id === hostId}
                             onClick={() =>
                                 navigate(
-                                    `/projects/${project.slug}/fleet/hosts/${h.id}/files`,
+                                    `/projects/${project.slug}/hosts/${h.id}/files`,
                                 )
                             }
                         />

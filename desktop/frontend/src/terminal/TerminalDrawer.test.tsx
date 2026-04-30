@@ -58,7 +58,7 @@ import { GlobalTerminalProvider, useGlobalTerminal } from "./GlobalTerminalConte
 //
 //   1. With zero shells anywhere, the drawer renders nothing.
 //
-//   2. Off any host detail page (overview / fleet / activities …),
+//   2. Off any host detail page (overview / hosts list / activity …),
 //      the drawer container stays in the DOM — so <Terminal>
 //      children stay mounted — but it is visually hidden
 //      (data-active="false", height 0, visibility:hidden) so the

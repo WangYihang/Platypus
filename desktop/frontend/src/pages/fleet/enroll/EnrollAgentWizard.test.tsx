@@ -54,12 +54,12 @@ beforeEach(() => {
 
 describe("<EnrollAgentWizard>", () => {
     it("stays closed without ?enroll=1", () => {
-        render("/projects/test-project/fleet");
+        render("/projects/test-project/hosts");
         expect(screen.queryByTestId("enroll-wizard")).not.toBeInTheDocument();
     });
 
     it("opens with ?enroll=1 and lands on the OS step", async () => {
-        render("/projects/test-project/fleet?enroll=1");
+        render("/projects/test-project/hosts?enroll=1");
         expect(await screen.findByTestId("enroll-wizard")).toBeInTheDocument();
         // Step indicator marks `os` as the active step.
         const indicator = await screen.findByTestId("enroll-wizard-steps");
@@ -77,7 +77,7 @@ describe("<EnrollAgentWizard>", () => {
             bundle_url: "https://example.test/install/dl_x",
         });
         const user = userEvent.setup();
-        render("/projects/test-project/fleet?enroll=1");
+        render("/projects/test-project/hosts?enroll=1");
 
         // Wait for the OS step to render its picker (depends on the
         // platforms fetch landing).

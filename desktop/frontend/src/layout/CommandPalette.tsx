@@ -169,27 +169,25 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                         />
                         <PaletteItem
                             icon={<Monitor className="size-4" />}
-                            label="Fleet"
-                            shortcut="hosts sessions topology"
-                            onSelect={() => go("fleet")}
+                            label="Hosts"
+                            shortcut="fleet hosts list topology"
+                            onSelect={() => go("hosts")}
                         />
                         <PaletteItem
                             icon={<Clock className="size-4" />}
-                            label="Activities"
-                            shortcut="activity log"
-                            onSelect={() => go("activities")}
+                            label="Activity"
+                            shortcut="activity events sessions recordings transfers log"
+                            onSelect={() => go("activity")}
                         />
                         <PaletteItem
                             icon={<CloudDownload className="size-4" />}
                             label="Enroll agent"
-                            shortcut="enrollment pat install artifacts tokens"
-                            // 2026-04: enrollment is now a wizard
-                            // dialog mounted on FleetPage. We hop to
-                            // /fleet (the surface where the wizard
-                            // lives) with `?enroll=1` so the wizard
-                            // opens on top of whichever Fleet view
-                            // the operator's preference defaults to.
-                            onSelect={() => go("fleet?enroll=1")}
+                            shortcut="enrollment pat install artifacts tokens approvals"
+                            // Enrollment is now a wizard dialog mounted
+                            // on HostsShell — we hop to /hosts with
+                            // `?enroll=1` so the wizard opens on top of
+                            // whichever Hosts view is active.
+                            onSelect={() => go("hosts?enroll=1")}
                         />
                         <PaletteItem
                             icon={<Users className="size-4" />}
@@ -243,7 +241,7 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
                                         onSelect={() =>
                                             run(() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/fleet/hosts/${h.id}/files`,
+                                                    `/projects/${project.slug}/hosts/${h.id}/files`,
                                                 ),
                                             )
                                         }

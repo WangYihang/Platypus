@@ -38,7 +38,7 @@ interface Props {
 
 // ActivityBar is the 44 px vertical strip on the left of HostView,
 // VSCode style. Each icon switches the active activity (URL goes
-// `/fleet/hosts/<id>/<activity>`); icons map to the same domain
+// `/hosts/<id>/<activity>`); icons map to the same domain
 // nouns as the rest of the app via lib/icons.ts.
 //
 // We render plain lucide icons inline rather than going through

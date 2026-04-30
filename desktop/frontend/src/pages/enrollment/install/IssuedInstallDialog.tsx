@@ -51,7 +51,7 @@ export default function IssuedInstallDialog({
 
     function done() {
         onClose();
-        navigate(`/projects/${projectSlug}/fleet?await=enroll`);
+        navigate(`/projects/${projectSlug}/hosts?await=enroll`);
     }
 
     const bundleOneLiner = result

@@ -30,10 +30,10 @@ describe("<HostsView>", () => {
     it("annotates the view toggle with the current default-view preference", () => {
         writePreference("ui.fleet.defaultView", "cards");
         const { container } = renderWithQueryClient(
-            <MemoryRouter initialEntries={["/projects/test-project/fleet/hosts"]}>
+            <MemoryRouter initialEntries={["/projects/test-project/hosts"]}>
                 <Routes>
                     <Route
-                        path="/projects/:projectSlug/fleet/hosts"
+                        path="/projects/:projectSlug/hosts"
                         element={<HostsView />}
                     />
                 </Routes>

@@ -116,7 +116,7 @@ export default function HostsPanel() {
                         description="Hosts appear here once an agent enrolls into this project. Generate an install command or enrollment token, then run the agent on the target machine."
                         action={
                             <Button
-                                onClick={() => navigate(`/projects/${project.slug}/fleet/enroll`)}
+                                onClick={() => navigate(`/projects/${project.slug}/hosts?enroll=1`)}
                             >
                                 Enroll agent
                             </Button>
@@ -161,7 +161,7 @@ export default function HostsPanel() {
                                             className="cursor-pointer"
                                             onClick={() =>
                                                 navigate(
-                                                    `/projects/${project.slug}/fleet/hosts/${h.id}/files`,
+                                                    `/projects/${project.slug}/hosts/${h.id}/files`,
                                                 )
                                             }
                                         >

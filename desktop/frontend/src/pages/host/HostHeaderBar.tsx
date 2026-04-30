@@ -17,7 +17,7 @@ interface Props {
 // HostView. Plays double duty:
 //   · Wide viewport: identity strip beside the master rail.
 //   · Narrow viewport (<960px): the rail hides; the "← Hosts" link
-//     becomes the back button to /fleet/hosts. We render it
+//     becomes the back button to /hosts. We render it
 //     unconditionally so wide-screen muscle memory still has the
 //     escape hatch.
 const HEADER_PX = 40;
@@ -43,7 +43,7 @@ export default function HostHeaderBar({ project, host, actions }: Props) {
             }}
         >
             <Link
-                to={`/projects/${project.slug}/fleet/hosts`}
+                to={`/projects/${project.slug}/hosts`}
                 aria-label="Back to hosts"
                 title="Back to hosts"
                 style={{

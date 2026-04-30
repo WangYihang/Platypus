@@ -11,10 +11,9 @@ interface Tab {
     icon: ReactNode;
     minRole?: SessionUser["role"];
     // matchPaths lets a tab claim "active" for paths nested below it
-    // even when react-router's NavLink isActive wouldn't (e.g. Fleet
-    // owns /hosts/:id; Audit owns /audit/activities, /audit/recordings,
-    // …). Each entry is matched as a strict equal-or-startsWith
-    // ("/<path>/") so /fleet does not light up for /fleet-x.
+    // even when react-router's NavLink isActive wouldn't. Each entry
+    // is matched as strict equal-or-startsWith ("/<path>/") so /hosts
+    // does not light up for /hosts-x.
     matchPaths?: string[];
 }
 
@@ -26,13 +25,14 @@ interface Props {
 // NavTabs renders the second row of the top bar. It picks one of two
 // tab sets depending on whether a project is in scope:
 //
-//   project → Overview · Fleet · Operations · History · Members · Settings
+//   project → Overview · Hosts · Activity · Security · Enrollment · Members · Settings
 //   global  → Projects · Servers · Admin (admin-only)
 //
-// Operations and History split the previous "Audit" hub into write-
-// capable runtime state (Transfers, Enrollment) and read-only audit
-// (Activities, Recordings) respectively. Old /audit/* URLs still
-// resolve via redirects in routes.tsx.
+// Hosts owns the fleet inventory and per-host detail (incl. the
+// terminal drawer). Activity is the project-wide rollup of every
+// per-host time-series resource (Sessions / Events / Recordings /
+// Transfers). Enrollment is the agent-onboarding hub (install
+// commands / tokens / approvals).
 //
 // Admin opens its own sub-tab strip (Users · Access Control ·
 // Settings) under /admin; Servers is the promoted ManageServersDialog
@@ -52,48 +52,28 @@ export default function NavTabs({ user, currentSlug }: Props) {
                   icon: <I.project className="size-3.5" />,
               },
               {
-                  to: `${projectBase}/fleet`,
-                  label: "Fleet",
+                  to: `${projectBase}/hosts`,
+                  label: "Hosts",
                   icon: <I.fleet className="size-3.5" />,
-                  // Fleet owns hosts/sessions/topology/approvals as
-                  // sub-tabs under /fleet, and the legacy /hosts/:id
-                  // deep link redirects under /fleet/hosts/:id/...
-                  matchPaths: [`${projectBase}/fleet`, `${projectBase}/hosts`],
+                  matchPaths: [`${projectBase}/hosts`],
               },
               {
-                  // Project-level security tab — cross-host findings
-                  // table. Per-host tab lives at /hosts/:id/security
-                  // (owned by Fleet's matchPaths above), so this tab
-                  // doesn't need to match it.
+                  to: `${projectBase}/activity`,
+                  label: "Activity",
+                  icon: <I.history className="size-3.5" />,
+                  matchPaths: [`${projectBase}/activity`],
+              },
+              {
                   to: `${projectBase}/security`,
                   label: "Security",
                   icon: <I.security className="size-3.5" />,
                   matchPaths: [`${projectBase}/security`],
               },
               {
-                  to: `${projectBase}/operations`,
-                  label: "Operations",
-                  icon: <I.operations className="size-3.5" />,
-                  // /audit/transfers and /audit/enrollment redirect
-                  // here; light up the tab during the transition so the
-                  // bar doesn't blink to "no tab active".
-                  matchPaths: [
-                      `${projectBase}/operations`,
-                      `${projectBase}/audit/transfers`,
-                      `${projectBase}/audit/enrollment`,
-                      `${projectBase}/enrollment`,
-                  ],
-              },
-              {
-                  to: `${projectBase}/history`,
-                  label: "History",
-                  icon: <I.history className="size-3.5" />,
-                  // /audit and /audit/{activities,recordings} redirect
-                  // here. Match those for the same reason as above.
-                  matchPaths: [
-                      `${projectBase}/history`,
-                      `${projectBase}/audit`,
-                  ],
+                  to: `${projectBase}/enrollment`,
+                  label: "Enrollment",
+                  icon: <I.enrollment className="size-3.5" />,
+                  matchPaths: [`${projectBase}/enrollment`],
               },
               {
                   to: `${projectBase}/members`,

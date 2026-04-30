@@ -4,44 +4,42 @@ import PageShell from "../components/PageShell";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// OperationsPage is the parent route for write-capable runtime
-// surfaces — Transfers (in-flight file moves) and Enrollment (token /
-// install-artifact management). Both used to live under the Audit hub,
-// where the "Audit" label mis-signalled "read-only history". Splitting
-// them out so the IA labels match what the page lets you actually do.
-//
-// Sister surface HistoryPage owns the truly read-only audit views
-// (Activities, Recordings).
-const TABS = ["transfers", "enrollment"] as const;
-type OperationsTab = (typeof TABS)[number];
+// ActivityShell is the project-wide rollup of every per-host time-
+// series resource: live sessions, recorded shells, audit events, and
+// in-flight file transfers. Each sub-tab is the same data the per-host
+// tabs surface, unioned across the fleet.
+const TABS = ["sessions", "events", "recordings", "transfers"] as const;
+type ActivityTab = (typeof TABS)[number];
 
-const TAB_LABELS: Record<OperationsTab, string> = {
+const TAB_LABELS: Record<ActivityTab, string> = {
+    sessions: "Sessions",
+    events: "Events",
+    recordings: "Recordings",
     transfers: "Transfers",
-    enrollment: "Enrollment",
 };
 
-export default function OperationsPage() {
+export default function ActivityShell() {
     const project = useCurrentProject();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const segments = pathname.split("/").filter(Boolean);
-    const last = segments[segments.length - 1] ?? "transfers";
-    const activeTab: OperationsTab = (TABS as readonly string[]).includes(last)
-        ? (last as OperationsTab)
-        : "transfers";
+    const last = segments[segments.length - 1] ?? "sessions";
+    const activeTab: ActivityTab = (TABS as readonly string[]).includes(last)
+        ? (last as ActivityTab)
+        : "sessions";
 
     return (
         <PageShell
-            title="Operations"
-            subtitle={`Live runtime state across ${project.name}`}
+            title="Activity"
+            subtitle={`What's happening across ${project.name}`}
             tabs={
                 <Tabs
                     value={activeTab}
                     onValueChange={(v) =>
-                        navigate(`/projects/${project.slug}/operations/${v}`)
+                        navigate(`/projects/${project.slug}/activity/${v}`)
                     }
                 >
-                    <TabsList className="h-7">
+                    <TabsList className="h-7" data-testid="activity-subtabs">
                         {TABS.map((t) => (
                             <TabsTrigger key={t} value={t}>
                                 {TAB_LABELS[t]}

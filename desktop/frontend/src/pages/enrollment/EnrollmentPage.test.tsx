@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { renderWithQueryClient } from "../../testing/renderWithQueryClient";
 
@@ -34,6 +34,8 @@ vi.mock("../../lib/api", () => ({
         platforms: [{ os: "linux", arch: "amd64" }],
     }),
     listEnrollmentTokens: vi.fn().mockResolvedValue([]),
+    listPendingApprovals: vi.fn().mockResolvedValue([]),
+    pendingApprovalCount: vi.fn().mockResolvedValue(0),
     issueInstallArtifact: vi.fn(),
     issueEnrollmentToken: vi.fn().mockResolvedValue({ token_id: "tok_1", token: "plt_xxx" }),
     revokeInstallArtifact: vi.fn(),
@@ -47,10 +49,23 @@ vi.mock("../../lib/api", () => ({
 
 import EnrollmentPage from "./EnrollmentPage";
 
-function renderPage() {
+function renderPage(initialEntry = "/projects/test-project/enrollment") {
+    // EnrollmentPage reads :tab from useParams(); mount under the
+    // matching route so the tab state is URL-driven the way it is in
+    // production. Without a parent route the params are empty and the
+    // page falls back to the install tab regardless of clicks.
     return renderWithQueryClient(
-        <MemoryRouter>
-            <EnrollmentPage />
+        <MemoryRouter initialEntries={[initialEntry]}>
+            <Routes>
+                <Route
+                    path="/projects/:projectSlug/enrollment"
+                    element={<EnrollmentPage />}
+                />
+                <Route
+                    path="/projects/:projectSlug/enrollment/:tab"
+                    element={<EnrollmentPage />}
+                />
+            </Routes>
         </MemoryRouter>,
     );
 }

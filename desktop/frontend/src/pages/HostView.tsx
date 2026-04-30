@@ -52,7 +52,7 @@ interface Props {
 //   · BottomPanel (collapsible) — Processes / Tunnels for "peek
 //     while editing"; defaults collapsed.
 //
-// URL-driven activity selection so deep links (`/fleet/hosts/<id>/files`)
+// URL-driven activity selection so deep links (`/hosts/<id>/files`)
 // keep working — the slugs match the legacy tab keys (files / info /
 // sessions / processes / security / tunnels) so existing bookmarks
 // resolve.
@@ -107,7 +107,7 @@ export default function HostView({ projectID, hostID }: Props) {
         ? (tabParam as Activity)
         : "files";
     const setActiveActivity = (key: Activity) =>
-        navigate(`/projects/${project.slug}/fleet/hosts/${hostID}/${key}`);
+        navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
 
     // BottomPanel state (open/collapsed, active tab, height) lives
     // here rather than inside BottomPanel because we want it sticky
