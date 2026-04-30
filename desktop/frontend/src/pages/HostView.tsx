@@ -10,9 +10,7 @@ import { Loader2, TerminalSquare } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import EmptyState from "../components/EmptyState";
-import PageHeader from "../components/PageHeader";
 import RefreshButton from "../components/RefreshButton";
-import StatusDot from "../components/StatusDot";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
@@ -25,12 +23,14 @@ import {
 } from "../lib/api";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { qk } from "../lib/queryKeys";
-import { isOnline } from "../lib/time";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 
 import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
+import ActivityBar, { ACTIVITIES, Activity } from "./host/ActivityBar";
+import BottomPanel, { BottomTab } from "./host/BottomPanel";
 import FilesTab from "./host/FilesTab";
+import HostHeaderBar from "./host/HostHeaderBar";
 import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
 import SecurityTab from "./host/SecurityTab";
@@ -38,34 +38,25 @@ import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
 
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Props {
     projectID: string;
     hostID: string;
 }
 
-// HostView's tab order matches the VS Code mental model the R3
-// redesign adopts: file browser is the centerpiece (this is a
-// remote-shell client, the file system is what operators come here
-// to explore), so Files leads. Info / Sessions / Processes / Tunnels
-// follow as auxiliary panels. The route default
-// (`/hosts/:id` → `/hosts/:id/files`) reflects that — landing on a
-// system-info data dump was useful for debugging the agent but
-// less useful for the day-to-day operator workflow.
-const TABS = ["files", "info", "sessions", "processes", "security", "tunnels"] as const;
-type TabKey = (typeof TABS)[number];
-
-// HostView is the main-panel view when a Host is selected. After the
-// 2026-04 split, this file is just the tab orchestrator — each tab's
-// rendering lives in pages/host/<Tab>.tsx so this surface stays
-// focused on:
+// HostView is the right-pane VSCode-style layout for a selected host.
+// Anatomy:
+//   · HostHeaderBar — back link + identity pills + actions
+//   · ActivityBar (44 px) — vertical icons for the 6 activities
+//   · ActivityPane     — renders the active activity body
+//   · BottomPanel (collapsible) — Processes / Tunnels for "peek
+//     while editing"; defaults collapsed.
 //
-//   1. Fetching host / sysInfo / sessions and threading them down
-//   2. Tab routing (URL-driven, deep-link friendly)
-//   3. Per-tab scroll preservation
-//   4. The auto-open-terminal heuristic
-//   5. The page-level header chrome
+// URL-driven activity selection so deep links (`/fleet/hosts/<id>/files`)
+// keep working — the slugs match the legacy tab keys (files / info /
+// sessions / processes / security / tunnels) so existing bookmarks
+// resolve.
+
 export default function HostView({ projectID, hostID }: Props) {
     const queryClient = useQueryClient();
     const hostQuery = useQuery({
@@ -110,36 +101,45 @@ export default function HostView({ projectID, hostID }: Props) {
     const navigate = useNavigate();
     const { shells, openShell } = useGlobalTerminal();
     const { tab: tabParam } = useParams<{ tab?: string }>();
-    const activeTab: TabKey = (TABS as readonly string[]).includes(tabParam ?? "")
-        ? (tabParam as TabKey)
-        : "info";
-    const setActiveTab = (key: string) =>
+    const activeActivity: Activity = (ACTIVITIES as readonly string[]).includes(
+        tabParam ?? "",
+    )
+        ? (tabParam as Activity)
+        : "files";
+    const setActiveActivity = (key: Activity) =>
         navigate(`/projects/${project.slug}/fleet/hosts/${hostID}/${key}`);
 
-    // Per-tab scroll preservation. Each tab panel shares one scroll
-    // container; without help every tab change resets scrollTop to 0.
-    // computeScrollSwap is the pure brain — we read scrollTop off the
-    // container before the tab swap, hand it the leaving tab, and
-    // write back the restored value for the new tab.
+    // BottomPanel state (open/collapsed, active tab, height) lives
+    // here rather than inside BottomPanel because we want it sticky
+    // across activity switches. localStorage persistence is intentionally
+    // out-of-scope for v1 — operators who keep the panel open can re-
+    // expand on next load (one click).
+    const [bottomOpen, setBottomOpen] = useState(false);
+    const [bottomTab, setBottomTab] = useState<BottomTab>("processes");
+    const [bottomHeight, setBottomHeight] = useState(220);
+
+    // Per-activity scroll preservation. Each activity panel shares one
+    // scroll container; without help every switch resets scrollTop to
+    // 0. computeScrollSwap is the pure brain.
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const scrollMapRef = useRef(new Map<string, number>());
     const prevTabRef = useRef<string | null>(null);
     useLayoutEffect(() => {
         const el = scrollRef.current;
         if (!el) {
-            prevTabRef.current = activeTab;
+            prevTabRef.current = activeActivity;
             return;
         }
         const result = computeScrollSwap(
             scrollMapRef.current,
             prevTabRef.current,
             el.scrollTop,
-            activeTab,
+            activeActivity,
         );
         scrollMapRef.current = result.map;
         el.scrollTop = result.scrollTop;
-        prevTabRef.current = activeTab;
-    }, [activeTab]);
+        prevTabRef.current = activeActivity;
+    }, [activeActivity]);
 
     const refresh = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: qk.host(projectID, hostID) });
@@ -174,11 +174,6 @@ export default function HostView({ projectID, hostID }: Props) {
 
     useEffect(() => {
         const live = sessions.filter((s) => !s.disconnected_at);
-        // No live session → blank the pick so tabs render empty state.
-        // Any live session → pin pickedSessionID to host.agent_id (see
-        // comment on the useState above). agent_id is single-valued
-        // per host, so we don't need to disambiguate between concurrent
-        // sessions on the same agent.
         const next = live.length > 0 && host?.agent_id ? host.agent_id : null;
         if (pickedSessionID !== next) {
             setPickedSessionID(next);
@@ -188,10 +183,8 @@ export default function HostView({ projectID, hostID }: Props) {
     // Auto-open a terminal the first time the operator lands on a
     // host that's reachable. The motivating UX: opening a host from
     // Fleet usually means "I need a shell here" — making the operator
-    // click "Open terminal" again duplicates intent. The decision
-    // helper is pure (see ./host/autoOpenShell.ts) so the contract
-    // is pinned by unit tests; this hook only handles the side
-    // effects.
+    // click "Open terminal" again duplicates intent. Decision lives in
+    // a pure helper so the contract stays unit-testable.
     const autoOpenedRef = useRef(false);
     useEffect(() => {
         const action = decideAutoOpenShell({
@@ -203,7 +196,7 @@ export default function HostView({ projectID, hostID }: Props) {
         if (action.kind === "skip") return;
         autoOpenedRef.current = true;
         if (action.kind === "mark") return;
-        if (!host?.agent_id) return; // narrowed by hasAgentID above; satisfies TS
+        if (!host?.agent_id) return;
         openShell({
             projectID: project.id,
             projectSlug: project.slug,
@@ -241,170 +234,178 @@ export default function HostView({ projectID, hostID }: Props) {
 
     const primary =
         host.primary_alias || host.hostname || host.machine_id?.slice(0, 8) || "unknown";
-    const online = isOnline(host.last_seen_at);
     const liveSessions = sessions.filter((s) => !s.disconnected_at);
     const liveCount = liveSessions.length;
-
-    const tabBar = (
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="h-7">
-                <TabsTrigger value="files">Files</TabsTrigger>
-                <TabsTrigger value="info">Info</TabsTrigger>
-                <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
-                <TabsTrigger value="processes">Processes</TabsTrigger>
-                <TabsTrigger value="security">Security</TabsTrigger>
-                <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
-            </TabsList>
-        </Tabs>
-    );
-
     const canOpenShell = liveCount > 0 && !!host.agent_id;
-    // Icon-only buttons here so the page header doesn't grow with the
-    // host alias — the tooltip + aria-label keep the action discoverable
-    // without bloating the chrome.
-    const openTerminalAction = (
-        <Button
-            size="icon-sm"
-            variant="outline"
-            disabled={!canOpenShell}
-            onClick={() => {
-                if (!host.agent_id) return;
-                openShell({
-                    projectID: project.id,
-                    projectSlug: project.slug,
-                    hostId: hostID,
-                    sessionHash: host.agent_id,
-                    label: primary,
-                });
-            }}
-            aria-label="Open terminal"
-            title={canOpenShell ? "Open a shell in the bottom panel" : "No live agent session"}
-        >
-            <TerminalSquare className="size-3.5" />
-        </Button>
+
+    const headerActions = (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
+            <Button
+                size="icon-sm"
+                variant="outline"
+                disabled={!canOpenShell}
+                onClick={() => {
+                    if (!host.agent_id) return;
+                    openShell({
+                        projectID: project.id,
+                        projectSlug: project.slug,
+                        hostId: hostID,
+                        sessionHash: host.agent_id,
+                        label: primary,
+                    });
+                }}
+                aria-label="Open terminal"
+                title={canOpenShell ? "Open a shell in the bottom drawer" : "No live agent session"}
+            >
+                <TerminalSquare className="size-3.5" />
+            </Button>
+            <RefreshButton
+                loading={loading}
+                onClick={refresh}
+                iconOnly
+                aria-label="Refresh"
+                title="Refresh host"
+            />
+        </span>
     );
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PageHeader
-                title={
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
-                        <StatusDot status={online ? "online" : "offline"} />
-                        <span>{primary}</span>
-                    </span>
-                }
-                subtitle={
-                    <span>
-                        {liveCount} active · {host.os || "unknown OS"}
-                        {host.fingerprint_fallback && " · fp-fallback"}
-                    </span>
-                }
-                actions={
-                    <span style={{ display: "inline-flex", gap: space[2] }}>
-                        {openTerminalAction}
-                        <RefreshButton
-                            loading={loading}
-                            onClick={refresh}
-                            iconOnly
-                            aria-label="Refresh"
-                            title="Refresh host"
-                        />
-                    </span>
-                }
-                tabs={tabBar}
-            />
-            <div
-                ref={scrollRef}
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    // Files tab manages its own internal scroll (file
-                    // list and preview each scroll independently), so
-                    // the outer container must not also scroll — that
-                    // would race with the inner regions and trap the
-                    // toggle/breadcrumb chrome below the fold. Other
-                    // tabs are card stacks that need outer scroll.
-                    overflow: activeTab === "files" ? "hidden" : "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                }}
-            >
-                {/* Each tab panel stays mounted (via display:none) so
-                    expensive children (Files tree, Processes poller,
-                    etc.) don't rebuild state on tab switch. */}
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+            <HostHeaderBar project={project} host={host} actions={headerActions} />
+            <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+                <ActivityBar
+                    active={activeActivity}
+                    onSelect={setActiveActivity}
+                    badges={{ sessions: sessions.length || undefined }}
+                />
                 <div
                     style={{
-                        display: activeTab === "files" ? "flex" : "none",
-                        flexDirection: "column",
                         flex: 1,
+                        minWidth: 0,
                         minHeight: 0,
-                        padding: space[3],
+                        display: "flex",
+                        flexDirection: "column",
                     }}
                 >
-                    {pickedSessionID ? (
-                        <FilesTab
-                            projectID={projectID}
-                            sessionHash={pickedSessionID}
-                            host={host}
-                        />
-                    ) : (
-                        <NoLiveSessionNote />
-                    )}
-                </div>
-                <div
-                    style={{
-                        display: activeTab === "sessions" ? "block" : "none",
-                        padding: space[4],
-                    }}
-                >
-                    <SessionsTab sessions={sessions} />
-                </div>
-                <div
-                    style={{
-                        display: activeTab === "info" ? "block" : "none",
-                        padding: space[4],
-                    }}
-                >
-                    <InfoTab
-                        host={host}
-                        sysInfo={sysInfo}
-                        sysInfoError={sysInfoError}
-                        sysInfoLoading={sysInfoLoading}
-                        onRefreshSysInfo={refreshSysInfo}
-                    />
-                </div>
-                <div
-                    style={{
-                        display: activeTab === "processes" ? "block" : "none",
-                        padding: space[4],
-                    }}
-                >
-                    <ProcessesTab
-                        projectID={projectID}
-                        hostID={hostID}
-                        active={activeTab === "processes"}
-                    />
-                </div>
-                <div
-                    style={{
-                        display: activeTab === "security" ? "block" : "none",
-                        padding: space[4],
-                    }}
-                >
-                    <SecurityTab
-                        projectID={projectID}
-                        hostID={hostID}
-                        active={activeTab === "security"}
-                    />
-                </div>
-                <div
-                    style={{
-                        display: activeTab === "tunnels" ? "block" : "none",
-                        padding: space[4],
-                        height: "100%",
-                    }}
-                >
-                    <TunnelsTab projectID={projectID} hostID={hostID} />
+                    <div
+                        ref={scrollRef}
+                        style={{
+                            flex: 1,
+                            minHeight: 0,
+                            // Files manages its own internal scroll (file
+                            // list and viewer scroll independently); the
+                            // outer container must not race with the inner
+                            // regions or the toggle/breadcrumb chrome
+                            // would slide below the fold. Other activities
+                            // are card stacks that need outer scroll.
+                            overflow: activeActivity === "files" ? "hidden" : "auto",
+                            display: "flex",
+                            flexDirection: "column",
+                        }}
+                    >
+                        {/* Each activity stays mounted (display:none on
+                            the inactive ones) so expensive children (file
+                            tree, processes poller, …) keep their state on
+                            switch. */}
+                        <div
+                            style={{
+                                display: activeActivity === "files" ? "flex" : "none",
+                                flexDirection: "column",
+                                flex: 1,
+                                minHeight: 0,
+                                padding: space[3],
+                            }}
+                        >
+                            {pickedSessionID ? (
+                                <FilesTab
+                                    projectID={projectID}
+                                    sessionHash={pickedSessionID}
+                                    host={host}
+                                />
+                            ) : (
+                                <NoLiveSessionNote />
+                            )}
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "info" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <InfoTab
+                                host={host}
+                                sysInfo={sysInfo}
+                                sysInfoError={sysInfoError}
+                                sysInfoLoading={sysInfoLoading}
+                                onRefreshSysInfo={refreshSysInfo}
+                            />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "sessions" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <SessionsTab sessions={sessions} />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "processes" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <ProcessesTab
+                                projectID={projectID}
+                                hostID={hostID}
+                                active={activeActivity === "processes"}
+                            />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "security" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <SecurityTab
+                                projectID={projectID}
+                                hostID={hostID}
+                                active={activeActivity === "security"}
+                            />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "tunnels" ? "block" : "none",
+                                padding: space[4],
+                                height: "100%",
+                            }}
+                        >
+                            <TunnelsTab projectID={projectID} hostID={hostID} />
+                        </div>
+                    </div>
+                    <BottomPanel
+                        open={bottomOpen}
+                        activeTab={bottomTab}
+                        onActiveTabChange={setBottomTab}
+                        onToggle={() => setBottomOpen((o) => !o)}
+                        onClose={() => setBottomOpen(false)}
+                        height={bottomHeight}
+                        onHeightChange={setBottomHeight}
+                    >
+                        {bottomTab === "processes" && (
+                            <div style={{ padding: space[3] }}>
+                                <ProcessesTab
+                                    projectID={projectID}
+                                    hostID={hostID}
+                                    active={bottomOpen && bottomTab === "processes"}
+                                />
+                            </div>
+                        )}
+                        {bottomTab === "tunnels" && (
+                            <div style={{ padding: space[3], height: "100%" }}>
+                                <TunnelsTab projectID={projectID} hostID={hostID} />
+                            </div>
+                        )}
+                    </BottomPanel>
                 </div>
             </div>
         </div>
