@@ -197,10 +197,20 @@ func (h *InstallTokensHandler) distributorBase(req *http.Request) string {
 //     every supported version.) The distributor serves a PowerShell
 //     script when ?os=windows is set on the install endpoint.
 //
-//   - everything else (linux/darwin/*bsd/…/empty) → `curl -fsSL ... | sh`
+//   - everything else (linux/darwin/*bsd/…/empty) → `curl -fsSL --tlsv1.2 ... | sh`
 //     The distributor's default response is a POSIX shell script which
 //     auto-detects GOOS/GOARCH at runtime, so no explicit os hint is
 //     needed for the unix family.
+//
+// Why --tlsv1.2: macOS ships curl linked against LibreSSL / Secure
+// Transport, which under some IP-literal / self-signed / ALPN
+// combinations advertises a TLS 1.0 floor in its ClientHello. The
+// ingress listener pins MinVersion=TLS 1.2 (internal/ingress/tls.go),
+// so that handshake gets rejected and the operator sees a cryptic
+// "SSL_ERROR_PROTOCOL_VERSION_ALERT". Forcing curl to start at TLS 1.2
+// sidesteps the downgrade entirely. On Linux / modern curl the flag
+// is a no-op (1.2 is already the floor), so we ship it
+// unconditionally rather than sniffing OS at render time.
 //
 // Preference order for the distributor base URL: see distributorBase.
 // The resulting command is safe to copy into a terminal — no shell
@@ -212,7 +222,7 @@ func (h *InstallTokensHandler) renderInstallCommand(req *http.Request, token, ta
 		url := base + "/api/v1/install/" + token + "?os=windows"
 		return `powershell -ExecutionPolicy Bypass -Command "iwr -useb '` + url + `' | iex"`
 	}
-	return "curl -fsSL " + base + "/api/v1/install/" + token + " | sh"
+	return "curl -fsSL --tlsv1.2 " + base + "/api/v1/install/" + token + " | sh"
 }
 
 // List handles GET /projects/:pid/install-artifacts.
