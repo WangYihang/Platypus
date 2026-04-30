@@ -2,32 +2,45 @@ package mesh
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
-	"net"
+	"net/http"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/coder/websocket"
 )
+
+func marshalEd25519PKCS8(priv ed25519.PrivateKey) ([]byte, error) {
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, fmt.Errorf("mesh: marshal PKCS8: %w", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
+}
 
 const (
 	dialTimeout    = 8 * time.Second
 	minRetryDelay  = 5 * time.Second
 	maxRetryDelay  = 5 * time.Minute
-	redialGracePct = 10 // ±10% jitter around the backoff timer
+	redialGracePct = 10
+
+	meshLinkPath = "/api/v1/mesh/link"
 )
 
-// Dialer owns all outbound connection attempts for a Node. Each known
-// address is tracked in a small state machine: idle -> dialing -> linked
-// or idle -> dialing -> backoff (on failure). Once a Link is established
-// via an inbound or outbound attempt, Dialer stops trying alternate
-// addresses for that peer until the link drops.
 type Dialer struct {
 	node   *Node
 	logger *slog.Logger
 
 	mu    sync.Mutex
-	tasks map[string]*dialTask // key = "node_id|address"
+	tasks map[string]*dialTask
 }
 
 type dialTask struct {
@@ -45,9 +58,6 @@ func newDialer(node *Node) *Dialer {
 	}
 }
 
-// EnsurePeer schedules (or adjusts) a dial task for each candidate
-// address of the given peer. It's a no-op if we already have a live link
-// to that peer.
 func (d *Dialer) EnsurePeer(ctx context.Context, nodeID string, addresses []string) {
 	if nodeID == "" || nodeID == d.node.identity.NodeID {
 		return
@@ -78,8 +88,6 @@ func (d *Dialer) EnsurePeer(ctx context.Context, nodeID string, addresses []stri
 	}
 }
 
-// StopPeer cancels any in-flight dial tasks for a peer (called when the
-// peer went away or we already linked successfully).
 func (d *Dialer) StopPeer(nodeID string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -132,62 +140,133 @@ func (d *Dialer) run(ctx context.Context, t *dialTask) {
 }
 
 func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
-	tlsCfg, err := selfSignedTLSConfig()
+	tlsCfg, captured, err := peerDialTLSConfig(d.node.identity, d.node.trustedCAs)
 	if err != nil {
-		return err
+		return fmt.Errorf("mesh dial tls config: %w", err)
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	raw, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", t.addr)
-	if err != nil {
-		return err
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsCfg,
+		},
 	}
-	conn := tls.Client(raw, tlsCfg)
-	if err := conn.HandshakeContext(dialCtx); err != nil {
-		closeConn(raw)
-		return fmt.Errorf("tls handshake: %w", err)
+	wsURL := "wss://" + t.addr + meshLinkPath
+	wsConn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		HTTPClient:   httpClient,
+		Subprotocols: []string{LinkSubprotocol},
+	})
+	if err != nil {
+		return fmt.Errorf("mesh ws dial: %w", err)
 	}
 
-	// Bounded deadline for the app-level mesh handshake.
-	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
-
-	codec := newEnvCodec(conn)
-	result, err := PerformClientHandshake(ctx, codec, d.node.identity, d.node.psk, d.node.advertisedAddrs())
+	leaf := captured.Load()
+	if leaf == nil {
+		_ = wsConn.CloseNow()
+		return errors.New("mesh dial: tls verify did not capture peer cert")
+	}
+	peerNodeID, err := meshNodeIDFromVerifiedCert(leaf)
 	if err != nil {
-		closeConn(conn)
+		_ = wsConn.CloseNow()
 		return err
 	}
-	if result.PeerNodeID == d.node.identity.NodeID {
-		closeConn(conn)
-		return fmt.Errorf("dialed self")
+	if peerNodeID == d.node.identity.NodeID {
+		_ = wsConn.CloseNow()
+		return errors.New("mesh dial: peer is self")
 	}
-	if t.nodeID != "" && result.PeerNodeID != t.nodeID {
-		// The address advertised this NodeID but someone else answered.
-		// We still completed a valid mesh handshake, so adopt the link
-		// under the *real* NodeID — but don't short-circuit our attempts
-		// for the original target.
+	if t.nodeID != "" && t.nodeID != peerNodeID {
 		d.logger.Info("mesh dial: peer node_id mismatch",
 			slog.String("want", t.nodeID),
-			slog.String("got", result.PeerNodeID))
+			slog.String("got", peerNodeID))
 	}
-	_ = conn.SetDeadline(time.Time{})
+	peerPubkey, ok := leaf.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		_ = wsConn.CloseNow()
+		return errors.New("mesh dial: peer cert must use Ed25519 key")
+	}
+	leafPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf.Raw})
 
-	link := newLink(conn, codec, result.PeerNodeID, result.PeerPublicKey, result.PeerAddresses, d.node)
-	if !d.node.adoptLink(link) {
-		// Already had a link to this peer (probably inbound beat us here).
-		closeConn(conn)
-		return nil
-	}
-	go link.run()
+	nc := NetConnFromWebSocket(context.Background(), wsConn)
+	go d.node.AdoptStream(context.Background(), nc, peerNodeID, peerPubkey, leafPEM)
 	return nil
+}
+
+// peerDialTLSConfig builds a tls.Config for outbound mesh dials. Uses
+// the agent's project-CA-signed cert as client cert; verifies the
+// peer's chain against the project CA but skips hostname matching
+// (mesh peers carry only platypus:// URI SANs, not DNS / IP). The
+// captured atomic.Pointer holds the verified peer cert post-handshake.
+func peerDialTLSConfig(id *Identity, caPool *x509.CertPool) (*tls.Config, *atomic.Pointer[x509.Certificate], error) {
+	if id == nil || len(id.CertPEM) == 0 || id.PrivateKey == nil {
+		return nil, nil, errors.New("mesh: identity must carry CertPEM + PrivateKey")
+	}
+	if caPool == nil {
+		return nil, nil, errors.New("mesh: trustedCAs required for mesh dial")
+	}
+	keyDER, err := marshalEd25519PKCS8(id.PrivateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := tls.X509KeyPair(id.CertPEM, keyDER)
+	if err != nil {
+		return nil, nil, fmt.Errorf("mesh: tls X509KeyPair: %w", err)
+	}
+	captured := &atomic.Pointer[x509.Certificate]{}
+	cfg := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: true, // hostname/IP match skipped; chain verified manually below
+		MinVersion:         tls.VersionTLS12,
+		NextProtos:         []string{"h2", "http/1.1"},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return errors.New("mesh: no peer cert")
+			}
+			leaf := cs.PeerCertificates[0]
+			intermediates := x509.NewCertPool()
+			for _, c := range cs.PeerCertificates[1:] {
+				intermediates.AddCert(c)
+			}
+			if _, err := leaf.Verify(x509.VerifyOptions{
+				Roots:         caPool,
+				Intermediates: intermediates,
+				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			}); err != nil {
+				return fmt.Errorf("mesh: peer chain verify: %w", err)
+			}
+			captured.Store(leaf)
+			return nil
+		},
+	}
+	return cfg, captured, nil
+}
+
+func meshNodeIDFromVerifiedCert(leaf *x509.Certificate) (string, error) {
+	for _, u := range leaf.URIs {
+		if u.Scheme != "platypus" {
+			continue
+		}
+		id := strings.TrimPrefix(u.Path, "/")
+		switch u.Host {
+		case "agent":
+			if id == "" {
+				return "", errors.New("mesh: platypus://agent/ SAN has empty id")
+			}
+			return id, nil
+		case "server":
+			if id == "" {
+				return "", errors.New("mesh: platypus://server/ SAN has empty id")
+			}
+			return "server-" + id, nil
+		}
+	}
+	return "", errors.New("mesh: peer cert missing platypus:// URI SAN")
 }
 
 func dialKey(nodeID, addr string) string {
 	return nodeID + "|" + addr
 }
 
-// jittered adds ±(redialGracePct)% jitter to avoid thundering-herd
-// reconnects when a shared upstream flaps.
 func jittered(d time.Duration) time.Duration {
 	if d <= 0 {
 		return minRetryDelay
@@ -196,7 +275,6 @@ func jittered(d time.Duration) time.Duration {
 	if jitter <= 0 {
 		return d
 	}
-	// Pseudo-random but cheap: derive from current nanos.
 	offset := (time.Now().UnixNano() % (2 * jitter)) - jitter
 	return d + time.Duration(offset)
 }

@@ -79,6 +79,18 @@ func randAgentID(t *testing.T) string {
 	return "agent-" + hex.EncodeToString(b[:])
 }
 
+// mustIdentity mints a unique cert-bound Identity for tests.
+// Wraps mintLeafFromTestCA + LoadIdentityFromCert.
+func mustIdentity(t *testing.T) *Identity {
+	t.Helper()
+	certPEM, keyPEM := mintLeafFromTestCA(t, randAgentID(t))
+	id, err := LoadIdentityFromCert(certPEM, keyPEM)
+	if err != nil {
+		t.Fatalf("LoadIdentityFromCert: %v", err)
+	}
+	return id
+}
+
 // mintLeafFromTestCA mints a fresh leaf signed by the shared test
 // CA and returns (certPEM, keyPEM) in the formats
 // LoadIdentityFromCert expects. The SAN carries

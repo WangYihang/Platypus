@@ -9,18 +9,10 @@ import (
 	"fmt"
 )
 
-// ALPNAgentV2 is the ALPN protocol advertised on the agent-link TLS
-// connection. We negotiate http/1.1 so the connection lands on the
-// unified ingress's HTTP listener, where gin serves /api/v1/agent/link
-// and upgrades to WebSocket. Pinning "ptps-agent" (the legacy v1
-// Envelope identifier) routes the connection into the dispatcher's
-// OnAgent handler instead, which v2 deployments leave unset — the
-// server silently closes the TLS session and the agent sees EOF.
-//
-// WebSocket over h2 needs extended CONNECT support that
-// coder/websocket doesn't implement, so advertising "h2" is not an
-// option here. http/1.1 matches what the websocket handshake speaks.
-const ALPNAgentV2 = "http/1.1"
+// ALPNAgent is the ALPN value the agent advertises on its outbound
+// link. WebSocket over h2 needs extended CONNECT (which
+// coder/websocket doesn't implement), so we pin http/1.1.
+const ALPNAgent = "http/1.1"
 
 // BuildDialerTLSConfig produces a *tls.Config ready for tls.Dial
 // from an on-disk agent Identity. The caller uses this as the
@@ -30,7 +22,7 @@ const ALPNAgentV2 = "http/1.1"
 // Invariants:
 //   - Certificates[0] is the agent's own leaf + private key.
 //   - RootCAs is a pool containing only the project CA.
-//   - NextProtos advertises ALPNAgentV2.
+//   - NextProtos advertises ALPNAgent.
 //   - MinVersion = TLS 1.2.
 //   - InsecureSkipVerify is hard-coded false; callers that want
 //     to skip verification should do so at a higher layer during
@@ -57,7 +49,7 @@ func BuildDialerTLSConfig(id *Identity) (*tls.Config, error) {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      pool,
-		NextProtos:   []string{ALPNAgentV2},
+		NextProtos:   []string{ALPNAgent},
 		MinVersion:   tls.VersionTLS12,
 	}, nil
 }

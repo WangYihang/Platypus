@@ -17,17 +17,9 @@ type SettingsProvider interface {
 	MeshPeers() []string
 }
 
-// Config collects the runtime knobs for a mesh Node. Identity,
-// TrustedCAs, and either PSK or PSKFile are required; the rest
-// accept zero values.
+// Config collects the runtime knobs for a mesh Node. Identity and
+// TrustedCAs are required; everything else accepts zero values.
 type Config struct {
-	// PSKFile is the pre-shared key path. Loaded lazily by
-	// LoadOrCreatePSK if the caller didn't supply PSK directly.
-	PSKFile string
-
-	// PSK overrides PSKFile. 16+ bytes.
-	PSK []byte
-
 	// Identity is the cert-bound mesh identity (required). Callers
 	// produce one via LoadIdentityFromCert.
 	Identity *Identity

@@ -46,11 +46,10 @@ type CertSource struct {
 	PersistTo PersistTarget
 }
 
-// BuildTLSConfig returns a *tls.Config wired up for ALPN dispatch. On
-// a self-signed fallback it logs a prominent warning — admins who see
-// this in production need to provision a real certificate because
-// browsers, agents, and the curl | sh bootstrap all hit the same port
-// now.
+// BuildTLSConfig returns the server's *tls.Config. On a self-signed
+// fallback it logs a prominent warning — admins who see this in
+// production need to provision a real cert because browsers, agents,
+// and the curl | sh bootstrap all hit the same HTTPS port.
 func BuildTLSConfig(src CertSource, protocols []string) (*tls.Config, error) {
 	if len(protocols) == 0 {
 		protocols = DefaultProtocols

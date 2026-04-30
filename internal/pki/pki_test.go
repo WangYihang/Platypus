@@ -166,6 +166,22 @@ func TestIssueAgentCert_ValidChain(t *testing.T) {
 			t.Fatalf("leaf missing expected URI SAN prefix %q; got %v", want, leaf.URIs)
 		}
 	}
+	// EKU must include BOTH clientAuth AND serverAuth: the agent uses
+	// the cert as a client when dialing the server, AND as a server
+	// cert when running its own mesh peer listener (--mesh-listen, the
+	// NAT-relay scenario). Locking this in test because the
+	// dispatcher-free mesh transport relies on it.
+	gotEKU := map[x509.ExtKeyUsage]bool{}
+	for _, eku := range leaf.ExtKeyUsage {
+		gotEKU[eku] = true
+	}
+	if !gotEKU[x509.ExtKeyUsageClientAuth] {
+		t.Errorf("leaf missing ExtKeyUsageClientAuth; got %v", leaf.ExtKeyUsage)
+	}
+	if !gotEKU[x509.ExtKeyUsageServerAuth] {
+		t.Errorf("leaf missing ExtKeyUsageServerAuth; got %v", leaf.ExtKeyUsage)
+	}
+
 	caBlock, _ := pem.Decode([]byte(res.CAPem))
 	caCert, _ := x509.ParseCertificate(caBlock.Bytes)
 
@@ -177,6 +193,15 @@ func TestIssueAgentCert_ValidChain(t *testing.T) {
 		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}); err != nil {
 		t.Fatalf("leaf failed to verify against CA: %v", err)
+	}
+	// Same chain must validate against ServerAuth — that's the
+	// path the mesh peer listener will take when an agent dials in.
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		Roots:       pool,
+		CurrentTime: time.Now(),
+		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}); err != nil {
+		t.Fatalf("leaf failed to verify as ServerAuth (needed for --mesh-listen): %v", err)
 	}
 }
 
@@ -419,6 +444,35 @@ func TestIssueServerCert_IngressLeafIsECDSAWithSHA256(t *testing.T) {
 		DNSName:     "example.com",
 	}); err != nil {
 		t.Fatalf("ingress leaf does not verify against project CA: %v", err)
+	}
+
+	// Mesh-peer URI SAN: the dispatcher-free transport extracts
+	// NodeID from this URI after mTLS, so it's the regression lock
+	// for the server's mesh identity. Format must be
+	// platypus://server/<projectID>.
+	want := "platypus://server/" + proj.ID
+	var found bool
+	for _, u := range leaf.URIs {
+		if u.String() == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ingress leaf missing mesh URI SAN %q; got %v", want, leaf.URIs)
+	}
+
+	// EKU must include ClientAuth — the server uses the same cert
+	// when it dials an agent's mesh peer listener.
+	gotEKU := map[x509.ExtKeyUsage]bool{}
+	for _, eku := range leaf.ExtKeyUsage {
+		gotEKU[eku] = true
+	}
+	if !gotEKU[x509.ExtKeyUsageClientAuth] {
+		t.Errorf("ingress leaf missing ExtKeyUsageClientAuth (needed for server-as-mesh-client); got %v", leaf.ExtKeyUsage)
+	}
+	if !gotEKU[x509.ExtKeyUsageServerAuth] {
+		t.Errorf("ingress leaf missing ExtKeyUsageServerAuth; got %v", leaf.ExtKeyUsage)
 	}
 }
 

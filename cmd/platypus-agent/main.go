@@ -156,16 +156,12 @@ func main() {
 		slog.String("token", opts.Token),
 	)
 
-	// Mesh overlay is opt-in: enable when the operator provides a
-	// PSK file. Requires the agent to already be enrolled — the
-	// cert-bound mesh identity comes from the same disk files as
-	// the v2 dial identity. Fresh installs need to complete
-	// BootstrapV2 (and restart the agent) before mesh starts.
-	if meshPSKFile != "" {
-		node := tryStartMesh(ctx, logger, identityDir, meshPSKFile, meshPeers, meshProjectID, opts)
-		if node != nil {
-			agent.AttachMesh(state, node)
-		}
+	// Mesh runs unconditionally once the agent has an enrolled
+	// identity. Fresh installs hit ErrIdentityNotFound inside
+	// tryStartMesh and will only join the mesh after the first
+	// BootstrapV2 + agent restart.
+	if node := tryStartMesh(ctx, logger, identityDir, meshPeers, meshProjectID, opts); node != nil {
+		agent.AttachMesh(state, node)
 	}
 
 	bo := backoff.WithContext(
@@ -368,7 +364,7 @@ func main() {
 // pure hub-and-spoke mode. A fresh-install agent hits the
 // ErrIdentityNotFound branch (no cert on disk yet) and will only
 // join the mesh after the next restart following BootstrapV2.
-func tryStartMesh(ctx context.Context, logger *slog.Logger, identityDir, pskFile string, peers []string, projectID string, opts *options.Options) *mesh.Node {
+func tryStartMesh(ctx context.Context, logger *slog.Logger, identityDir string, peers []string, projectID string, opts *options.Options) *mesh.Node {
 	agentID, err := agent.LoadIdentity(identityDir)
 	if err != nil {
 		if errors.Is(err, agent.ErrIdentityNotFound) {
@@ -389,7 +385,6 @@ func tryStartMesh(ctx context.Context, logger *slog.Logger, identityDir, pskFile
 		return nil
 	}
 	node, err := mesh.NewNode(mesh.Config{
-		PSKFile:           pskFile,
 		Identity:          meshID,
 		TrustedCAs:        pool,
 		ListenAddr:        opts.MeshListen,
@@ -408,10 +403,36 @@ func tryStartMesh(ctx context.Context, logger *slog.Logger, identityDir, pskFile
 		logger.Error("mesh start", slog.String("error", err.Error()))
 		return nil
 	}
+
+	if opts.MeshListen != "" {
+		handler := mesh.NewLinkHandler(node, func() *x509.CertPool { return pool })
+		pl, err := mesh.NewPeerListener(opts.MeshListen, meshID, pool, handler)
+		if err != nil {
+			logger.Error("mesh peer listener init", slog.String("error", err.Error()))
+			return node
+		}
+		go func() {
+			if err := pl.Serve(); err != nil {
+				logger.Error("mesh peer listener serve", slog.String("error", err.Error()))
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			shutdownCtx, cancel := contextWithTimeout(2 * time.Second)
+			defer cancel()
+			_ = pl.Shutdown(shutdownCtx)
+		}()
+		logger.Info("mesh peer listener up", slog.String("addr", pl.Addr()))
+	}
+
 	logger.Info("mesh enabled",
 		slog.String("node_id", node.NodeID()),
 		slog.String("listen", node.ListenerAddr()))
 	return node
+}
+
+func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), d)
 }
 
 // meshIdentityFromAgentID turns the enrolled agent.Identity (cert

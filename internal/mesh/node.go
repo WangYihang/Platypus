@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/x509"
 	"fmt"
 	"log/slog"
@@ -15,18 +16,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PayloadHandler is invoked for every envelope whose target_node matches
-// the local NodeID (i.e. addressed to us, not to be forwarded). The
-// mesh package deliberately knows nothing about process/tunnel/exec
-// semantics — upper layers plug their existing dispatcher in here.
+// PayloadHandler is invoked for every envelope addressed to the local
+// NodeID. Upper layers plug their existing dispatcher in here; the
+// mesh package itself knows nothing about process / tunnel / exec
+// semantics.
 type PayloadHandler func(peer string, env *v2pb.MeshEnvelope)
 
 // Node is the top-level mesh participant. Each platypus-agent and
 // platypus-server instance owns exactly one.
 type Node struct {
 	identity   *Identity
-	psk        []byte
-	trustedCAs *x509.CertPool // optional — nil disables cert-chain verify
+	trustedCAs *x509.CertPool
 	cfg        Config
 	logger     *slog.Logger
 
@@ -74,19 +74,8 @@ func NewNode(cfg Config, logger *slog.Logger) (*Node, error) {
 	if cfg.TrustedCAs == nil {
 		return nil, fmt.Errorf("mesh: cfg.TrustedCAs is required")
 	}
-	if len(cfg.PSK) == 0 {
-		if cfg.PSKFile == "" {
-			return nil, fmt.Errorf("mesh: PSK or PSKFile must be provided")
-		}
-		psk, err := LoadOrCreatePSK(cfg.PSKFile)
-		if err != nil {
-			return nil, err
-		}
-		cfg.PSK = psk
-	}
 	n := &Node{
 		identity:   cfg.Identity,
-		psk:        cfg.PSK,
 		trustedCAs: cfg.TrustedCAs,
 		cfg:        cfg,
 		logger: logger.With(
@@ -138,10 +127,10 @@ func (n *Node) SetPayloadHandler(h PayloadHandler) {
 	n.payloadHandler.Store(&h)
 }
 
-// Start boots the dialer and periodic tasks. The unified-ingress
-// dispatcher drives inbound links through AcceptRaw, so there is no
-// independent listener to spin up here. Blocks until ctx is
-// cancelled in the background goroutines.
+// Start boots the dialer and periodic tasks. Inbound links arrive
+// through AdoptStream — either via the server's
+// /api/v1/mesh/link handler or, when --mesh-listen is set, an
+// agent-side PeerListener mounting the same handler.
 func (n *Node) Start(ctx context.Context) error {
 	var startErr error
 	n.startOnce.Do(func() {
@@ -200,34 +189,22 @@ func (n *Node) ListenerAddr() string {
 	return ""
 }
 
-// AcceptRaw runs the inbound mesh handshake on an already-TLS'd
-// net.Conn and registers the resulting link. This is the entry point
-// the unified-ingress dispatcher (internal/ingress) uses once it has
-// determined a connection negotiated "ptps-mesh".
-//
-// Blocks until the link is fully torn down (or the handshake is
-// rejected). Caller must launch it in its own goroutine.
-func (n *Node) AcceptRaw(ctx context.Context, conn net.Conn) {
-	// Bounded deadline on the app-level handshake; link.run clears
-	// it once keepalive is driving the liveness check.
-	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+// LocalNodeID returns this node's mesh identity (the URI SAN of its
+// project-CA-signed cert).
+func (n *Node) LocalNodeID() string { return n.identity.NodeID }
 
-	codec := newEnvCodec(conn)
-	result, err := PerformServerHandshake(ctx, codec, n.identity, n.psk, n.advertisedAddrs())
-	if err != nil {
-		n.logger.Debug("mesh inbound handshake failed",
-			slog.String("remote", conn.RemoteAddr().String()),
-			slog.String("error", err.Error()))
+// AdoptStream registers a mesh peer link on a conn whose peer
+// identity has already been validated (via mTLS at the transport
+// layer). Blocks until the link tears down.
+func (n *Node) AdoptStream(ctx context.Context, conn net.Conn, peerNodeID string, peerPubkey ed25519.PublicKey, peerCertPEM []byte) {
+	if peerNodeID == "" || peerNodeID == n.identity.NodeID {
 		closeConn(conn)
 		return
 	}
-	if err := conn.SetDeadline(time.Time{}); err != nil {
-		n.logger.Debug("clear deadline", slog.String("error", err.Error()))
-	}
-
-	link := newLink(conn, codec, result.PeerNodeID, result.PeerPublicKey, result.PeerAddresses, n)
+	codec := newEnvCodec(conn)
+	link := newLink(conn, codec, peerNodeID, peerPubkey, nil, n)
+	link.PeerCertPEM = append([]byte(nil), peerCertPEM...)
 	if !n.adoptLink(link) {
-		link.logger.Info("duplicate mesh link, closing inbound")
 		closeConn(conn)
 		return
 	}
@@ -255,6 +232,9 @@ func (n *Node) adoptLink(l *Link) bool {
 	}
 	rec.PublicKey = l.PeerPublicKey
 	rec.Addresses = mergeAddresses(rec.Addresses, l.PeerAddresses)
+	if len(l.PeerCertPEM) > 0 {
+		rec.CertPEM = append([]byte(nil), l.PeerCertPEM...)
+	}
 	rec.LastSeen = time.Now()
 	n.registry.Upsert(rec)
 	if n.dialer != nil {
@@ -732,10 +712,10 @@ func (n *Node) reconcileLoop(ctx context.Context) {
 	}
 }
 
-// advertisedAddrs returns the addresses this node is willing to publish
-// for other nodes to dial. The unified-ingress dispatcher owns the
-// listening socket, so we rely entirely on AdvertiseAddrs /
-// ListenAddr from config.
+// advertisedAddrs returns the addresses this node is willing to
+// publish for other nodes to dial. The listening socket is owned by
+// the platypus-server's HTTPS ingress (servers) or the
+// PeerListener (agents with --mesh-listen).
 func (n *Node) advertisedAddrs() []string {
 	if len(n.cfg.AdvertiseAddrs) > 0 {
 		return n.cfg.AdvertiseAddrs
@@ -745,9 +725,6 @@ func (n *Node) advertisedAddrs() []string {
 	}
 	return nil
 }
-
-// PSK returns the pre-shared key used by this node.
-func (n *Node) PSK() []byte { return n.psk }
 
 // ProjectID returns the project ID configured for this node.
 func (n *Node) ProjectID() string { return n.cfg.ProjectID }

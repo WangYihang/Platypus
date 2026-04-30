@@ -405,7 +405,15 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 
 	notBefore := time.Now().Add(-5 * time.Minute).UTC()
 	notAfter := notBefore.Add(DefaultAgentCertTTL + 5*time.Minute)
-	certPEM, err := signServerLeaf(caPriv, ca.CertPEM, hosts, leafPub, serial, notBefore, notAfter)
+	// Mesh peer identity rides in the same cert via a URI SAN. The
+	// server is a mesh node like any agent; the dispatcher-free
+	// transport extracts NodeID = "server-<projectID>" from this URI
+	// after mTLS instead of receiving it inside a Noise handshake.
+	uris, err := serverURISANs(projectID)
+	if err != nil {
+		return nil, err
+	}
+	certPEM, err := signServerLeaf(caPriv, ca.CertPEM, hosts, uris, leafPub, serial, notBefore, notAfter)
 	if err != nil {
 		return nil, err
 	}
@@ -447,13 +455,20 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 	}, nil
 }
 
-// signServerLeaf is the sibling of signLeaf that stamps DNS / IP SANs
-// instead of platypus:// URI SANs. hosts can be a mix of hostnames and
-// numeric IPs; net.ParseIP decides the bucket. Both leaf and CA are
-// ECDSA P-256; the resulting leaf's SignatureAlgorithm is
-// ECDSAWithSHA256, which every Schannel / Secure Transport / OpenSSL
-// build parses fine.
-func signServerLeaf(caPriv *ecdsa.PrivateKey, caPEM string, hosts []string, pub *ecdsa.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
+// signServerLeaf stamps DNS / IP SANs for hostname verification plus
+// URI SANs that double as the server's mesh-peer identity. hosts can
+// be a mix of hostnames and numeric IPs; net.ParseIP decides the
+// bucket. Both leaf and CA are ECDSA P-256; the resulting leaf's
+// SignatureAlgorithm is ECDSAWithSHA256, which every Schannel /
+// Secure Transport / OpenSSL build parses fine.
+//
+// The cert advertises BOTH serverAuth and clientAuth EKUs. serverAuth
+// is for the obvious ingress role (browsers, agents dialing in);
+// clientAuth lets the server act as an mTLS client when it dials an
+// agent's mesh peer listener (the NAT-traversal case where an
+// isolated agent reaches the server through a peer relay — see the
+// /api/v1/mesh/link handler).
+func signServerLeaf(caPriv *ecdsa.PrivateKey, caPEM string, hosts []string, uris []*url.URL, pub *ecdsa.PublicKey, serial int64, notBefore, notAfter time.Time) (string, error) {
 	caCert, err := parseCAFromPEM(caPEM)
 	if err != nil {
 		return "", err
@@ -475,12 +490,16 @@ func signServerLeaf(caPriv *ecdsa.PrivateKey, caPEM string, hosts []string, pub 
 			CommonName:   "platypus-ingress",
 			Organization: []string{"Platypus"},
 		},
-		NotBefore:             notBefore,
-		NotAfter:              notAfter,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+		KeyUsage:  x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
 		DNSNames:              dns,
 		IPAddresses:           ips,
+		URIs:                  uris,
 		BasicConstraintsValid: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, caCert, pub, caPriv)
@@ -488,6 +507,23 @@ func signServerLeaf(caPriv *ecdsa.PrivateKey, caPEM string, hosts []string, pub 
 		return "", fmt.Errorf("pki: sign server leaf: %w", err)
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
+}
+
+// serverURISANs builds the URI SAN list for the server's
+// ingress+mesh leaf. The single SAN platypus://server/<projectID>
+// gives mesh peers a stable NodeID to bind to: when an agent's mesh
+// dialer completes mTLS against the server, it extracts this URI
+// from the verified peer cert and uses "server-<projectID>" as the
+// peer's mesh identity.
+func serverURISANs(projectID string) ([]*url.URL, error) {
+	if projectID == "" {
+		return nil, errors.New("pki: serverURISANs: empty projectID")
+	}
+	u, err := url.Parse("platypus://server/" + projectID)
+	if err != nil {
+		return nil, fmt.Errorf("pki: serverURISANs: parse: %w", err)
+	}
+	return []*url.URL{u}, nil
 }
 
 // --- Low-level helpers ---------------------------------------------------

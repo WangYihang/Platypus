@@ -62,11 +62,6 @@ func TestLoadIdentityFromCert_HappyPath(t *testing.T) {
 	if string(id.CertPEM) != string(certPEM) {
 		t.Fatal("CertPEM does not match input")
 	}
-	// X25519 must be filled in.
-	var zero [32]byte
-	if id.X25519Private == zero || id.X25519Public == zero {
-		t.Fatal("X25519 keys not populated")
-	}
 	// NodeID must come from the cert SAN — prefix sanity check.
 	if id.NodeID != "agent-abc123" {
 		t.Fatalf("NodeID = %q, want agent-abc123", id.NodeID)

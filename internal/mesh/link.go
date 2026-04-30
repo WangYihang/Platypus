@@ -23,6 +23,7 @@ const (
 type Link struct {
 	PeerNodeID    string
 	PeerPublicKey ed25519.PublicKey
+	PeerCertPEM   []byte
 	RemoteAddr    string
 	PeerAddresses []string
 

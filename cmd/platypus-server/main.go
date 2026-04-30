@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/gin-gonic/gin"
 	"golang.org/x/net/http2"
 
 	"github.com/WangYihang/Platypus/internal/activity"
@@ -172,19 +173,14 @@ func main() {
 	// without a restart.
 	settingsReg := settings.New(db, cfg)
 
-	// Mesh node (optional). Activated by the presence of a mesh PSK
-	// file at <data_dir>/mesh.psk — when missing, mesh stays inert
-	// and the server still serves agent traffic on the unified
-	// ingress. The server self-issues a cert-bound leaf under
-	// cfg.MeshProjectID's CA — same chain agents in that project use.
-	// On any wiring failure mesh is skipped with an error log; server
-	// startup never aborts over mesh.
+	// Mesh runs unconditionally on the server: project CA membership
+	// is the admission gate, no PSK to require. On any wiring failure
+	// mesh is skipped with an error log; server startup never aborts
+	// over mesh.
 	var meshNode *mesh.Node
-	if fileExists(cfg.MeshPSKPath()) {
-		if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr, settingsReg); node != nil {
-			core.Ctx.Mesh = node
-			meshNode = node
-		}
+	if node := tryStartServerMesh(ctx, pkiSvc, cfg, publicAddr, settingsReg); node != nil {
+		core.Ctx.Mesh = node
+		meshNode = node
 	}
 
 	// Custom TLS leaf is opt-in via the cert.pem / key.pem file
@@ -240,72 +236,34 @@ func main() {
 	}
 	logIngressCertFingerprint(tlsCfg)
 
-	// Accept client certificates when presented, but don't reject
-	// connections that lack them — browsers and the REST API still
-	// connect without a client cert. The v2 agent-link handler
-	// validates the chain in-handler against the live project-CA
-	// pool so revocations / rotations take effect without a restart.
+	// Mesh peers + the /api/v1/mesh/link handler re-verify the chain
+	// against a live project-CA pool, so we accept client certs when
+	// presented but don't force them on every connection (browsers,
+	// the REST API, and the bootstrap install endpoint connect without
+	// one).
 	tlsCfg.ClientAuth = tls.RequestClientCert
 
-	// v1 AgentService is gone; v2 agents reach us through the h2/http1
-	// ALPN path (see Gin's /api/v1/agent/link handler). We keep the
-	// ptps-mesh ALPN so mesh peers can still dial the same port.
-	dispatcher, err := ingress.New(ingress.Config{
-		TLSConfig: tlsCfg,
-		OnMesh: func(conn net.Conn) {
-			if meshNode == nil {
-				_ = conn.Close()
-				return
-			}
-			meshNode.AcceptRaw(ctx, conn)
-		},
-	})
-	if err != nil {
-		log.Error("ingress: configure dispatcher: %v", err)
-		os.Exit(1)
-	}
-
-	listener, err := net.Listen("tcp", ingressAddr)
+	rawListener, err := net.Listen("tcp", ingressAddr)
 	if err != nil {
 		log.Error("ingress: listen %s: %v", ingressAddr, err)
 		os.Exit(1)
 	}
+	tlsListener := tls.NewListener(rawListener, tlsCfg)
 
-	rest, agentLinkSvc := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg)
+	rest, agentLinkSvc := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg, meshNode)
 
-	// Audit retention reaper: sweeps every hour, consults settings
-	// for the live retention window. A zero window keeps everything
-	// forever and the sweep is a no-op.
 	go activity.NewReaper(db, settingsReg, log.L).Run(ctx)
 
-	go func() {
-		if err := dispatcher.Serve(ctx, listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("ingress: %v", err)
-		}
-	}()
-
-	httpLn := dispatcher.HTTPListener(listener.Addr())
 	httpSrv := &http.Server{
 		Handler:           rest,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	// Wire HTTP/2 into the per-conn TLSNextProto map so a TLS
-	// connection that negotiated `h2` via ALPN actually gets served
-	// — without this, Go's http.Server.serve() takes an unconditional
-	// `return` branch when proto=="h2" but TLSNextProto["h2"]==nil,
-	// silently closing the socket. Some Schannel-backed clients
-	// (Windows PowerShell 5.1's HttpWebRequest among them) end up
-	// advertising h2 in ALPN even when they only speak HTTP/1.1, so
-	// the server picks h2 and the connection dies before any HTTP
-	// handler runs. ConfigureServer registers the h2 handler, which
-	// gracefully demotes truly-HTTP/1.1 clients via the standard h2
-	// fallback path.
 	if err := http2.ConfigureServer(httpSrv, &http2.Server{}); err != nil {
 		log.Error("http2.ConfigureServer: %v", err)
 	}
 	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("rest: %v", err)
+		if err := httpSrv.Serve(tlsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("ingress: %v", err)
 		}
 	}()
 
@@ -327,7 +285,7 @@ func main() {
 			"listen":       ingressAddr,
 			"external":     publicAddr,
 			"data_dir":     cfg.DataDir,
-			"mesh_enabled": fileExists(cfg.MeshPSKPath()),
+			"mesh_enabled": meshNode != nil,
 		},
 	})
 
@@ -407,7 +365,7 @@ func fileExistsDir(path string) bool {
 	return info.IsDir()
 }
 
-func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry) (http.Handler, *core.AgentLinkService) {
+func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry, meshNode *mesh.Node) (http.Handler, *core.AgentLinkService) {
 	rest := api.CreateRESTfulAPIServer()
 
 	auth := api.NewAuth()
@@ -496,6 +454,10 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
+	if meshNode != nil {
+		meshLinkH := mesh.NewLinkHandler(meshNode, mesh.CertPoolFn(api.ProjectsCAPool(db)))
+		rest.GET(mesh.LinkPath, gin.WrapH(meshLinkH))
+	}
 
 	// Terminal session recording: every operator shell is mirrored to
 	// an asciinema v2 cast file under <data_dir>/recordings.
@@ -876,7 +838,6 @@ func tryStartServerMesh(ctx context.Context, pkiSvc *pki.Service, cfg *config.Op
 		advertise = []string{publicAddr}
 	}
 	node, err := mesh.NewNode(mesh.Config{
-		PSKFile:        cfg.MeshPSKPath(),
 		Identity:       meshID,
 		TrustedCAs:     pool,
 		ListenAddr:     "", // listener is the unified ingress
