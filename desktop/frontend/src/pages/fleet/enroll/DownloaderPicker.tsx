@@ -80,33 +80,49 @@ export default function DownloaderPicker({ value, onChange, available, targetOS 
 
 // bundleOneLinerFor wraps the bundle URL in the equivalent of
 // `platypus-agent "$(<downloader-cmd> <url>)"` for whichever
-// downloader the operator picked. Mirrors the per-tool insecure-skip
-// conventions baked into the backend registry.
+// downloader the operator picked. The `insecure` flag mirrors the
+// backend registry: true emits skip-TLS-verification flavour
+// (default for self-signed install endpoints), false emits a strict
+// flavour that relies on the host's system trust store.
 //
-// For Windows we keep the existing two shapes (powershell vs pwsh —
-// pwsh has -SkipCertificateCheck on Invoke-RestMethod since 6+) and
-// expose them under the same name so the picker stays uniform.
-export function bundleOneLinerFor(downloader: string, bundleURL: string): string {
+// On Windows the TLS 1.2 force stays in BOTH flavours — Windows
+// PowerShell 5.1 defaults to TLS 1.0 and would otherwise fail with
+// "Could not create SSL/TLS secure channel" before cert validation
+// even runs.
+export function bundleOneLinerFor(
+    downloader: string,
+    bundleURL: string,
+    insecure: boolean,
+): string {
     switch (downloader) {
         case "wget":
-            return `platypus-agent "$(wget -qO- --no-check-certificate ${bundleURL})"`;
+            return insecure
+                ? `platypus-agent "$(wget -qO- --no-check-certificate ${bundleURL})"`
+                : `platypus-agent "$(wget -qO- ${bundleURL})"`;
         case "python3":
-            return `platypus-agent "$(python3 -c "import ssl,urllib.request as u;print(u.urlopen('${bundleURL}',context=ssl._create_unverified_context()).read().decode())")"`;
+            return insecure
+                ? `platypus-agent "$(python3 -c "import ssl,urllib.request as u;print(u.urlopen('${bundleURL}',context=ssl._create_unverified_context()).read().decode())")"`
+                : `platypus-agent "$(python3 -c "import urllib.request as u;print(u.urlopen('${bundleURL}').read().decode())")"`;
         case "php":
-            return `platypus-agent "$(php -r "echo file_get_contents('${bundleURL}',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));")"`;
+            return insecure
+                ? `platypus-agent "$(php -r "echo file_get_contents('${bundleURL}',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));")"`
+                : `platypus-agent "$(php -r "echo file_get_contents('${bundleURL}');")"`;
         case "ruby":
-            return `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}',ssl_verify_mode: 0).read")"`;
+            return insecure
+                ? `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}',ssl_verify_mode: 0).read")"`
+                : `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}').read")"`;
         case "powershell":
-            // Force TLS 1.2 + skip cert verification BEFORE the
-            // request — Windows PowerShell 5.1 defaults to TLS 1.0
-            // and the server's MinVersion=Tls12 floor would
-            // otherwise fail with "Could not create SSL/TLS secure
-            // channel".
-            return `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; [Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
+            return insecure
+                ? `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; [Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`
+                : `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
         case "pwsh":
-            return `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -SkipCertificateCheck -UseBasicParsing -Uri '${bundleURL}') }`;
+            return insecure
+                ? `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -SkipCertificateCheck -UseBasicParsing -Uri '${bundleURL}') }`
+                : `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
         case "curl":
         default:
-            return `platypus-agent "$(curl -fsSL --tlsv1.2 -k ${bundleURL})"`;
+            return insecure
+                ? `platypus-agent "$(curl -fsSL --tlsv1.2 -k ${bundleURL})"`
+                : `platypus-agent "$(curl -fsSL --tlsv1.2 ${bundleURL})"`;
     }
 }

@@ -35,13 +35,18 @@ export interface IssueInstallResponse {
     // windows). Older callers / tests that don't know about the
     // per-downloader map still get something sensible here.
     install_command: string;
-    // Per-downloader one-liners keyed by downloader name. Unix:
-    // curl, wget, python3, php, ruby. Windows: powershell, pwsh.
-    // The wizard's RunStep picker reads from this without re-issuing
-    // the install token (single-use atomically — re-mint would force
-    // re-paste). Optional in the type for backwards-compat with old
-    // server builds that didn't return it yet.
+    // Per-downloader one-liners keyed by downloader name in the
+    // "skip TLS verification" flavour (`-k`, --no-check-certificate,
+    // ServerCertificateValidationCallback={$true}, etc). Default
+    // when the wizard's "Skip TLS verification" toggle is ON.
+    // Optional for backwards-compat with old server builds.
     install_commands?: Record<string, string>;
+    // Same per-downloader map but WITHOUT skip-cert flags — for
+    // prod deployments where the install endpoint serves a
+    // system-trusted cert and the operator wants a clean,
+    // MITM-resistant one-liner. Surfaced via the wizard's "Skip
+    // TLS verification" toggle when OFF.
+    install_commands_strict?: Record<string, string>;
     // pinst_<base64> self-contained token (when curled). For targets
     // that can't pipe to a shell — paste the resulting token straight
     // into platypus-agent. Same single-use install token as install_command.

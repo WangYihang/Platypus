@@ -187,4 +187,52 @@ describe("<EnrollAgentWizard>", () => {
         );
         expect(screen.queryByText("curl-cmd")).not.toBeInTheDocument();
     });
+
+    // Skip-TLS-verification toggle: defaults ON so the wizard shows
+    // the insecure flavour (matches first-boot self-signed servers),
+    // and toggling it OFF swaps the rendered command to the strict
+    // map the server returned. Both maps survive the same install
+    // token so no re-issue happens.
+    it("toggles between insecure and strict install commands", async () => {
+        issueInstallArtifact.mockResolvedValue({
+            download_id: "dl_z",
+            download_token: "dl_z.secret",
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+            server_endpoint: "203.0.113.5:13337",
+            install_command: "curl-insecure",
+            install_commands: {
+                curl: "curl-insecure",
+                wget: "wget-insecure",
+            },
+            install_commands_strict: {
+                curl: "curl-strict",
+                wget: "wget-strict",
+            },
+            bundle_url: "https://example.test/install/dl_z",
+        });
+        const user = userEvent.setup();
+        render("/projects/test-project/hosts?enroll=1");
+
+        await screen.findByTestId("enroll-wizard-os");
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-connect");
+        await user.click(screen.getByTestId("enroll-wizard-submit"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
+        );
+
+        // Default: toggle is on, insecure command is rendered.
+        expect(screen.getByText("curl-insecure")).toBeInTheDocument();
+        expect(screen.queryByText("curl-strict")).not.toBeInTheDocument();
+
+        // Toggle off → strict command takes over.
+        const toggles = screen.getAllByTestId("skip-tls-toggle");
+        await user.click(toggles[0]);
+        await waitFor(() =>
+            expect(screen.getByText("curl-strict")).toBeInTheDocument(),
+        );
+        expect(screen.queryByText("curl-insecure")).not.toBeInTheDocument();
+    });
 });

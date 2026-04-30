@@ -14,6 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DownloaderPicker, {
     bundleOneLinerFor,
@@ -50,6 +51,11 @@ export default function IssuedInstallDialog({
     const [downloader, setDownloader] = useState<string>(
         defaultDownloader(result?.target_os),
     );
+    // Default ON: Platypus servers most commonly first-boot with a
+    // self-signed cert, so the rendered command needs to skip
+    // verification to actually run. Operators with a real cert turn
+    // it off to copy a stricter, MITM-resistant one-liner.
+    const [skipTLS, setSkipTLS] = useState<boolean>(true);
 
     async function copy(text: string) {
         await navigator.clipboard.writeText(text);
@@ -66,20 +72,20 @@ export default function IssuedInstallDialog({
     // missing, so the picker still has something to select.
     const commands = useMemo<Record<string, string>>(() => {
         if (!result) return {};
-        if (
-            result.install_commands &&
-            Object.keys(result.install_commands).length > 0
-        ) {
-            return result.install_commands;
+        const fromServer = skipTLS
+            ? result.install_commands
+            : result.install_commands_strict;
+        if (fromServer && Object.keys(fromServer).length > 0) {
+            return fromServer;
         }
         return { [defaultDownloader(result.target_os)]: result.install_command };
-    }, [result]);
+    }, [result, skipTLS]);
 
     const scriptOneLiner = result
         ? commands[downloader] ?? result.install_command
         : "";
     const bundleOneLiner = result
-        ? bundleOneLinerFor(downloader, result.bundle_url)
+        ? bundleOneLinerFor(downloader, result.bundle_url, skipTLS)
         : "";
 
     return (
@@ -102,14 +108,27 @@ export default function IssuedInstallDialog({
                             Run on the target machine. Downloads the agent binary, then
                             enrols using the freshly-minted PAT.
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-text-muted">Downloader</span>
-                            <DownloaderPicker
-                                value={downloader}
-                                onChange={setDownloader}
-                                available={Object.keys(commands)}
-                                targetOS={result?.target_os}
-                            />
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-text-muted">Downloader</span>
+                                <DownloaderPicker
+                                    value={downloader}
+                                    onChange={setDownloader}
+                                    available={Object.keys(commands)}
+                                    targetOS={result?.target_os}
+                                />
+                            </div>
+                            <label
+                                className="flex cursor-pointer items-center gap-2 text-xs text-text-muted"
+                                title="Skip TLS verification on the install endpoint. Default ON because most Platypus servers first-boot with a self-signed cert. Turn off when the server has a real, system-trusted cert."
+                            >
+                                <Switch
+                                    checked={skipTLS}
+                                    onCheckedChange={setSkipTLS}
+                                    data-testid="skip-tls-toggle"
+                                />
+                                Skip TLS verification
+                            </label>
                         </div>
                         <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
                             {scriptOneLiner}
@@ -123,14 +142,27 @@ export default function IssuedInstallDialog({
                             to <Mono>platypus-agent</Mono> (binary must already be on the
                             host).
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-text-muted">Downloader</span>
-                            <DownloaderPicker
-                                value={downloader}
-                                onChange={setDownloader}
-                                available={Object.keys(commands)}
-                                targetOS={result?.target_os}
-                            />
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-text-muted">Downloader</span>
+                                <DownloaderPicker
+                                    value={downloader}
+                                    onChange={setDownloader}
+                                    available={Object.keys(commands)}
+                                    targetOS={result?.target_os}
+                                />
+                            </div>
+                            <label
+                                className="flex cursor-pointer items-center gap-2 text-xs text-text-muted"
+                                title="Skip TLS verification on the install endpoint. Default ON because most Platypus servers first-boot with a self-signed cert. Turn off when the server has a real, system-trusted cert."
+                            >
+                                <Switch
+                                    checked={skipTLS}
+                                    onCheckedChange={setSkipTLS}
+                                    data-testid="skip-tls-toggle"
+                                />
+                                Skip TLS verification
+                            </label>
                         </div>
                         <pre className="rounded border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
                             {bundleOneLiner}

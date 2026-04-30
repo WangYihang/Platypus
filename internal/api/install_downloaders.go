@@ -8,6 +8,14 @@ import "strings"
 // and how to wrap a fully-qualified install URL into a tool-specific
 // "fetch + pipe to shell" command.
 //
+// The render fn takes an `insecure` bool: true emits the
+// skip-cert-verification flavour (for self-signed servers, the
+// default for first-boot deployments), false emits the strict
+// flavour that relies on the host's system trust store. Both
+// flavours are pre-computed server-side and shipped together in the
+// install token response so the wizard can toggle between them
+// without re-issuing the (single-use) install token.
+//
 // Why we keep this server-side instead of letting the FE templatise
 // the URL itself: the install URL ships through `install_command` /
 // `install_commands` fields in the issue-install response, which
@@ -18,7 +26,7 @@ import "strings"
 type downloader struct {
 	name     string
 	osFamily string // "unix" | "windows"
-	render   func(url string) string
+	render   func(url string, insecure bool) string
 }
 
 const (
@@ -30,14 +38,6 @@ const (
 // here drives the dropdown order; defaults (curl on unix, powershell
 // on windows) come first within their family so the operator's
 // muscle-memory "just paste it" flow stays unchanged.
-//
-// All templates include a per-tool "skip TLS verification" flag
-// because the install endpoint may be self-signed on first-boot
-// deployments — the same self-signed cert that motivated the macOS
-// LibreSSL workaround. Tools that pin via CA cert at this stage
-// would need the CA bytes server-side; we leave that to the inner
-// script (which already gets PLATYPUS_PROJECT_CA stamped in) and
-// keep the bootstrap one-liner tool-agnostic about trust.
 var installDownloaders = []downloader{
 	// --- unix ---
 	{name: "curl", osFamily: osFamilyUnix, render: renderCurl},
@@ -66,78 +66,111 @@ func downloaderOSFamily(targetOS string) string {
 	return osFamilyUnix
 }
 
-// renderInstallCommandsFor returns every downloader command for the
-// given target OS, keyed by downloader name. The default for the
-// family is also returned as a separate string so the legacy
-// install_command field stays populated.
-func renderInstallCommandsFor(url, targetOS string) (commands map[string]string, defaultCmd string) {
+// renderInstallCommandsFor returns the per-downloader bootstrap
+// commands for the given target OS in BOTH flavours: insecure
+// (skip-cert-verify, default for self-signed) and strict (relies on
+// the system trust store, for prod servers with a real cert). Each
+// map is keyed by downloader name; the defaults are the family's
+// first entry in the matching flavour.
+func renderInstallCommandsFor(url, targetOS string) (
+	insecureCommands, strictCommands map[string]string,
+	insecureDefault, strictDefault string,
+) {
 	family := downloaderOSFamily(targetOS)
-	commands = make(map[string]string, 4)
+	insecureCommands = make(map[string]string, 4)
+	strictCommands = make(map[string]string, 4)
 	for _, d := range installDownloaders {
 		if d.osFamily != family {
 			continue
 		}
-		cmd := d.render(url)
-		commands[d.name] = cmd
-		if defaultCmd == "" {
+		insecureCmd := d.render(url, true)
+		strictCmd := d.render(url, false)
+		insecureCommands[d.name] = insecureCmd
+		strictCommands[d.name] = strictCmd
+		if insecureDefault == "" {
 			// First entry of the family wins — see the ordering
 			// rationale in the installDownloaders comment.
-			defaultCmd = cmd
+			insecureDefault = insecureCmd
+			strictDefault = strictCmd
 		}
 	}
-	return commands, defaultCmd
+	return insecureCommands, strictCommands, insecureDefault, strictDefault
 }
 
 // --- per-tool render helpers ---
 
-func renderCurl(url string) string {
+func renderCurl(url string, insecure bool) string {
 	// --tlsv1.2 sidesteps macOS LibreSSL curl's TLS 1.0 ClientHello
-	// downgrade on strict-1.2 servers; -k skips cert verification.
-	return "curl -fsSL --tlsv1.2 -k " + url + " | sh"
+	// downgrade on strict-1.2 servers regardless of trust mode; -k
+	// is added only when the operator opted into skip-verify.
+	flag := ""
+	if insecure {
+		flag = "-k "
+	}
+	return "curl -fsSL --tlsv1.2 " + flag + url + " | sh"
 }
 
-func renderWget(url string) string {
-	return "wget -qO- --no-check-certificate " + url + " | sh"
+func renderWget(url string, insecure bool) string {
+	flag := ""
+	if insecure {
+		flag = "--no-check-certificate "
+	}
+	return "wget -qO- " + flag + url + " | sh"
 }
 
-func renderPython3(url string) string {
-	// Single-quoted to keep shell-escaping minimal; the install URL
-	// is base32+token-safe so no embedded quotes can leak through.
-	return "python3 -c \"import ssl,urllib.request as u;print(u.urlopen('" +
-		url + "',context=ssl._create_unverified_context()).read().decode())\" | sh"
+func renderPython3(url string, insecure bool) string {
+	// Single-quoted URL to keep shell-escaping minimal — the install
+	// URL is base32+token-safe so no embedded quotes can leak through.
+	if insecure {
+		return "python3 -c \"import ssl,urllib.request as u;print(u.urlopen('" +
+			url + "',context=ssl._create_unverified_context()).read().decode())\" | sh"
+	}
+	return "python3 -c \"import urllib.request as u;print(u.urlopen('" +
+		url + "').read().decode())\" | sh"
 }
 
-func renderPHP(url string) string {
-	return "php -r \"echo file_get_contents('" + url +
-		"',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));\" | sh"
+func renderPHP(url string, insecure bool) string {
+	if insecure {
+		return "php -r \"echo file_get_contents('" + url +
+			"',false,stream_context_create(['ssl'=>['verify_peer'=>false,'verify_peer_name'=>false]]));\" | sh"
+	}
+	return "php -r \"echo file_get_contents('" + url + "');\" | sh"
 }
 
-func renderRuby(url string) string {
-	return "ruby -ropen-uri -e \"puts URI.open('" + url +
-		"',ssl_verify_mode: 0).read\" | sh"
+func renderRuby(url string, insecure bool) string {
+	if insecure {
+		return "ruby -ropen-uri -e \"puts URI.open('" + url +
+			"',ssl_verify_mode: 0).read\" | sh"
+	}
+	return "ruby -ropen-uri -e \"puts URI.open('" + url + "').read\" | sh"
 }
 
-func renderPowerShell(url string) string {
+func renderPowerShell(url string, insecure bool) string {
 	// Windows PowerShell 5.1 defaults SecurityProtocol to Ssl3|Tls
 	// (TLS 1.0), which the ingress listener rejects (MinVersion=
-	// TLS 1.2). The handshake fails with the misleading "Could not
-	// create SSL/TLS secure channel" error before cert validation
-	// even runs. Forcing Tls12 fixes the protocol negotiation;
-	// ServerCertificateValidationCallback={$true} skips cert
-	// verification for self-signed deployments. Both must come
-	// BEFORE iwr so the new ServicePointManager state is in place
-	// when the connection is opened.
-	return `powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};iwr -useb '` +
-		url + `' | iex"`
+	// TLS 1.2). Force Tls12 BEFORE iwr regardless of trust mode so
+	// the protocol layer succeeds; ServerCertificateValidationCallback
+	// is added only when skipping verification.
+	tlsForce := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
+	skip := ""
+	if insecure {
+		skip = "[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};"
+	}
+	return `powershell -ExecutionPolicy Bypass -Command "` + tlsForce + skip +
+		`iwr -useb '` + url + `' | iex"`
 }
 
-func renderPwsh(url string) string {
-	// pwsh (PowerShell 7+) inherits system-default protocols which
-	// include TLS 1.2/1.3 on every supported Windows, so the
-	// SecurityProtocol force is technically redundant. We set it
-	// anyway for defence-in-depth — a hardened host that disabled
-	// 1.2 at the OS level would otherwise still fail here, and the
-	// line is a no-op when 1.2 is already enabled.
-	return `pwsh -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;iwr -useb -SkipCertificateCheck '` +
-		url + `' | iex"`
+func renderPwsh(url string, insecure bool) string {
+	// pwsh (PowerShell 7+) inherits system-default protocols (TLS
+	// 1.2/1.3) on every supported Windows; the SecurityProtocol
+	// force is defensive for hosts that disabled 1.2 at the OS
+	// level. -SkipCertificateCheck is the PS 7+ replacement for the
+	// callback hack.
+	tlsForce := "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
+	skip := ""
+	if insecure {
+		skip = "-SkipCertificateCheck "
+	}
+	return `pwsh -ExecutionPolicy Bypass -Command "` + tlsForce +
+		`iwr -useb ` + skip + `'` + url + `' | iex"`
 }

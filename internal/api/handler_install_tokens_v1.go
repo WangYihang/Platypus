@@ -64,15 +64,24 @@ type issueInstallResponse struct {
 	ServerEndpoint string    `json:"server_endpoint"`
 	TargetOS       string    `json:"target_os,omitempty"`
 	TargetArch     string    `json:"target_arch,omitempty"`
-	// InstallCommand is the OS-default downloader's one-liner (curl on
-	// unix, powershell on windows). Kept for older FE / API consumers
-	// that don't know about InstallCommands.
+	// InstallCommand is the OS-default downloader's one-liner in the
+	// "skip TLS verification" flavour — kept for older FE / API
+	// consumers that don't know about the per-flavour maps below.
 	InstallCommand string `json:"install_command"`
 	// InstallCommands is keyed by downloader name (curl / wget /
-	// python3 / php / ruby on unix; powershell / pwsh on windows) so
-	// the wizard can offer a picker without re-issuing the install
-	// token (single-use atomically — re-mint would force re-paste).
+	// python3 / php / ruby on unix; powershell / pwsh on windows) and
+	// renders the skip-TLS-verification flavour. Default for the
+	// wizard's "Skip TLS verification" toggle when ON. The toggle is
+	// ON by default because the install endpoint is most commonly
+	// reached through a self-signed cert on first-boot deployments.
 	InstallCommands map[string]string `json:"install_commands"`
+	// InstallCommandsStrict is the same per-downloader map but
+	// renders WITHOUT skip-cert flags — for prod deployments where
+	// the install endpoint serves a system-trusted cert and the
+	// admin wants a clean, MITM-resistant one-liner. The wizard
+	// switches to this map when the operator turns off the "Skip
+	// TLS verification" toggle.
+	InstallCommandsStrict map[string]string `json:"install_commands_strict"`
 	// BundleURL is the alternative single-string bootstrap form.
 	// `curl -fsSL <bundle_url>` returns a `pinst_<base64>` token the
 	// operator pastes straight into `platypus-agent`. Use when the
@@ -163,17 +172,18 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 	}
 	h.audit(c, "install.issue", "install_download", res.DownloadID, projectID, req, "success", "")
 
-	commands, defaultCmd := h.renderInstallCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
+	insecure, strict, insecureDefault, _ := h.renderInstallCommands(c.Request, res.PlaintextDownloadToken, res.TargetOS)
 	c.JSON(http.StatusCreated, issueInstallResponse{
-		DownloadID:      res.DownloadID,
-		DownloadToken:   res.PlaintextDownloadToken,
-		ExpiresAt:       res.ExpiresAt,
-		ServerEndpoint:  res.ServerEndpoint,
-		TargetOS:        res.TargetOS,
-		TargetArch:      res.TargetArch,
-		InstallCommand:  defaultCmd,
-		InstallCommands: commands,
-		BundleURL:       h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
+		DownloadID:            res.DownloadID,
+		DownloadToken:         res.PlaintextDownloadToken,
+		ExpiresAt:             res.ExpiresAt,
+		ServerEndpoint:        res.ServerEndpoint,
+		TargetOS:              res.TargetOS,
+		TargetArch:            res.TargetArch,
+		InstallCommand:        insecureDefault,
+		InstallCommands:       insecure,
+		InstallCommandsStrict: strict,
+		BundleURL:             h.distributorBase(c.Request) + "/api/v1/install/" + res.PlaintextDownloadToken + "?format=bundle",
 	})
 }
 
@@ -219,7 +229,7 @@ func (h *InstallTokensHandler) distributorBase(req *http.Request) string {
 // helpers in the registry rely on that.
 func (h *InstallTokensHandler) renderInstallCommands(
 	req *http.Request, token, targetOS string,
-) (map[string]string, string) {
+) (insecure, strict map[string]string, insecureDefault, strictDefault string) {
 	base := h.distributorBase(req)
 	url := base + "/api/v1/install/" + token
 	if downloaderOSFamily(targetOS) == osFamilyWindows {

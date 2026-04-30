@@ -6,6 +6,7 @@ import Mono from "../../../../components/Mono";
 import { palette } from "../../../../layout/theme";
 import { IssueInstallResponse } from "../../../../lib/api";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DownloaderPicker, {
     bundleOneLinerFor,
@@ -36,6 +37,11 @@ export default function RunStep({ result }: Props) {
     const [downloader, setDownloader] = useState<string>(
         defaultDownloader(result.target_os),
     );
+    // Default ON: most Platypus deployments first-boot with a
+    // self-signed cert, so the rendered command needs to skip
+    // verification to actually run. Operators with a real cert turn
+    // it off to copy a stricter, MITM-resistant one-liner.
+    const [skipTLS, setSkipTLS] = useState<boolean>(true);
     const isWindows = (result.target_os ?? "").toLowerCase() === "windows";
     const scriptTabLabel = isWindows ? "iwr | iex" : "curl | sh";
 
@@ -44,14 +50,27 @@ export default function RunStep({ result }: Props) {
     // single-entry map keyed by the family default so the picker
     // still has something to select (and renders that default).
     const commands = useMemo<Record<string, string>>(() => {
-        if (result.install_commands && Object.keys(result.install_commands).length > 0) {
-            return result.install_commands;
+        const fromServer = skipTLS
+            ? result.install_commands
+            : result.install_commands_strict;
+        if (fromServer && Object.keys(fromServer).length > 0) {
+            return fromServer;
         }
+        // Fallback to the legacy single-string field. The strict map
+        // can't be synthesised from install_command (server didn't
+        // render that flavour) — degrade gracefully by reusing the
+        // insecure default rather than rendering empty.
         return { [defaultDownloader(result.target_os)]: result.install_command };
-    }, [result.install_commands, result.install_command, result.target_os]);
+    }, [
+        skipTLS,
+        result.install_commands,
+        result.install_commands_strict,
+        result.install_command,
+        result.target_os,
+    ]);
 
     const scriptOneLiner = commands[downloader] ?? result.install_command;
-    const bundleOneLiner = bundleOneLinerFor(downloader, result.bundle_url);
+    const bundleOneLiner = bundleOneLinerFor(downloader, result.bundle_url, skipTLS);
 
     const bundleHint = isWindows ? (
         <>
@@ -87,11 +106,13 @@ export default function RunStep({ result }: Props) {
                     <TabsTrigger value="bundle">offline bundle</TabsTrigger>
                 </TabsList>
                 <TabsContent value="script" className="mt-3 space-y-2">
-                    <DownloaderRow
+                    <OptionsRow
                         downloader={downloader}
-                        onChange={setDownloader}
+                        onDownloaderChange={setDownloader}
                         available={Object.keys(commands)}
                         targetOS={result.target_os}
+                        skipTLS={skipTLS}
+                        onSkipTLSChange={setSkipTLS}
                     />
                     <CodeBlock>{scriptOneLiner}</CodeBlock>
                     <CopyRow text={scriptOneLiner} onCopy={copy} />
@@ -100,11 +121,13 @@ export default function RunStep({ result }: Props) {
                     <div style={{ fontSize: 12, color: palette.textMuted }}>
                         {bundleHint}
                     </div>
-                    <DownloaderRow
+                    <OptionsRow
                         downloader={downloader}
-                        onChange={setDownloader}
+                        onDownloaderChange={setDownloader}
                         available={Object.keys(commands)}
                         targetOS={result.target_os}
+                        skipTLS={skipTLS}
+                        onSkipTLSChange={setSkipTLS}
                     />
                     <CodeBlock>{bundleOneLiner}</CodeBlock>
                     <CopyRow text={bundleOneLiner} onCopy={copy} />
@@ -114,28 +137,46 @@ export default function RunStep({ result }: Props) {
     );
 }
 
-function DownloaderRow({
+function OptionsRow({
     downloader,
-    onChange,
+    onDownloaderChange,
     available,
     targetOS,
+    skipTLS,
+    onSkipTLSChange,
 }: {
     downloader: string;
-    onChange: (next: string) => void;
+    onDownloaderChange: (next: string) => void;
     available: string[];
     targetOS?: string;
+    skipTLS: boolean;
+    onSkipTLSChange: (next: boolean) => void;
 }) {
     return (
-        <div className="flex items-center gap-2">
-            <span style={{ fontSize: 12, color: palette.textMuted }}>
-                Downloader
-            </span>
-            <DownloaderPicker
-                value={downloader}
-                onChange={onChange}
-                available={available}
-                targetOS={targetOS}
-            />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+                <span style={{ fontSize: 12, color: palette.textMuted }}>
+                    Downloader
+                </span>
+                <DownloaderPicker
+                    value={downloader}
+                    onChange={onDownloaderChange}
+                    available={available}
+                    targetOS={targetOS}
+                />
+            </div>
+            <label
+                className="flex items-center gap-2"
+                style={{ fontSize: 12, color: palette.textMuted, cursor: "pointer" }}
+                title="Skip TLS verification on the install endpoint. Default ON because most Platypus servers first-boot with a self-signed cert. Turn off when the server has a real, system-trusted cert."
+            >
+                <Switch
+                    checked={skipTLS}
+                    onCheckedChange={onSkipTLSChange}
+                    data-testid="skip-tls-toggle"
+                />
+                Skip TLS verification
+            </label>
         </div>
     );
 }
