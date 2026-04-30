@@ -97,9 +97,14 @@ export function bundleOneLinerFor(downloader: string, bundleURL: string): string
         case "ruby":
             return `platypus-agent "$(ruby -ropen-uri -e "puts URI.open('${bundleURL}',ssl_verify_mode: 0).read")"`;
         case "powershell":
-            return `& platypus-agent.exe ([Net.ServicePointManager]::ServerCertificateValidationCallback={$true};Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}')`;
+            // Force TLS 1.2 + skip cert verification BEFORE the
+            // request — Windows PowerShell 5.1 defaults to TLS 1.0
+            // and the server's MinVersion=Tls12 floor would
+            // otherwise fail with "Could not create SSL/TLS secure
+            // channel".
+            return `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; [Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; & platypus-agent.exe (Invoke-RestMethod -UseBasicParsing -Uri '${bundleURL}') }`;
         case "pwsh":
-            return `& platypus-agent.exe (Invoke-RestMethod -SkipCertificateCheck -UseBasicParsing -Uri '${bundleURL}')`;
+            return `& { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; & platypus-agent.exe (Invoke-RestMethod -SkipCertificateCheck -UseBasicParsing -Uri '${bundleURL}') }`;
         case "curl":
         default:
             return `platypus-agent "$(curl -fsSL --tlsv1.2 -k ${bundleURL})"`;

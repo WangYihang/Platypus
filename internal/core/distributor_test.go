@@ -60,6 +60,13 @@ func TestRenderInstallScriptPS1_PinsProjectCA(t *testing.T) {
 	if !strings.Contains(got, "/v1/artifacts/windows/$Arch/latest") {
 		t.Errorf("PS1 script does not download the windows artifact for the detected arch\n%s", got)
 	}
+	// Lock in the TLS 1.2 protocol force: Windows PowerShell 5.1
+	// defaults to Ssl3|Tls (TLS 1.0), which the ingress listener
+	// rejects, surfacing the misleading "Could not create SSL/TLS
+	// secure channel" error long before cert validation runs.
+	if !strings.Contains(got, "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12") {
+		t.Errorf("PS1 script does not force TLS 1.2 on ServicePointManager\n%s", got)
+	}
 }
 
 // TestRenderInstallScriptPS1_RefusesInsecureByDefault is the PowerShell

@@ -18,14 +18,18 @@ func TestInstallDownloaders_RenderShape(t *testing.T) {
 		name           string
 		insecureMarker string // unique substring proving the no-verify flag is present
 		suffix         string // last few chars to confirm the pipe is correctly oriented
+		// extraMarker is checked when non-empty. We use it on Windows
+		// templates to lock in the TLS 1.2 force — Windows PS 5.1
+		// defaults to TLS 1.0 and the server rejects sub-1.2.
+		extraMarker string
 	}{
 		{name: "curl", insecureMarker: "-k ", suffix: "| sh"},
 		{name: "wget", insecureMarker: "--no-check-certificate", suffix: "| sh"},
 		{name: "python3", insecureMarker: "_create_unverified_context", suffix: "| sh"},
 		{name: "php", insecureMarker: "verify_peer'=>false", suffix: "| sh"},
 		{name: "ruby", insecureMarker: "ssl_verify_mode: 0", suffix: "| sh"},
-		{name: "powershell", insecureMarker: "ServerCertificateValidationCallback", suffix: "| iex\""},
-		{name: "pwsh", insecureMarker: "-SkipCertificateCheck", suffix: "| iex\""},
+		{name: "powershell", insecureMarker: "ServerCertificateValidationCallback", suffix: "| iex\"", extraMarker: "SecurityProtocolType]::Tls12"},
+		{name: "pwsh", insecureMarker: "-SkipCertificateCheck", suffix: "| iex\"", extraMarker: "SecurityProtocolType]::Tls12"},
 	}
 	byName := make(map[string]downloader, len(installDownloaders))
 	for _, d := range installDownloaders {
@@ -47,6 +51,10 @@ func TestInstallDownloaders_RenderShape(t *testing.T) {
 		}
 		if !strings.HasSuffix(got, c.suffix) {
 			t.Errorf("%s: expected suffix %q, got %q", c.name, c.suffix, got)
+		}
+		if c.extraMarker != "" && !strings.Contains(got, c.extraMarker) {
+			t.Errorf("%s: missing extra marker %q in: %q",
+				c.name, c.extraMarker, got)
 		}
 	}
 }

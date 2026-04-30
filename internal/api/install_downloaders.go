@@ -118,11 +118,26 @@ func renderRuby(url string) string {
 }
 
 func renderPowerShell(url string) string {
-	return `powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};iwr -useb '` +
+	// Windows PowerShell 5.1 defaults SecurityProtocol to Ssl3|Tls
+	// (TLS 1.0), which the ingress listener rejects (MinVersion=
+	// TLS 1.2). The handshake fails with the misleading "Could not
+	// create SSL/TLS secure channel" error before cert validation
+	// even runs. Forcing Tls12 fixes the protocol negotiation;
+	// ServerCertificateValidationCallback={$true} skips cert
+	// verification for self-signed deployments. Both must come
+	// BEFORE iwr so the new ServicePointManager state is in place
+	// when the connection is opened.
+	return `powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true};iwr -useb '` +
 		url + `' | iex"`
 }
 
 func renderPwsh(url string) string {
-	return `pwsh -ExecutionPolicy Bypass -Command "iwr -useb -SkipCertificateCheck '` +
+	// pwsh (PowerShell 7+) inherits system-default protocols which
+	// include TLS 1.2/1.3 on every supported Windows, so the
+	// SecurityProtocol force is technically redundant. We set it
+	// anyway for defence-in-depth — a hardened host that disabled
+	// 1.2 at the OS level would otherwise still fail here, and the
+	// line is a no-op when 1.2 is already enabled.
+	return `pwsh -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;iwr -useb -SkipCertificateCheck '` +
 		url + `' | iex"`
 }

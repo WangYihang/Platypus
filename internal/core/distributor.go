@@ -487,6 +487,15 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string)
 		"# Platypus agent bootstrap (Windows / PowerShell).",
 		"# One-shot enrollment; the download token is burnt on first hit.",
 		"$ErrorActionPreference = 'Stop'",
+		// Force TLS 1.2 on the .NET ServicePointManager — Windows
+		// PowerShell 5.1 defaults to Ssl3|Tls (TLS 1.0), which the
+		// ingress listener (MinVersion=TLS 1.2) rejects with the
+		// misleading "Could not create SSL/TLS secure channel"
+		// error. Setting this here is defensive: the outer iwr|iex
+		// one-liner already forces it, but a paste of the bare
+		// script body via a different harness would otherwise miss
+		// the override and fail.
+		"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
 		"$AgentHost = " + psQuote(host),
 		"$AgentPort = " + psQuote(port),
 		"$AgentToken = " + psQuote(r.PATPlaintext),
