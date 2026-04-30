@@ -33,6 +33,7 @@ import { computeScrollSwap } from "./host/scrollPreservation";
 import FilesTab from "./host/FilesTab";
 import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
+import SecurityTab from "./host/SecurityTab";
 import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
 
@@ -52,7 +53,7 @@ interface Props {
 // (`/hosts/:id` → `/hosts/:id/files`) reflects that — landing on a
 // system-info data dump was useful for debugging the agent but
 // less useful for the day-to-day operator workflow.
-const TABS = ["files", "info", "sessions", "processes", "tunnels"] as const;
+const TABS = ["files", "info", "sessions", "processes", "security", "tunnels"] as const;
 type TabKey = (typeof TABS)[number];
 
 // HostView is the main-panel view when a Host is selected. After the
@@ -251,6 +252,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <TabsTrigger value="info">Info</TabsTrigger>
                 <TabsTrigger value="sessions">Sessions ({sessions.length})</TabsTrigger>
                 <TabsTrigger value="processes">Processes</TabsTrigger>
+                <TabsTrigger value="security">Security</TabsTrigger>
                 <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
             </TabsList>
         </Tabs>
@@ -381,6 +383,18 @@ export default function HostView({ projectID, hostID }: Props) {
                         projectID={projectID}
                         hostID={hostID}
                         active={activeTab === "processes"}
+                    />
+                </div>
+                <div
+                    style={{
+                        display: activeTab === "security" ? "block" : "none",
+                        padding: space[4],
+                    }}
+                >
+                    <SecurityTab
+                        projectID={projectID}
+                        hostID={hostID}
+                        active={activeTab === "security"}
                     />
                 </div>
                 <div

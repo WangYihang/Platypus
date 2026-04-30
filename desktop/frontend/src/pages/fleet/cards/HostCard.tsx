@@ -10,6 +10,7 @@ import { fromNow, isOnline } from "../../../lib/time";
 
 import ApprovalActions from "./ApprovalActions";
 import Dim from "./Dim";
+import SecurityBadge from "./SecurityBadge";
 import { MachineTypeIcon } from "./machineIcons";
 import { formatMem, osLabel } from "./format";
 
@@ -101,6 +102,11 @@ export default function HostCard({
                 </span>
                 {pending && <StatusPill tone="warning">pending</StatusPill>}
                 {rejected && <StatusPill tone="neutral">rejected</StatusPill>}
+                <SecurityBadge
+                    counts={host.security_severity_counts ?? null}
+                    scannedAtUnix={host.security_scanned_at_unix}
+                    compact
+                />
             </div>
 
             <div

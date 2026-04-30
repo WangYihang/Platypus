@@ -23,6 +23,7 @@ import enLogin from "./locales/en-US/login.json";
 import enOnboarding from "./locales/en-US/onboarding.json";
 import enPreferences from "./locales/en-US/preferences.json";
 import enProjectOverview from "./locales/en-US/projectOverview.json";
+import enSecurity from "./locales/en-US/security.json";
 
 import zhCommon from "./locales/zh-CN/common.json";
 import zhLayout from "./locales/zh-CN/layout.json";
@@ -30,6 +31,7 @@ import zhLogin from "./locales/zh-CN/login.json";
 import zhOnboarding from "./locales/zh-CN/onboarding.json";
 import zhPreferences from "./locales/zh-CN/preferences.json";
 import zhProjectOverview from "./locales/zh-CN/projectOverview.json";
+import zhSecurity from "./locales/zh-CN/security.json";
 
 export const SUPPORTED_LANGUAGES = ["en-US", "zh-CN"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -61,6 +63,7 @@ export const i18nReady = i18n
             "onboarding",
             "preferences",
             "projectOverview",
+            "security",
         ],
         defaultNS: "common",
         detection: {
@@ -76,6 +79,7 @@ export const i18nReady = i18n
                 onboarding: enOnboarding,
                 preferences: enPreferences,
                 projectOverview: enProjectOverview,
+                security: enSecurity,
             },
             "zh-CN": {
                 common: zhCommon,
@@ -84,6 +88,7 @@ export const i18nReady = i18n
                 onboarding: zhOnboarding,
                 preferences: zhPreferences,
                 projectOverview: zhProjectOverview,
+                security: zhSecurity,
             },
         },
         interpolation: { escapeValue: false },

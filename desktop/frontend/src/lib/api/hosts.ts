@@ -63,6 +63,24 @@ export interface Host {
     approval_decided_at?: string;
     approval_decided_by?: string;
     approval_reason?: string;
+
+    // Latest security-scan summary, ridden onto the hosts list
+    // response by a single batched query server-side. `null`
+    // (absent on the wire) = host has never been scanned; populated
+    // counts (even all-zero) = scanned, possibly clean. The fleet
+    // HostCard distinguishes the two visually.
+    security_severity_counts?: SeverityCounts | null;
+    security_scanned_at_unix?: number;
+}
+
+export type Severity = "critical" | "high" | "medium" | "low" | "info";
+
+export interface SeverityCounts {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
 }
 
 export interface HostSysInfoInterface {
@@ -354,4 +372,152 @@ export async function triggerAgentUpgrade(
             body: JSON.stringify(body),
         },
     );
+}
+
+// --- Security scan -------------------------------------------------
+
+export interface SecurityFinding {
+    id: string;
+    finding_id: string;
+    check_id: string;
+    category: string;
+    severity: Severity;
+    title: string;
+    description: string;
+    evidence: string;
+    remediation: string;
+    references?: string[];
+    // Present only on the project-level findings endpoint.
+    host_id?: string;
+    scanned_at_unix?: number;
+}
+
+export interface SecurityCheckResult {
+    id: string;
+    category: string;
+    status: "ok" | "skipped" | "error";
+    error?: string;
+    elapsed_ms: number;
+    finding_count: number;
+}
+
+export interface HostSecurityScan {
+    id: string;
+    host_id: string;
+    project_id: string;
+    started_at_unix: number;
+    elapsed_ms: number;
+    error?: string;
+    severity_counts: SeverityCounts;
+    findings: SecurityFinding[];
+    checks: SecurityCheckResult[];
+}
+
+export interface SecurityScanSummary {
+    id: string;
+    started_at_unix: number;
+    elapsed_ms: number;
+    severity_counts: SeverityCounts;
+    error?: string;
+}
+
+export interface RescanHostOpts {
+    check_ids?: string[];
+    categories?: string[];
+    per_check_timeout_ms?: number;
+}
+
+export interface ListProjectFindingsOpts {
+    severity?: Severity[];
+    category?: string[];
+    host_id?: string;
+    q?: string;
+    page?: number;
+    page_size?: number;
+}
+
+export interface ProjectFindingsPage {
+    findings: SecurityFinding[];
+    total: number;
+    page: number;
+    page_size: number;
+}
+
+// getHostSecurityScan returns the latest persisted scan, or null when
+// the host has never been scanned. Distinguishing "never scanned"
+// from "scanned, all clean" is part of the UI's job — keep the null
+// pathway intact rather than throwing on 404.
+//
+// scanID, when supplied, picks one historical scan from the
+// per-host history dropdown. ErrNotFound on a stranger's scan id is
+// the server's responsibility (handler_hosts_v1 enforces it); we
+// surface it as null here for the same reason.
+export async function getHostSecurityScan(
+    pid: string,
+    hid: string,
+    scanID?: string,
+): Promise<HostSecurityScan | null> {
+    const qs = scanID ? `?scan_id=${encodeURIComponent(scanID)}` : "";
+    try {
+        return await authJSON<HostSecurityScan>(
+            `/api/v1/projects/${pid}/hosts/${hid}/security-scan${qs}`,
+        );
+    } catch (err) {
+        if (err instanceof Error && err.message.startsWith("404:")) return null;
+        throw err;
+    }
+}
+
+// rescanHost POSTs to the same path. Triggers an agent RPC, persists
+// the result server-side, and returns it. Throws on 4xx/5xx —
+// callers should surface humanizeError(err) inline rather than
+// clobbering the cached read.
+export async function rescanHost(
+    pid: string,
+    hid: string,
+    opts: RescanHostOpts = {},
+): Promise<HostSecurityScan> {
+    return authJSON<HostSecurityScan>(
+        `/api/v1/projects/${pid}/hosts/${hid}/security-scan`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(opts),
+        },
+    );
+}
+
+// listHostScans returns the lightweight history rows for the per-host
+// History dropdown. limit defaults to 10, capped server-side at 50.
+export async function listHostScans(
+    pid: string,
+    hid: string,
+    limit?: number,
+): Promise<SecurityScanSummary[]> {
+    const qs = limit && limit > 0 ? `?limit=${limit}` : "";
+    const j = await authJSON<{ scans: SecurityScanSummary[] }>(
+        `/api/v1/projects/${pid}/hosts/${hid}/security-scans${qs}`,
+    );
+    return j.scans ?? [];
+}
+
+// listProjectFindings powers the cross-host Security top-tab. The
+// server restricts results to the latest scan per host so the
+// project view always shows current posture, not historical noise.
+export async function listProjectFindings(
+    pid: string,
+    opts: ListProjectFindingsOpts = {},
+): Promise<ProjectFindingsPage> {
+    const params = new URLSearchParams();
+    if (opts.severity?.length) params.set("severity", opts.severity.join(","));
+    if (opts.category?.length) params.set("category", opts.category.join(","));
+    if (opts.host_id) params.set("host_id", opts.host_id);
+    if (opts.q) params.set("q", opts.q);
+    if (opts.page && opts.page > 0) params.set("page", String(opts.page));
+    if (opts.page_size && opts.page_size > 0) {
+        params.set("page_size", String(opts.page_size));
+    }
+    const qs = params.toString();
+    const url = `/api/v1/projects/${pid}/security-findings${qs ? "?" + qs : ""}`;
+    return authJSON<ProjectFindingsPage>(url);
 }

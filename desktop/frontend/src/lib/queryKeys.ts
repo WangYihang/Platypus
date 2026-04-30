@@ -9,7 +9,7 @@
 // give react-query proper structural-equality matching without
 // hand-rolling a comparator.
 
-import type { ListActivitiesOpts } from "./api";
+import type { ListActivitiesOpts, ListProjectFindingsOpts } from "./api";
 
 export const qk = {
     // --- Hosts / sessions / processes -----------------------------
@@ -23,6 +23,12 @@ export const qk = {
         ["hostSessions", projectId, hostId] as const,
     hostProcesses: (projectId: string, hostId: string) =>
         ["hostProcesses", projectId, hostId] as const,
+    hostSecurityScan: (projectId: string, hostId: string, scanId?: string) =>
+        ["hostSecurityScan", projectId, hostId, scanId ?? null] as const,
+    hostSecurityScans: (projectId: string, hostId: string, limit: number) =>
+        ["hostSecurityScans", projectId, hostId, limit] as const,
+    projectSecurityFindings: (projectId: string, opts: ListProjectFindingsOpts) =>
+        ["projectSecurityFindings", projectId, opts] as const,
     pendingHosts: (projectId: string) =>
         ["pendingHosts", projectId] as const,
     pendingHostsCount: (projectId: string) =>

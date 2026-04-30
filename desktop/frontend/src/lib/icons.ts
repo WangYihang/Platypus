@@ -28,6 +28,7 @@ import {
     Server,
     ServerCog,
     Settings2,
+    ShieldAlert,
     ShieldCheck,
     ShieldHalf,
     Circle,
@@ -47,6 +48,7 @@ export const icons = {
     // Top-bar navigation (project context)
     project: LayoutGrid,
     fleet: Monitor,
+    security: ShieldAlert,
     operations: Wrench,
     history: History,
     members: Users,
