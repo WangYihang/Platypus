@@ -72,7 +72,12 @@ type hostResponse struct {
 	PrimaryIP       string       `json:"primary_ip,omitempty"`
 	PrimaryIPInfo   *ipinfo.Info `json:"primary_ip_info,omitempty"`
 	PrimaryMAC      string       `json:"primary_mac,omitempty"`
-	BootTimeUnix    int64  `json:"boot_time_unix,omitempty"`
+	BootTimeUnix    int64        `json:"boot_time_unix,omitempty"`
+
+	EgressIP     string       `json:"egress_ip,omitempty"`
+	EgressIPInfo *ipinfo.Info `json:"egress_ip_info,omitempty"`
+	PublicIP     string       `json:"public_ip,omitempty"`
+	PublicIPInfo *ipinfo.Info `json:"public_ip_info,omitempty"`
 
 	BuildVersion    string `json:"build_version,omitempty"`
 	BuildCommit     string `json:"build_commit,omitempty"`
@@ -93,6 +98,16 @@ func toHostResponse(h *storage.Host) hostResponse {
 	if h.PrimaryIP != "" {
 		info := ipinfo.Lookup(h.PrimaryIP)
 		primaryInfo = &info
+	}
+	var egressInfo *ipinfo.Info
+	if h.EgressIP != "" {
+		info := ipinfo.Lookup(h.EgressIP)
+		egressInfo = &info
+	}
+	var publicInfo *ipinfo.Info
+	if h.PublicIP != "" {
+		info := ipinfo.Lookup(h.PublicIP)
+		publicInfo = &info
 	}
 	return hostResponse{
 		ID:                  h.ID,
@@ -120,6 +135,10 @@ func toHostResponse(h *storage.Host) hostResponse {
 		PrimaryIPInfo:       primaryInfo,
 		PrimaryMAC:          h.PrimaryMAC,
 		BootTimeUnix:        h.BootTimeUnix,
+		EgressIP:            h.EgressIP,
+		EgressIPInfo:        egressInfo,
+		PublicIP:            h.PublicIP,
+		PublicIPInfo:        publicInfo,
 		BuildVersion:        h.BuildVersion,
 		BuildCommit:         h.BuildCommit,
 		BuildDate:           h.BuildDate,

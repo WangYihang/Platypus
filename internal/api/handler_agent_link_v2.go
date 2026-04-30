@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -320,6 +321,18 @@ func (h *AgentLinkHandler) startLiveSession(c *gin.Context, agentID, projectID s
 		log.Warn("agent link: insert session (agent=%s host=%s): %v", agentID, host.ID, err)
 		return ""
 	}
+	// Stamp the server-derived egress IP on the host row. The session
+	// row already records remote_addr per-connect, but surfacing it on
+	// the host means the fleet UI can show "where on the internet is
+	// this box" without joining sessions every render. Strip the port
+	// (RemoteAddr is host:port). Failure is non-fatal — the link still
+	// works, the egress column just stays at the previous value.
+	if egress := stripRemotePort(c.Request.RemoteAddr); egress != "" {
+		if err := h.db.Hosts().SetEgressIP(ctx, host.ID, egress); err != nil &&
+			!errors.Is(err, storage.ErrNotFound) {
+			log.Debug("agent link: set egress ip (host=%s): %v", host.ID, err)
+		}
+	}
 	// Audit row: the agent itself is the principal here (no human
 	// user is on the request). Captures connect IP for forensic
 	// review of "which IP did agent X connect from?".
@@ -506,6 +519,7 @@ func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
 		PrimaryIP:       s.PrimaryIp,
 		PrimaryMAC:      s.PrimaryMac,
 		BootTimeUnix:    int64(s.BootTimeUnix),
+		PublicIP:        s.PublicIp,
 		BuildVersion:    s.BuildVersion,
 		BuildCommit:     s.BuildCommit,
 		BuildDate:       s.BuildDate,
@@ -528,6 +542,25 @@ func coalesce(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// stripRemotePort returns the host portion of a "host:port" remote
+// address, leaving plain literals (no port) untouched. Empty / clearly
+// malformed input returns "" so callers don't persist garbage.
+func stripRemotePort(remote string) string {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return ""
+	}
+	if h, _, err := net.SplitHostPort(remote); err == nil {
+		return h
+	}
+	// IPv6 literal without port (already bare) — keep as-is. Any other
+	// input that doesn't parse as an IP is dropped on the floor.
+	if ip := net.ParseIP(remote); ip != nil {
+		return remote
+	}
+	return ""
 }
 
 // summarizeGPUs builds a short "vendor model; vendor model" blurb

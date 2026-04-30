@@ -1,0 +1,6 @@
+# ip2region xdb datasets are not committed — they're either fetched
+# via `make data` (calls scripts/fetch-ip2region.sh) or shipped
+# alongside the binary in release tarballs. Embedding them in the Go
+# binary inflates platypus-server by ~11 MB (v4) and ~36 MB (v6) for
+# data most operators don't need at runtime.
+*.xdb

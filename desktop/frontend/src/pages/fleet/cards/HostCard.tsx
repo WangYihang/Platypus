@@ -135,6 +135,14 @@ export default function HostCard({
                         <Dim>—</Dim>
                     )}
                 </span>
+                <span style={{ color: palette.textMuted }}>Egress</span>
+                <span>
+                    {host.egress_ip ? (
+                        <RemoteAddr addr={host.egress_ip} info={host.egress_ip_info} />
+                    ) : (
+                        <Dim>—</Dim>
+                    )}
+                </span>
                 <span style={{ color: palette.textMuted }}>Hardware</span>
                 <span
                     style={{

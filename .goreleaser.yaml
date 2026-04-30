@@ -20,6 +20,11 @@ before:
     # CI step required to ship a UI-bearing binary. Requires Node +
     # pnpm on the release host.
     - make web-ui-embed
+    # Pull the ip2region v4 xdb into internal/ipinfo/data/ so the
+    # archives section can ship it alongside the server binary at
+    # data/ip2region_v4.xdb. Without the file the server still runs;
+    # geo / ISP enrichment just stays blank.
+    - make data
 
 builds:
   - id: platypus-server
@@ -209,6 +214,14 @@ archives:
     files:
       - README.md
       - assets/*
+      # Ship the v4 ip2region xdb at data/ip2region_v4.xdb inside the
+      # archive so it lands next to the server binary on extract — the
+      # ipinfo loader probes <exec dir>/data/ip2region_v{4,6}.xdb and
+      # picks it up automatically. v6 isn't bundled by default; add it
+      # via PLATYPUS_IP2REGION_V6_XDB or `make data-v6` locally.
+      - src: internal/ipinfo/data/ip2region_v4.xdb
+        dst: data/ip2region_v4.xdb
+        strip_parent: false
 
 changelog:
   sort: asc

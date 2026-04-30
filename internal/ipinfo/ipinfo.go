@@ -1,27 +1,40 @@
 // Package ipinfo enriches a bare IP address with cheap-to-derive
 // metadata: address class (private / loopback / link-local), IP
-// version, and best-effort geo / ISP attribution from the embedded
-// ip2region xdb dataset.
+// version, and best-effort geo / ISP attribution from an ip2region
+// xdb dataset loaded at runtime.
 //
-// The xdb file is shipped inside the binary so callers don't need to
-// manage an out-of-tree data file. IPv6 lookup is intentionally not
-// supported here — the v6 dataset is ~36 MB and rarely useful for
-// the operator-facing IP display this package was written for; v6
-// addresses get classified (private/global/version) but no geo data.
+// Resolution order for the v4 / v6 xdb files:
+//
+//  1. Env override — PLATYPUS_IP2REGION_V4_XDB / PLATYPUS_IP2REGION_V6_XDB
+//  2. <exec dir>/data/ip2region_v{4,6}.xdb — what release tarballs ship
+//  3. $XDG_DATA_HOME/platypus/ip2region_v{4,6}.xdb (or ~/.local/share/...)
+//  4. ./data/ip2region_v{4,6}.xdb — dev-tree convenience
+//
+// First file that exists and parses wins. A missing / malformed file
+// degrades to "classification only" — the IP still gets a version /
+// private / loopback verdict, but country / ISP / city stay empty.
+// IPv6 enrichment is opt-in: drop a v6 xdb in any of the search
+// paths to turn it on.
 package ipinfo
 
 import (
 	"container/list"
-	_ "embed"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
 )
 
-//go:embed data/ip2region_v4.xdb
-var v4DB []byte
+const (
+	envV4Override = "PLATYPUS_IP2REGION_V4_XDB"
+	envV6Override = "PLATYPUS_IP2REGION_V6_XDB"
+	v4Filename    = "ip2region_v4.xdb"
+	v6Filename    = "ip2region_v6.xdb"
+)
 
 // Info is the enriched description we hand back for an IP. Empty
 // strings on the geo fields mean "unknown / not looked up" — the
@@ -38,24 +51,91 @@ type Info struct {
 }
 
 var (
-	searcherOnce sync.Once
-	searcherMu   sync.Mutex // ip2region's xdb.Searcher is not safe for concurrent Search().
-	searcher     *xdb.Searcher
-	cache        = newLRU(1024)
+	// Per-version: a sync.Once gates initialisation, a mutex guards
+	// concurrent .Search() calls (xdb.Searcher isn't safe for parallel
+	// access), and the searcher is nil when no xdb file was found.
+	searcherV4Once sync.Once
+	searcherV4Mu   sync.Mutex
+	searcherV4     *xdb.Searcher
+
+	searcherV6Once sync.Once
+	searcherV6Mu   sync.Mutex
+	searcherV6     *xdb.Searcher
+
+	cache = newLRU(1024)
 )
 
-func ensureSearcher() {
-	searcherOnce.Do(func() {
-		s, err := xdb.NewWithBuffer(xdb.IPv4, v4DB)
-		if err != nil {
-			// Embedded data is built into the binary — a load error
-			// here is a build/release problem, not something callers
-			// can recover from. Falling back to nil leaves geo fields
-			// blank rather than crashing the process.
-			return
+// loadSearcher resolves the xdb path for the given IP version and
+// opens it via xdb.NewWithFileOnly so we don't slurp the whole file
+// (especially the 36 MB v6 dataset) into memory. Missing / malformed
+// files log once and leave the returned searcher nil; callers must
+// nil-check.
+func loadSearcher(version *xdb.Version, envVar, filename string) *xdb.Searcher {
+	path := resolveXDBPath(envVar, filename)
+	if path == "" {
+		log.L.Info("ipinfo.xdb_not_found",
+			"version", version.Name,
+			"hint", "set "+envVar+" or place "+filename+" next to the binary",
+		)
+		return nil
+	}
+	s, err := xdb.NewWithFileOnly(version, path)
+	if err != nil {
+		log.L.Warn("ipinfo.xdb_load_failed",
+			"version", version.Name,
+			"path", path,
+			"error", err.Error(),
+		)
+		return nil
+	}
+	log.L.Info("ipinfo.xdb_loaded", "version", version.Name, "path", path)
+	return s
+}
+
+// resolveXDBPath walks the standard search paths and returns the
+// first one that exists.
+func resolveXDBPath(envVar, filename string) string {
+	if v := strings.TrimSpace(os.Getenv(envVar)); v != "" {
+		if fileExists(v) {
+			return v
 		}
-		searcher = s
+	}
+	candidates := []string{}
+	if execPath, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(execPath), "data", filename))
+	}
+	if dataHome := os.Getenv("XDG_DATA_HOME"); dataHome != "" {
+		candidates = append(candidates, filepath.Join(dataHome, "platypus", filename))
+	} else if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".local", "share", "platypus", filename))
+	}
+	candidates = append(candidates, filepath.Join("data", filename))
+
+	for _, p := range candidates {
+		if fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+func ensureV4Searcher() *xdb.Searcher {
+	searcherV4Once.Do(func() {
+		searcherV4 = loadSearcher(xdb.IPv4, envV4Override, v4Filename)
 	})
+	return searcherV4
+}
+
+func ensureV6Searcher() *xdb.Searcher {
+	searcherV6Once.Do(func() {
+		searcherV6 = loadSearcher(xdb.IPv6, envV6Override, v6Filename)
+	})
+	return searcherV6
 }
 
 // Lookup returns enrichment for an IP literal. host:port forms and
@@ -89,11 +169,19 @@ func Lookup(raw string) Info {
 	info.IsLoopback = ip.IsLoopback()
 	info.IsPrivate = isPrivateOrReserved(ip)
 
-	// Only public IPv4 addresses get a geo lookup. Private ranges
-	// would just return blanks anyway, and IPv6 isn't covered by the
-	// embedded dataset.
-	if info.Version == 4 && !info.IsPrivate && !info.IsLoopback {
-		if region, ok := lookupV4(key); ok {
+	// Skip geo lookup for non-routable addresses regardless of version
+	// — both the v4 and v6 datasets only carry public-internet ranges,
+	// and a private IP would just return blanks anyway.
+	if !info.IsPrivate && !info.IsLoopback {
+		var region string
+		var ok bool
+		switch info.Version {
+		case 4:
+			region, ok = lookupV4(key)
+		case 6:
+			region, ok = lookupV6(key)
+		}
+		if ok {
 			info.Country, info.Province, info.City, info.ISP = parseRegion(region)
 		}
 	}
@@ -103,13 +191,27 @@ func Lookup(raw string) Info {
 }
 
 func lookupV4(ip string) (string, bool) {
-	ensureSearcher()
-	if searcher == nil {
+	s := ensureV4Searcher()
+	if s == nil {
 		return "", false
 	}
-	searcherMu.Lock()
-	defer searcherMu.Unlock()
-	r, err := searcher.Search(ip)
+	searcherV4Mu.Lock()
+	defer searcherV4Mu.Unlock()
+	r, err := s.Search(ip)
+	if err != nil || r == "" {
+		return "", false
+	}
+	return r, true
+}
+
+func lookupV6(ip string) (string, bool) {
+	s := ensureV6Searcher()
+	if s == nil {
+		return "", false
+	}
+	searcherV6Mu.Lock()
+	defer searcherV6Mu.Unlock()
+	r, err := s.Search(ip)
 	if err != nil || r == "" {
 		return "", false
 	}
@@ -138,7 +240,9 @@ func parseRegion(region string) (country, province, city, isp string) {
 
 // isPrivateOrReserved covers the ranges net.IP.IsPrivate misses that
 // still aren't useful to look up: link-local, CGNAT (100.64/10),
-// multicast, unspecified.
+// multicast, unspecified, plus IPv6 ULA (fc00::/7). IPv4-mapped v6
+// addresses recurse into the v4 check so a tunneled RFC1918 still
+// classifies as private.
 func isPrivateOrReserved(ip net.IP) bool {
 	if ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast() || ip.IsUnspecified() {
@@ -149,6 +253,13 @@ func isPrivateOrReserved(ip net.IP) bool {
 		if v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
 			return true
 		}
+		return false
+	}
+	// IPv6 from here on. ULA fc00::/7 — IsPrivate already covers fd00::/8
+	// (the locally-assigned half) but not the fc00::/8 reserved half;
+	// treat both as non-routable.
+	if len(ip) == net.IPv6len && (ip[0]&0xfe) == 0xfc {
+		return true
 	}
 	return false
 }

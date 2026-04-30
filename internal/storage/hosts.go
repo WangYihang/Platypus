@@ -44,6 +44,16 @@ type Host struct {
 	PrimaryMAC      string
 	BootTimeUnix    int64
 
+	// Egress / public IP (migration 000024). EgressIP is whatever the
+	// server saw as RemoteAddr on the agent-link WS upgrade — the
+	// authoritative "where on the internet did this connection come
+	// from" signal. PublicIP is the agent's own DNS-TXT probe of
+	// o-o.myaddr.l.google.com and may diverge from EgressIP under mesh
+	// relay (where EgressIP becomes the relay). Both optional; populated
+	// on the next agent link-up after migration.
+	EgressIP string
+	PublicIP string
+
 	// Build identity (migration 000023). Populated from the agent's
 	// pkg/version at enroll time and refreshed on every SysInfo
 	// reconnect. All advisory; never gates security decisions.
@@ -118,6 +128,12 @@ type HostIdentity struct {
 	PrimaryMAC      string
 	BootTimeUnix    int64
 
+	// Egress / public IP. Server callers prefer SetEgressIP for the
+	// hot connect path; PublicIP rides through this struct from the
+	// SysInfo refresh, so the regular Upsert merges it in.
+	EgressIP string
+	PublicIP string
+
 	BuildVersion    string
 	BuildCommit     string
 	BuildDate       string
@@ -153,6 +169,7 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        kernel_version, cpu_model, num_cpu, mem_total_bytes,
        current_user, timezone, primary_ip, primary_mac,
        boot_time_unix,
+       egress_ip, public_ip,
        build_version, build_commit, build_date, protocol_version,
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
@@ -240,6 +257,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			       num_cpu = ?, mem_total_bytes = ?, current_user = ?,
 			       timezone = ?, primary_ip = ?, primary_mac = ?,
 			       boot_time_unix = ?,
+			       egress_ip = ?, public_ip = ?,
 			       build_version = ?, build_commit = ?, build_date = ?,
 			       protocol_version = ?,
 			       machine_type = ?, chassis_type = ?, product_vendor = ?,
@@ -255,6 +273,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			nullIfEmpty(merged.CurrentUser), nullIfEmpty(merged.Timezone),
 			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
 			nullIfInt64(merged.BootTimeUnix),
+			nullIfEmpty(merged.EgressIP), nullIfEmpty(merged.PublicIP),
 			nullIfEmpty(merged.BuildVersion), nullIfEmpty(merged.BuildCommit),
 			nullIfEmpty(merged.BuildDate), nullIfUint32(merged.ProtocolVersion),
 			nullIfEmpty(merged.MachineType), nullIfEmpty(merged.ChassisType),
@@ -302,6 +321,8 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		PrimaryIP:           ident.PrimaryIP,
 		PrimaryMAC:          ident.PrimaryMAC,
 		BootTimeUnix:        ident.BootTimeUnix,
+		EgressIP:            ident.EgressIP,
+		PublicIP:            ident.PublicIP,
 		BuildVersion:        ident.BuildVersion,
 		BuildCommit:         ident.BuildCommit,
 		BuildDate:           ident.BuildDate,
@@ -334,13 +355,16 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		   kernel_version, cpu_model, num_cpu, mem_total_bytes,
 		   current_user, timezone, primary_ip, primary_mac,
 		   boot_time_unix,
+		   egress_ip, public_ip,
 		   build_version, build_commit, build_date, protocol_version,
 		   machine_type, chassis_type, product_vendor, product_name,
 		   bios_vendor, bios_version, gpu_summary,
 		   approval_status, approval_decided_at, approval_decided_by, approval_reason)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		        ?, ?, ?, ?, ?,
+		        ?,
+		        ?, ?,
+		        ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?)`,
 		h.ID, h.ProjectID, nullIfEmpty(h.MachineID), h.Fingerprint,
@@ -353,6 +377,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfEmpty(h.CurrentUser), nullIfEmpty(h.Timezone),
 		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
 		nullIfInt64(h.BootTimeUnix),
+		nullIfEmpty(h.EgressIP), nullIfEmpty(h.PublicIP),
 		nullIfEmpty(h.BuildVersion), nullIfEmpty(h.BuildCommit),
 		nullIfEmpty(h.BuildDate), nullIfUint32(h.ProtocolVersion),
 		nullIfEmpty(h.MachineType), nullIfEmpty(h.ChassisType),
@@ -417,6 +442,12 @@ func mergeHost(existing *Host, ident *HostIdentity) *Host {
 	}
 	if ident.BootTimeUnix != 0 {
 		h.BootTimeUnix = ident.BootTimeUnix
+	}
+	if ident.EgressIP != "" {
+		h.EgressIP = ident.EgressIP
+	}
+	if ident.PublicIP != "" {
+		h.PublicIP = ident.PublicIP
 	}
 	if ident.BuildVersion != "" {
 		h.BuildVersion = ident.BuildVersion
@@ -533,6 +564,30 @@ func (r *HostRepo) TouchLastSeen(ctx context.Context, agentID string, at time.Ti
 	return nil
 }
 
+// SetEgressIP records the server-derived egress IP (the WS upgrade
+// peer address) on the hosts row identified by id. Empty ip clears
+// the column. Used on the link hot path so we don't run a full Upsert
+// just to stamp a connect IP. Returns ErrNotFound when the host row
+// hasn't been created yet — callers should treat that as transient
+// (the enroll-time Upsert may still be in flight) and let the next
+// reconnect retry.
+func (r *HostRepo) SetEgressIP(ctx context.Context, hostID, ip string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE hosts SET egress_ip = ? WHERE id = ?`,
+		nullIfEmpty(ip), hostID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // scanHostRow scans a single row from *sql.Rows or *sql.Row via rowScanner.
 func scanHostRow(s rowScanner) (*Host, error) {
 	var (
@@ -553,6 +608,8 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		primaryIP       sql.NullString
 		primaryMAC      sql.NullString
 		bootTimeUnix    sql.NullInt64
+		egressIP        sql.NullString
+		publicIP        sql.NullString
 		buildVersion    sql.NullString
 		buildCommit     sql.NullString
 		buildDate       sql.NullString
@@ -576,6 +633,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&kernelVersion, &cpuModel, &numCPU, &memTotalBytes,
 		&currentUser, &timezone, &primaryIP, &primaryMAC,
 		&bootTimeUnix,
+		&egressIP, &publicIP,
 		&buildVersion, &buildCommit, &buildDate, &protocolVersion,
 		&machineType, &chassisType, &productVendor, &productName,
 		&biosVendor, &biosVersion, &gpuSummary,
@@ -631,6 +689,12 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	}
 	if bootTimeUnix.Valid {
 		h.BootTimeUnix = bootTimeUnix.Int64
+	}
+	if egressIP.Valid {
+		h.EgressIP = egressIP.String
+	}
+	if publicIP.Valid {
+		h.PublicIP = publicIP.String
 	}
 	if buildVersion.Valid {
 		h.BuildVersion = buildVersion.String
