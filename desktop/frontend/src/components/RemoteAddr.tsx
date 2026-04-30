@@ -1,12 +1,14 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { lookupIpInfo, RemoteIpInfo } from "../lib/api";
 import { qk } from "../lib/queryKeys";
 import Mono from "./Mono";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // IpInfo mirrors the Go-side ipinfo.Info struct serialised by the
 // API. All geo fields are optional — they only get populated for
-// public IPv4 addresses that ip2region recognises.
+// public addresses that ip2region recognises.
 export type IpInfo = RemoteIpInfo;
 
 // Country-name → ISO emoji flag for the names ip2region emits. The
@@ -59,25 +61,6 @@ function formatLocation(info: IpInfo): string {
     return parts.join(" · ");
 }
 
-// Build the hover tooltip from whatever fields are populated. Always
-// shows the raw IP first so the operator can copy it without
-// expanding anything.
-function buildTooltip(addr: string, info?: IpInfo): string {
-    const lines: string[] = [addr];
-    if (!info) return lines.join("\n");
-
-    if (info.is_loopback) lines.push("Loopback (本机)");
-    else if (info.is_private) lines.push("Private / reserved (内网)");
-
-    if (info.version) lines.push(`IPv${info.version}`);
-
-    const loc = formatLocation(info);
-    if (loc) lines.push(loc);
-    if (info.isp) lines.push(`ISP: ${info.isp}`);
-
-    return lines.join("\n");
-}
-
 interface Props {
     addr: string;
     info?: IpInfo | null;
@@ -92,12 +75,13 @@ interface Props {
 
 // RemoteAddr renders an IP address with optional geo / class
 // enrichment. The bare address is always shown in monospace so
-// table layouts stay aligned; the flag, badge, and location text
-// hang off the side and degrade to nothing when unknown.
+// table layouts stay aligned; the flag, badge, and inline location
+// text hang off the side and degrade to nothing when unknown.
 //
-// Hover surfaces the full breakdown via a native title attribute —
-// matches the rest of the codebase's tooltip pattern (StatusBar,
-// RoleHelpIcon) instead of dragging in a popover lib.
+// Hover surfaces the full breakdown via a Radix tooltip — a styled
+// card with sectioned IP / family / class / location / ISP rows
+// instead of the browser's native single-line title attribute. The
+// global TooltipProvider in main.tsx sets the open delay (200ms).
 export default function RemoteAddr({ addr, info, monoSize = 12, fetchInfo }: Props) {
     // Hooks must run unconditionally — gate on `enabled` instead of
     // an early return so the rules-of-hooks linter is happy when the
@@ -113,7 +97,6 @@ export default function RemoteAddr({ addr, info, monoSize = 12, fetchInfo }: Pro
     if (!addr) return <>—</>;
 
     const resolved = info ?? lookup.data ?? undefined;
-    const tooltip = buildTooltip(addr, resolved);
     const flag = resolved?.country ? FLAG_BY_COUNTRY[resolved.country] : undefined;
     const location = resolved ? formatLocation(resolved) : "";
 
@@ -121,12 +104,25 @@ export default function RemoteAddr({ addr, info, monoSize = 12, fetchInfo }: Pro
     if (resolved?.is_loopback) badge = "loopback";
     else if (resolved?.is_private) badge = "private";
 
-    return (
+    const trigger = (
         <span
-            title={tooltip}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+            // Inline-flex so the trigger keeps Mono baseline alignment
+            // inside table cells and DataList rows; the Radix tooltip
+            // primitive forwards refs through `asChild` so the span is
+            // the actual hover target.
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+                cursor: "default",
+            }}
         >
-            {flag && <span aria-hidden style={{ fontSize: monoSize + 2 }}>{flag}</span>}
+            {flag && (
+                <span aria-hidden style={{ fontSize: monoSize + 2 }}>
+                    {flag}
+                </span>
+            )}
             <Mono size={monoSize}>{addr}</Mono>
             {badge && (
                 <span
@@ -151,6 +147,74 @@ export default function RemoteAddr({ addr, info, monoSize = 12, fetchInfo }: Pro
                     {location}
                 </span>
             )}
+        </span>
+    );
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent
+                side="top"
+                align="start"
+                // Override the default tooltip styling: this content
+                // is a multi-line card, not a one-liner label.
+                className="max-w-[320px] rounded-md border bg-popover px-3 py-2 text-popover-foreground shadow-md"
+            >
+                <RemoteAddrTooltipBody addr={addr} info={resolved} flag={flag} />
+            </TooltipContent>
+        </Tooltip>
+    );
+}
+
+function RemoteAddrTooltipBody({
+    addr,
+    info,
+    flag,
+}: {
+    addr: string;
+    info?: IpInfo;
+    flag?: string;
+}) {
+    const location = info ? formatLocation(info) : "";
+    const classLabel = info?.is_loopback
+        ? "Loopback (本机)"
+        : info?.is_private
+          ? "Private / reserved (内网)"
+          : "";
+    return (
+        <div className="flex flex-col gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 font-mono text-[12px] break-all">
+                {flag && <span aria-hidden>{flag}</span>}
+                <span>{addr}</span>
+            </div>
+            {(info?.version || classLabel) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {info?.version && <Pill>IPv{info.version}</Pill>}
+                    {classLabel && <Pill>{classLabel}</Pill>}
+                </div>
+            )}
+            {(location || info?.isp) && (
+                <div className="flex flex-col gap-0.5 text-text-secondary">
+                    {location && <div>{location}</div>}
+                    {info?.isp && (
+                        <div>
+                            <span className="text-text-muted">ISP </span>
+                            {info.isp}
+                        </div>
+                    )}
+                </div>
+            )}
+            {!info && (
+                <div className="text-text-muted">No enrichment data available</div>
+            )}
+        </div>
+    );
+}
+
+function Pill({ children }: { children: ReactNode }) {
+    return (
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            {children}
         </span>
     );
 }

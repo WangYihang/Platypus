@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/user"
 	"runtime"
@@ -311,20 +313,41 @@ func detectDefaultGateway() string {
 	return ""
 }
 
-// detectPublicIPs runs the o-o.myaddr.l.google.com TXT probe twice in
-// parallel, once forced over IPv4 transport and once over IPv6, and
+// publicIPProbeEndpoints lists the v4 / v6 HTTP endpoints we hit to
+// learn the host's apparent public address. Each pair has a v4-only
+// hostname and a v6-only hostname so the underlying dial naturally
+// picks the right transport without us having to force a family —
+// `api.ipify.org` resolves only to A records, `api6.ipify.org` only
+// to AAAA, and the body is a bare IP string. The fallback set
+// (ident.me) is unrelated infrastructure so a single provider outage
+// or geographic block can't silence us; we always try the first pair
+// and fall through to the second on per-family error.
+//
+// Why HTTP instead of DNS: the o-o.myaddr.l.google.com TXT trick we
+// used previously returns the *DNS resolver's* IP, which under a
+// campus / corporate network is often a recursive resolver many hops
+// removed from the host's actual egress (e.g. CERNET resolvers in
+// front of every Tsinghua box). HTTP echoes the server-observed TCP
+// source IP, which is the precise NAT-translated egress we want.
+var publicIPProbeEndpoints = []struct {
+	v4URL string
+	v6URL string
+}{
+	{v4URL: "https://api.ipify.org", v6URL: "https://api6.ipify.org"},
+	{v4URL: "https://v4.ident.me", v6URL: "https://v6.ident.me"},
+}
+
+// detectPublicIPs probes the v4 / v6 endpoints in parallel and
 // returns the apparent public addresses for each family. Either side
 // may come back empty: dual-stack hosts get both, single-stack hosts
-// get whichever family has working egress, and a host with no DNS
-// (or no route to Google's name servers) gets nothing. The 1500ms
-// timeout caps the whole pair — a stalled v6 path can't hold up the
-// snapshot.
+// get whichever family has working egress, and a host with no
+// outbound connectivity gets nothing. The 1500ms timeout caps the
+// whole pair so a stalled v6 path can't hold up the snapshot.
 //
-// Forcing the transport family is what lets us see both addresses on
-// the same host: a single unconstrained LookupTXT only ever returns
-// the family the kernel happened to route the DNS query over, so a
-// dual-stack host that prefers v6 will silently lose its v4 readout
-// (and vice versa).
+// Each family runs sequentially through its fallback chain so a
+// blocked / slow primary doesn't waste the whole budget — we move on
+// to the next provider as soon as the previous one fails. The two
+// families never block each other.
 func detectPublicIPs(ctx context.Context) (v4, v6 string) {
 	c, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancel()
@@ -336,29 +359,17 @@ func detectPublicIPs(ctx context.Context) (v4, v6 string) {
 	out := make(chan result, 2)
 
 	probe := func(family string) {
-		r := &net.Resolver{
-			PreferGo: true,
-			Dial: func(dctx context.Context, _, address string) (net.Conn, error) {
-				// Pin the transport: "tcp4" / "udp4" force the resolver
-				// to reach Google's nameservers over the requested family
-				// regardless of the host's default route preference.
-				d := net.Dialer{}
-				return d.DialContext(dctx, "udp"+familyDigit(family), address)
-			},
-		}
-		addrs, err := r.LookupTXT(c, "o-o.myaddr.l.google.com")
-		if err != nil {
-			out <- result{family: family}
-			return
-		}
-		for _, a := range addrs {
-			ip := net.ParseIP(strings.Trim(a, "\""))
-			if ip == nil {
-				continue
+		urls := make([]string, 0, len(publicIPProbeEndpoints))
+		for _, ep := range publicIPProbeEndpoints {
+			if family == "v4" {
+				urls = append(urls, ep.v4URL)
+			} else {
+				urls = append(urls, ep.v6URL)
 			}
-			isV4 := ip.To4() != nil
-			if (family == "v4" && isV4) || (family == "v6" && !isV4) {
-				out <- result{family: family, ip: ip.String()}
+		}
+		for _, u := range urls {
+			if ip := fetchPublicIP(c, u, family); ip != "" {
+				out <- result{family: family, ip: ip}
 				return
 			}
 		}
@@ -380,9 +391,60 @@ func detectPublicIPs(ctx context.Context) (v4, v6 string) {
 	return v4, v6
 }
 
-func familyDigit(family string) string {
+// fetchPublicIP issues a single GET against url and returns the body
+// parsed as an IP literal of the requested family. The dialer is
+// pinned to the matching network ("tcp4" / "tcp6") so a v4-only
+// hostname accidentally resolved over a happy-eyeballs preferred v6
+// path can't ever come back as a v6 address (and vice versa). Empty
+// return means "this provider didn't give us a usable answer" — the
+// caller falls through to the next provider in the chain.
+func fetchPublicIP(ctx context.Context, url, family string) string {
+	network := "tcp4"
 	if family == "v6" {
-		return "6"
+		network = "tcp6"
 	}
-	return "4"
+	transport := &http.Transport{
+		// Match the family on every layer of the dial — the resolver
+		// step (LookupIP) honours the requested network, and the
+		// final TCP connect uses the same network so a misconfigured
+		// dual-stack provider can't sneak a wrong-family answer past
+		// us.
+		DialContext: func(dctx context.Context, _, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 800 * time.Millisecond}
+			return d.DialContext(dctx, network, address)
+		},
+		TLSHandshakeTimeout:   800 * time.Millisecond,
+		ResponseHeaderTimeout: 800 * time.Millisecond,
+		DisableKeepAlives:     true,
+	}
+	client := &http.Client{Transport: transport}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "platypus-agent/public-ip-probe")
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	// Bodies are tiny (an IP literal). Cap the read so a misbehaving
+	// provider can't trick us into buffering megabytes.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 128))
+	if err != nil {
+		return ""
+	}
+	ip := net.ParseIP(strings.TrimSpace(string(body)))
+	if ip == nil {
+		return ""
+	}
+	isV4 := ip.To4() != nil
+	if (family == "v4" && !isV4) || (family == "v6" && isV4) {
+		return ""
+	}
+	return ip.String()
 }
