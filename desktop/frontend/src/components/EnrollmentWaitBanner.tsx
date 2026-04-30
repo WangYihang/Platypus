@@ -110,7 +110,7 @@ export default function EnrollmentWaitBanner({ projectID, projectSlug }: Props) 
         const first = state.newHosts[0];
         const label =
             first.primary_alias || first.hostname || first.machine_id?.slice(0, 12) || "new host";
-        const hostHref = `/projects/${projectSlug}/hosts/${first.id}/files`;
+        const hostHref = `/projects/${projectSlug}/fleet/hosts/${first.id}/files`;
         return (
             <Frame
                 tone="success"

@@ -3,6 +3,7 @@ import {
     Navigate,
     RouteObject,
     createBrowserRouter,
+    useParams,
     useRouteError,
 } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -21,6 +22,9 @@ const ProjectsLanding = lazy(() => import("./pages/ProjectsLanding"));
 const ProjectOverviewRoute = lazy(() => import("./routes/ProjectOverviewRoute"));
 const FleetPage = lazy(() => import("./pages/FleetPage"));
 const SecurityPage = lazy(() => import("./pages/SecurityPage"));
+const HostsView = lazy(() => import("./pages/fleet/HostsView"));
+const SessionsPanel = lazy(() => import("./pages/fleet/SessionsPanel"));
+const TopologyPanel = lazy(() => import("./pages/fleet/TopologyPanel"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const OperationsPage = lazy(() => import("./pages/OperationsPage"));
@@ -38,6 +42,26 @@ const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 const AdminAccessControl = lazy(() => import("./pages/admin/AdminAccessControl"));
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
 const Servers = lazy(() => import("./pages/Servers"));
+
+// LegacyHostRedirect bridges old `/projects/<slug>/hosts/<id>(/<tab>)`
+// URLs to the new master-detail path under `/fleet/hosts`. We can't
+// use a static <Navigate to=…> because the target needs `:hostId` /
+// `:tab` interpolated; reading useParams() gives us the current
+// values to splice into the redirect target.
+function LegacyHostRedirect() {
+    const params = useParams<{
+        projectSlug: string;
+        hostId: string;
+        tab?: string;
+    }>();
+    const tab = params.tab ?? "files";
+    return (
+        <Navigate
+            to={`/projects/${params.projectSlug}/fleet/hosts/${params.hostId}/${tab}`}
+            replace
+        />
+    );
+}
 
 // routeFallback is the placeholder each lazy route renders while its
 // chunk is fetched. Centred spinner over the main surface so it doesn't
@@ -184,39 +208,74 @@ export const routeTree: RouteObject[] = [
                 children: [
                     { index: true, element: <Navigate to="overview" replace /> },
                     { path: "overview", element: withSuspense(<ProjectOverviewRoute />) },
-                    { path: "fleet", element: withSuspense(<FleetPage />) },
                     { path: "security", element: withSuspense(<SecurityPage />) },
-                    // Day-to-day enrollment (issue an install
-                    // command for one new host) happens through the
-                    // EnrollAgentWizard inside FleetPage's card view
-                    // — the wizard opens via the `?enroll=1` URL
-                    // param, no separate route needed. The historical
-                    // management surface (browse / revoke past
-                    // artifacts + tokens) lives at
-                    // /operations/enrollment.
-                    //
-                    // The legacy /fleet/enroll URL still resolves so
-                    // old bookmarks / docs / e2e specs land
-                    // somewhere reasonable; it redirects to the new
-                    // canonical path.
+                    // Fleet is the parent route for hosts / sessions /
+                    // topology / approvals. The four legacy panels
+                    // mounted via `?view=` got broken out into proper
+                    // sub-routes so URL = activity (deep-linkable,
+                    // bookmarkable, browser-back works), and the
+                    // master-detail HostView lives under hosts/:id/:activity.
                     {
-                        path: "fleet/enroll",
-                        element: <Navigate to="../operations/enrollment" replace />,
+                        path: "fleet",
+                        element: withSuspense(<FleetPage />),
+                        children: [
+                            { index: true, element: <Navigate to="hosts" replace /> },
+                            {
+                                path: "hosts",
+                                element: withSuspense(<HostsView />),
+                                children: [
+                                    // hosts/:hostId without an activity
+                                    // lands on `files` — the VS-Code-style
+                                    // HostView treats the file browser as
+                                    // the centrepiece.
+                                    {
+                                        path: ":hostId",
+                                        element: <Navigate to="files" replace />,
+                                    },
+                                    {
+                                        path: ":hostId/:tab",
+                                        element: withSuspense(<HostViewRoute />),
+                                    },
+                                ],
+                            },
+                            { path: "sessions", element: withSuspense(<SessionsPanel />) },
+                            { path: "topology", element: withSuspense(<TopologyPanel />) },
+                            { path: "approvals", element: withSuspense(<ApprovalsPage />) },
+                            // Backwards-compat: /fleet/enroll used to
+                            // be the standalone enrollment page. The
+                            // canonical management surface (browse /
+                            // revoke past artifacts + tokens) now
+                            // lives under /operations/enrollment.
+                            // Day-to-day enrollment is the
+                            // EnrollAgentWizard mounted on FleetPage
+                            // via the `?enroll=1` URL param.
+                            {
+                                path: "enroll",
+                                element: (
+                                    <Navigate
+                                        to="../../operations/enrollment"
+                                        replace
+                                        relative="path"
+                                    />
+                                ),
+                            },
+                        ],
                     },
-                    { path: "fleet/approvals", element: withSuspense(<ApprovalsPage />) },
+                    // Backwards-compat: hosts used to live as a flat
+                    // sibling of /fleet. Master-detail moved them
+                    // under /fleet/hosts so the surrounding chrome
+                    // (sub-tabs, count pills) stays in place when
+                    // jumping between hosts. Old deep links keep
+                    // resolving via the LegacyHostRedirect helper
+                    // that injects :hostId / :tab into the new path.
                     {
-                        // Default landing tab is `files` — the R3
-                        // VS-Code-style HostView treats the file
-                        // browser as the centerpiece. Operators who
-                        // want the system-info dump open the Info
-                        // tab explicitly. Direct deep links
-                        // (`…/hosts/<id>/info`) keep working
-                        // because the per-tab route below resolves
-                        // any of the TABS values.
                         path: "hosts/:hostId",
-                        element: <Navigate to="files" replace />,
+                        element: <LegacyHostRedirect />,
                     },
-                    { path: "hosts/:hostId/:tab", element: withSuspense(<HostViewRoute />) },
+                    {
+                        path: "hosts/:hostId/:tab",
+                        element: <LegacyHostRedirect />,
+                    },
                     // History is the read-only audit hub: Activities
                     // (event log) + Recordings (session playback).
                     // Sister surface Operations owns the write-capable

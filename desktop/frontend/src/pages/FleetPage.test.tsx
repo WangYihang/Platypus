@@ -10,20 +10,17 @@ vi.mock("../layout/ProjectShell", () => ({
     }),
 }));
 
-vi.mock("./fleet/HostsCardPanel", () => ({ default: () => <div /> }));
-vi.mock("./fleet/HostsPanel", () => ({ default: () => <div /> }));
-vi.mock("./fleet/SessionsPanel", () => ({ default: () => <div /> }));
-vi.mock("./fleet/TopologyPanel", () => ({ default: () => <div /> }));
+vi.mock("./fleet/enroll/EnrollAgentWizard", () => ({ default: () => null }));
 vi.mock("../components/EnrollmentWaitBanner", () => ({ default: () => null }));
 
-// FleetPage now reads `qk.hosts(project.id)` to derive the
-// PageHeader pill counts (online / offline) and mounts the
-// EnrollAgentWizard child (which imports a few install-related
-// helpers). Mock everything the import graph touches so the test
-// doesn't need a backend; useQuery surfaces missing-impl as `error`
-// instead of throwing at render so we don't even need every helper
-// to resolve, but listing them explicitly here keeps the failure
-// mode obvious if the imports drift.
+// FleetPage is now the parent route — it owns the Fleet title, the
+// Enroll-agent button, and the sub-tab strip (Hosts · Sessions ·
+// Topology · Approvals). Sub-pages render through <Outlet />, so
+// the things this test pins are the chrome bits that always show
+// regardless of which sub-tab is active.
+//
+// The Cards / Table view toggle that used to live here moved into
+// HostsView (the Hosts sub-tab body) — see HostsView.test.tsx.
 vi.mock("../lib/api", () => ({
     listHosts: vi.fn().mockResolvedValue([]),
     listInstallArtifacts: vi.fn().mockResolvedValue([]),
@@ -40,43 +37,33 @@ vi.mock("../lib/api", () => ({
 }));
 
 import FleetPage from "./FleetPage";
-import { writePreference } from "../lib/preferences";
 import { renderWithQueryClient } from "../testing/renderWithQueryClient";
 
-// FleetPage's view ToggleGroup is now wrapped in a span carrying a
-// title= attribute that names the user's stored default-view
-// preference and points at /preferences as the place to change it.
-// Without this hint, switching projects could land on an
-// unexpected default with no clue why.
-
 describe("<FleetPage>", () => {
-    it("annotates the view toggle with the current default-view preference", () => {
-        writePreference("ui.fleet.defaultView", "cards");
-        const { container } = renderWithQueryClient(
-            <MemoryRouter>
+    it("renders the Fleet sub-tab strip (hosts · sessions · topology · approvals)", () => {
+        renderWithQueryClient(
+            <MemoryRouter initialEntries={["/projects/test-project/fleet/hosts"]}>
                 <FleetPage />
             </MemoryRouter>,
         );
-        const toggle = container.querySelector(
-            '[data-testid="fleet-view-toggle"]',
-        );
-        expect(toggle).not.toBeNull();
-        const title = toggle!.getAttribute("title") ?? "";
-        expect(title).toMatch(/default view/i);
-        expect(title).toMatch(/cards/i);
-        expect(title).toMatch(/preferences/i);
+        const strip = screen.getByTestId("fleet-subtabs");
+        expect(strip).toBeInTheDocument();
+        expect(strip.textContent?.toLowerCase() ?? "").toContain("hosts");
+        expect(strip.textContent?.toLowerCase() ?? "").toContain("sessions");
+        expect(strip.textContent?.toLowerCase() ?? "").toContain("topology");
+        expect(strip.textContent?.toLowerCase() ?? "").toContain("approvals");
     });
 
     // 2026-04: enrollment is no longer a separate page — it's a
     // multi-step wizard mounted on top of Fleet itself, opened by
     // the URL search param `?enroll=1`. The header "Enroll agent"
     // entry point therefore links to `?enroll=1` (relative — keeps
-    // whichever Fleet view is active) instead of routing away. This
+    // whichever Fleet sub-tab is active) instead of routing away. This
     // spec pins the new wire format so a future refactor can't
     // accidentally re-route enrollment off-page.
     it("renders an 'Enroll agent' link in the header that opens the wizard via ?enroll=1", () => {
         renderWithQueryClient(
-            <MemoryRouter initialEntries={["/projects/test-project/fleet"]}>
+            <MemoryRouter initialEntries={["/projects/test-project/fleet/hosts"]}>
                 <FleetPage />
             </MemoryRouter>,
         );

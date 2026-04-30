@@ -55,8 +55,9 @@ export default function NavTabs({ user, currentSlug }: Props) {
                   to: `${projectBase}/fleet`,
                   label: "Fleet",
                   icon: <I.fleet className="size-3.5" />,
-                  // Fleet still owns the /hosts/:id deep link until
-                  // the Fleet master-detail refactor lands.
+                  // Fleet owns hosts/sessions/topology/approvals as
+                  // sub-tabs under /fleet, and the legacy /hosts/:id
+                  // deep link redirects under /fleet/hosts/:id/...
                   matchPaths: [`${projectBase}/fleet`, `${projectBase}/hosts`],
               },
               {

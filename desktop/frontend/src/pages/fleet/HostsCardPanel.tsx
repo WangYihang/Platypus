@@ -170,7 +170,7 @@ export default function HostsCardPanel() {
                                 }
                                 onOpen={() =>
                                     navigate(
-                                        `/projects/${project.slug}/hosts/${h.id}/files`,
+                                        `/projects/${project.slug}/fleet/hosts/${h.id}/files`,
                                     )
                                 }
                             />

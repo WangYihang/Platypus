@@ -114,7 +114,7 @@ export default function HostView({ projectID, hostID }: Props) {
         ? (tabParam as TabKey)
         : "info";
     const setActiveTab = (key: string) =>
-        navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
+        navigate(`/projects/${project.slug}/fleet/hosts/${hostID}/${key}`);
 
     // Per-tab scroll preservation. Each tab panel shares one scroll
     // container; without help every tab change resets scrollTop to 0.

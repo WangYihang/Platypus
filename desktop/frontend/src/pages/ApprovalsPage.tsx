@@ -6,9 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import EmptyState from "../components/EmptyState";
 import Mono from "../components/Mono";
 import RemoteAddr from "../components/RemoteAddr";
-import PageShell from "../components/PageShell";
 import RefreshButton from "../components/RefreshButton";
-import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
 import {
@@ -45,6 +43,10 @@ import {
 // the redeemed install token had auto_approve=true. Operators sanity-
 // check the reported hostname / IP / OS, optionally drop a reason
 // note, and click Approve or Reject.
+//
+// Renders body-only — the parent FleetPage owns the page chrome
+// (Fleet title, sub-tab strip, Enroll button) so this surface only
+// adds a small toolbar (count + refresh) and the table.
 //
 // Reject is destructive (the agent's cert chain still validates, but
 // the link gate refuses the next reconnect — to retry, the host has
@@ -91,67 +93,72 @@ export default function ApprovalsPage() {
         onError: (e) => toast.error(humanizeError(e)),
     });
 
-    const actions = (
-        <RefreshButton
-            onClick={() => void refetch()}
-            loading={isFetching}
-            aria-label="Refresh pending approvals"
-        />
-    );
-
     return (
-        <PageShell
-            title="Approvals"
-            subtitle="Hosts awaiting admin approval before their agent can open a link"
-            actions={actions}
-            pills={
-                <StatusPills
-                    pills={[
-                        { tone: "warning", count: hosts.length, label: "pending" },
-                    ]}
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div
+                style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: `${space[2]}px ${space[4]}px`,
+                    borderBottom: `1px solid ${palette.border}`,
+                    background: palette.rail,
+                    fontSize: 12,
+                    color: palette.textMuted,
+                }}
+            >
+                <span>
+                    {hosts.length} pending · auto-expire 24 h
+                </span>
+                <RefreshButton
+                    onClick={() => void refetch()}
+                    loading={isFetching}
+                    aria-label="Refresh pending approvals"
                 />
-            }
-        >
-            {hosts.length === 0 ? (
-                <EmptyState
-                    icon={<CheckCircle2 />}
-                    title="No pending hosts"
-                    description="Fresh enrollments land here. New agents that try to open a link
-                        before approval are turned away with HTTP 425; they retry on a
-                        backoff and connect automatically once you Approve."
-                />
-            ) : (
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Hostname</TableHead>
-                            <TableHead>OS</TableHead>
-                            <TableHead>Primary IP</TableHead>
-                            <TableHead>Egress</TableHead>
-                            <TableHead>First seen</TableHead>
-                            <TableHead>Fingerprint</TableHead>
-                            <TableHead style={{ textAlign: "right" }}>Decision</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {hosts.map((h) => (
-                            <ApprovalRow
-                                key={h.id}
-                                host={h}
-                                approving={approveMu.isPending}
-                                rejecting={rejectMu.isPending}
-                                onApprove={(reason) =>
-                                    approveMu.mutate({ hid: h.id, reason })
-                                }
-                                onReject={(reason) =>
-                                    rejectMu.mutate({ hid: h.id, reason })
-                                }
-                            />
-                        ))}
-                    </TableBody>
-                </Table>
-            )}
-        </PageShell>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: space[4] }}>
+                {hosts.length === 0 ? (
+                    <EmptyState
+                        icon={<CheckCircle2 />}
+                        title="No pending hosts"
+                        description="Fresh enrollments land here. New agents that try to open a link
+                            before approval are turned away with HTTP 425; they retry on a
+                            backoff and connect automatically once you Approve."
+                    />
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Hostname</TableHead>
+                                <TableHead>OS</TableHead>
+                                <TableHead>Primary IP</TableHead>
+                                <TableHead>Egress</TableHead>
+                                <TableHead>First seen</TableHead>
+                                <TableHead>Fingerprint</TableHead>
+                                <TableHead style={{ textAlign: "right" }}>Decision</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {hosts.map((h) => (
+                                <ApprovalRow
+                                    key={h.id}
+                                    host={h}
+                                    approving={approveMu.isPending}
+                                    rejecting={rejectMu.isPending}
+                                    onApprove={(reason) =>
+                                        approveMu.mutate({ hid: h.id, reason })
+                                    }
+                                    onReject={(reason) =>
+                                        rejectMu.mutate({ hid: h.id, reason })
+                                    }
+                                />
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </div>
+        </div>
     );
 }
 
