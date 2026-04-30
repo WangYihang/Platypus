@@ -96,8 +96,8 @@ importers:
         specifier: ^1.14.0
         version: 1.14.0(react@19.2.5)
       pdfjs-dist:
-        specifier: ^5.7.284
-        version: 5.7.284
+        specifier: 5.4.296
+        version: 5.4.296
       radix-ui:
         specifier: ^1.4.3
         version: 1.4.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -2474,10 +2474,6 @@ packages:
   pdfjs-dist@5.4.296:
     resolution: {integrity: sha512-DlOzet0HO7OEnmUmB6wWGJrrdvbyJKftI1bhMitK7O2N8W2gc757yyYBbINy9IDafXAV9wmKr9t7xsTaNKRG5Q==}
     engines: {node: '>=20.16.0 || >=22.3.0'}
-
-  pdfjs-dist@5.7.284:
-    resolution: {integrity: sha512-h4EdYQczmGhbOlqc3PPZwxevn7ApdWPbovAuWXOB/DjIyigSnwfy2oze7c6mRcSr9XgLp3eN3EeL4DyySTPMFw==}
-    engines: {node: '>=22.13.0 || >=24'}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -5376,10 +5372,6 @@ snapshots:
   pathe@2.0.3: {}
 
   pdfjs-dist@5.4.296:
-    optionalDependencies:
-      '@napi-rs/canvas': 0.1.100
-
-  pdfjs-dist@5.7.284:
     optionalDependencies:
       '@napi-rs/canvas': 0.1.100
 
