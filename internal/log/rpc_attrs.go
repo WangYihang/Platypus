@@ -35,6 +35,8 @@ func RPCMethodName(payload any) string {
 		return "process_list"
 	case *v2pb.RpcRequest_SecurityScan, *v2pb.RpcResponse_SecurityScan:
 		return "security_scan"
+	case *v2pb.RpcRequest_ListSecurityChecks, *v2pb.RpcResponse_ListSecurityChecks:
+		return "list_security_checks"
 	case nil:
 		return ""
 	default:
@@ -104,6 +106,8 @@ func RPCRequestAttr(payload any) slog.Attr {
 			"category_count", len(s.GetCategories()),
 			"per_check_timeout_ms", s.GetPerCheckTimeoutMs(),
 		)
+	case *v2pb.RpcRequest_ListSecurityChecks:
+		return slog.Group("request")
 	default:
 		return slog.Group("request")
 	}
@@ -157,6 +161,11 @@ func RPCResponseAttr(payload any) slog.Attr {
 			"finding_count", len(s.GetFindings()),
 			"check_count", len(s.GetChecks()),
 			"elapsed_ms", s.GetElapsedMs(),
+		)
+	case *v2pb.RpcResponse_ListSecurityChecks:
+		s := r.ListSecurityChecks
+		return slog.Group("response",
+			"check_count", len(s.GetChecks()),
 		)
 	default:
 		return slog.Group("response")

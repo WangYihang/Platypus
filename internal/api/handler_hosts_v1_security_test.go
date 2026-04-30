@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,6 +216,86 @@ func TestHosts_List_EnrichesWithScanSummary(t *testing.T) {
 	// hide the badge entirely.
 	if h := got["never"]; h.SecuritySeverityCounts != nil {
 		t.Fatalf("never-scanned host should have nil counts, got %+v", h.SecuritySeverityCounts)
+	}
+}
+
+// TestMergePartialScan pins the merge behaviour: re-running a single
+// check must not nuke findings for the other checks. Also tests the
+// degenerate case of a partial scan with no prior (just returns the
+// fresh result unchanged).
+func TestMergePartialScan(t *testing.T) {
+	prior := &storage.SecurityScan{
+		ID: "old-scan", ProjectID: "p", HostID: "h",
+		StartedAtUnix: 100,
+		ChecksJSON: `[
+            {"id":"ssh","category":"ssh","status":"ok","elapsed_ms":5,"finding_count":1},
+            {"id":"kernel.version","category":"kernel","status":"ok","elapsed_ms":2,"finding_count":1}
+        ]`,
+	}
+	priorFindings := []*storage.SecurityFinding{
+		{
+			ID: "old-f1", ScanID: "old-scan", HostID: "h", ProjectID: "p",
+			FindingID: "ssh.permitrootlogin", CheckID: "ssh", Category: "ssh",
+			Severity: "high", Title: "old ssh", Description: "x",
+			ReferencesJSON: "[]",
+		},
+		{
+			ID: "old-f2", ScanID: "old-scan", HostID: "h", ProjectID: "p",
+			FindingID: "kernel.version.outdated", CheckID: "kernel.version", Category: "kernel",
+			Severity: "high", Title: "old kernel", Description: "x",
+			ReferencesJSON: "[]",
+		},
+	}
+	freshScan := &storage.SecurityScan{
+		ID: "new-scan", ProjectID: "p", HostID: "h",
+		StartedAtUnix: 200,
+		ChecksJSON: `[
+            {"id":"ssh","category":"ssh","status":"ok","elapsed_ms":3,"finding_count":0}
+        ]`,
+	}
+	// No fresh ssh findings — operator just fixed the box.
+	freshFindings := []*storage.SecurityFinding{}
+	respProto := &v2pb.SecurityScanResponse{
+		Checks: []*v2pb.CheckResult{
+			{Id: "ssh", Category: "ssh", Status: "ok"},
+		},
+	}
+
+	scan, findings := mergePartialScan(freshScan, freshFindings, prior, priorFindings, respProto)
+
+	// Targeted check (ssh) had its 1 prior finding dropped; non-targeted
+	// (kernel.version) carried over. Total = 1.
+	if len(findings) != 1 {
+		t.Fatalf("merged findings count = %d; want 1 (kernel kept, ssh refreshed clean)", len(findings))
+	}
+	if findings[0].CheckID != "kernel.version" {
+		t.Fatalf("wrong finding survived: %+v", findings[0])
+	}
+	// Carried finding must point at the new scan id, not the old one.
+	if findings[0].ScanID != freshScan.ID {
+		t.Fatalf("carried finding stuck on old scan_id %q (want %q)", findings[0].ScanID, freshScan.ID)
+	}
+	// And get a fresh row id so storage.Save's PK doesn't collide.
+	if findings[0].ID == "old-f2" {
+		t.Fatalf("carried finding kept old row id; PK collision incoming")
+	}
+	// Merged checks_json must contain BOTH ssh (fresh) and kernel.version (prior).
+	if !strings.Contains(scan.ChecksJSON, "ssh") || !strings.Contains(scan.ChecksJSON, "kernel.version") {
+		t.Fatalf("merged checks_json missing entries: %s", scan.ChecksJSON)
+	}
+}
+
+func TestMergePartialScan_NoPrior(t *testing.T) {
+	freshScan := &storage.SecurityScan{ID: "new", ProjectID: "p", HostID: "h"}
+	freshFindings := []*storage.SecurityFinding{
+		{ID: "f1", ScanID: "new", FindingID: "ssh.x", CheckID: "ssh"},
+	}
+	respProto := &v2pb.SecurityScanResponse{
+		Checks: []*v2pb.CheckResult{{Id: "ssh"}},
+	}
+	scan, findings := mergePartialScan(freshScan, freshFindings, nil, nil, respProto)
+	if scan != freshScan || len(findings) != 1 {
+		t.Fatalf("nil prior should pass-through fresh data: %+v %+v", scan, findings)
 	}
 }
 

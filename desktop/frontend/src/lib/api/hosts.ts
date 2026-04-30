@@ -427,6 +427,36 @@ export interface RescanHostOpts {
     per_check_timeout_ms?: number;
 }
 
+// AvailableCheck describes one registered checker on the agent. The
+// UI renders a checklist of these before any scan runs, so users see
+// the full set of what *would* be evaluated. `applicable` reflects
+// the agent's Applicable() decision at enumeration time — non-
+// applicable checks render dimmed (e.g. ssh.config when sshd_config
+// is missing).
+export interface AvailableCheck {
+    id: string;
+    category: string;
+    applicable: boolean;
+}
+
+// listAvailableChecks proxies the agent's ListSecurityChecks RPC.
+// Returns null when the agent is offline (404) so the UI can fall
+// back to deriving the list from the persisted scan's checks[].
+export async function listAvailableChecks(
+    pid: string,
+    hid: string,
+): Promise<AvailableCheck[] | null> {
+    try {
+        const j = await authJSON<{ checks: AvailableCheck[] }>(
+            `/api/v1/projects/${pid}/hosts/${hid}/security-checks`,
+        );
+        return j.checks ?? [];
+    } catch (err) {
+        if (err instanceof Error && err.message.startsWith("404:")) return null;
+        throw err;
+    }
+}
+
 export interface ListProjectFindingsOpts {
     severity?: Severity[];
     category?: string[];

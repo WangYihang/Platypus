@@ -19,6 +19,7 @@ message RpcRequest {
     SysInfoRequest      sys_info     = 30;
     ProcessListRequest  process_list = 31;
     SecurityScanRequest security_scan = 32;
+    ListSecurityChecksRequest list_security_checks = 33;
   }
 }
 
@@ -39,6 +40,7 @@ message RpcResponse {
     SysInfoResponse      sys_info     = 30;
     ProcessListResponse  process_list = 31;
     SecurityScanResponse security_scan = 32;
+    ListSecurityChecksResponse list_security_checks = 33;
   }
 }
 
@@ -355,4 +357,30 @@ message SecurityScanResponse {
   // when checks ran sequentially; current implementation does).
   uint64 elapsed_ms                 = 4;
   string error                      = 5;
+}
+
+// --- Enumerate registered security checks ---
+//
+// ListSecurityChecks returns every checker the agent has registered,
+// regardless of whether it has ever run. The UI uses this to render
+// a "checklist" before any scan completes — first-time visitors see
+// the full set of checks the agent will run, with each row showing
+// a "not run yet" placeholder until the user clicks Re-scan.
+//
+// `applicable` reflects what `Applicable(ctx)` returns on the agent
+// at enumeration time — checkers gated by /etc/ssh/sshd_config
+// missing, or by a non-Linux build, surface as inapplicable so the
+// UI can render them dimmed and skip them in the per-check filter.
+
+message ListSecurityChecksRequest {}
+
+message AvailableSecurityCheck {
+  string id          = 1;  // stable id, e.g. "ssh.config"
+  string category    = 2;  // "kernel" | "sysctl" | "ssh" | "filesystem" | ...
+  bool   applicable  = 3;
+}
+
+message ListSecurityChecksResponse {
+  repeated AvailableSecurityCheck checks = 1;
+  string error                            = 2;
 }

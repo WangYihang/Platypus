@@ -538,6 +538,21 @@ func (h *HostsHandler) RescanHost(c *gin.Context) {
 	}
 
 	scan, findings := buildStorageRows(pid, host.ID, scanProto)
+
+	// Partial scan: merge with the prior persisted scan so re-
+	// running one check (e.g. ssh.config) doesn't lose findings
+	// from the others (kernel, sysctl, …). When this is a full
+	// scan or there is no prior, the merge is a no-op.
+	partial := len(body.CheckIDs) > 0 || len(body.Categories) > 0
+	if partial {
+		if prev, prevFindings, prevErr := h.db.SecurityScans().LatestForHost(c.Request.Context(), host.ID); prevErr == nil {
+			scan, findings = mergePartialScan(scan, findings, prev, prevFindings, scanProto)
+		} else if !errors.Is(prevErr, storage.ErrNotFound) {
+			log.L.Warn("http_security_scan: load prior scan for merge failed",
+				"host_id", host.ID, "error", prevErr.Error())
+		}
+	}
+
 	findingCount = len(findings)
 	if err := h.db.SecurityScans().Save(c.Request.Context(), scan, findings); err != nil {
 		log.L.Warn("http_security_scan: persist failed",
@@ -591,6 +606,73 @@ func (h *HostsHandler) GetSecurityScan(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toScanResponse(scan, findings))
+}
+
+// availableCheckResponse mirrors v2pb.AvailableSecurityCheck on the
+// wire. Returned by the GET .../security-checks endpoint so the UI
+// can render its checklist before any scan completes.
+type availableCheckResponse struct {
+	ID         string `json:"id"`
+	Category   string `json:"category"`
+	Applicable bool   `json:"applicable"`
+}
+
+// ListAvailableSecurityChecks handles
+// GET /projects/:pid/hosts/:hid/security-checks. Proxies a live
+// ListSecurityChecks RPC so the UI gets the full set of registered
+// checks (not just the ones that have run before). Falls back to a
+// 404 when the agent isn't connected — UI degrades to deriving the
+// list from the persisted scan's checks[] in that case.
+func (h *HostsHandler) ListAvailableSecurityChecks(c *gin.Context) {
+	pid := c.Param("pid")
+	hid := c.Param("hid")
+	if h.svc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "live security scan not configured"})
+		return
+	}
+	host, err := h.db.Hosts().GetByID(c.Request.Context(), hid)
+	if errors.Is(err, storage.ErrNotFound) || (err == nil && host.ProjectID != pid) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup host"})
+		return
+	}
+	if host.AgentID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "host has no registered agent"})
+		return
+	}
+	resp, err := core.CallAgentRPC(c.Request.Context(), h.svc, host.AgentID, &v2pb.RpcRequest{
+		Payload: &v2pb.RpcRequest_ListSecurityChecks{ListSecurityChecks: &v2pb.ListSecurityChecksRequest{}},
+	})
+	if err != nil {
+		var notConnected *core.ErrAgentNotConnected
+		if errors.As(err, &notConnected) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "agent not connected"})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	if resp.Error != "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": resp.Error})
+		return
+	}
+	listProto := resp.GetListSecurityChecks()
+	if listProto == nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "agent returned empty checks response"})
+		return
+	}
+	out := make([]availableCheckResponse, 0, len(listProto.GetChecks()))
+	for _, ch := range listProto.GetChecks() {
+		out = append(out, availableCheckResponse{
+			ID:         ch.GetId(),
+			Category:   ch.GetCategory(),
+			Applicable: ch.GetApplicable(),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"checks": out})
 }
 
 // ListSecurityScans handles GET /projects/:pid/hosts/:hid/security-scans
@@ -701,6 +783,85 @@ func buildStorageRows(projectID, hostID string, src *v2pb.SecurityScanResponse) 
 		})
 	}
 	return scan, findings
+}
+
+// mergePartialScan folds a partial-scan result (only the targeted
+// checks ran) into the prior persisted scan so the new row carries
+// every check's most-recent state. Without this, re-running just
+// `ssh.config` would produce a saved scan with no kernel/sysctl
+// findings and the HostCard severity badge would suddenly turn green
+// — visually correct only for the latest single check, not the host.
+//
+// Algorithm:
+//   - "targeted" = the set of check ids the agent actually ran this
+//     time (i.e. every entry in the proto response's checks[]).
+//   - For checks NOT in `targeted`: copy their findings + their
+//     CheckResult entry from the prior scan, re-stamped with the
+//     fresh scan id so they live under the new row.
+//   - For checks IN `targeted`: keep the fresh data verbatim.
+//
+// Returns the same `fresh.scan` (mutated in place) and the merged
+// findings slice. Caller saves that pair as one transaction.
+func mergePartialScan(
+	freshScan *storage.SecurityScan,
+	freshFindings []*storage.SecurityFinding,
+	priorScan *storage.SecurityScan,
+	priorFindings []*storage.SecurityFinding,
+	respProto *v2pb.SecurityScanResponse,
+) (*storage.SecurityScan, []*storage.SecurityFinding) {
+	if priorScan == nil {
+		return freshScan, freshFindings
+	}
+	targeted := make(map[string]struct{}, len(respProto.GetChecks()))
+	for _, c := range respProto.GetChecks() {
+		targeted[c.GetId()] = struct{}{}
+	}
+
+	// Carry over non-targeted findings, re-stamped onto the new
+	// scan so they ride into the same row save.
+	merged := make([]*storage.SecurityFinding, 0, len(freshFindings)+len(priorFindings))
+	merged = append(merged, freshFindings...)
+	for _, f := range priorFindings {
+		if _, hit := targeted[f.CheckID]; hit {
+			continue
+		}
+		clone := *f
+		clone.ID = uuid.NewString()
+		clone.ScanID = freshScan.ID
+		clone.ScannedAtUnix = freshScan.StartedAtUnix
+		merged = append(merged, &clone)
+	}
+
+	// Merge the per-check status array. Targeted checks come from
+	// the fresh proto response; non-targeted ones are pulled from
+	// the prior row's checks_json.
+	type checkRow struct {
+		ID           string `json:"id"`
+		Category     string `json:"category"`
+		Status       string `json:"status"`
+		Error        string `json:"error,omitempty"`
+		ElapsedMs    uint64 `json:"elapsed_ms"`
+		FindingCount uint32 `json:"finding_count"`
+	}
+	mergedChecks := []checkRow{}
+	if len(freshScan.ChecksJSON) > 0 {
+		_ = json.Unmarshal([]byte(freshScan.ChecksJSON), &mergedChecks)
+	}
+	if priorScan.ChecksJSON != "" {
+		var prior []checkRow
+		if err := json.Unmarshal([]byte(priorScan.ChecksJSON), &prior); err == nil {
+			for _, p := range prior {
+				if _, hit := targeted[p.ID]; hit {
+					continue
+				}
+				mergedChecks = append(mergedChecks, p)
+			}
+		}
+	}
+	if b, err := json.Marshal(mergedChecks); err == nil {
+		freshScan.ChecksJSON = string(b)
+	}
+	return freshScan, merged
 }
 
 // approvalDecisionRequest is the JSON body for Approve / Reject. The
@@ -838,6 +999,7 @@ func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
 		viewer.GET("/:hid/processes", h.GetProcesses)
 		viewer.GET("/:hid/security-scan", h.GetSecurityScan)
 		viewer.GET("/:hid/security-scans", h.ListSecurityScans)
+		viewer.GET("/:hid/security-checks", h.ListAvailableSecurityChecks)
 	}
 
 	// Re-scan triggers an agent RPC and writes a new DB row, so it

@@ -1,19 +1,30 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Shield } from "lucide-react";
+import {
+    AlertTriangle,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    Loader2,
+    MinusCircle,
+    RefreshCw,
+    Shield,
+    XCircle,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import EmptyState from "../../components/EmptyState";
 import Mono from "../../components/Mono";
-import RefreshButton from "../../components/RefreshButton";
 import { palette, radius, space } from "../../layout/theme";
 import {
+    AvailableCheck,
     HostSecurityScan,
     SecurityCheckResult,
     SecurityFinding,
     Severity,
     SeverityCounts,
     getHostSecurityScan,
+    listAvailableChecks,
     rescanHost,
 } from "../../lib/api";
 import { humanizeError } from "../../lib/humanizeError";
@@ -22,14 +33,6 @@ import { fromNow } from "../../lib/time";
 
 import { severityTone } from "../fleet/cards/SecurityBadge";
 
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -40,95 +43,125 @@ interface Props {
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 
-// SecurityTab loads the host's most recent persisted scan from the
-// server-side cache and lets the operator trigger a fresh scan.
+// Per-row status drives the icon + label on each checklist entry.
+//   not_run        — never persisted + not currently scanning
+//   running        — mutation in flight covering this check
+//   pass           — last run was ok with zero findings
+//   findings       — last run was ok with N findings
+//   skipped        — last run reported the check as not applicable
+//   error          — last run errored (agent could not read the data)
+//   not_applicable — Applicable() = false at enumeration time
+type RowStatus =
+    | "not_run"
+    | "running"
+    | "pass"
+    | "findings"
+    | "skipped"
+    | "error"
+    | "not_applicable";
+
+interface RowModel {
+    id: string;
+    category: string;
+    applicable: boolean;
+    status: RowStatus;
+    elapsedMs?: number;
+    error?: string;
+    findingCount: number;
+    findings: SecurityFinding[];
+}
+
+// SecurityTab renders the host's hardening posture as an interactive
+// checklist. The data sources stack:
 //
-// Behaviour differences from ProcessesTab:
-//   · No interval polling — a scan is heavy (file walks, /proc reads)
-//     and findings don't drift on their own. Refresh is explicit.
-//   · The empty state branches on data === null (server returned 404
-//     because the host has never been scanned) vs data with empty
-//     findings (scanned, all clean). Same well-known shape difference
-//     the storage layer pins, surfaced here so the user understands
-//     why no findings are showing.
-//   · Re-scan is a mutation that writes through to the cache plus
-//     invalidates the hosts list (HostCard severity badge) and the
-//     project-level findings table.
+//   1. listAvailableChecks() — every checker the agent has registered,
+//      whether or not it has ever run. Renders "not run yet" rows on
+//      a fresh host so the operator can see what'll happen before
+//      clicking.
+//   2. getHostSecurityScan() — the latest persisted scan. Per-row
+//      status (pass / findings / skipped / error) and findings come
+//      from here.
+//   3. rescanHost() — fires either the full registry or one check id.
+//      Server-side merge logic keeps non-targeted findings intact, so
+//      re-running ssh.config doesn't blank kernel/sysctl rows.
+//
+// While a mutation is in flight we mark only the *targeted* rows as
+// "running" so the operator sees per-check spinners on partial reruns.
 export default function SecurityTab({ projectID, hostID, active }: Props) {
     const { t } = useTranslation("security");
     const queryClient = useQueryClient();
 
-    const {
-        data,
-        isFetching,
-        error,
-        refetch,
-    } = useQuery({
+    const checksQuery = useQuery({
+        queryKey: qk.hostSecurityChecks(projectID, hostID),
+        queryFn: () => listAvailableChecks(projectID, hostID),
+        enabled: active,
+        refetchOnWindowFocus: false,
+    });
+
+    const scanQuery = useQuery({
         queryKey: qk.hostSecurityScan(projectID, hostID),
         queryFn: () => getHostSecurityScan(projectID, hostID),
         enabled: active,
         refetchOnWindowFocus: false,
     });
 
+    // Track which check ids are currently running so the per-row
+    // spinner only lights up on the targeted rows. `null` means
+    // "all checks running" (full re-scan).
+    const [runningSet, setRunningSet] = useState<Set<string> | null>(null);
+
     const rescan = useMutation({
-        mutationFn: () => rescanHost(projectID, hostID),
+        mutationFn: (vars: { check_ids?: string[] }) =>
+            rescanHost(projectID, hostID, vars),
+        onMutate: (vars) => {
+            setRunningSet(vars.check_ids ? new Set(vars.check_ids) : null);
+        },
+        onSettled: () => {
+            setRunningSet(new Set());
+        },
         onSuccess: (fresh) => {
             queryClient.setQueryData(qk.hostSecurityScan(projectID, hostID), fresh);
             queryClient.invalidateQueries({
                 queryKey: qk.hostSecurityScans(projectID, hostID, 10),
             });
             queryClient.invalidateQueries({ queryKey: qk.hosts(projectID) });
-            // Project-level findings page caches per-options; nuke
-            // the whole shelf so any open page rerenders.
             queryClient.invalidateQueries({
                 queryKey: ["projectSecurityFindings", projectID],
             });
         },
     });
 
-    const [severityFilter, setSeverityFilter] = useState<Set<Severity>>(new Set());
-    const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
+    const scan = scanQuery.data;
+    const available = checksQuery.data;
 
-    const findings = data?.findings ?? [];
-    const checks = data?.checks ?? [];
-    const counts: SeverityCounts =
-        data?.severity_counts ?? { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-
-    const categoriesPresent = useMemo(() => {
-        const s = new Set<string>();
-        for (const f of findings) s.add(f.category);
-        return Array.from(s).sort();
-    }, [findings]);
-
-    const filtered = useMemo(() => {
-        return findings.filter((f) => {
-            if (severityFilter.size > 0 && !severityFilter.has(f.severity)) return false;
-            if (categoryFilter.size > 0 && !categoryFilter.has(f.category)) return false;
-            return true;
-        });
-    }, [findings, severityFilter, categoryFilter]);
-
-    const skipped = useMemo(
-        () => checks.filter((c) => c.status !== "ok"),
-        [checks],
+    const rows = useMemo(
+        () => buildRows(available, scan, runningSet),
+        [available, scan, runningSet],
     );
 
-    const isPending = rescan.isPending;
-    const loading = isFetching || isPending;
+    const counts: SeverityCounts =
+        scan?.severity_counts ?? { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+
+    const isAnyRunning = rescan.isPending;
+
+    // First-load state: no checklist source available yet (agent
+    // offline + never scanned). Show the placeholder empty state with
+    // a single "Run scan" button — the agent doesn't have to be
+    // online to display this; the click path will surface its own
+    // error if the agent isn't reachable when triggered.
+    const noChecklist = (rows.length === 0) && !checksQuery.isFetching && !scanQuery.isFetching;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
             <Header
-                data={data}
+                scan={scan}
                 counts={counts}
-                loading={loading}
-                isPending={isPending}
-                onRescan={() => rescan.mutate()}
-                onRefresh={() => void refetch()}
+                isAnyRunning={isAnyRunning}
+                onRescanAll={() => rescan.mutate({})}
             />
 
-            {error && (
-                <Alert kind="danger">{humanizeError(error)}</Alert>
+            {scanQuery.error && (
+                <Alert kind="danger">{humanizeError(scanQuery.error)}</Alert>
             )}
             {rescan.error && (
                 <Alert kind="warning">
@@ -136,7 +169,7 @@ export default function SecurityTab({ projectID, hostID, active }: Props) {
                 </Alert>
             )}
 
-            {data === null && !isPending ? (
+            {noChecklist && (
                 <EmptyState
                     icon={<Shield />}
                     title={t("neverScanned")}
@@ -145,71 +178,42 @@ export default function SecurityTab({ projectID, hostID, active }: Props) {
                         <Button
                             type="button"
                             size="sm"
-                            onClick={() => rescan.mutate()}
-                            disabled={isPending}
+                            onClick={() => rescan.mutate({})}
+                            disabled={isAnyRunning}
                         >
-                            {isPending ? t("rescan.running") : t("rescan.first")}
+                            {isAnyRunning ? t("rescan.running") : t("rescan.first")}
                         </Button>
                     }
                 />
-            ) : null}
+            )}
 
-            {data && findings.length === 0 && !isPending && (
-                <EmptyState
-                    icon={<Shield style={{ color: palette.success }} />}
-                    title={t("empty.title")}
-                    description={t("empty.subtitle")}
+            {rows.length > 0 && (
+                <Checklist
+                    rows={rows}
+                    onRerunOne={(id) => rescan.mutate({ check_ids: [id] })}
+                    isAnyRunning={isAnyRunning}
                 />
             )}
-
-            {data && findings.length > 0 && (
-                <>
-                    <FilterRow
-                        countsPresent={SEVERITIES.filter(
-                            (s) => counts[s] > 0,
-                        )}
-                        categoriesPresent={categoriesPresent}
-                        severity={severityFilter}
-                        category={categoryFilter}
-                        onSeverityToggle={(s) => {
-                            setSeverityFilter((prev) => toggle(prev, s));
-                        }}
-                        onCategoryToggle={(c) => {
-                            setCategoryFilter((prev) => toggle(prev, c));
-                        }}
-                        onClear={() => {
-                            setSeverityFilter(new Set());
-                            setCategoryFilter(new Set());
-                        }}
-                        counts={counts}
-                    />
-                    <FindingsTable findings={filtered} />
-                </>
-            )}
-
-            {skipped.length > 0 && <SkippedChecks checks={skipped} />}
         </div>
     );
 }
 
+// --- Checklist components ----------------------------------------------------
+
 function Header({
-    data,
+    scan,
     counts,
-    loading,
-    isPending,
-    onRescan,
-    onRefresh,
+    isAnyRunning,
+    onRescanAll,
 }: {
-    data: HostSecurityScan | null | undefined;
+    scan: HostSecurityScan | null | undefined;
     counts: SeverityCounts;
-    loading: boolean;
-    isPending: boolean;
-    onRescan: () => void;
-    onRefresh: () => void;
+    isAnyRunning: boolean;
+    onRescanAll: () => void;
 }) {
     const { t } = useTranslation("security");
     const scannedAt =
-        data?.started_at_unix ? new Date(data.started_at_unix * 1000) : null;
+        scan?.started_at_unix ? new Date(scan.started_at_unix * 1000) : null;
 
     return (
         <div
@@ -225,20 +229,27 @@ function Header({
             <span style={{ fontSize: 12, color: palette.textSecondary }}>
                 {scannedAt ? t("lastScanned", { when: fromNow(scannedAt) }) : "—"}
             </span>
-            {data && (
-                <RefreshButton loading={loading && !isPending} onClick={onRefresh} />
-            )}
-            {data && (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="default"
-                    onClick={onRescan}
-                    disabled={isPending}
-                >
-                    {isPending ? t("rescan.running") : t("rescan.button")}
-                </Button>
-            )}
+            <Button
+                type="button"
+                size="sm"
+                variant="default"
+                onClick={onRescanAll}
+                disabled={isAnyRunning}
+            >
+                {isAnyRunning ? (
+                    <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        {t("rescan.running")}
+                    </>
+                ) : scan ? (
+                    <>
+                        <RefreshCw className="size-3.5" />
+                        {t("checklist.rerunAll")}
+                    </>
+                ) : (
+                    t("checklist.runAll")
+                )}
+            </Button>
         </div>
     );
 }
@@ -277,231 +288,249 @@ function SeverityChips({ counts }: { counts: SeverityCounts }) {
     );
 }
 
-function FilterRow({
-    countsPresent,
-    categoriesPresent,
-    severity,
-    category,
-    onSeverityToggle,
-    onCategoryToggle,
-    onClear,
-    counts,
+function Checklist({
+    rows,
+    onRerunOne,
+    isAnyRunning,
 }: {
-    countsPresent: Severity[];
-    categoriesPresent: string[];
-    severity: Set<Severity>;
-    category: Set<string>;
-    onSeverityToggle: (s: Severity) => void;
-    onCategoryToggle: (c: string) => void;
-    onClear: () => void;
-    counts: SeverityCounts;
+    rows: RowModel[];
+    onRerunOne: (id: string) => void;
+    isAnyRunning: boolean;
 }) {
     const { t } = useTranslation("security");
-    if (countsPresent.length === 0 && categoriesPresent.length === 0) return null;
-    const hasFilter = severity.size > 0 || category.size > 0;
     return (
         <div
             style={{
-                display: "flex",
-                gap: space[3],
-                alignItems: "center",
-                flexWrap: "wrap",
-                fontSize: 12,
-                color: palette.textSecondary,
+                border: `1px solid ${palette.border}`,
+                borderRadius: radius.md,
+                background: palette.surface,
+                overflow: "hidden",
             }}
         >
-            {countsPresent.length > 0 && (
-                <FilterGroup label={t("filter.severity")}>
-                    {countsPresent.map((s) => (
-                        <Toggle
-                            key={s}
-                            active={severity.has(s)}
-                            onClick={() => onSeverityToggle(s)}
-                            tone={severityTone(s)}
-                        >
-                            {t(`severity.${s}`)} {counts[s]}
-                        </Toggle>
-                    ))}
-                </FilterGroup>
-            )}
-            {categoriesPresent.length > 0 && (
-                <FilterGroup label={t("filter.category")}>
-                    {categoriesPresent.map((c) => (
-                        <Toggle
-                            key={c}
-                            active={category.has(c)}
-                            onClick={() => onCategoryToggle(c)}
-                        >
-                            {translateCategory(t, c)}
-                        </Toggle>
-                    ))}
-                </FilterGroup>
-            )}
-            {hasFilter && (
-                <Button type="button" size="sm" variant="ghost" onClick={onClear}>
-                    {t("filter.clear")}
-                </Button>
-            )}
-        </div>
-    );
-}
-
-function FilterGroup({
-    label,
-    children,
-}: {
-    label: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <div style={{ display: "inline-flex", gap: space[2], alignItems: "center" }}>
-            <span>{label}:</span>
-            <span style={{ display: "inline-flex", gap: space[1], flexWrap: "wrap" }}>
-                {children}
-            </span>
-        </div>
-    );
-}
-
-function Toggle({
-    active,
-    onClick,
-    children,
-    tone,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-    tone?: ReturnType<typeof severityTone>;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            style={{
-                all: "unset",
-                cursor: "pointer",
-                padding: `2px ${space[2]}px`,
-                borderRadius: radius.pill,
-                background: active
-                    ? tone?.background ?? palette.surfaceHover
-                    : "transparent",
-                color: active
-                    ? tone?.foreground ?? palette.textPrimary
-                    : palette.textSecondary,
-                border: `1px solid ${
-                    active ? tone?.border ?? palette.borderStrong : palette.border
-                }`,
-                fontWeight: active ? 600 : 500,
-                fontSize: 11,
-            }}
-        >
-            {children}
-        </button>
-    );
-}
-
-function FindingsTable({ findings }: { findings: SecurityFinding[] }) {
-    const { t } = useTranslation("security");
-    return (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[110px]">{t("table.severity")}</TableHead>
-                    <TableHead>{t("table.title")}</TableHead>
-                    <TableHead className="w-[110px]">{t("table.category")}</TableHead>
-                    <TableHead className="w-[140px]">{t("table.check")}</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {findings.map((f) => (
-                    <FindingRow key={f.id} f={f} />
+            <div
+                style={{
+                    padding: `${space[2]}px ${space[3]}px`,
+                    borderBottom: `1px solid ${palette.border}`,
+                    fontSize: 12,
+                    color: palette.textSecondary,
+                }}
+            >
+                <strong style={{ color: palette.textPrimary, fontSize: 13 }}>
+                    {t("checklist.heading")}
+                </strong>
+                <span style={{ marginLeft: space[2] }}>{t("checklist.subheading")}</span>
+            </div>
+            <div>
+                {rows.map((row) => (
+                    <ChecklistRow
+                        key={row.id}
+                        row={row}
+                        onRerun={() => onRerunOne(row.id)}
+                        rerunDisabled={isAnyRunning || !row.applicable}
+                    />
                 ))}
-            </TableBody>
-        </Table>
+            </div>
+        </div>
     );
 }
 
-function FindingRow({ f }: { f: SecurityFinding }) {
+function ChecklistRow({
+    row,
+    onRerun,
+    rerunDisabled,
+}: {
+    row: RowModel;
+    onRerun: () => void;
+    rerunDisabled: boolean;
+}) {
     const { t } = useTranslation("security");
     const [open, setOpen] = useState(false);
-    const tone = severityTone(f.severity);
+    const expandable = row.findings.length > 0 || (row.error && row.error !== "");
+
     return (
         <>
-            <TableRow
-                onClick={() => setOpen((v) => !v)}
-                style={{ cursor: "pointer" }}
-                aria-expanded={open}
+            <div
+                onClick={() => expandable && setOpen((v) => !v)}
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: space[3],
+                    padding: `${space[2]}px ${space[3]}px`,
+                    borderBottom: `1px solid ${palette.border}`,
+                    cursor: expandable ? "pointer" : "default",
+                    opacity: row.applicable ? 1 : 0.55,
+                }}
+                aria-expanded={expandable ? open : undefined}
             >
-                <TableCell>
-                    <span
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: space[1],
-                            padding: `2px ${space[2]}px`,
-                            borderRadius: radius.pill,
-                            background: tone.background,
-                            color: tone.foreground,
-                            border: `1px solid ${tone.border}`,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            textTransform: "capitalize",
-                        }}
-                    >
-                        {t(`severity.${f.severity}`)}
-                    </span>
-                </TableCell>
-                <TableCell>
-                    <span
-                        style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}
-                    >
-                        {open ? (
+                <span style={{ display: "inline-flex", alignItems: "center", width: 18 }}>
+                    {expandable ? (
+                        open ? (
                             <ChevronDown className="size-3.5" />
                         ) : (
                             <ChevronRight className="size-3.5" />
+                        )
+                    ) : null}
+                </span>
+                <StatusIcon status={row.status} />
+                <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span style={{ display: "inline-flex", gap: space[2], alignItems: "center" }}>
+                        <Mono size={13}>{row.id}</Mono>
+                        <span
+                            style={{
+                                fontSize: 11,
+                                color: palette.textMuted,
+                                padding: `0 ${space[2]}px`,
+                                borderRadius: radius.pill,
+                                border: `1px solid ${palette.border}`,
+                            }}
+                        >
+                            {row.category}
+                        </span>
+                        {!row.applicable && (
+                            <span style={{ fontSize: 11, color: palette.textMuted }}>
+                                {t("checklist.notApplicable")}
+                            </span>
                         )}
-                        <span>{f.title}</span>
                     </span>
-                </TableCell>
-                <TableCell>
                     <span style={{ fontSize: 12, color: palette.textSecondary }}>
-                        {translateCategory(t, f.category)}
+                        <StatusLabel row={row} />
+                        {row.elapsedMs != null && row.status !== "running" && (
+                            <span style={{ marginLeft: space[2], color: palette.textMuted }}>
+                                {row.elapsedMs}ms
+                            </span>
+                        )}
                     </span>
-                </TableCell>
-                <TableCell>
-                    <Mono size={11}>{f.check_id || f.finding_id}</Mono>
-                </TableCell>
-            </TableRow>
-            {open && (
-                <TableRow>
-                    <TableCell colSpan={4} style={{ background: palette.surfaceHover }}>
-                        <FindingDetails f={f} />
-                    </TableCell>
-                </TableRow>
+                </span>
+                <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRerun();
+                    }}
+                    disabled={rerunDisabled}
+                    title={t("checklist.rerunOne")}
+                    aria-label={t("checklist.rerunOne")}
+                >
+                    {row.status === "running" ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                        <RefreshCw className="size-3.5" />
+                    )}
+                </Button>
+            </div>
+            {open && expandable && (
+                <div
+                    style={{
+                        background: palette.surfaceHover,
+                        borderBottom: `1px solid ${palette.border}`,
+                        padding: `${space[3]}px ${space[5]}px`,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: space[3],
+                    }}
+                >
+                    {row.error && (
+                        <DetailBlock label={t("details.description")} body={row.error} />
+                    )}
+                    {row.findings.map((f) => (
+                        <FindingDetail key={f.id} f={f} />
+                    ))}
+                </div>
             )}
         </>
     );
 }
 
-function FindingDetails({ f }: { f: SecurityFinding }) {
+function StatusIcon({ status }: { status: RowStatus }) {
+    switch (status) {
+        case "running":
+            return <Loader2 className="size-4 animate-spin" style={{ color: palette.info }} />;
+        case "pass":
+            return <CheckCircle2 className="size-4" style={{ color: palette.success }} />;
+        case "findings":
+            return <AlertTriangle className="size-4" style={{ color: palette.warning }} />;
+        case "skipped":
+        case "not_applicable":
+            return <MinusCircle className="size-4" style={{ color: palette.textMuted }} />;
+        case "error":
+            return <XCircle className="size-4" style={{ color: palette.danger }} />;
+        default:
+            return (
+                <span
+                    style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: radius.pill,
+                        border: `1px solid ${palette.border}`,
+                    }}
+                />
+            );
+    }
+}
+
+function StatusLabel({ row }: { row: RowModel }) {
     const { t } = useTranslation("security");
+    switch (row.status) {
+        case "running":
+            return <>{t("checklist.statusRunning")}</>;
+        case "pass":
+            return <>{t("checklist.statusPass")}</>;
+        case "findings":
+            return <>{t("checklist.statusFindings", { count: row.findingCount })}</>;
+        case "skipped":
+            return <>{t("checklist.statusSkipped")}</>;
+        case "error":
+            return <>{t("checklist.statusError")}</>;
+        case "not_applicable":
+            return <>{t("checklist.statusSkipped")}</>;
+        default:
+            return <>{t("checklist.statusNotRun")}</>;
+    }
+}
+
+function FindingDetail({ f }: { f: SecurityFinding }) {
+    const { t } = useTranslation("security");
+    const tone = severityTone(f.severity);
     return (
         <div
             style={{
+                border: `1px solid ${palette.border}`,
+                borderRadius: radius.md,
+                padding: `${space[2]}px ${space[3]}px`,
+                background: palette.surface,
                 display: "flex",
                 flexDirection: "column",
                 gap: space[2],
-                padding: `${space[2]}px 0`,
                 fontSize: 13,
             }}
         >
+            <div style={{ display: "inline-flex", alignItems: "center", gap: space[2] }}>
+                <span
+                    style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: `2px ${space[2]}px`,
+                        borderRadius: radius.pill,
+                        background: tone.background,
+                        color: tone.foreground,
+                        border: `1px solid ${tone.border}`,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textTransform: "capitalize",
+                    }}
+                >
+                    {t(`severity.${f.severity}`)}
+                </span>
+                <strong>{f.title}</strong>
+            </div>
             <DetailBlock label={t("details.description")} body={f.description} />
             <DetailBlock label={t("details.evidence")} body={f.evidence} mono />
             <DetailBlock label={t("details.remediation")} body={f.remediation} />
             {f.references && f.references.length > 0 && (
-                <div>
-                    <strong style={{ color: palette.textSecondary, fontSize: 12 }}>
+                <div style={{ fontSize: 12 }}>
+                    <strong style={{ color: palette.textSecondary }}>
                         {t("details.references")}:
                     </strong>{" "}
                     {f.references.map((r, i) => (
@@ -527,7 +556,7 @@ function DetailBlock({
 }) {
     if (!body) return null;
     return (
-        <div>
+        <div style={{ fontSize: 13 }}>
             <strong style={{ color: palette.textSecondary, fontSize: 12 }}>
                 {label}:
             </strong>{" "}
@@ -535,79 +564,6 @@ function DetailBlock({
                 <Mono size={12}>{body}</Mono>
             ) : (
                 <span style={{ whiteSpace: "pre-wrap" }}>{body}</span>
-            )}
-        </div>
-    );
-}
-
-function SkippedChecks({ checks }: { checks: SecurityCheckResult[] }) {
-    const { t } = useTranslation("security");
-    const [open, setOpen] = useState(false);
-    return (
-        <div
-            style={{
-                border: `1px solid ${palette.border}`,
-                borderRadius: radius.md,
-                background: palette.surface,
-                padding: `${space[2]}px ${space[3]}px`,
-                fontSize: 12,
-            }}
-        >
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                style={{
-                    all: "unset",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: space[1],
-                    color: palette.textSecondary,
-                    fontWeight: 600,
-                }}
-                aria-expanded={open}
-            >
-                {open ? (
-                    <ChevronDown className="size-3.5" />
-                ) : (
-                    <ChevronRight className="size-3.5" />
-                )}
-                {t("checks.skippedHeader", { count: checks.length })}
-            </button>
-            {open && (
-                <div style={{ marginTop: space[2], display: "flex", flexDirection: "column", gap: space[1] }}>
-                    <p style={{ color: palette.textMuted, margin: 0 }}>
-                        {t("checks.skippedHint")}
-                    </p>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[200px]">id</TableHead>
-                                <TableHead className="w-[100px]">status</TableHead>
-                                <TableHead>error</TableHead>
-                                <TableHead className="w-[100px]">elapsed</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {checks.map((c) => (
-                                <TableRow key={c.id}>
-                                    <TableCell>
-                                        <Mono size={11}>{c.id}</Mono>
-                                    </TableCell>
-                                    <TableCell>
-                                        <span style={{ color: c.status === "error" ? palette.danger : palette.textSecondary }}>
-                                            {t(`checks.status${capitalize(c.status)}`, { defaultValue: c.status })}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Mono size={11}>{c.error || "—"}</Mono>
-                                    </TableCell>
-                                    <TableCell>{c.elapsed_ms}ms</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
             )}
         </div>
     );
@@ -636,28 +592,93 @@ function Alert({
     );
 }
 
-function toggle<T>(set: Set<T>, value: T): Set<T> {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    return next;
-}
-
-function capitalize(s: string) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-// translateCategory falls back to the literal category id when no
-// translation is registered. Lets the agent register new categories
-// without forcing an i18n PR before the UI displays them.
+// buildRows fuses three data sources into one displayable list:
+//   - available: ListSecurityChecks RPC (ground truth for "what
+//     checks exist", regardless of whether they've run)
+//   - scan.checks + scan.findings: per-check last-known status +
+//     findings from the persisted scan
+//   - runningSet: which check ids are currently being re-scanned
 //
-// The `t` function from i18next accepts a `defaultValue` option so
-// missing keys land on the literal id rather than the dotted key.
-function translateCategory(
-    t: (key: string, options?: { defaultValue?: string }) => string,
-    category: string,
-) {
-    return t(`category.${category}`, { defaultValue: category });
+// Precedence: an entry in `available` always wins on identity (ids,
+// applicability). When the agent is offline (`available` is null)
+// we degrade to deriving the row set from the persisted scan's
+// checks[]; if neither source exists, we render zero rows and the
+// caller surfaces the never-scanned empty state.
+function buildRows(
+    available: AvailableCheck[] | null | undefined,
+    scan: HostSecurityScan | null | undefined,
+    runningSet: Set<string> | null,
+): RowModel[] {
+    const checkResults = new Map<string, SecurityCheckResult>();
+    if (scan?.checks) {
+        for (const c of scan.checks) checkResults.set(c.id, c);
+    }
+    const findingsByCheck = new Map<string, SecurityFinding[]>();
+    if (scan?.findings) {
+        for (const f of scan.findings) {
+            const arr = findingsByCheck.get(f.check_id) ?? [];
+            arr.push(f);
+            findingsByCheck.set(f.check_id, arr);
+        }
+    }
+
+    // Source of "all checks": prefer the live registry; fall back to
+    // whatever the persisted scan saw.
+    let source: { id: string; category: string; applicable: boolean }[];
+    if (available && available.length > 0) {
+        source = available;
+    } else if (scan?.checks && scan.checks.length > 0) {
+        source = scan.checks.map((c) => ({
+            id: c.id,
+            category: c.category,
+            applicable: c.status !== "skipped",
+        }));
+    } else {
+        return [];
+    }
+
+    return source
+        .slice()
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((meta): RowModel => {
+            const result = checkResults.get(meta.id);
+            const findings = findingsByCheck.get(meta.id) ?? [];
+            // Per-row spinners light up only on PARTIAL reruns, where
+            // the targeted check ids land in `runningSet`. Full
+            // re-scans signal "in flight" only via the header button
+            // — flipping every row's icon during a full scan made
+            // the table flicker, since the scan typically finishes
+            // before the next paint.
+            const running = runningSet !== null && runningSet.has(meta.id);
+
+            let status: RowStatus;
+            if (running) {
+                status = "running";
+            } else if (!meta.applicable) {
+                status = "not_applicable";
+            } else if (!result) {
+                status = "not_run";
+            } else if (result.status === "error") {
+                status = "error";
+            } else if (result.status === "skipped") {
+                status = "skipped";
+            } else if (findings.length > 0) {
+                status = "findings";
+            } else {
+                status = "pass";
+            }
+
+            return {
+                id: meta.id,
+                category: meta.category,
+                applicable: meta.applicable,
+                status,
+                elapsedMs: result?.elapsed_ms,
+                error: result?.error,
+                findingCount: findings.length,
+                findings,
+            };
+        });
 }
 
 const cveRe = /^CVE-\d{4}-\d+$/;

@@ -27,6 +27,8 @@ export const qk = {
         ["hostSecurityScan", projectId, hostId, scanId ?? null] as const,
     hostSecurityScans: (projectId: string, hostId: string, limit: number) =>
         ["hostSecurityScans", projectId, hostId, limit] as const,
+    hostSecurityChecks: (projectId: string, hostId: string) =>
+        ["hostSecurityChecks", projectId, hostId] as const,
     projectSecurityFindings: (projectId: string, opts: ListProjectFindingsOpts) =>
         ["projectSecurityFindings", projectId, opts] as const,
     pendingHosts: (projectId: string) =>
