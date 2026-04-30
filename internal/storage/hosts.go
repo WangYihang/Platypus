@@ -44,15 +44,21 @@ type Host struct {
 	PrimaryMAC      string
 	BootTimeUnix    int64
 
-	// Egress / public IP (migration 000024). EgressIP is whatever the
-	// server saw as RemoteAddr on the agent-link WS upgrade — the
-	// authoritative "where on the internet did this connection come
-	// from" signal. PublicIP is the agent's own DNS-TXT probe of
-	// o-o.myaddr.l.google.com and may diverge from EgressIP under mesh
-	// relay (where EgressIP becomes the relay). Both optional; populated
-	// on the next agent link-up after migration.
-	EgressIP string
-	PublicIP string
+	// Egress / public IP (migrations 000024 + 000027). EgressIP is
+	// whatever the server saw as RemoteAddr on the agent-link WS
+	// upgrade — the authoritative "where on the internet did this
+	// connection come from" signal. PublicIPv4 / PublicIPv6 are the
+	// agent's own DNS-TXT probes of o-o.myaddr.l.google.com forced
+	// over each transport family, so a dual-stack host can report both
+	// addresses (with different country / ISP attribution). PublicIP is
+	// the legacy single-family column kept around so older read paths
+	// keep working; the server fills it with whichever family came
+	// back. Any of these may diverge from EgressIP under mesh relay.
+	// All optional; populated on the next agent link-up after migration.
+	EgressIP   string
+	PublicIP   string
+	PublicIPv4 string
+	PublicIPv6 string
 
 	// Build identity (migration 000023). Populated from the agent's
 	// pkg/version at enroll time and refreshed on every SysInfo
@@ -129,10 +135,15 @@ type HostIdentity struct {
 	BootTimeUnix    int64
 
 	// Egress / public IP. Server callers prefer SetEgressIP for the
-	// hot connect path; PublicIP rides through this struct from the
-	// SysInfo refresh, so the regular Upsert merges it in.
-	EgressIP string
-	PublicIP string
+	// hot connect path; PublicIPv4 / PublicIPv6 ride through this
+	// struct from the SysInfo refresh, so the regular Upsert merges
+	// them in. PublicIP is the legacy single-family field — Upsert
+	// auto-derives it from the v4/v6 pair when callers don't set it
+	// explicitly.
+	EgressIP   string
+	PublicIP   string
+	PublicIPv4 string
+	PublicIPv6 string
 
 	BuildVersion    string
 	BuildCommit     string
@@ -169,7 +180,7 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        kernel_version, cpu_model, num_cpu, mem_total_bytes,
        current_user, timezone, primary_ip, primary_mac,
        boot_time_unix,
-       egress_ip, public_ip,
+       egress_ip, public_ip, public_ipv4, public_ipv6,
        build_version, build_commit, build_date, protocol_version,
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
@@ -257,7 +268,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			       num_cpu = ?, mem_total_bytes = ?, current_user = ?,
 			       timezone = ?, primary_ip = ?, primary_mac = ?,
 			       boot_time_unix = ?,
-			       egress_ip = ?, public_ip = ?,
+			       egress_ip = ?, public_ip = ?, public_ipv4 = ?, public_ipv6 = ?,
 			       build_version = ?, build_commit = ?, build_date = ?,
 			       protocol_version = ?,
 			       machine_type = ?, chassis_type = ?, product_vendor = ?,
@@ -274,6 +285,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			nullIfEmpty(merged.PrimaryIP), nullIfEmpty(merged.PrimaryMAC),
 			nullIfInt64(merged.BootTimeUnix),
 			nullIfEmpty(merged.EgressIP), nullIfEmpty(merged.PublicIP),
+			nullIfEmpty(merged.PublicIPv4), nullIfEmpty(merged.PublicIPv6),
 			nullIfEmpty(merged.BuildVersion), nullIfEmpty(merged.BuildCommit),
 			nullIfEmpty(merged.BuildDate), nullIfUint32(merged.ProtocolVersion),
 			nullIfEmpty(merged.MachineType), nullIfEmpty(merged.ChassisType),
@@ -323,6 +335,8 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		BootTimeUnix:        ident.BootTimeUnix,
 		EgressIP:            ident.EgressIP,
 		PublicIP:            ident.PublicIP,
+		PublicIPv4:          ident.PublicIPv4,
+		PublicIPv6:          ident.PublicIPv6,
 		BuildVersion:        ident.BuildVersion,
 		BuildCommit:         ident.BuildCommit,
 		BuildDate:           ident.BuildDate,
@@ -355,7 +369,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		   kernel_version, cpu_model, num_cpu, mem_total_bytes,
 		   current_user, timezone, primary_ip, primary_mac,
 		   boot_time_unix,
-		   egress_ip, public_ip,
+		   egress_ip, public_ip, public_ipv4, public_ipv6,
 		   build_version, build_commit, build_date, protocol_version,
 		   machine_type, chassis_type, product_vendor, product_name,
 		   bios_vendor, bios_version, gpu_summary,
@@ -363,7 +377,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		        ?,
-		        ?, ?,
+		        ?, ?, ?, ?,
 		        ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?)`,
@@ -378,6 +392,7 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		nullIfEmpty(h.PrimaryIP), nullIfEmpty(h.PrimaryMAC),
 		nullIfInt64(h.BootTimeUnix),
 		nullIfEmpty(h.EgressIP), nullIfEmpty(h.PublicIP),
+		nullIfEmpty(h.PublicIPv4), nullIfEmpty(h.PublicIPv6),
 		nullIfEmpty(h.BuildVersion), nullIfEmpty(h.BuildCommit),
 		nullIfEmpty(h.BuildDate), nullIfUint32(h.ProtocolVersion),
 		nullIfEmpty(h.MachineType), nullIfEmpty(h.ChassisType),
@@ -448,6 +463,23 @@ func mergeHost(existing *Host, ident *HostIdentity) *Host {
 	}
 	if ident.PublicIP != "" {
 		h.PublicIP = ident.PublicIP
+	}
+	if ident.PublicIPv4 != "" {
+		h.PublicIPv4 = ident.PublicIPv4
+	}
+	if ident.PublicIPv6 != "" {
+		h.PublicIPv6 = ident.PublicIPv6
+	}
+	// Keep the legacy single-family column in sync with the dual-stack
+	// pair so callers that still read PublicIP get something sensible
+	// even when the agent only set the new fields. Prefer v4 for parity
+	// with the pre-split behaviour.
+	if h.PublicIP == "" {
+		if h.PublicIPv4 != "" {
+			h.PublicIP = h.PublicIPv4
+		} else if h.PublicIPv6 != "" {
+			h.PublicIP = h.PublicIPv6
+		}
 	}
 	if ident.BuildVersion != "" {
 		h.BuildVersion = ident.BuildVersion
@@ -610,6 +642,8 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		bootTimeUnix    sql.NullInt64
 		egressIP        sql.NullString
 		publicIP        sql.NullString
+		publicIPv4      sql.NullString
+		publicIPv6      sql.NullString
 		buildVersion    sql.NullString
 		buildCommit     sql.NullString
 		buildDate       sql.NullString
@@ -633,7 +667,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&kernelVersion, &cpuModel, &numCPU, &memTotalBytes,
 		&currentUser, &timezone, &primaryIP, &primaryMAC,
 		&bootTimeUnix,
-		&egressIP, &publicIP,
+		&egressIP, &publicIP, &publicIPv4, &publicIPv6,
 		&buildVersion, &buildCommit, &buildDate, &protocolVersion,
 		&machineType, &chassisType, &productVendor, &productName,
 		&biosVendor, &biosVersion, &gpuSummary,
@@ -695,6 +729,12 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	}
 	if publicIP.Valid {
 		h.PublicIP = publicIP.String
+	}
+	if publicIPv4.Valid {
+		h.PublicIPv4 = publicIPv4.String
+	}
+	if publicIPv6.Valid {
+		h.PublicIPv6 = publicIPv6.String
 	}
 	if buildVersion.Valid {
 		h.BuildVersion = buildVersion.String

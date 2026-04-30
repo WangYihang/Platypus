@@ -319,8 +319,12 @@ export default function InfoTab({
                     primaryMAC={primaryMAC}
                     egressIP={host.egress_ip}
                     egressIPInfo={host.egress_ip_info}
-                    publicIP={host.public_ip}
-                    publicIPInfo={host.public_ip_info}
+                    publicIPv4={host.public_ipv4}
+                    publicIPv4Info={host.public_ipv4_info}
+                    publicIPv6={host.public_ipv6}
+                    publicIPv6Info={host.public_ipv6_info}
+                    legacyPublicIP={host.public_ip}
+                    legacyPublicIPInfo={host.public_ip_info}
                 />
 
                 <HardwareCard host={host} sysInfo={sysInfo} />
@@ -400,8 +404,12 @@ function NetworkCard({
     primaryMAC,
     egressIP,
     egressIPInfo,
-    publicIP,
-    publicIPInfo,
+    publicIPv4,
+    publicIPv4Info,
+    publicIPv6,
+    publicIPv6Info,
+    legacyPublicIP,
+    legacyPublicIPInfo,
 }: {
     sysInfo: HostSysInfo | null;
     primaryIP?: string;
@@ -409,17 +417,40 @@ function NetworkCard({
     primaryMAC?: string;
     egressIP?: string;
     egressIPInfo?: import("../../lib/api").RemoteIpInfo;
-    publicIP?: string;
-    publicIPInfo?: import("../../lib/api").RemoteIpInfo;
+    publicIPv4?: string;
+    publicIPv4Info?: import("../../lib/api").RemoteIpInfo;
+    publicIPv6?: string;
+    publicIPv6Info?: import("../../lib/api").RemoteIpInfo;
+    legacyPublicIP?: string;
+    legacyPublicIPInfo?: import("../../lib/api").RemoteIpInfo;
 }) {
-    // Prefer the server-side enriched public_ip cached on the host
-    // row over the live sysInfo value — same address, but the host
-    // version arrives with country/ISP already filled in. Falls back
-    // to sysInfo + fetchInfo for the brief window before the first
-    // SysInfo refresh persists.
-    const effectivePublicIP = publicIP || sysInfo?.public_ip;
-    const effectivePublicInfo =
-        publicIPInfo && publicIPInfo.ip === effectivePublicIP ? publicIPInfo : undefined;
+    // Prefer the server-side enriched public_ipv{4,6} cached on the
+    // host row over the live sysInfo values — same addresses, but the
+    // host version arrives with country / ISP already filled in.
+    // Falls back to sysInfo (+ fetchInfo for the geo) for the brief
+    // window before the first SysInfo refresh persists.
+    const effV4 = publicIPv4 || sysInfo?.public_ipv4;
+    const effV6 = publicIPv6 || sysInfo?.public_ipv6;
+    // Older agents only filled the legacy public_ip field. Surface it
+    // under whichever family it parses as so dual-stack hosts on a
+    // mixed fleet still display something useful in the v4 / v6 rows.
+    const legacyIsV6 = legacyPublicIP ? legacyPublicIP.includes(":") : false;
+    const fallbackV4 = !effV4 && legacyPublicIP && !legacyIsV6 ? legacyPublicIP : undefined;
+    const fallbackV6 = !effV6 && legacyPublicIP && legacyIsV6 ? legacyPublicIP : undefined;
+    const finalV4 = effV4 || fallbackV4;
+    const finalV6 = effV6 || fallbackV6;
+    const v4Info =
+        publicIPv4Info && publicIPv4Info.ip === finalV4
+            ? publicIPv4Info
+            : legacyPublicIPInfo && legacyPublicIPInfo.ip === finalV4
+              ? legacyPublicIPInfo
+              : undefined;
+    const v6Info =
+        publicIPv6Info && publicIPv6Info.ip === finalV6
+            ? publicIPv6Info
+            : legacyPublicIPInfo && legacyPublicIPInfo.ip === finalV6
+              ? legacyPublicIPInfo
+              : undefined;
     return (
         <Card header="Network" padding={5}>
             <DataList
@@ -469,12 +500,24 @@ function NetworkCard({
                         ),
                     },
                     {
-                        label: "public IP",
-                        value: effectivePublicIP ? (
+                        label: "public IPv4",
+                        value: finalV4 ? (
                             <RemoteAddr
-                                addr={effectivePublicIP}
-                                info={effectivePublicInfo}
-                                fetchInfo={!effectivePublicInfo}
+                                addr={finalV4}
+                                info={v4Info}
+                                fetchInfo={!v4Info}
+                            />
+                        ) : (
+                            "—"
+                        ),
+                    },
+                    {
+                        label: "public IPv6",
+                        value: finalV6 ? (
+                            <RemoteAddr
+                                addr={finalV6}
+                                info={v6Info}
+                                fetchInfo={!v6Info}
                             />
                         ) : (
                             "—"

@@ -35,7 +35,7 @@ help:
 	@echo "  snapshot        Build cross-platform snapshot via goreleaser"
 	@echo "  release         Cut a release via goreleaser (requires tag + GITHUB_TOKEN)"
 	@echo "  data            Fetch ip2region v4 xdb into internal/ipinfo/data/"
-	@echo "  data-v6         Also fetch the v6 xdb (~36 MB; opt-in)"
+	@echo "  data-v6         Fetch v4 + v6 xdbs (v6 is ~36 MB)"
 	@echo "  clean           Remove build artifacts"
 	@echo ""
 	@echo "Desktop app (./desktop):"
@@ -120,8 +120,9 @@ release:
 # `data` pulls the ip2region v4 xdb into internal/ipinfo/data/ so the
 # server can do geo / ISP enrichment at runtime. The Go binary no
 # longer embeds it (saved ~11 MB). Run once after a fresh clone; the
-# fetch script is idempotent. `data-v6` adds the optional ~36 MB v6
-# dataset for v6 enrichment.
+# fetch script is idempotent. `data-v6` additionally pulls the ~36 MB
+# v6 dataset, which is what the docker / goreleaser pipelines use so
+# the public-IP geo lookup can attribute IPv6 addresses too.
 data:
 	./scripts/fetch-ip2region.sh
 

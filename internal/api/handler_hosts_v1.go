@@ -76,10 +76,14 @@ type hostResponse struct {
 	PrimaryMAC      string       `json:"primary_mac,omitempty"`
 	BootTimeUnix    int64        `json:"boot_time_unix,omitempty"`
 
-	EgressIP     string       `json:"egress_ip,omitempty"`
-	EgressIPInfo *ipinfo.Info `json:"egress_ip_info,omitempty"`
-	PublicIP     string       `json:"public_ip,omitempty"`
-	PublicIPInfo *ipinfo.Info `json:"public_ip_info,omitempty"`
+	EgressIP       string       `json:"egress_ip,omitempty"`
+	EgressIPInfo   *ipinfo.Info `json:"egress_ip_info,omitempty"`
+	PublicIP       string       `json:"public_ip,omitempty"` // legacy single-family field
+	PublicIPInfo   *ipinfo.Info `json:"public_ip_info,omitempty"`
+	PublicIPv4     string       `json:"public_ipv4,omitempty"`
+	PublicIPv4Info *ipinfo.Info `json:"public_ipv4_info,omitempty"`
+	PublicIPv6     string       `json:"public_ipv6,omitempty"`
+	PublicIPv6Info *ipinfo.Info `json:"public_ipv6_info,omitempty"`
 
 	BuildVersion    string `json:"build_version,omitempty"`
 	BuildCommit     string `json:"build_commit,omitempty"`
@@ -119,6 +123,16 @@ func toHostResponse(h *storage.Host) hostResponse {
 		info := ipinfo.Lookup(h.PublicIP)
 		publicInfo = &info
 	}
+	var publicV4Info *ipinfo.Info
+	if h.PublicIPv4 != "" {
+		info := ipinfo.Lookup(h.PublicIPv4)
+		publicV4Info = &info
+	}
+	var publicV6Info *ipinfo.Info
+	if h.PublicIPv6 != "" {
+		info := ipinfo.Lookup(h.PublicIPv6)
+		publicV6Info = &info
+	}
 	return hostResponse{
 		ID:                  h.ID,
 		ProjectID:           h.ProjectID,
@@ -149,6 +163,10 @@ func toHostResponse(h *storage.Host) hostResponse {
 		EgressIPInfo:        egressInfo,
 		PublicIP:            h.PublicIP,
 		PublicIPInfo:        publicInfo,
+		PublicIPv4:          h.PublicIPv4,
+		PublicIPv4Info:      publicV4Info,
+		PublicIPv6:          h.PublicIPv6,
+		PublicIPv6Info:      publicV6Info,
 		BuildVersion:        h.BuildVersion,
 		BuildCommit:         h.BuildCommit,
 		BuildDate:           h.BuildDate,

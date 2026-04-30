@@ -520,6 +520,8 @@ func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
 		PrimaryMAC:      s.PrimaryMac,
 		BootTimeUnix:    int64(s.BootTimeUnix),
 		PublicIP:        s.PublicIp,
+		PublicIPv4:      s.PublicIpv4,
+		PublicIPv6:      s.PublicIpv6,
 		BuildVersion:    s.BuildVersion,
 		BuildCommit:     s.BuildCommit,
 		BuildDate:       s.BuildDate,

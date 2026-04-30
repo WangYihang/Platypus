@@ -1697,8 +1697,18 @@ type SysInfoResponse struct {
 	DefaultGateway string              `protobuf:"bytes,90,opt,name=default_gateway,json=defaultGateway,proto3" json:"default_gateway,omitempty"`
 	PrimaryIp      string              `protobuf:"bytes,91,opt,name=primary_ip,json=primaryIp,proto3" json:"primary_ip,omitempty"` // source IP chosen for an outbound route
 	PrimaryMac     string              `protobuf:"bytes,92,opt,name=primary_mac,json=primaryMac,proto3" json:"primary_mac,omitempty"`
-	PublicIp       string              `protobuf:"bytes,93,opt,name=public_ip,json=publicIp,proto3" json:"public_ip,omitempty"` // best-effort (resolver-based); empty if unavailable
+	PublicIp       string              `protobuf:"bytes,93,opt,name=public_ip,json=publicIp,proto3" json:"public_ip,omitempty"` // legacy single-family probe; kept for older agents
 	Interfaces     []*NetworkInterface `protobuf:"bytes,94,rep,name=interfaces,proto3" json:"interfaces,omitempty"`
+	// Dual-stack public-IP probes. Each is the agent's apparent address
+	// as observed by an external resolver over the corresponding
+	// transport, so both can be populated when the host has working v4
+	// and v6 egress (different addresses, different geo). Empty when the
+	// family has no usable egress or the probe failed within the tight
+	// timeout. New agents fill these instead of public_ip; the server
+	// backfills public_ip as a copy of whichever is set so older clients
+	// still get something.
+	PublicIpv4 string `protobuf:"bytes,95,opt,name=public_ipv4,json=publicIpv4,proto3" json:"public_ipv4,omitempty"`
+	PublicIpv6 string `protobuf:"bytes,96,opt,name=public_ipv6,json=publicIpv6,proto3" json:"public_ipv6,omitempty"`
 	// Disks (rich).
 	Disks []*DiskPartition `protobuf:"bytes,100,rep,name=disks,proto3" json:"disks,omitempty"`
 	// Logged-in users.
@@ -2043,6 +2053,20 @@ func (x *SysInfoResponse) GetInterfaces() []*NetworkInterface {
 		return x.Interfaces
 	}
 	return nil
+}
+
+func (x *SysInfoResponse) GetPublicIpv4() string {
+	if x != nil {
+		return x.PublicIpv4
+	}
+	return ""
+}
+
+func (x *SysInfoResponse) GetPublicIpv6() string {
+	if x != nil {
+		return x.PublicIpv6
+	}
+	return ""
 }
 
 func (x *SysInfoResponse) GetDisks() []*DiskPartition {
@@ -3691,7 +3715,7 @@ const file_rpc_proto_rawDesc = "" +
 	"\bterminal\x18\x02 \x01(\tR\bterminal\x12\x12\n" +
 	"\x04host\x18\x03 \x01(\tR\x04host\x12\x1d\n" +
 	"\n" +
-	"started_at\x18\x04 \x01(\x03R\tstartedAt\"\x82\x0f\n" +
+	"started_at\x18\x04 \x01(\x03R\tstartedAt\"\xc4\x0f\n" +
 	"\x0fSysInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x1a\n" +
@@ -3743,7 +3767,11 @@ const file_rpc_proto_rawDesc = "" +
 	"\tpublic_ip\x18] \x01(\tR\bpublicIp\x12=\n" +
 	"\n" +
 	"interfaces\x18^ \x03(\v2\x1d.platypus.v2.NetworkInterfaceR\n" +
-	"interfaces\x120\n" +
+	"interfaces\x12\x1f\n" +
+	"\vpublic_ipv4\x18_ \x01(\tR\n" +
+	"publicIpv4\x12\x1f\n" +
+	"\vpublic_ipv6\x18` \x01(\tR\n" +
+	"publicIpv6\x120\n" +
 	"\x05disks\x18d \x03(\v2\x1a.platypus.v2.DiskPartitionR\x05disks\x12.\n" +
 	"\x05users\x18n \x03(\v2\x18.platypus.v2.UserSessionR\x05users\x12&\n" +
 	"\x0fsampled_at_unix\x18x \x01(\x03R\rsampledAtUnix\x12\"\n" +

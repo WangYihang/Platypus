@@ -201,8 +201,18 @@ message SysInfoResponse {
   string default_gateway  = 90;
   string primary_ip       = 91; // source IP chosen for an outbound route
   string primary_mac      = 92;
-  string public_ip        = 93; // best-effort (resolver-based); empty if unavailable
+  string public_ip        = 93; // legacy single-family probe; kept for older agents
   repeated NetworkInterface interfaces = 94;
+  // Dual-stack public-IP probes. Each is the agent's apparent address
+  // as observed by an external resolver over the corresponding
+  // transport, so both can be populated when the host has working v4
+  // and v6 egress (different addresses, different geo). Empty when the
+  // family has no usable egress or the probe failed within the tight
+  // timeout. New agents fill these instead of public_ip; the server
+  // backfills public_ip as a copy of whichever is set so older clients
+  // still get something.
+  string public_ipv4      = 95;
+  string public_ipv6      = 96;
 
   // Disks (rich).
   repeated DiskPartition disks = 100;

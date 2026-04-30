@@ -30,15 +30,22 @@ export interface Host {
     primary_mac?: string;
     boot_time_unix?: number;
 
-    // Egress / public IP (migration 000024). egress_ip is what the
-    // server saw as the WS upgrade peer (authoritative "where on the
-    // internet did this connect from"). public_ip is the agent's own
-    // DNS-TXT probe; the two diverge under mesh relay so we keep
-    // both.
+    // Egress / public IP (migrations 000024 + 000027). egress_ip is
+    // what the server saw as the WS upgrade peer (authoritative "where
+    // on the internet did this connect from"). public_ipv4 /
+    // public_ipv6 are the agent's own DNS-TXT probes forced over each
+    // transport family — a dual-stack host populates both with
+    // potentially different country / ISP attribution. public_ip is
+    // the legacy single-family field kept around so older read paths
+    // still work.
     egress_ip?: string;
     egress_ip_info?: RemoteIpInfo;
     public_ip?: string;
     public_ip_info?: RemoteIpInfo;
+    public_ipv4?: string;
+    public_ipv4_info?: RemoteIpInfo;
+    public_ipv6?: string;
+    public_ipv6_info?: RemoteIpInfo;
 
     // Build identity (migration 000023). build_version is semver,
     // build_commit short git SHA, build_date RFC3339. protocol_version
@@ -162,6 +169,8 @@ export interface HostSysInfo {
     primary_ip?: string;
     primary_mac?: string;
     public_ip?: string;
+    public_ipv4?: string;
+    public_ipv6?: string;
     interfaces?: HostSysInfoInterface[];
     disks?: HostSysInfoDisk[];
     users?: HostSysInfoUser[];

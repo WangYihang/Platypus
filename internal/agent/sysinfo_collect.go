@@ -128,7 +128,15 @@ func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 	}
 
 	resp.DefaultGateway = detectDefaultGateway()
-	resp.PublicIp = detectPublicIP(ctx)
+	resp.PublicIpv4, resp.PublicIpv6 = detectPublicIPs(ctx)
+	// Backfill the legacy single-family field so a server running an
+	// older build still gets something. Prefer v4 (current schema's
+	// previous behaviour); fall through to v6.
+	if resp.PublicIpv4 != "" {
+		resp.PublicIp = resp.PublicIpv4
+	} else {
+		resp.PublicIp = resp.PublicIpv6
+	}
 
 	// Hardware / chassis / machine classification. Pulled after the
 	// gopsutil host probe so we can reuse its VirtualizationSystem
@@ -303,26 +311,78 @@ func detectDefaultGateway() string {
 	return ""
 }
 
-// detectPublicIP uses a DNS-based probe that returns the caller's
-// apparent public address without making an HTTP request to a third
-// party. Falls back to empty on any error or when DNS isn't
-// configured. Guarded by a tight timeout so a slow / blackholed
-// resolver doesn't stall the snapshot.
-func detectPublicIP(ctx context.Context) string {
+// detectPublicIPs runs the o-o.myaddr.l.google.com TXT probe twice in
+// parallel, once forced over IPv4 transport and once over IPv6, and
+// returns the apparent public addresses for each family. Either side
+// may come back empty: dual-stack hosts get both, single-stack hosts
+// get whichever family has working egress, and a host with no DNS
+// (or no route to Google's name servers) gets nothing. The 1500ms
+// timeout caps the whole pair — a stalled v6 path can't hold up the
+// snapshot.
+//
+// Forcing the transport family is what lets us see both addresses on
+// the same host: a single unconstrained LookupTXT only ever returns
+// the family the kernel happened to route the DNS query over, so a
+// dual-stack host that prefers v6 will silently lose its v4 readout
+// (and vice versa).
+func detectPublicIPs(ctx context.Context) (v4, v6 string) {
 	c, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancel()
-	r := &net.Resolver{PreferGo: true}
-	// Standard trick: OpenDNS and Google both expose the caller's
-	// source IP as a TXT record. Try OpenDNS first; fall through to
-	// Google. Never both in parallel — we don't want to fingerprint
-	// the agent on multiple external endpoints for a stat.
-	addrs, err := r.LookupTXT(c, "o-o.myaddr.l.google.com")
-	if err == nil {
+
+	type result struct {
+		family string
+		ip     string
+	}
+	out := make(chan result, 2)
+
+	probe := func(family string) {
+		r := &net.Resolver{
+			PreferGo: true,
+			Dial: func(dctx context.Context, _, address string) (net.Conn, error) {
+				// Pin the transport: "tcp4" / "udp4" force the resolver
+				// to reach Google's nameservers over the requested family
+				// regardless of the host's default route preference.
+				d := net.Dialer{}
+				return d.DialContext(dctx, "udp"+familyDigit(family), address)
+			},
+		}
+		addrs, err := r.LookupTXT(c, "o-o.myaddr.l.google.com")
+		if err != nil {
+			out <- result{family: family}
+			return
+		}
 		for _, a := range addrs {
-			if ip := net.ParseIP(strings.Trim(a, "\"")); ip != nil {
-				return ip.String()
+			ip := net.ParseIP(strings.Trim(a, "\""))
+			if ip == nil {
+				continue
+			}
+			isV4 := ip.To4() != nil
+			if (family == "v4" && isV4) || (family == "v6" && !isV4) {
+				out <- result{family: family, ip: ip.String()}
+				return
 			}
 		}
+		out <- result{family: family}
 	}
-	return ""
+
+	go probe("v4")
+	go probe("v6")
+
+	for i := 0; i < 2; i++ {
+		r := <-out
+		switch r.family {
+		case "v4":
+			v4 = r.ip
+		case "v6":
+			v6 = r.ip
+		}
+	}
+	return v4, v6
+}
+
+func familyDigit(family string) string {
+	if family == "v6" {
+		return "6"
+	}
+	return "4"
 }
