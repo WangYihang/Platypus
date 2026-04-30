@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, LogOut, MoreHorizontal, Settings, SlidersHorizontal, User } from "lucide-react";
+import { ChevronDown, LogOut, MoreHorizontal, SlidersHorizontal, User } from "lucide-react";
 import { useNavigate, NavLink } from "react-router-dom";
 
 import { SessionUser, logout } from "../lib/auth";
@@ -20,9 +20,11 @@ interface Props {
 }
 
 // UserMenu is the dropdown anchored on the user's avatar. Lives in
-// TopBar's right cluster (compact variant). Surfaces admin server
-// destinations (Users / Access Control / Server settings) for admins,
-// then personal destinations (Account, Preferences) and Logout.
+// TopBar's right cluster (compact variant). Surfaces personal
+// destinations only — Account, Preferences, Logout. Admin (Users /
+// Access Control / Settings) is a global top-tab, not a UserMenu
+// entry, so the menu stays focused on "things only this user cares
+// about".
 //
 // Account vs Preferences:
 //   · Account → /account → user-self, server-side state (password,
@@ -51,43 +53,6 @@ export default function UserMenu({ user, serverURL, variant = "stack" }: Props) 
                     {roleLabel(user.role)} · {hostOf(serverURL)}
                 </div>
             </div>
-            {user.role === "admin" && (
-                <>
-                    <button
-                        type="button"
-                        className="pl-popover-btn"
-                        onClick={() => {
-                            setMenuOpen(false);
-                            navigate("/admin/users");
-                        }}
-                    >
-                        <Settings className="size-3.5" />
-                        <span>Manage users</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="pl-popover-btn"
-                        onClick={() => {
-                            setMenuOpen(false);
-                            navigate("/admin/access-control");
-                        }}
-                    >
-                        <Settings className="size-3.5" />
-                        <span>Access control</span>
-                    </button>
-                    <button
-                        type="button"
-                        className="pl-popover-btn"
-                        onClick={() => {
-                            setMenuOpen(false);
-                            navigate("/admin/settings");
-                        }}
-                    >
-                        <Settings className="size-3.5" />
-                        <span>Server settings</span>
-                    </button>
-                </>
-            )}
             <NavLink
                 to="/account"
                 className="pl-popover-btn"

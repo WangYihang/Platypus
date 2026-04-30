@@ -36,6 +36,8 @@ const Account = lazy(() => import("./pages/Account"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 const AdminAccessControl = lazy(() => import("./pages/admin/AdminAccessControl"));
+const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
+const Servers = lazy(() => import("./pages/Servers"));
 
 // routeFallback is the placeholder each lazy route renders while its
 // chunk is fetched. Centred spinner over the main surface so it doesn't
@@ -157,9 +159,21 @@ export const routeTree: RouteObject[] = [
                 element: <ProjectShell />,
                 children: [
                     { path: "/projects", element: withSuspense(<ProjectsLanding />) },
-                    { path: "/admin/users", element: withSuspense(<AdminUsers />) },
-                    { path: "/admin/settings", element: withSuspense(<AdminSettings />) },
-                    { path: "/admin/access-control", element: withSuspense(<AdminAccessControl />) },
+                    { path: "/servers", element: withSuspense(<Servers />) },
+                    // /admin gets a sub-tab strip via AdminLayout so
+                    // Users / Access Control / Settings share chrome
+                    // and the Admin top-tab can deep-link into any
+                    // child without each page replicating the strip.
+                    { path: "/admin", element: <Navigate to="/admin/users" replace /> },
+                    {
+                        path: "/admin",
+                        element: withSuspense(<AdminLayout />),
+                        children: [
+                            { path: "users", element: withSuspense(<AdminUsers />) },
+                            { path: "access-control", element: withSuspense(<AdminAccessControl />) },
+                            { path: "settings", element: withSuspense(<AdminSettings />) },
+                        ],
+                    },
                     { path: "/account", element: withSuspense(<Account />) },
                     { path: "/preferences", element: withSuspense(<Preferences />) },
                 ],

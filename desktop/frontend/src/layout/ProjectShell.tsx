@@ -30,7 +30,6 @@ import {
 import TerminalDrawer, { TAB_BAR_HEIGHT } from "../terminal/TerminalDrawer";
 import CommandPalette from "./CommandPalette";
 import AddServerDialog from "./AddServerDialog";
-import ManageServersDialog from "./ManageServersDialog";
 import NavTabs from "./NavTabs";
 import TopBar from "./TopBar";
 import { palette } from "./theme";
@@ -180,8 +179,14 @@ function ShellChrome({
     children: ReactNode;
 }) {
     const [addOpen, setAddOpen] = useState(false);
-    const [manageOpen, setManageOpen] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
+    const navigate = useNavigate();
+    // "Manage all…" used to open ManageServersDialog from inside the
+    // shell. The dialog was promoted to /servers, so the action now
+    // navigates instead. Same callback shape (`onManageServers`) keeps
+    // every existing trigger (TopBar, ServerSwitcher, CommandPalette)
+    // working without an API change.
+    const goToServers = useCallback(() => navigate("/servers"), [navigate]);
     useGlobalTerminalHotkey();
     useServerSwitchHotkeys();
     return (
@@ -202,7 +207,7 @@ function ShellChrome({
                 currentProject={currentProject}
                 onCreateProject={() => setCreateOpen(true)}
                 onAddServer={() => setAddOpen(true)}
-                onManageServers={() => setManageOpen(true)}
+                onManageServers={goToServers}
             />
             <NavTabs user={user} currentSlug={currentSlug} />
             <div
@@ -219,14 +224,9 @@ function ShellChrome({
             <StatusBar />
             <CommandPalette
                 onAddServer={() => setAddOpen(true)}
-                onManageServers={() => setManageOpen(true)}
+                onManageServers={goToServers}
             />
             <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
-            <ManageServersDialog
-                open={manageOpen}
-                onOpenChange={setManageOpen}
-                onAddServer={() => setAddOpen(true)}
-            />
             <CreateProjectDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}

@@ -27,16 +27,17 @@ interface Props {
 // tab sets depending on whether a project is in scope:
 //
 //   project → Overview · Fleet · Operations · History · Members · Settings
-//   global  → Projects
+//   global  → Projects · Servers · Admin (admin-only)
 //
 // Operations and History split the previous "Audit" hub into write-
 // capable runtime state (Transfers, Enrollment) and read-only audit
 // (Activities, Recordings) respectively. Old /audit/* URLs still
 // resolve via redirects in routes.tsx.
 //
-// Admin destinations (Users / Access Control / Server settings) are
-// reachable from UserMenu's popover until the dedicated Admin top-tab
-// lands. Account / Preferences also live in the UserMenu.
+// Admin opens its own sub-tab strip (Users · Access Control ·
+// Settings) under /admin; Servers is the promoted ManageServersDialog
+// page. Account / Preferences stay personal-settings only and live in
+// the UserMenu (no top-tab).
 export default function NavTabs({ user, currentSlug }: Props) {
     const { pathname } = useLocation();
     const I = icons;
@@ -114,6 +115,19 @@ export default function NavTabs({ user, currentSlug }: Props) {
             label: "Projects",
             icon: <I.projects className="size-3.5" />,
             matchPaths: ["/projects"],
+        },
+        {
+            to: "/servers",
+            label: "Servers",
+            icon: <I.servers className="size-3.5" />,
+            matchPaths: ["/servers"],
+        },
+        {
+            to: "/admin/users",
+            label: "Admin",
+            icon: <I.admin className="size-3.5" />,
+            minRole: "admin",
+            matchPaths: ["/admin"],
         },
     ];
 
