@@ -39,6 +39,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/app"
 	"github.com/WangYihang/Platypus/internal/core"
 	"github.com/WangYihang/Platypus/internal/core/artifact"
+	corepluginpkg "github.com/WangYihang/Platypus/internal/core/plugin"
 	"github.com/WangYihang/Platypus/internal/enrollment"
 	"github.com/WangYihang/Platypus/internal/ingress"
 	"github.com/WangYihang/Platypus/internal/log"
@@ -454,6 +455,14 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
 	api.RegisterV1AgentPluginRoutes(rest, api.NewAgentPluginsHandler(agentLinkSvc), rbac)
+
+	// Marketplace catalog: server-side mirror of the platypus-plugins
+	// git index repo. Refresh URL via PLATYPUS_PLUGIN_INDEX env; empty
+	// means "no index configured", which keeps the REST endpoints
+	// alive (returning empty results) so a fresh deployment doesn't
+	// 500 on Marketplace tab loads.
+	pluginCatalog := corepluginpkg.New(db.DB, os.Getenv("PLATYPUS_PLUGIN_INDEX"))
+	api.RegisterV1MarketplaceRoutes(rest, api.NewMarketplaceHandler(pluginCatalog), rbac)
 	if meshNode != nil {
 		meshLinkH := mesh.NewLinkHandler(meshNode, mesh.CertPoolFn(api.ProjectsCAPool(db)))
 		rest.GET(mesh.LinkPath, gin.WrapH(meshLinkH))
