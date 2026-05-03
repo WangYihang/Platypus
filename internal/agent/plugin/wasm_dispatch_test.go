@@ -24,17 +24,6 @@ import (
 // these layers split makes runActiveStream pure-state-machine
 // and unit-testable without a wire transport.
 
-// invokerFn is the signature the runActiveStream caller injects.
-// In production this is `extism.Plugin.CallWithContext` wrapped on
-// *loaded; in tests it's a closure that fakes wasm by reading +
-// writing through pctx.activeStream().
-type invokerFn func(ctx context.Context, method string, input []byte) ([]byte, error)
-
-type invokerResult struct {
-	output []byte
-	err    error
-}
-
 func TestRunActiveStream_InvokerCalledWithMethodAndPayload(t *testing.T) {
 	pctx := &pluginCtx{}
 	var gotMethod string

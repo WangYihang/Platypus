@@ -2,6 +2,20 @@ package plugin
 
 import "context"
 
+// invokerFn is the wasm-call seam runActiveStream injects. Production
+// wraps extism.Plugin.CallWithContext on a *loaded; tests substitute a
+// closure that fakes wasm by reading + writing through pctx.activeStream.
+// Splitting the seam keeps runActiveStream pure-state-machine and lets
+// the unit tests run without an extism runtime.
+type invokerFn func(ctx context.Context, method string, input []byte) ([]byte, error)
+
+// invokerResult bundles what an invoker returns so runActiveStream can
+// hand both fields back through a single channel.
+type invokerResult struct {
+	output []byte
+	err    error
+}
+
 // runActiveStream is the choreography around one wasm-streaming
 // method call. Allocates a fresh streamCtx, installs it as
 // pctx.activeStream so the host_stream_* primitives can find it,
