@@ -63,8 +63,8 @@ func (m *Manifest) Validate() error {
 	if m.Runtime.ABI != "extism/1" {
 		errs = append(errs, fmt.Errorf("runtime.abi=%q, only \"extism/1\" is supported", m.Runtime.ABI))
 	}
-	if len(m.RPC) == 0 {
-		errs = append(errs, errors.New("rpc is required: at least one method must be exported"))
+	if len(m.RPC) == 0 && len(m.Streams) == 0 {
+		errs = append(errs, errors.New("at least one rpc or streams entry is required"))
 	}
 	seen := map[string]bool{}
 	for i, r := range m.RPC {
@@ -76,6 +76,23 @@ func (m *Manifest) Validate() error {
 			errs = append(errs, fmt.Errorf("rpc[%d].name=%q is duplicated", i, r.Name))
 		}
 		seen[r.Name] = true
+	}
+	streamSeen := map[string]bool{}
+	for i, s := range m.Streams {
+		if s.Name == "" {
+			errs = append(errs, fmt.Errorf("streams[%d].name is required", i))
+			continue
+		}
+		if streamSeen[s.Name] {
+			errs = append(errs, fmt.Errorf("streams[%d].name=%q is duplicated", i, s.Name))
+		}
+		streamSeen[s.Name] = true
+		if s.StreamType == "" {
+			errs = append(errs, fmt.Errorf("streams[%d].stream_type is required", i))
+		}
+		if s.HostHandler == "" {
+			errs = append(errs, fmt.Errorf("streams[%d].host_handler is required", i))
+		}
 	}
 	if err := m.Capabilities.validate(); err != nil {
 		errs = append(errs, err)

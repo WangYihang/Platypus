@@ -73,7 +73,7 @@ func TestParseManifest_RejectsInvalid(t *testing.T) {
 		{"missing runtime entry", strReplace("entry: nginx_status.wasm", "entry: ''"), "runtime.entry is required"},
 		{"path traversal in entry", strReplace("entry: nginx_status.wasm", "entry: ../foo.wasm"), "must be a plain filename"},
 		{"bad abi", strReplace("abi: extism/1", "abi: extism/2"), "extism/1"},
-		{"no rpc", strReplace("rpc:\n  - name: nginx_status\n    request:  { proto: NginxStatusRequest }\n    response: { proto: NginxStatusResponse }", "rpc: []"), "rpc is required"},
+		{"no rpc + no streams", strReplace("rpc:\n  - name: nginx_status\n    request:  { proto: NginxStatusRequest }\n    response: { proto: NginxStatusResponse }", "rpc: []"), "at least one rpc or streams entry is required"},
 		{"exec without commands", strReplace("commands: [/usr/sbin/nginx]", "commands: []"), "exec set without any commands"},
 		{"relative exec command", strReplace("commands: [/usr/sbin/nginx]", "commands: [nginx]"), "must be an absolute path"},
 		{"oversize memory", strReplace("max_memory_mb: 32", "max_memory_mb: 4096"), "exceeds the 1024 MB ceiling"},

@@ -1,0 +1,18 @@
+[package]
+name = "sys-streams"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "sys_streams"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

@@ -37,9 +37,44 @@ type Manifest struct {
 	Description  string               `yaml:"description"`
 	Runtime      ManifestRuntime      `yaml:"runtime"`
 	RPC          []ManifestRPC        `yaml:"rpc"`
+	Streams      []ManifestStream     `yaml:"streams,omitempty"`
 	Capabilities ManifestCapabilities `yaml:"capabilities"`
 	Resources    ManifestResources    `yaml:"resources"`
 	Signature    ManifestSignature    `yaml:"signature"`
+}
+
+// ManifestStream declares ownership of one wire stream type. The
+// agent's stream dispatcher consults the per-Registry claim registry
+// before falling into its legacy hardcoded switch — a plugin that
+// claims STREAM_TYPE_PROCESS_OPEN gets that stream's bytes routed to
+// it (via the host_stream_handler named in HostHandler) instead of
+// the legacy agent.HandleProcessStream.
+//
+// Stream IO does NOT flow through wasm in MVP. The plugin is a
+// claim-only entity for streams: the wasm runtime executes once at
+// install time to validate the manifest and never again for stream
+// dispatch. Real wasm-mediated stream IO (interleaved read/write
+// inside the plugin's wasm) is the bigger-design Phase 2 work
+// described in docs/plugins/STREAMING_ABI.md.
+type ManifestStream struct {
+	// Name is the plugin-author-facing label for the stream — useful
+	// in audit logs ("plugin X handled stream foo"). Free-form;
+	// uniqueness is per-plugin not global.
+	Name string `yaml:"name"`
+
+	// StreamType is the wire-level v2pb.StreamType value (string form
+	// matching the proto enum: "STREAM_TYPE_PROCESS_OPEN", etc.).
+	// One plugin may claim multiple stream types via multiple
+	// ManifestStream entries.
+	StreamType string `yaml:"stream_type"`
+
+	// HostHandler is the registered host stream provider name to
+	// delegate to. The agent's main wires the legacy handlers as
+	// named providers; system plugins reference the names here. User
+	// plugins (Phase 2, when wasm stream IO lands) will use a
+	// reserved value like "wasm:<method_name>" to flag in-wasm
+	// dispatch.
+	HostHandler string `yaml:"host_handler"`
 }
 
 type ManifestAuthor struct {

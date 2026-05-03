@@ -31,7 +31,29 @@ type AgentHandlerDeps struct {
 	TunnelPull  TunnelPullHandler
 	Upgrade     UpgradeHandler
 	PluginMgmt  PluginMgmtHandler
+
+	// PluginStream is the optional pre-dispatch hook the plugin
+	// runtime injects. Called before the legacy hardcoded type
+	// switch; when it returns handled=true the legacy switch is
+	// skipped. Used by system plugins that have claimed ownership of
+	// a stream type via their manifest's `streams:` arm.
+	//
+	// When nil (e.g. plugin runtime unavailable at boot), the legacy
+	// switch handles every stream as it always did.
+	PluginStream PluginStreamDispatcher
 }
+
+// PluginStreamDispatcher is the signature for the
+// AgentHandlerDeps.PluginStream hook. Implementations live in
+// internal/agent/plugin (Registry.DispatchStream); declared here so
+// the agent package doesn't need to import the plugin package.
+//
+// Contract:
+//   - (true, nil)   plugin owned + ran the stream successfully
+//   - (true, err)   plugin owned the stream but the provider errored
+//   - (false, nil)  no plugin claimed this type → fall through to the
+//                   legacy switch in dispatchAgentStream
+type PluginStreamDispatcher func(ctx context.Context, t v2pb.StreamType, stream io.ReadWriteCloser, metadata []byte) (handled bool, err error)
 
 // ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
 // The production implementation is HandleProcessStream; tests can
@@ -145,6 +167,23 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 	// they emit (process_list.*, file_*, etc.) carry the same values
 	// the server stamped on the wire.
 	ctx = ContextWithStreamIDs(ctx, hdr.GetCorrelationId(), hdr.GetLinkSessionId())
+
+	// Plugin claim consultation: a system plugin may have declared
+	// ownership of this stream type via its manifest's `streams:`
+	// arm. When it has + the host-side provider is available, the
+	// plugin handles the stream and we skip the legacy switch.
+	// (false, nil) means no plugin owned this type — fall through.
+	if deps.PluginStream != nil {
+		handled, err := deps.PluginStream(ctx, hdr.Type, stream, hdr.Metadata)
+		if handled {
+			if err != nil {
+				log.Warn("agent: plugin-claimed stream %s for %s: %v",
+					hdr.Type.String(), hdr.CorrelationId, err)
+			}
+			return
+		}
+	}
+
 	switch hdr.Type {
 	case v2pb.StreamType_STREAM_TYPE_RPC:
 		if err := ServeRPCStream(ctx, stream, deps.RPC); err != nil {

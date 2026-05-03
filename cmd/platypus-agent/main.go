@@ -145,6 +145,7 @@ func main() {
 	pluginrt.SetHostListSecurityChecksProvider(agent.HandleListSecurityChecks)
 	pluginrt.SetHostConfigAuditProvider(agent.HandleConfigAudit)
 	pluginrt.SetHostListConfigAuditorsProvider(agent.HandleListConfigAuditors)
+	registerStreamProviders(ctx) // 6 stream adapters for sys-streams plugin
 
 	pluginRegistry, err := pluginrt.New(pluginrt.Options{
 		Paths: pluginrt.NewPaths(identityDir),
@@ -356,20 +357,23 @@ func main() {
 			ListConfigAuditors: listConfigAuditors,
 		}
 		var pluginMgmt agent.PluginMgmtHandler
+		var pluginStream agent.PluginStreamDispatcher
 		if pluginRegistry != nil {
 			rpc.PluginCall = pluginRegistry.Invoke
 			pluginMgmt = pluginRegistry.HandleMgmt
+			pluginStream = pluginRegistry.DispatchStream
 		}
 		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
-			RPC:         rpc,
-			Process:     agent.HandleProcessStream,
-			FileRead:    agent.HandleFileReadStream,
-			FileWrite:   agent.HandleFileWriteStream,
-			FileScan:    agent.HandleFileScanStream,
-			FileArchive: agent.HandleFileArchiveStream,
-			TunnelPull:  agent.HandleTunnelPullStream,
-			Upgrade:     buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
-			PluginMgmt:  pluginMgmt,
+			RPC:          rpc,
+			Process:      agent.HandleProcessStream,
+			FileRead:     agent.HandleFileReadStream,
+			FileWrite:    agent.HandleFileWriteStream,
+			FileScan:     agent.HandleFileScanStream,
+			FileArchive:  agent.HandleFileArchiveStream,
+			TunnelPull:   agent.HandleTunnelPullStream,
+			Upgrade:      buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
+			PluginMgmt:   pluginMgmt,
+			PluginStream: pluginStream,
 		})
 		reason := "peer_close"
 		if serveErr != nil {
