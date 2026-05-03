@@ -127,6 +127,15 @@ func (r *Registry) DispatchStream(ctx context.Context, t v2pb.StreamType, stream
 	if !ok {
 		return false, nil
 	}
+	// `wasm:method` host_handler markers route through the legacy-
+	// wasm bridge — the wasm method owns frame production via
+	// host_link_write_frame, the wire protocol stays byte-for-byte
+	// identical to what the legacy Go handlers used to emit. No
+	// StreamProvider lookup happens for these (the host-provider
+	// claim path is exclusive to `agent.X` markers).
+	if method, isWasm := parseWasmHandler(claim.HostHandler); isWasm {
+		return true, r.DispatchLegacyWasmStream(ctx, stream, claim.PluginID, method, metadata)
+	}
 	if !providerOK {
 		return true, fmt.Errorf("plugin: stream %s: claim by %s references unknown provider %q",
 			t.String(), claim.PluginID, claim.HostHandler)

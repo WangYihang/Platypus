@@ -75,6 +75,8 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostKVPut),
 		newHostFunc("host_fs_read", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSRead),
+		newHostFunc("host_fs_read_range", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSReadRange),
 		newHostFunc("host_fs_listdir", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSListdir),
 		newHostFunc("host_fs_stat", []api.ValueType{api.ValueTypeI64},
@@ -114,6 +116,14 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamWrite),
 		newHostFunc("host_stream_close", []api.ValueType{},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamClose),
+
+		// Legacy-wasm-bridge primitive: writes a length-prefixed
+		// frame (matching internal/link's wire format) directly to
+		// the agent stream. Only valid when the plugin was invoked
+		// via DispatchLegacyWasmStream — pump-mode dispatch returns
+		// stream_not_legacy_bridge from this fn.
+		newHostFunc("host_link_write_frame", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostLinkWriteFrame),
 	}
 }
 

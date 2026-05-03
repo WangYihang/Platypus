@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -84,6 +85,117 @@ func (pctx *pluginCtx) hostFSRead(_ context.Context, p *extism.CurrentPlugin, st
 		return
 	}
 	returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(string(data))})
+}
+
+// fsReadRangeRequest is the JSON the wasm passes when it wants a
+// specific byte slice of a file rather than the whole thing. Used by
+// streaming-style plugins (e.g. sys-file-read) that chunk a large
+// file into wire-sized frames; the existing host_fs_read returns
+// the whole file (capped by maxFileReadSize), which doesn't scale.
+type fsReadRangeRequest struct {
+	Path   string `json:"path"`
+	Offset int64  `json:"offset"`
+	// Length is the max bytes to return. 0 = "all remaining bytes
+	// from offset", clamped at maxFileReadRangeBytes per call so a
+	// single call can't blow the wasm memory limit.
+	Length int64 `json:"length"`
+}
+
+// fsReadRangeResponse is the structured envelope.Data the wasm
+// receives. EOF is true when offset+returned bytes covered the
+// trailing tail of the file (no more bytes available).
+type fsReadRangeResponse struct {
+	Data   []byte `json:"data"`
+	EOF    bool   `json:"eof"`
+	Size   int64  `json:"size"`
+	Mode   uint32 `json:"mode"`
+}
+
+// maxFileReadRangeBytes caps a single host_fs_read_range call so a
+// wasm asking for "Length=10 GiB" still returns sanely. Tuned to
+// stay well under internal/link.FrameMaxBytes (1 MiB) so the
+// returned bytes can be wrapped in a single wire frame on the
+// downstream legacy bridge path.
+const maxFileReadRangeBytes = 256 * 1024
+
+// hostFSReadRange reads a specific byte slice of a regular file.
+// Stateless on the host side: opens, seeks, reads, closes per call.
+// Per-chunk overhead is a few syscalls — fine for the sequential
+// streaming pattern this fn is intended for, where each chunk is
+// 64-256 KiB. A handle-based API would amortise the syscalls but
+// requires per-plugin state lifecycle that's not worth the
+// complexity for the (rare-in-practice) high-throughput case.
+func (pctx *pluginCtx) hostFSReadRange(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	if !pctx.granted[CapFSRead] {
+		returnEnvelope(p, stack, denied("fs.read"))
+		return
+	}
+	raw, err := readStringArg(p, stack[0])
+	if err != nil {
+		returnEnvelope(p, stack, failed("read_arg: "+err.Error()))
+		return
+	}
+	var req fsReadRangeRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		returnEnvelope(p, stack, failed("parse_request: "+err.Error()))
+		return
+	}
+	clean, err := pctx.checkFSReadPath(req.Path)
+	if err != nil {
+		returnEnvelope(p, stack, failed(err.Error()))
+		return
+	}
+	f, err := os.Open(clean)
+	if err != nil {
+		returnEnvelope(p, stack, failed("open: "+err.Error()))
+		return
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		returnEnvelope(p, stack, failed("stat: "+err.Error()))
+		return
+	}
+	if st.IsDir() {
+		returnEnvelope(p, stack, failed("is_directory"))
+		return
+	}
+	want := req.Length
+	if want <= 0 || want > maxFileReadRangeBytes {
+		want = maxFileReadRangeBytes
+	}
+	if req.Offset > 0 {
+		if _, err := f.Seek(req.Offset, io.SeekStart); err != nil {
+			returnEnvelope(p, stack, failed("seek: "+err.Error()))
+			return
+		}
+	}
+	buf := make([]byte, want)
+	n, err := io.ReadFull(f, buf)
+	// io.ReadFull returns ErrUnexpectedEOF when it reads at least
+	// one byte but fewer than len(buf) — that's our signal that we
+	// hit the file's tail. EOF (zero bytes read) is the same signal
+	// when offset already pointed past the end. Either way the
+	// caller should know "no more after this batch".
+	eof := false
+	switch {
+	case err == nil:
+		// Buffer fully filled — there may be more data after.
+	case err == io.EOF:
+		eof = true
+	case err == io.ErrUnexpectedEOF:
+		eof = true
+	default:
+		returnEnvelope(p, stack, failed("read: "+err.Error()))
+		return
+	}
+	resp := fsReadRangeResponse{
+		Data: buf[:n],
+		EOF:  eof,
+		Size: st.Size(),
+		Mode: uint32(st.Mode().Perm()),
+	}
+	returnEnvelope(p, stack, okData(resp))
 }
 
 func (pctx *pluginCtx) hostFSListdir(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
