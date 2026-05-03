@@ -1,40 +1,17 @@
-// First Platypus system plugin — proves the bundled bootstrap path
-// end-to-end with a real Rust extism artefact.
+// sys-hostname v2 — reads /etc/hostname (with /proc fallback) via
+// host_fs_read directly. The previous version went through the
+// agent's host_sysinfo helper, which has been deleted now that the
+// fully-self-contained sys-info plugin makes the small "just give
+// me hostname" host fn redundant.
 //
-// What it does: one method `hostname` that reads the host's
-// hostname via the agent's `host_sysinfo` host function and returns
-// it. Tiny on purpose; the migration of the larger SysInfo /
-// ProcessList / etc. handlers builds on the same shape but at
-// significantly more complexity (parsing /proc files, etc.).
-//
-// Sandbox posture: declares only the implicit `log` capability +
-// `sysinfo` (granted automatically because system plugins run with
-// every capability they declare). No fs.read / exec / net.http.
+// Capability: fs.read of /etc + /proc/sys/kernel.
 
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
 
-/// HostnameResponse is the schema operators see over the wire. Mirrors
-/// the shape we'll eventually return from the migrated SysInfo
-/// handler; today only `hostname` is populated.
-#[derive(Serialize, Deserialize)]
-pub struct HostnameResponse {
-    pub hostname: String,
-    /// Source records which path produced the value. "host_sysinfo"
-    /// today; once we add more host functions (e.g. host_fs_read of
-    /// /etc/hostname), this field lets the operator audit which
-    /// primitive was used.
-    pub source: String,
-}
-
-/// host_sysinfo lives in the `platypus` namespace (see
-/// internal/agent/plugin/host_funcs.go's `hostNamespace` constant).
-/// The default extism PDK namespace is `extism:host/user`, so we
-/// explicitly retarget here. Mismatched namespaces show up as
-/// "module not instantiated" at extism.NewPlugin time.
 #[host_fn("platypus")]
 extern "ExtismHost" {
-    fn host_sysinfo() -> Json<Envelope>;
+    fn host_fs_read(path: String) -> Json<Envelope>;
 }
 
 #[derive(Deserialize)]
@@ -46,23 +23,48 @@ struct Envelope {
     error: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct HostnameResponse {
+    pub hostname: String,
+    /// Path that produced the value — useful in audit logs to tell
+    /// "/etc/hostname is set" apart from "had to fall back to
+    /// /proc/sys/kernel/hostname". The legacy v1 plugin set this to
+    /// "host_sysinfo"; v2 records the actual filesystem path read.
+    pub source: String,
+}
+
 #[plugin_fn]
 pub fn hostname(_: ()) -> FnResult<Json<HostnameResponse>> {
-    let env: Envelope = unsafe { host_sysinfo()?.0 };
-    if !env.ok {
-        return Err(WithReturnCode::new(
-            Error::msg(format!("host_sysinfo: {}", env.error)),
-            1,
-        ));
+    // Order: /etc/hostname is the canonical source on every modern
+    // distro; fall back to /proc/sys/kernel/hostname when the file
+    // is missing (rare but legitimate on minimal containers).
+    for path in &["/etc/hostname", "/proc/sys/kernel/hostname"] {
+        if let Some(v) = read_trim(path) {
+            return Ok(Json(HostnameResponse {
+                hostname: v,
+                source: path.to_string(),
+            }));
+        }
     }
-    let hostname = env
-        .data
-        .get("hostname")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // Both reads failed; surface the failure as an empty hostname +
+    // a "source: none" marker so the bridge sees a valid response
+    // rather than a wasm trap.
     Ok(Json(HostnameResponse {
-        hostname,
-        source: "host_sysinfo".to_string(),
+        hostname: String::new(),
+        source: "none".to_string(),
     }))
+}
+
+fn read_trim(path: &str) -> Option<String> {
+    let env: Envelope = unsafe { host_fs_read(path.to_string()).ok()?.0 };
+    if !env.ok {
+        return None;
+    }
+    let s = env.data.as_str()?;
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }

@@ -10,7 +10,7 @@ type CapabilityID string
 const (
 	CapLog     CapabilityID = "log"      // host_log; granted implicitly to every plugin
 	CapKV      CapabilityID = "kv"       // host_kv_get/put under plugin's own namespace
-	CapSysInfo CapabilityID = "sysinfo"  // host_sysinfo: read-only host snapshot
+	CapSysInfo CapabilityID = "sysinfo"  // host_uname: read-only host snapshot (os/arch)
 	CapExec    CapabilityID = "exec"     // host_exec; requires Capabilities.Exec.Commands allowlist
 	CapFSRead  CapabilityID = "fs.read"  // host_fs_read/listdir/stat; requires Capabilities.FSRead.Paths
 	CapFSWrite CapabilityID = "fs.write" // host_fs_write/mkdir/chmod/rename/delete; requires Capabilities.FSWrite.Paths

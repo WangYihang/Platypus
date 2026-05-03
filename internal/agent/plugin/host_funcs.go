@@ -52,7 +52,7 @@ type pluginCtx struct {
 // at runtime.
 //
 // Per-family implementations live in host_log.go, host_kv.go,
-// host_fs.go, host_exec.go, host_sysinfo.go, host_http.go.
+// host_fs.go, host_exec.go, host_uname.go, host_http.go.
 func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 	return []extism.HostFunction{
 		newHostFunc("host_log", []api.ValueType{api.ValueTypeI32, api.ValueTypeI64},
@@ -79,8 +79,6 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSRename),
 		newHostFunc("host_exec", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostExec),
-		newHostFunc("host_sysinfo", []api.ValueType{},
-			[]api.ValueType{api.ValueTypeI64}, pctx.hostSysInfo),
 		newHostFunc("host_uname", []api.ValueType{},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostUname),
 		newHostFunc("host_http", []api.ValueType{api.ValueTypeI64},

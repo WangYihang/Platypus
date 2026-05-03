@@ -56,11 +56,14 @@ func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
 		t.Fatalf("expected %s in Installed, got %+v (failed=%+v)",
 			wantID, res.Installed, res.Failed)
 	}
-	if !reg.HasInstalledVersion(wantID, "1.0.0") {
-		t.Fatalf("expected %s v1.0.0 in catalog", wantID)
+	if !reg.HasInstalledVersion(wantID, "2.0.0") {
+		t.Fatalf("expected %s v2.0.0 in catalog", wantID)
 	}
 
-	// Invoke. Returns JSON {"hostname":"...","source":"host_sysinfo"}.
+	// Invoke. v2 returns {"hostname":"...","source":"/etc/hostname"}
+	// (or "/proc/sys/kernel/hostname" fallback). The source field
+	// records which filesystem path produced the value — useful in
+	// audit trails distinguishing canonical vs fallback reads.
 	resp := reg.Invoke(context.Background(), &v2pb.PluginCallRequest{
 		PluginId: wantID,
 		Method:   "hostname",
@@ -72,8 +75,11 @@ func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
 	if !strings.Contains(body, `"hostname"`) {
 		t.Errorf("payload missing hostname field: %s", body)
 	}
-	if !strings.Contains(body, `"source":"host_sysinfo"`) {
-		t.Errorf("payload missing source field: %s", body)
+	// Source must reference one of the two filesystem paths the v2
+	// plugin tries; "host_sysinfo" (the v1 marker) means we're
+	// running an old bundle.
+	if !strings.Contains(body, `"source":"/`) {
+		t.Errorf("payload missing /-prefixed source field (v2 sources are filesystem paths): %s", body)
 	}
 	t.Logf("sys-hostname returned: %s", body)
 }
