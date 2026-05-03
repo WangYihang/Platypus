@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
+	"strings"
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/agent/plugin/system"
+	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -94,6 +97,52 @@ func TestStream_ProviderErrorPropagates(t *testing.T) {
 		v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN, nil, nil)
 	if !errors.Is(err, wantErr) {
 		t.Errorf("err = %v, want wraps %v", err, wantErr)
+	}
+}
+
+// TestStream_PluginStreamRoutesToWasmDispatcher verifies that
+// STREAM_TYPE_PLUGIN_STREAM bypasses the host-provider claim lookup
+// (which would never match — the type is the generic wasm-streaming
+// slot, not a per-plugin claim) and routes straight into
+// DispatchPluginStream. We feed garbage metadata; success here is
+// observing handled=true with the wasm dispatcher's parse_metadata
+// error code, which proves the route taken.
+func TestStream_PluginStreamRoutesToWasmDispatcher(t *testing.T) {
+	plugin.ResetStreamProvidersForTest()
+
+	reg := freshRegistryWithSysPlugins(t)
+	defer reg.Close(context.Background())
+
+	a, b := net.Pipe()
+	// Drain the wire side so the dispatcher's best-effort error frame
+	// write doesn't deadlock against the synchronous net.Pipe.
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for {
+			var f v2pb.PluginStreamFrame
+			if err := link.ReadFrame(b, &f); err != nil {
+				return
+			}
+		}
+	}()
+
+	handled, err := reg.DispatchStream(context.Background(),
+		v2pb.StreamType_STREAM_TYPE_PLUGIN_STREAM, a, []byte("not a proto"))
+
+	// Close both ends + join the drain goroutine before any t.Fatal so
+	// failure cases don't leak the read-blocked goroutine. If routing
+	// worked, DispatchPluginStream already closed `a` via its defer
+	// and these closes are no-ops; if it didn't, we close here.
+	_ = a.Close()
+	_ = b.Close()
+	<-drainDone
+
+	if !handled {
+		t.Fatalf("expected handled=true (PLUGIN_STREAM owned by wasm dispatcher)")
+	}
+	if err == nil || !strings.Contains(err.Error(), "parse_metadata") {
+		t.Errorf("err = %v, want parse_metadata", err)
 	}
 }
 

@@ -113,7 +113,16 @@ func (r *Registry) StreamClaim(t v2pb.StreamType) (claim StreamClaim, providerOK
 // (true, error) for the in-between cases (claim found but provider
 // missing) — surfaced as an error so a misconfigured deployment
 // fails loudly instead of silently routing to the wrong place.
+//
+// STREAM_TYPE_PLUGIN_STREAM is the wasm-mediated path: it bypasses
+// the per-type claim lookup (no manifest declares the generic slot)
+// and routes straight to DispatchPluginStream, which parses the
+// embedded PluginStreamRequest header to find the target plugin +
+// stream name.
 func (r *Registry) DispatchStream(ctx context.Context, t v2pb.StreamType, stream io.ReadWriteCloser, metadata []byte) (handled bool, err error) {
+	if t == v2pb.StreamType_STREAM_TYPE_PLUGIN_STREAM {
+		return true, r.DispatchPluginStream(ctx, stream, metadata)
+	}
 	claim, providerOK, ok := r.StreamClaim(t)
 	if !ok {
 		return false, nil
