@@ -83,6 +83,8 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostSysInfo),
 		newHostFunc("host_process_list", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessList),
+		newHostFunc("host_collect_sysinfo", []api.ValueType{},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostCollectSysInfo),
 		newHostFunc("host_http", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostHTTP),
 	}

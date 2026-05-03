@@ -1,0 +1,34 @@
+api_version: 1
+id: com.platypus.sys-info
+name: SysInfo (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — replaces the agent's built-in SysInfo RPC.
+  Forwards to the agent's gopsutil-backed collector via
+  host_collect_sysinfo.
+
+runtime:
+  type: wasm
+  entry: sys_info_plugin.wasm
+  abi: extism/1
+
+rpc:
+  - name: sys_info
+    request:  { proto: SysInfoRequest }
+    response: { proto: SysInfoResponse }
+
+capabilities:
+  sysinfo: true
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_info_plugin.wasm.minisig
