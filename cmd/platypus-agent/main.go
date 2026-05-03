@@ -141,6 +141,10 @@ func main() {
 	// plugin already finds them.
 	pluginrt.SetHostProcessListProvider(agent.CollectProcessList)
 	pluginrt.SetHostCollectSysInfoProvider(agent.CollectSysInfo)
+	pluginrt.SetHostSecurityScanProvider(agent.HandleSecurityScan)
+	pluginrt.SetHostListSecurityChecksProvider(agent.HandleListSecurityChecks)
+	pluginrt.SetHostConfigAuditProvider(agent.HandleConfigAudit)
+	pluginrt.SetHostListConfigAuditorsProvider(agent.HandleListConfigAuditors)
 
 	pluginRegistry, err := pluginrt.New(pluginrt.Options{
 		Paths: pluginrt.NewPaths(identityDir),
@@ -317,6 +321,10 @@ func main() {
 		processList := agent.HandleProcessList
 		sysInfo := agent.HandleSysInfo
 		exec := agent.HandleExec
+		securityScan := agent.HandleSecurityScan
+		listSecurityChecks := agent.HandleListSecurityChecks
+		configAudit := agent.HandleConfigAudit
+		listConfigAuditors := agent.HandleListConfigAuditors
 		if pluginRegistry != nil {
 			listDir = pluginbridge.ListDir(pluginRegistry)
 			stat = pluginbridge.Stat(pluginRegistry)
@@ -327,6 +335,10 @@ func main() {
 			processList = pluginbridge.ProcessList(pluginRegistry)
 			sysInfo = pluginbridge.SysInfo(pluginRegistry)
 			exec = pluginbridge.Exec(pluginRegistry)
+			securityScan = pluginbridge.SecurityScan(pluginRegistry)
+			listSecurityChecks = pluginbridge.ListSecurityChecks(pluginRegistry)
+			configAudit = pluginbridge.ConfigAudit(pluginRegistry)
+			listConfigAuditors = pluginbridge.ListConfigAuditors(pluginRegistry)
 		}
 		rpc := agent.AgentRPCHandlers{
 			Exec:               exec,
@@ -338,10 +350,10 @@ func main() {
 			Chmod:              chmod,
 			SysInfo:            sysInfo,
 			ProcessList:        processList,
-			SecurityScan:       agent.HandleSecurityScan,
-			ListSecurityChecks: agent.HandleListSecurityChecks,
-			ConfigAudit:        agent.HandleConfigAudit,
-			ListConfigAuditors: agent.HandleListConfigAuditors,
+			SecurityScan:       securityScan,
+			ListSecurityChecks: listSecurityChecks,
+			ConfigAudit:        configAudit,
+			ListConfigAuditors: listConfigAuditors,
 		}
 		var pluginMgmt agent.PluginMgmtHandler
 		if pluginRegistry != nil {
