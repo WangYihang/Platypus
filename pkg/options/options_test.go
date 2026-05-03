@@ -13,7 +13,7 @@ import (
 func clearAgentEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		EnvInstallToken, EnvServerAddr, EnvDataDir,
+		EnvInstallToken, EnvServerAddr, EnvDataDir, EnvBaselinePlugins,
 	} {
 		t.Setenv(k, "")
 	}
@@ -134,6 +134,54 @@ func TestParseArgs_RepeatablePeers(t *testing.T) {
 
 // TestParseArgs_NoArgsAllowed: a re-run with persisted identity
 // should be possible without any args.
+// TestParseArgs_BaselinePlugins ensures the --baseline-plugins flag
+// (and its env equivalent) round-trip through to opts as a clean,
+// trimmed, deduplicated string slice. The default (no flag, no env)
+// must produce nil so the agent's first-boot logic can distinguish
+// "operator never set a baseline" from "operator set an empty one".
+func TestParseArgs_BaselinePlugins(t *testing.T) {
+	clearAgentEnv(t)
+	cases := []struct {
+		name string
+		argv []string
+		env  string
+		want []string
+	}{
+		{name: "default", argv: []string{"--server", "h:1", "plt_a.b"}, want: nil},
+		{name: "empty flag", argv: []string{"--server", "h:1", "--baseline-plugins", "", "plt_a.b"}, want: nil},
+		{name: "single", argv: []string{"--server", "h:1", "--baseline-plugins", "com.platypus.sys-info", "plt_a.b"}, want: []string{"com.platypus.sys-info"}},
+		{name: "multi + dedup + trim", argv: []string{"--server", "h:1", "--baseline-plugins", " a , b,a ,, c ", "plt_a.b"}, want: []string{"a", "b", "c"}},
+		{name: "via env", argv: []string{"--server", "h:1", "plt_a.b"}, env: "x,y", want: []string{"x", "y"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAgentEnv(t)
+			if tc.env != "" {
+				t.Setenv(EnvBaselinePlugins, tc.env)
+			}
+			opts, err := parseArgs(tc.argv)
+			if err != nil {
+				t.Fatalf("parseArgs: %v", err)
+			}
+			if !equalStrings(opts.BaselinePluginIDs, tc.want) {
+				t.Fatalf("BaselinePluginIDs = %v; want %v", opts.BaselinePluginIDs, tc.want)
+			}
+		})
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestParseArgs_NoArgsAllowed(t *testing.T) {
 	clearAgentEnv(t)
 	opts, err := parseArgs(nil)

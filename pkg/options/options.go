@@ -27,6 +27,13 @@ type Options struct {
 	RemotePort int
 	DataDir    string
 
+	// BaselinePluginIDs is the operator-chosen system-plugin
+	// allowlist for first boot. Empty slice = "no allowlist", which
+	// the agent interprets as "install only the mandatory core
+	// (sys-info)". Persisted on first boot to baseline.json so
+	// later boots reproduce the same selection without the flag.
+	BaselinePluginIDs []string
+
 	MeshListen            string
 	MeshPeers             []string
 	MeshAdvertise         []string
@@ -36,9 +43,10 @@ type Options struct {
 
 // Env-var names exposed for tests / docs / install scripts.
 const (
-	EnvInstallToken = "PLATYPUS_INSTALL_TOKEN"
-	EnvServerAddr   = "PLATYPUS_SERVER"
-	EnvDataDir      = "PLATYPUS_DATA_DIR"
+	EnvInstallToken     = "PLATYPUS_INSTALL_TOKEN"
+	EnvServerAddr       = "PLATYPUS_SERVER"
+	EnvDataDir          = "PLATYPUS_DATA_DIR"
+	EnvBaselinePlugins  = "PLATYPUS_BASELINE_PLUGINS"
 )
 
 var (
@@ -52,6 +60,8 @@ type cli struct {
 	Server string `name:"server" env:"PLATYPUS_SERVER" placeholder:"HOST:PORT" help:"Server endpoint. Falls back to the embedded prefix in --install-token (when present) or persisted state."`
 
 	DataDir string `name:"data-dir" env:"PLATYPUS_DATA_DIR" placeholder:"PATH" help:"Persistent state root. Defaults to ~/.platypus/agent (or /var/lib/platypus when running as root)."`
+
+	BaselinePlugins string `name:"baseline-plugins" env:"PLATYPUS_BASELINE_PLUGINS" placeholder:"id1,id2,..." help:"Comma-separated allowlist of system plugin ids to install on first boot. Empty = install only the mandatory core (sys-info). Ignored on later boots once baseline.json is persisted."`
 
 	MeshListen            string   `name:"mesh-listen" placeholder:"HOST:PORT" help:"Address to accept inbound mesh links from peers (NAT-relay / hub-and-spoke fan-out). Empty = leaf-only (the typical configuration)."`
 	MeshDiscoveryLAN      bool     `name:"mesh-discovery" default:"true" negatable:"" help:"Enable mDNS LAN discovery."`
@@ -88,6 +98,7 @@ func parseArgs(argv []string) (*Options, error) {
 	opts := &Options{
 		Token:                 c.Token,
 		DataDir:               c.DataDir,
+		BaselinePluginIDs:     parseBaselinePlugins(c.BaselinePlugins),
 		MeshListen:            c.MeshListen,
 		MeshPeers:             append([]string(nil), c.MeshPeers...),
 		MeshAdvertise:         append([]string(nil), c.MeshAdvertise...),
@@ -131,6 +142,35 @@ func splitTokenWithServer(raw string) (host string, port int, token string, ok b
 		return "", 0, raw, false
 	}
 	return h, p, rest, true
+}
+
+// parseBaselinePlugins splits a comma-separated allowlist into a
+// trimmed, deduplicated string slice. Empty input returns nil so the
+// agent can distinguish "no allowlist passed" (mandatory core only)
+// from "explicit empty allowlist" (functionally identical, but the
+// nil form keeps debug logs cleaner).
+func parseBaselinePlugins(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		out = append(out, part)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func splitHostPort(s string) (string, int, error) {

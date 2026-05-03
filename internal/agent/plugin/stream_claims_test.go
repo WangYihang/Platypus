@@ -160,7 +160,7 @@ func freshRegistryWithSysPlugins(t *testing.T) *plugin.Registry {
 	if err != nil {
 		t.Fatalf("EmbeddedFS: %v", err)
 	}
-	if r := system.EnsureInstalled(context.Background(), reg, embFS); len(r.Failed) > 0 {
+	if r := system.EnsureInstalled(context.Background(), reg, embFS, system.EnsureOptions{AllowAll: true}); len(r.Failed) > 0 {
 		t.Fatalf("system bootstrap failures: %+v", r.Failed)
 	}
 	return reg

@@ -88,7 +88,7 @@ func TestSystem_FreshInstall(t *testing.T) {
 	reg := freshRegistry(t)
 	defer reg.Close(context.Background())
 
-	res := EnsureInstalled(context.Background(), reg, embFS)
+	res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true})
 	if res.SetupError != nil {
 		t.Fatalf("setup err: %v", res.SetupError)
 	}
@@ -110,10 +110,10 @@ func TestSystem_AlreadyInstalledSkipsOnSecondCall(t *testing.T) {
 	reg := freshRegistry(t)
 	defer reg.Close(context.Background())
 
-	if r := EnsureInstalled(context.Background(), reg, embFS); len(r.Installed) != 1 {
+	if r := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true}); len(r.Installed) != 1 {
 		t.Fatalf("first call should install: %+v", r)
 	}
-	r := EnsureInstalled(context.Background(), reg, embFS)
+	r := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true})
 	if len(r.Skipped) != 1 || len(r.Installed) != 0 {
 		t.Errorf("second call should skip: %+v", r)
 	}
@@ -128,7 +128,7 @@ func TestSystem_TamperedWasmFails(t *testing.T) {
 	reg := freshRegistry(t)
 	defer reg.Close(context.Background())
 
-	res := EnsureInstalled(context.Background(), reg, embFS)
+	res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true})
 	if len(res.Failed) != 1 {
 		t.Fatalf("expected 1 failure, got %+v", res)
 	}
@@ -147,7 +147,7 @@ func TestSystem_MissingPublisherFile(t *testing.T) {
 	reg := freshRegistry(t)
 	defer reg.Close(context.Background())
 
-	res := EnsureInstalled(context.Background(), reg, embFS)
+	res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true})
 	if res.SetupError == nil {
 		t.Fatalf("expected setup error")
 	}
@@ -156,12 +156,105 @@ func TestSystem_MissingPublisherFile(t *testing.T) {
 	}
 }
 
+// buildEmbeddedFSMulti stages N signed plugins under one common
+// publisher key so an allowlist test can pick out a subset.
+func buildEmbeddedFSMulti(t *testing.T, ids []string) fstest.MapFS {
+	t.Helper()
+	sk, pk, err := plugin.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	out := fstest.MapFS{
+		"publisher.pub": {Data: []byte(plugin.EncodePublicKey(pk, ""))},
+	}
+	for _, id := range ids {
+		manifest := strings.NewReplacer(
+			"PLUGIN_ID", id,
+			"VERSION", "1.0.0",
+			"PLACEHOLDER", plugin.HumanKeyID(pk),
+		).Replace(noopManifestTmpl)
+		sig, err := plugin.Sign(sk, noopWasm, plugin.DefaultTrustedComment("noop.wasm"))
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		out[id+"/1.0.0/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifest)}
+		out[id+"/1.0.0/noop.wasm"] = &fstest.MapFile{Data: noopWasm}
+		out[id+"/1.0.0/noop.wasm.minisig"] = &fstest.MapFile{Data: []byte(plugin.EncodeSignature(sig))}
+	}
+	return out
+}
+
+// TestEnsureInstalled_RespectsAllowlist exercises the operator
+// allowlist filter: with three plugins staged under the embedded FS,
+// passing Allowlist=[id1,id2] must install exactly id1+id2 and
+// surface id3 in Result.Filtered. AllowAll=false with an empty
+// Allowlist must filter all of them (mandatory-core merge happens
+// in the agent main, not here).
+func TestEnsureInstalled_RespectsAllowlist(t *testing.T) {
+	ids := []string{
+		"com.platypus.sys-info",
+		"com.platypus.sys-listdir",
+		"com.platypus.sys-procs",
+	}
+	embFS := buildEmbeddedFSMulti(t, ids)
+
+	t.Run("partial allowlist", func(t *testing.T) {
+		reg := freshRegistry(t)
+		defer reg.Close(context.Background())
+		res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{
+			Allowlist: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+		})
+		if res.SetupError != nil {
+			t.Fatalf("setup: %v", res.SetupError)
+		}
+		if len(res.Installed) != 2 {
+			t.Fatalf("Installed = %+v; want 2", res.Installed)
+		}
+		if len(res.Filtered) != 1 || res.Filtered[0].ID != "com.platypus.sys-procs" {
+			t.Fatalf("Filtered = %+v; want sys-procs only", res.Filtered)
+		}
+		if reg.HasInstalledVersion("com.platypus.sys-procs", "1.0.0") {
+			t.Errorf("sys-procs should not be installed (filtered)")
+		}
+	})
+
+	t.Run("empty allowlist filters everything", func(t *testing.T) {
+		reg := freshRegistry(t)
+		defer reg.Close(context.Background())
+		res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{})
+		if res.SetupError != nil {
+			t.Fatalf("setup: %v", res.SetupError)
+		}
+		if len(res.Installed) != 0 {
+			t.Fatalf("Installed = %+v; want empty", res.Installed)
+		}
+		if len(res.Filtered) != 3 {
+			t.Fatalf("Filtered = %+v; want all 3", res.Filtered)
+		}
+	})
+
+	t.Run("AllowAll overrides allowlist", func(t *testing.T) {
+		reg := freshRegistry(t)
+		defer reg.Close(context.Background())
+		res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{
+			AllowAll:  true,
+			Allowlist: []string{"com.platypus.sys-info"},
+		})
+		if len(res.Installed) != 3 {
+			t.Fatalf("Installed = %+v; want all 3 (AllowAll=true ignores Allowlist)", res.Installed)
+		}
+		if len(res.Filtered) != 0 {
+			t.Fatalf("Filtered = %+v; want empty when AllowAll=true", res.Filtered)
+		}
+	})
+}
+
 func TestSystem_RemoveRefusedForSystemPlugin(t *testing.T) {
 	embFS, _ := buildEmbeddedFS(t, "com.platypus.sys-noop", "1.0.0")
 	reg := freshRegistry(t)
 	defer reg.Close(context.Background())
 
-	if r := EnsureInstalled(context.Background(), reg, embFS); len(r.Installed) != 1 {
+	if r := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true}); len(r.Installed) != 1 {
 		t.Fatalf("install: %+v", r)
 	}
 	err := reg.Remove(context.Background(), "com.platypus.sys-noop", false)

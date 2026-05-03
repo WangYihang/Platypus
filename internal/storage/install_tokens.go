@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -35,11 +36,17 @@ type InstallDownloadToken struct {
 	// AutoApprove propagates into the PAT minted at consume time —
 	// the resulting host enrolls straight to `approved` instead of
 	// the default `pending`. See migration 000022.
-	AutoApprove   bool
-	Revoked       bool
-	RevokedAt     *time.Time
-	RevokedByUser string
-	RevokedReason string
+	AutoApprove bool
+	// BaselinePluginIDs propagates from the admin's install-token mint
+	// all the way to the agent boot: the agent will only install
+	// system plugins whose id is in this list (plus the mandatory
+	// core, e.g. sys-info). Empty slice = "no allowlist provided",
+	// which results in mandatory-core-only.
+	BaselinePluginIDs []string
+	Revoked           bool
+	RevokedAt         *time.Time
+	RevokedByUser     string
+	RevokedReason     string
 }
 
 // InstallDownloadStatus is derived (never materialised). Separate from
@@ -95,10 +102,10 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 			download_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, target_os, target_arch,
 			server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
-			pat_description, auto_approve,
+			pat_description, auto_approve, baseline_plugin_ids,
 			consumed_at, consumed_ip, consumed_ua,
 			consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		          NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL)`,
 		t.DownloadID, t.SecretHash, t.ProjectID, t.IssuedByUser,
 		t.IssuedAt.UTC(), t.ExpiresAt.UTC(),
@@ -107,6 +114,7 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 		nullableString(t.PATBindingMachineID),
 		nullableString(t.PATDescription),
 		autoApprove,
+		encodeBaselinePluginIDs(t.BaselinePluginIDs),
 	)
 	return err
 }
@@ -260,7 +268,8 @@ const installDownloadColumns = `
 	SELECT download_id, secret_hash, project_id, issued_by_user,
 	       issued_at, expires_at, target_os, target_arch,
 	       server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
-	       pat_description, auto_approve, consumed_at, consumed_ip, consumed_ua,
+	       pat_description, auto_approve, baseline_plugin_ids,
+	       consumed_at, consumed_ip, consumed_ua,
 	       consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
 	  FROM install_download_tokens`
 
@@ -274,26 +283,28 @@ func scanInstallDownloadSingle(row rowScanner) (*InstallDownloadToken, error) {
 
 func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	var (
-		t           InstallDownloadToken
-		tOS         sql.NullString
-		tArch       sql.NullString
-		bindMID     sql.NullString
-		patDesc     sql.NullString
-		autoApprove int
-		consAt      sql.NullTime
-		consIP      sql.NullString
-		consUA      sql.NullString
-		consPAT     sql.NullString
-		revAt       sql.NullTime
-		revBy       sql.NullString
-		revReas     sql.NullString
-		revoked     int
+		t            InstallDownloadToken
+		tOS          sql.NullString
+		tArch        sql.NullString
+		bindMID      sql.NullString
+		patDesc      sql.NullString
+		autoApprove  int
+		baselineCSV  string
+		consAt       sql.NullTime
+		consIP       sql.NullString
+		consUA       sql.NullString
+		consPAT      sql.NullString
+		revAt        sql.NullTime
+		revBy        sql.NullString
+		revReas      sql.NullString
+		revoked      int
 	)
 	err := row.Scan(
 		&t.DownloadID, &t.SecretHash, &t.ProjectID, &t.IssuedByUser,
 		&t.IssuedAt, &t.ExpiresAt, &tOS, &tArch,
 		&t.ServerEndpoint, &t.PATTTLSeconds, &t.PATMaxUses, &bindMID,
-		&patDesc, &autoApprove, &consAt, &consIP, &consUA,
+		&patDesc, &autoApprove, &baselineCSV,
+		&consAt, &consIP, &consUA,
 		&consPAT, &revoked, &revAt, &revBy, &revReas,
 	)
 	if err != nil {
@@ -304,6 +315,7 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.PATBindingMachineID = bindMID.String
 	t.PATDescription = patDesc.String
 	t.AutoApprove = autoApprove == 1
+	t.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV)
 	if consAt.Valid {
 		v := consAt.Time
 		t.ConsumedAt = &v
@@ -319,6 +331,42 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.RevokedByUser = revBy.String
 	t.RevokedReason = revReas.String
 	return &t, nil
+}
+
+// encodeBaselinePluginIDs joins ids with commas. Empty slice → "" so
+// the column NOT NULL DEFAULT '' is preserved verbatim. We assume
+// plugin ids never contain commas; ids are reverse-DNS-style
+// ("com.platypus.sys-info") which only allow [.\-_a-z0-9].
+func encodeBaselinePluginIDs(ids []string) string {
+	cleaned := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			cleaned = append(cleaned, id)
+		}
+	}
+	return strings.Join(cleaned, ",")
+}
+
+// decodeBaselinePluginIDs returns nil for "" so callers can distinguish
+// "no baseline provided" from "empty baseline" (functionally equivalent
+// but easier to log).
+func decodeBaselinePluginIDs(csv string) []string {
+	if csv == "" {
+		return nil
+	}
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // sha256Sum is a small helper so callers (and tests) don't need to

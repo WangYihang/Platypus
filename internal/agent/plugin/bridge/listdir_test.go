@@ -32,7 +32,7 @@ func TestBridge_ListDir_RoundTripThroughSystemPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EmbeddedFS: %v", err)
 	}
-	if r := system.EnsureInstalled(context.Background(), reg, embFS); len(r.Failed) > 0 {
+	if r := system.EnsureInstalled(context.Background(), reg, embFS, system.EnsureOptions{AllowAll: true}); len(r.Failed) > 0 {
 		t.Fatalf("system bootstrap failures: %+v", r.Failed)
 	}
 	if !reg.HasInstalledVersion("com.platypus.sys-listdir", "1.1.0") {
@@ -87,7 +87,7 @@ func TestBridge_ListDir_NonexistentPathReturnsCleanError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EmbeddedFS: %v", err)
 	}
-	if r := system.EnsureInstalled(context.Background(), reg, embFS); len(r.Failed) > 0 {
+	if r := system.EnsureInstalled(context.Background(), reg, embFS, system.EnsureOptions{AllowAll: true}); len(r.Failed) > 0 {
 		t.Fatalf("system bootstrap failures: %+v", r.Failed)
 	}
 

@@ -47,6 +47,52 @@ func TestInstallTokens_CreateGetStatus(t *testing.T) {
 	}
 }
 
+// Migration 000031 added baseline_plugin_ids. Ensure round-trip works
+// (slice in, slice back), with both populated and empty cases. Empty
+// returns nil (vs. []string{}) by convention so callers can distinguish
+// "no baseline provided" from "explicit empty baseline" — both behave
+// the same downstream but the nil form keeps logs cleaner.
+func TestInstallTokens_BaselinePluginIDs_Roundtrip(t *testing.T) {
+	db := newTestDB(t)
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", "Project 1", admin)
+
+	// With a baseline.
+	tok := &storage.InstallDownloadToken{
+		DownloadID:        "dl_with_baseline",
+		SecretHash:        hashBytes([]byte("s")),
+		ProjectID:         proj.ID,
+		IssuedByUser:      admin.ID,
+		IssuedAt:          time.Now().UTC(),
+		ExpiresAt:         time.Now().Add(time.Hour).UTC(),
+		ServerEndpoint:    "127.0.0.1:13337",
+		PATTTLSeconds:     3600,
+		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+	}
+	if err := db.InstallDownloadTokens().Create(context.Background(), tok); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := db.InstallDownloadTokens().Get(context.Background(), tok.DownloadID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.BaselinePluginIDs) != 2 ||
+		got.BaselinePluginIDs[0] != "com.platypus.sys-info" ||
+		got.BaselinePluginIDs[1] != "com.platypus.sys-listdir" {
+		t.Fatalf("BaselinePluginIDs = %v", got.BaselinePluginIDs)
+	}
+
+	// Without a baseline → nil round-trip.
+	plain := seedInstallToken(t, db, "dl_no_baseline", proj.ID, admin.ID, []byte("s"), time.Hour)
+	got2, err := db.InstallDownloadTokens().Get(context.Background(), plain.DownloadID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got2.BaselinePluginIDs != nil {
+		t.Fatalf("BaselinePluginIDs = %v; want nil", got2.BaselinePluginIDs)
+	}
+}
+
 // Happy path: secret matches, TryConsume records consumer metadata +
 // linked PAT id, status flips to consumed, and nothing is deleted.
 func TestInstallTokens_TryConsume_Success(t *testing.T) {

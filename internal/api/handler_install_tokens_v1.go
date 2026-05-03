@@ -49,14 +49,15 @@ type issueInstallRequest struct {
 	PATMaxUses          int    `json:"pat_max_uses"`
 	PATBindingMachineID string `json:"pat_binding_machine_id"`
 	PATDescription      string `json:"pat_description"`
-	// BaselinePluginIDs is the operator-chosen list of marketplace
-	// plugin ids the agent should auto-install on first boot. Empty
-	// = the agent boots with no host capabilities (the secure
-	// default the enroll wizard ships). The agent-side consumption
-	// of this list (read on first connect, marketplace-install each
-	// id) is wired in a follow-up commit; for now the value is
-	// accepted + persisted on the install token's metadata so the
-	// wire shape is stable while the agent catches up.
+	// BaselinePluginIDs is the operator-chosen system-plugin allowlist
+	// for the agent created by this install. The list rides the
+	// install bundle / install script down to the agent's first boot,
+	// where it filters which embedded system plugins get installed.
+	// Empty = the agent boots with only its mandatory core plugin
+	// (sys-info), the secure-by-default the enroll wizard ships.
+	// Anything beyond the baseline must be installed later via the
+	// per-agent plugin REST surface with explicit capability
+	// authorization.
 	BaselinePluginIDs []string `json:"baseline_plugin_ids"`
 	// AutoApprove pre-authorizes the host that redeems this install
 	// link — the host enrolls straight to `approved` without a
@@ -126,6 +127,7 @@ type installListItem struct {
 	PATMaxUses          int        `json:"pat_max_uses"`
 	PATBindingMachineID string     `json:"pat_binding_machine_id,omitempty"`
 	PATDescription      string     `json:"pat_description,omitempty"`
+	BaselinePluginIDs   []string   `json:"baseline_plugin_ids,omitempty"`
 	ConsumedAt          *time.Time `json:"consumed_at,omitempty"`
 	ConsumedIP          string     `json:"consumed_ip,omitempty"`
 	ConsumedPATID       string     `json:"consumed_pat_id,omitempty"`
@@ -149,6 +151,7 @@ func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installLi
 		PATMaxUses:          t.PATMaxUses,
 		PATBindingMachineID: t.PATBindingMachineID,
 		PATDescription:      t.PATDescription,
+		BaselinePluginIDs:   t.BaselinePluginIDs,
 		ConsumedAt:          t.ConsumedAt,
 		ConsumedIP:          t.ConsumedIP,
 		ConsumedPATID:       t.ConsumedPATID,
@@ -186,6 +189,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		PATBindingMachineID: req.PATBindingMachineID,
 		PATDescription:      req.PATDescription,
 		AutoApprove:         req.AutoApprove,
+		BaselinePluginIDs:   req.BaselinePluginIDs,
 	})
 	if err != nil {
 		h.audit(c, "install.issue", "install_download", "", projectID, req, "error", err.Error())

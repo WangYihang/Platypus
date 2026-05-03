@@ -16,6 +16,11 @@ export interface InstallArtifactListItem {
     pat_max_uses: number;
     pat_binding_machine_id?: string;
     pat_description?: string;
+    // Operator's system-plugin allowlist captured at mint time.
+    // Surfaces in the admin UI so reviewers can see which plugins
+    // the agent created by this token will boot with. Omitted on
+    // older rows.
+    baseline_plugin_ids?: string[];
     consumed_at?: string;
     consumed_ip?: string;
     consumed_pat_id?: string;

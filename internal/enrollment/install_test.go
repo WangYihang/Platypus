@@ -91,6 +91,65 @@ func TestConsumeInstallDownload_HappyPath(t *testing.T) {
 	}
 }
 
+// BaselinePluginIDs survive the round trip from Mint → DB → Consume →
+// caller. The list is what the agent will use to filter system plugins
+// at boot, so any drop-on-the-floor here would silently re-enable the
+// unrestricted boot mode.
+func TestConsumeInstallDownload_PreservesBaselinePluginIDs(t *testing.T) {
+	svc := newSvc(t)
+	admin, proj := bootstrap(t, svc.DB())
+	ctx := context.Background()
+
+	artifact, err := svc.Svc.MintInstallArtifact(ctx, enrollment.MintInstallArtifactInput{
+		ProjectID:         proj.ID,
+		IssuedByUser:      admin.ID,
+		ServerEndpoint:    "127.0.0.1:13337",
+		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+	})
+	if err != nil {
+		t.Fatalf("MintInstallArtifact: %v", err)
+	}
+
+	res, err := svc.Svc.ConsumeInstallDownload(ctx, artifact.PlaintextDownloadToken,
+		enrollment.ConsumeContext{ClientIP: "10.0.0.5"})
+	if err != nil {
+		t.Fatalf("ConsumeInstallDownload: %v", err)
+	}
+	if res.Outcome != "success" {
+		t.Fatalf("Outcome = %q; want success", res.Outcome)
+	}
+	if len(res.BaselinePluginIDs) != 2 ||
+		res.BaselinePluginIDs[0] != "com.platypus.sys-info" ||
+		res.BaselinePluginIDs[1] != "com.platypus.sys-listdir" {
+		t.Fatalf("BaselinePluginIDs = %v", res.BaselinePluginIDs)
+	}
+}
+
+// Mint without BaselinePluginIDs leaves the consume result with nil
+// (vs. []string{}) — the agent's bootstrap distinguishes "no allowlist
+// set" from "explicit empty allowlist".
+func TestConsumeInstallDownload_NoBaselineYieldsNil(t *testing.T) {
+	svc := newSvc(t)
+	admin, proj := bootstrap(t, svc.DB())
+	ctx := context.Background()
+
+	artifact, err := svc.Svc.MintInstallArtifact(ctx, enrollment.MintInstallArtifactInput{
+		ProjectID: proj.ID, IssuedByUser: admin.ID, ServerEndpoint: "127.0.0.1:13337",
+	})
+	if err != nil {
+		t.Fatalf("MintInstallArtifact: %v", err)
+	}
+
+	res, err := svc.Svc.ConsumeInstallDownload(ctx, artifact.PlaintextDownloadToken,
+		enrollment.ConsumeContext{ClientIP: "10.0.0.5"})
+	if err != nil {
+		t.Fatalf("ConsumeInstallDownload: %v", err)
+	}
+	if res.BaselinePluginIDs != nil {
+		t.Fatalf("BaselinePluginIDs = %v; want nil", res.BaselinePluginIDs)
+	}
+}
+
 func TestConsumeInstallDownload_InvalidSecret_DoesNotMintEnrollmentToken(t *testing.T) {
 	svc := newSvc(t)
 	admin, proj := bootstrap(t, svc.DB())

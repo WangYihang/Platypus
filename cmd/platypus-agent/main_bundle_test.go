@@ -88,3 +88,87 @@ func TestExpandInstallBundle_Malformed(t *testing.T) {
 		t.Fatal("malformed bundle should error")
 	}
 }
+
+// TestExpandInstallBundle_PropagatesBaselinePluginIDs: a v2 bundle
+// with a baseline allowlist must surface that allowlist on opts,
+// matching how host/port flow today. Empty opts.BaselinePluginIDs is
+// the precondition (no CLI override) — when set, the CLI wins.
+func TestExpandInstallBundle_PropagatesBaselinePluginIDs(t *testing.T) {
+	wire, err := installbundle.Encode(installbundle.Bundle{
+		Server:            "agent.corp:9443",
+		PAT:               "plt_a.b",
+		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+	})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	opts := &options.Options{Token: wire}
+	if _, err := expandInstallBundle(opts); err != nil {
+		t.Fatalf("expandInstallBundle: %v", err)
+	}
+	if !equalStrSlice(opts.BaselinePluginIDs, []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}) {
+		t.Fatalf("BaselinePluginIDs = %v", opts.BaselinePluginIDs)
+	}
+}
+
+// TestExpandInstallBundle_BaselineCLIWins: when the operator passed
+// --baseline-plugins on the agent CLI, the bundle's allowlist must
+// not silently overwrite that decision (mirror of host/port
+// precedence in the same function).
+func TestExpandInstallBundle_BaselineCLIWins(t *testing.T) {
+	wire, err := installbundle.Encode(installbundle.Bundle{
+		Server:            "agent.corp:9443",
+		PAT:               "plt_a.b",
+		BaselinePluginIDs: []string{"com.platypus.sys-listdir"},
+	})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	opts := &options.Options{
+		Token:             wire,
+		BaselinePluginIDs: []string{"com.platypus.sys-info"},
+	}
+	if _, err := expandInstallBundle(opts); err != nil {
+		t.Fatalf("expandInstallBundle: %v", err)
+	}
+	if !equalStrSlice(opts.BaselinePluginIDs, []string{"com.platypus.sys-info"}) {
+		t.Fatalf("CLI baseline overwritten by bundle: %v", opts.BaselinePluginIDs)
+	}
+}
+
+// TestMergeWithCore_AppendsMandatoryCoreOnce: the merge layer in
+// resolveBaselineAllowlist always includes sys-info. Operator picks
+// nothing → result is mandatory core only. Operator picks ids that
+// already include sys-info → no duplicate.
+func TestMergeWithCore_AppendsMandatoryCoreOnce(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{name: "empty operator pick", in: nil, want: []string{"com.platypus.sys-info"}},
+		{name: "operator picks one", in: []string{"com.platypus.sys-listdir"}, want: []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}},
+		{name: "operator already picked core", in: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}, want: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}},
+		{name: "trims and dedups", in: []string{" com.platypus.sys-listdir ", "com.platypus.sys-listdir", ""}, want: []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergeWithCore(tc.in)
+			if !equalStrSlice(got, tc.want) {
+				t.Fatalf("mergeWithCore(%v) = %v; want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func equalStrSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

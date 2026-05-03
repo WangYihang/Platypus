@@ -167,11 +167,16 @@ func main() {
 			slog.String("error", fsErr.Error()))
 		os.Exit(1)
 	}
-	bootRes := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS)
+	allowlist := resolveBaselineAllowlist(logger, identityDir, opts.BaselinePluginIDs)
+	bootRes := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS, pluginsys.EnsureOptions{
+		Allowlist: allowlist,
+	})
 	logger.Info("system plugins bootstrap",
+		slog.Any("allowlist", allowlist),
 		slog.Int("installed", len(bootRes.Installed)),
 		slog.Int("skipped", len(bootRes.Skipped)),
 		slog.Int("failed", len(bootRes.Failed)),
+		slog.Int("filtered", len(bootRes.Filtered)),
 	)
 	if bootRes.SetupError != nil {
 		// publisher.pub missing or unreadable — every signature
@@ -575,6 +580,97 @@ func projectIDFromURIs(uris []*url.URL) string {
 	return ""
 }
 
+// mandatoryCorePluginIDs is the set of system plugins that get
+// installed regardless of the operator's allowlist. Today: just
+// sys-info, because the Host overview page in the desktop UI is
+// blank without it. Anything else needs explicit operator opt-in
+// (either via --baseline-plugins at enroll time, or via the
+// per-agent plugin REST surface afterwards).
+var mandatoryCorePluginIDs = []string{
+	"com.platypus.sys-info",
+}
+
+// resolveBaselineAllowlist decides which embedded system plugins
+// are eligible to install on this boot. Resolution order:
+//
+//  1. Persisted baseline.json (steady state — operator decision is
+//     already captured on disk from a previous boot).
+//  2. opts.BaselinePluginIDs (first-boot path — install bundle /
+//     CLI flag tells us what the operator picked at enroll time).
+//     Persists to baseline.json so future boots take path (1) and
+//     no longer depend on the install bundle being present.
+//  3. nil (no baseline at all — interpreted by the system bootstrap
+//     as "install nothing", which when merged with mandatory core
+//     produces the secure default of sys-info only).
+//
+// In every case the mandatory core is union'd in so the host
+// overview is never blank. Returning nil here would be ambiguous
+// (the system bootstrap reads nil as "install nothing"), so the
+// secure default flows through this function as `mandatoryCorePluginIDs`.
+func resolveBaselineAllowlist(logger *slog.Logger, identityDir string, fromOpts []string) []string {
+	persisted, err := agent.LoadBaseline(identityDir)
+	switch {
+	case err == nil:
+		logger.Info("baseline loaded from disk",
+			slog.Int("count", len(persisted)),
+			slog.Any("plugin_ids", persisted),
+		)
+		return mergeWithCore(persisted)
+	case errors.Is(err, agent.ErrBaselineNotFound):
+		// First boot: persist the operator's choice (or the empty
+		// set) so the next boot doesn't re-evaluate the install bundle.
+		if saveErr := agent.SaveBaseline(identityDir, fromOpts); saveErr != nil {
+			// Non-fatal: the agent still boots, but every subsequent
+			// boot will re-run this branch with the install token's
+			// payload. Loud log so the operator notices.
+			logger.Warn("baseline persist failed; will re-evaluate next boot",
+				slog.String("error", saveErr.Error()))
+		}
+		logger.Info("baseline captured from install token",
+			slog.Int("count", len(fromOpts)),
+			slog.Any("plugin_ids", fromOpts),
+		)
+		return mergeWithCore(fromOpts)
+	default:
+		// File present but unreadable / corrupt. Don't silently fall
+		// through to the install-bundle path — that would let a
+		// truncated baseline.json silently re-enable plugins the
+		// operator removed. Fall back to mandatory core only and log
+		// loudly.
+		logger.Error("baseline file unreadable; falling back to mandatory core",
+			slog.String("error", err.Error()))
+		return append([]string(nil), mandatoryCorePluginIDs...)
+	}
+}
+
+// mergeWithCore returns the union of allow with the mandatory core.
+// Order is preserved (operator-chosen ids first, mandatory core
+// appended) so debug logs read well. Empty input yields just the
+// mandatory core.
+func mergeWithCore(allow []string) []string {
+	seen := make(map[string]struct{}, len(allow)+len(mandatoryCorePluginIDs))
+	out := make([]string, 0, len(allow)+len(mandatoryCorePluginIDs))
+	for _, id := range allow {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	for _, id := range mandatoryCorePluginIDs {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
 // expandInstallBundle inspects opts.Token for the `pinst_` prefix
 // and, when present, replaces opts.Token / opts.RemoteHost /
 // opts.RemotePort with the bundle's contents and returns the bundle's
@@ -601,6 +697,12 @@ func expandInstallBundle(opts *options.Options) ([]byte, error) {
 		}
 		opts.RemoteHost = host
 		opts.RemotePort = port
+	}
+	// Bundle baseline only fills in when the operator didn't already
+	// pass --baseline-plugins / PLATYPUS_BASELINE_PLUGINS — explicit
+	// CLI wins, mirroring the host/port precedence above.
+	if len(opts.BaselinePluginIDs) == 0 && len(b.BaselinePluginIDs) > 0 {
+		opts.BaselinePluginIDs = append([]string(nil), b.BaselinePluginIDs...)
 	}
 	return []byte(b.CACertPEM), nil
 }

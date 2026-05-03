@@ -45,6 +45,26 @@ import (
 // and tests reference one constant.
 const publisherFile = "publisher.pub"
 
+// EnsureOptions controls which embedded bundles EnsureInstalled
+// actually installs. Two modes:
+//
+//   - AllowAll=true: legacy "install everything in the embedded FS"
+//     behaviour, used by tests and any caller that wants the previous
+//     no-allowlist semantics. Allowlist is ignored in this mode.
+//
+//   - AllowAll=false: only bundles whose id appears in Allowlist get
+//     installed. Bundles outside the allowlist are surfaced via
+//     Result.Filtered so debug logs can show exactly which plugins
+//     were skipped because of operator policy. nil/empty Allowlist
+//     here means "install nothing" — paired with the agent's
+//     mandatory-core merge in cmd/platypus-agent, this is what
+//     produces the secure default ("only sys-info") on first boot
+//     when the operator passed no baseline.
+type EnsureOptions struct {
+	Allowlist []string
+	AllowAll  bool
+}
+
 // EnsureInstalled walks `embFS` (typically the embed.FS produced by
 // //go:embed in the caller, but any fs.FS works for testing) and
 // installs each <plugin_id>/<version>/ tree it finds via
@@ -57,7 +77,7 @@ const publisherFile = "publisher.pub"
 // single broken bundled plugin can't prevent the agent from booting.
 // The caller decides whether to treat the per-plugin error count as
 // fatal (the production agent does not — see cmd/platypus-agent).
-func EnsureInstalled(ctx context.Context, reg *plugin.Registry, embFS fs.FS) Result {
+func EnsureInstalled(ctx context.Context, reg *plugin.Registry, embFS fs.FS, opts EnsureOptions) Result {
 	res := Result{}
 
 	pubBytes, err := fs.ReadFile(embFS, publisherFile)
@@ -74,7 +94,16 @@ func EnsureInstalled(ctx context.Context, reg *plugin.Registry, embFS fs.FS) Res
 		return res
 	}
 
+	allow := newAllowChecker(opts)
+
 	for _, b := range bundles {
+		if !allow(b.ID) {
+			res.Filtered = append(res.Filtered, b)
+			log.L.Info("plugin.system.filtered_out",
+				"plugin_id", b.ID, "version", b.Version,
+				"reason", "not in allowlist")
+			continue
+		}
 		log.L.Info("plugin.system.ensure", "plugin_id", b.ID, "version", b.Version)
 		err := installOne(ctx, reg, embFS, b, pubBytes)
 		switch {
@@ -91,6 +120,32 @@ func EnsureInstalled(ctx context.Context, reg *plugin.Registry, embFS fs.FS) Res
 	return res
 }
 
+// newAllowChecker returns a predicate that decides whether a given
+// embedded bundle id is allowed by the operator policy. AllowAll
+// mode short-circuits to true; otherwise an empty allowlist means
+// "install nothing" so the install-script-driven secure default
+// works even if the manifest discovers extra bundles in a future
+// build.
+func newAllowChecker(opts EnsureOptions) func(string) bool {
+	if opts.AllowAll {
+		return func(string) bool { return true }
+	}
+	if len(opts.Allowlist) == 0 {
+		return func(string) bool { return false }
+	}
+	set := make(map[string]struct{}, len(opts.Allowlist))
+	for _, id := range opts.Allowlist {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			set[id] = struct{}{}
+		}
+	}
+	return func(id string) bool {
+		_, ok := set[id]
+		return ok
+	}
+}
+
 // Bundle identifies one plugin staged in the embedded FS.
 type Bundle struct {
 	ID      string
@@ -105,13 +160,21 @@ type FailedBundle struct {
 
 // Result summarises one EnsureInstalled call. SetupError is set when
 // EnsureInstalled couldn't even start (e.g. publisher.pub missing);
-// in that case the three slice fields are empty. Otherwise SetupError
-// is nil and the slices partition the discovered bundle set.
+// in that case the slice fields are empty. Otherwise SetupError is
+// nil and the four slice fields partition the discovered bundle set:
+//
+//   - Installed: bundle was newly added to the registry
+//   - Skipped:   bundle was already at this version, no-op
+//   - Failed:    bundle install errored (Err carries the cause)
+//   - Filtered:  bundle was excluded by the operator allowlist
+//
+// Filtered + Installed + Skipped + Failed = the full discovered set.
 type Result struct {
 	SetupError error
 	Installed  []Bundle
 	Skipped    []Bundle
 	Failed     []FailedBundle
+	Filtered   []Bundle
 }
 
 // errAlreadyInstalled is the sentinel for "this id+version already

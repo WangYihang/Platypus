@@ -62,12 +62,39 @@ type Bundle struct {
 	// agent-side logging before the cert is in hand; the
 	// authoritative source is still the issued cert's URI SAN.
 	ProjectID string `json:"project_id,omitempty"`
+
+	// BaselinePluginIDs is the operator-chosen system-plugin allowlist
+	// for the agent created by this install token. The agent reads
+	// it on first boot, filters the embedded system-plugin set
+	// against it (after merging with the mandatory core), and
+	// persists the merged list to baseline.json so subsequent boots
+	// reproduce the same state without the bundle.
+	//
+	// Added in schema v2. v1 bundles omit this field entirely
+	// (json:"omitempty") and decode as nil — equivalent to "agent
+	// runs with mandatory core only", which is the safest default.
+	BaselinePluginIDs []string `json:"baseline_plugin_ids,omitempty"`
 }
 
 // CurrentSchema is the value Encode stamps on every bundle. Bumped
 // when an incompatible field shape lands; old agents seeing a higher
 // number must error out (see Decode).
-const CurrentSchema = 1
+//
+// v1 → v2: added BaselinePluginIDs. The change is purely additive —
+// v1 readers see an unknown key when reading v2 bundles (which they'll
+// reject via the schema check), and v2 readers see no key in v1
+// bundles (which decodes to nil, the safe default of "no allowlist
+// → mandatory core only").
+const CurrentSchema = 2
+
+// minSupportedSchema is the oldest schema version Decode accepts.
+// Kept separate from CurrentSchema so the encoder always stamps the
+// newest shape but the decoder can still read older shapes — which
+// matters because operators paste install bundles into stale agent
+// CLIs all the time, and the failure mode for a v1 bundle on a v2
+// agent should be "decoded as v1 with sensible defaults" rather than
+// "rejected outright".
+const minSupportedSchema = 1
 
 // ErrMalformed is returned by Decode for any parse failure (missing
 // prefix, bad base64, bad JSON, unknown schema). Callers map this to
@@ -112,11 +139,12 @@ func Decode(raw string) (*Bundle, error) {
 	if err := json.Unmarshal(decoded, &b); err != nil {
 		return nil, fmt.Errorf("%w: json: %v", ErrMalformed, err)
 	}
-	if b.Schema != CurrentSchema {
-		// Forward-compat guard: refuse rather than silently dropping
-		// fields the older code doesn't know about.
-		return nil, fmt.Errorf("installbundle: unsupported schema v=%d (this build understands v=%d)",
-			b.Schema, CurrentSchema)
+	if b.Schema < minSupportedSchema || b.Schema > CurrentSchema {
+		// Out of supported window: refuse rather than silently dropping
+		// fields the older code doesn't know about, or accepting a
+		// future shape we can't safely interpret.
+		return nil, fmt.Errorf("installbundle: unsupported schema v=%d (this build understands v=%d..v=%d)",
+			b.Schema, minSupportedSchema, CurrentSchema)
 	}
 	if b.Server == "" || b.PAT == "" {
 		return nil, fmt.Errorf("%w: missing required field (server / pat)", ErrMalformed)

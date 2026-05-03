@@ -92,6 +92,57 @@ func TestRenderInstallScriptPS1_RefusesInsecureByDefault(t *testing.T) {
 	}
 }
 
+// TestRenderInstallScript_BaselinePlugins ensures the operator's
+// system-plugin allowlist rides into the rendered install script as
+// the AGENT_BASELINE_PLUGINS shell var and the --baseline-plugins
+// flag on the exec line. Empty list still renders the flag (with an
+// empty string) so the agent's first-boot logs can show the operator
+// decision explicitly.
+func TestRenderInstallScript_BaselinePlugins(t *testing.T) {
+	withList := &enrollment.ConsumeResult{
+		ServerEndpoint:    "agent.example.com:13337",
+		PATPlaintext:      "plt_id.secret",
+		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+	}
+	got := renderInstallScript(withList, "distributor.example.com", true)
+	if !strings.Contains(got, "AGENT_BASELINE_PLUGINS='com.platypus.sys-info,com.platypus.sys-listdir'") {
+		t.Errorf("script does not export AGENT_BASELINE_PLUGINS with the comma-joined allowlist\n%s", got)
+	}
+	if !strings.Contains(got, "--baseline-plugins \"$AGENT_BASELINE_PLUGINS\"") {
+		t.Errorf("script does not pass --baseline-plugins on the exec line\n%s", got)
+	}
+
+	withoutList := &enrollment.ConsumeResult{
+		ServerEndpoint: "agent.example.com:13337",
+		PATPlaintext:   "plt_id.secret",
+	}
+	got2 := renderInstallScript(withoutList, "distributor.example.com", true)
+	if !strings.Contains(got2, "AGENT_BASELINE_PLUGINS=''") {
+		t.Errorf("empty-allowlist script should still render an empty AGENT_BASELINE_PLUGINS\n%s", got2)
+	}
+	if !strings.Contains(got2, "--baseline-plugins \"$AGENT_BASELINE_PLUGINS\"") {
+		t.Errorf("empty-allowlist script should still pass --baseline-plugins (with empty value)\n%s", got2)
+	}
+}
+
+// TestRenderInstallScriptPS1_BaselinePlugins is the Windows analog —
+// the operator allowlist must be embedded in the PS1 variable and
+// surface as --baseline-plugins on the launcher.
+func TestRenderInstallScriptPS1_BaselinePlugins(t *testing.T) {
+	withList := &enrollment.ConsumeResult{
+		ServerEndpoint:    "agent.example.com:13337",
+		PATPlaintext:      "plt_id.secret",
+		BaselinePluginIDs: []string{"com.platypus.sys-info"},
+	}
+	got := renderInstallScriptPS1(withList, "distributor.example.com", true)
+	if !strings.Contains(got, "$AgentBaselinePlugins = 'com.platypus.sys-info'") {
+		t.Errorf("PS1 script does not bind the allowlist into $AgentBaselinePlugins\n%s", got)
+	}
+	if !strings.Contains(got, "--baseline-plugins $AgentBaselinePlugins") {
+		t.Errorf("PS1 script does not pass --baseline-plugins on the exec line\n%s", got)
+	}
+}
+
 // TestRenderInstallScript_RefusesInsecureByDefault locks the no-CA
 // branch: if no project CA is configured the script must NOT silently
 // fall back to -k. Operators must opt in via PLATYPUS_INSECURE_DOWNLOAD=1.

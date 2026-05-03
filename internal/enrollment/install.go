@@ -61,6 +61,14 @@ type MintInstallArtifactInput struct {
 	// can still create a `pending` host but can't reach the agent
 	// runtime until an admin clicks Approve.
 	AutoApprove bool
+	// BaselinePluginIDs is the operator's explicit allowlist for
+	// system plugins on the agent created by this install. Empty
+	// slice means "no allowlist provided" — the agent boots with
+	// only its mandatory core plugin set (sys-info). Any plugin
+	// outside this list (and outside the mandatory core) must be
+	// installed later via the per-agent plugin REST surface with
+	// explicit capability authorization.
+	BaselinePluginIDs []string
 }
 
 // MintInstallArtifact inserts a new install_download_tokens row and
@@ -114,6 +122,7 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 		PATBindingMachineID: in.PATBindingMachineID,
 		PATDescription:      in.PATDescription,
 		AutoApprove:         in.AutoApprove,
+		BaselinePluginIDs:   in.BaselinePluginIDs,
 	}
 	if err := s.db.InstallDownloadTokens().Create(ctx, tok); err != nil {
 		return nil, fmt.Errorf("enrollment: create install download token: %w", err)
@@ -149,6 +158,11 @@ type ConsumeResult struct {
 	PATExpiresAt   time.Time
 	ProjectID      string
 	ProjectCAPEM   string
+	// BaselinePluginIDs surfaces the operator's allowlist back to the
+	// distributor so it can render the agent's --baseline-plugins flag /
+	// install-bundle field. Empty means "agent runs with mandatory core
+	// only" (sys-info).
+	BaselinePluginIDs []string
 }
 
 // ConsumeContext carries request metadata used for audit rows.
@@ -244,16 +258,17 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 	}
 
 	return &ConsumeResult{
-		Outcome:        "success",
-		DownloadID:     id,
-		ServerEndpoint: tok.ServerEndpoint,
-		TargetOS:       tok.TargetOS,
-		TargetArch:     tok.TargetArch,
-		PATTokenID:     patRes.TokenID,
-		PATPlaintext:   patRes.PlaintextToken,
-		PATExpiresAt:   patRes.ExpiresAt,
-		ProjectID:      tok.ProjectID,
-		ProjectCAPEM:   caPEM,
+		Outcome:           "success",
+		DownloadID:        id,
+		ServerEndpoint:    tok.ServerEndpoint,
+		TargetOS:          tok.TargetOS,
+		TargetArch:        tok.TargetArch,
+		PATTokenID:        patRes.TokenID,
+		PATPlaintext:      patRes.PlaintextToken,
+		PATExpiresAt:      patRes.ExpiresAt,
+		ProjectID:         tok.ProjectID,
+		ProjectCAPEM:      caPEM,
+		BaselinePluginIDs: tok.BaselinePluginIDs,
 	}, nil
 }
 

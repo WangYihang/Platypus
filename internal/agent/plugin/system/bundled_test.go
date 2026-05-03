@@ -37,7 +37,7 @@ func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
 	}
 	defer reg.Close(context.Background())
 
-	res := EnsureInstalled(context.Background(), reg, embFS)
+	res := EnsureInstalled(context.Background(), reg, embFS, EnsureOptions{AllowAll: true})
 	if res.SetupError != nil {
 		t.Fatalf("setup err: %v", res.SetupError)
 	}
