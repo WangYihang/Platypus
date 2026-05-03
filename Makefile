@@ -118,7 +118,17 @@ example-plugins:
 	  dir=$$(dirname $$d); name=$$(basename $$dir); \
 	  echo "→ $$name"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
-	  wasm=$$dir/target/wasm32-unknown-unknown/release/$${name}.wasm; \
+	  # cargo names the .wasm after the crate's [lib] name field, \
+	  # which doesn't always match the dir basename — e.g. sys-info's \
+	  # lib is sys_info_plugin. Glob the release dir to find whatever \
+	  # cargo produced; assert exactly one .wasm so we fail loud if a \
+	  # crate ever ships multiple cdylibs (would surprise the catalog). \
+	  wasm_count=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm 2>/dev/null | wc -l); \
+	  if [ "$$wasm_count" -ne 1 ]; then \
+	    echo "expected exactly 1 .wasm under $$dir/target/.../release/, found $$wasm_count"; \
+	    exit 1; \
+	  fi; \
+	  wasm=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm); \
 	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_PUBLISHER_KEY --wasm $$wasm || exit 1; \
 	done
 
