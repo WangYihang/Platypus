@@ -1,0 +1,44 @@
+api_version: 1
+id: com.platypus.sys-file-archive
+name: File Archive (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — owns STREAM_TYPE_FILE_ARCHIVE. Replaces the legacy
+  Go HandleFileArchiveStream. Walks the requested paths via
+  host_fs_listdir + host_fs_read_range, packs them into TAR or
+  TAR_GZ on the wasm side, and emits FileArchiveResponse +
+  FileChunk frames matching the legacy wire contract.
+
+  ZIP format is NOT supported by this wasm replacement (parity gap).
+  Operators on Windows clients should use TAR_GZ — every modern
+  platform handles .tar.gz natively now (Windows 10+, macOS, Linux).
+  The legacy Go handler had ZIP support inherited from
+  archive/zip; restoring it requires a Rust ZIP crate (heavy in
+  wasm) or a deflate-only stream wrapper.
+
+runtime:
+  type: wasm
+  entry: sys_file_archive.wasm
+  abi: extism/1
+
+streams:
+  - name: archive
+    stream_type: STREAM_TYPE_FILE_ARCHIVE
+    host_handler: wasm:archive
+
+capabilities:
+  fs.read:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 1800000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_file_archive.wasm.minisig

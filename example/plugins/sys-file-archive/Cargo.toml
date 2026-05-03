@@ -1,0 +1,25 @@
+[package]
+name = "sys-file-archive"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "sys_file_archive"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+# Pure-Rust DEFLATE (no C deps), small wasm footprint. Used for the
+# gzip wrapping in TAR_GZ. flate2 selects miniz_oxide when no system
+# zlib backend is requested.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

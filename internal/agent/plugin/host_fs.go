@@ -28,6 +28,13 @@ type fsListEntry struct {
 	IsDir   bool   `json:"is_dir"`
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"mtime_unix"`
+	// Mode carries the permission bits (low 9 of Unix mode). Added
+	// for the archive walker (sys-file-archive) so tar headers can
+	// round-trip executability + readability when an operator
+	// downloads a tree. Older plugins that ignore the field stay
+	// backward compatible — JSON unmarshal of an unknown field is a
+	// no-op on the rust side.
+	Mode uint32 `json:"mode,omitempty"`
 }
 
 func (pctx *pluginCtx) hostFSRead(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
@@ -225,8 +232,11 @@ func (pctx *pluginCtx) hostFSListdir(_ context.Context, p *extism.CurrentPlugin,
 			continue
 		}
 		out = append(out, fsListEntry{
-			Name: e.Name(), IsDir: e.IsDir(),
-			Size: info.Size(), ModTime: info.ModTime().Unix(),
+			Name:    e.Name(),
+			IsDir:   e.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Unix(),
+			Mode:    uint32(info.Mode().Perm()),
 		})
 	}
 	returnEnvelope(p, stack, okData(out))
@@ -253,8 +263,11 @@ func (pctx *pluginCtx) hostFSStat(_ context.Context, p *extism.CurrentPlugin, st
 		return
 	}
 	returnEnvelope(p, stack, okData(fsListEntry{
-		Name: st.Name(), IsDir: st.IsDir(),
-		Size: st.Size(), ModTime: st.ModTime().Unix(),
+		Name:    st.Name(),
+		IsDir:   st.IsDir(),
+		Size:    st.Size(),
+		ModTime: st.ModTime().Unix(),
+		Mode:    uint32(st.Mode().Perm()),
 	}))
 }
 
