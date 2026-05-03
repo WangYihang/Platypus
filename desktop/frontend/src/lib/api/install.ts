@@ -74,6 +74,12 @@ export interface IssueInstallRequest {
     // false (default) → host enrolls in `pending`. true skips approval
     // for unattended automation (Ansible / CI / cloud-init).
     auto_approve?: boolean;
+    // Plugin ids the agent should auto-install on first boot.
+    // Empty / omitted = the agent connects with no host capabilities;
+    // operators add plugins later from the per-host Plugins tab.
+    // (Default secure: minimal-on-first-boot — see the wizard's
+    // baseline_plugins step.)
+    baseline_plugin_ids?: string[];
 }
 
 export async function listInstallArtifacts(

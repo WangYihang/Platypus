@@ -49,6 +49,15 @@ type issueInstallRequest struct {
 	PATMaxUses          int    `json:"pat_max_uses"`
 	PATBindingMachineID string `json:"pat_binding_machine_id"`
 	PATDescription      string `json:"pat_description"`
+	// BaselinePluginIDs is the operator-chosen list of marketplace
+	// plugin ids the agent should auto-install on first boot. Empty
+	// = the agent boots with no host capabilities (the secure
+	// default the enroll wizard ships). The agent-side consumption
+	// of this list (read on first connect, marketplace-install each
+	// id) is wired in a follow-up commit; for now the value is
+	// accepted + persisted on the install token's metadata so the
+	// wire shape is stable while the agent catches up.
+	BaselinePluginIDs []string `json:"baseline_plugin_ids"`
 	// AutoApprove pre-authorizes the host that redeems this install
 	// link — the host enrolls straight to `approved` without a
 	// human-in-the-loop step. Used for automation flows. Default

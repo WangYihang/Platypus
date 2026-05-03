@@ -33,6 +33,7 @@ import DownloadTLSStep from "./steps/DownloadTLSStep";
 import TTLStep from "./steps/TTLStep";
 import PATMaxUsesStep from "./steps/PATMaxUsesStep";
 import AutoApproveStep from "./steps/AutoApproveStep";
+import BaselinePluginsStep from "./steps/BaselinePluginsStep";
 import DescriptionStep from "./steps/DescriptionStep";
 import ReviewStep from "./steps/ReviewStep";
 import RunStep from "./steps/RunStep";
@@ -51,6 +52,7 @@ export default function EnrollAgentWizard() {
     const [ttlSeconds, setTtlSeconds] = useState<number | undefined>(undefined);
     const [patMaxUses, setPatMaxUses] = useState<number | undefined>(undefined);
     const [autoApprove, setAutoApprove] = useState(false);
+    const [baselinePluginIDs, setBaselinePluginIDs] = useState<string[]>([]);
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [issued, setIssued] = useState<IssueInstallResponse | null>(null);
@@ -67,6 +69,7 @@ export default function EnrollAgentWizard() {
         setTtlSeconds(undefined);
         setPatMaxUses(undefined);
         setAutoApprove(false);
+        setBaselinePluginIDs([]);
         setDescription("");
         setSkipTLSVerification(true);
         setIssued(null);
@@ -134,6 +137,8 @@ export default function EnrollAgentWizard() {
                 pat_max_uses: patMaxUses,
                 auto_approve: autoApprove,
                 pat_description: description.trim() || undefined,
+                baseline_plugin_ids:
+                    baselinePluginIDs.length > 0 ? baselinePluginIDs : undefined,
             });
             setIssued(r);
             setStep("run");
@@ -210,6 +215,14 @@ export default function EnrollAgentWizard() {
             label: "Approval policy",
             value: autoApprove ? "Auto-approve" : "Manual approval",
             editStep: "auto_approve",
+        },
+        {
+            label: "Baseline plugins",
+            value:
+                baselinePluginIDs.length === 0
+                    ? "(none — agent boots empty)"
+                    : `${baselinePluginIDs.length}: ${baselinePluginIDs.join(", ")}`,
+            editStep: "baseline_plugins",
         },
         {
             label: "Description",
@@ -292,6 +305,12 @@ export default function EnrollAgentWizard() {
                     <AutoApproveStep
                         autoApprove={autoApprove}
                         onChange={setAutoApprove}
+                    />
+                )}
+                {step === "baseline_plugins" && (
+                    <BaselinePluginsStep
+                        selected={baselinePluginIDs}
+                        onChange={setBaselinePluginIDs}
                     />
                 )}
                 {step === "description" && (

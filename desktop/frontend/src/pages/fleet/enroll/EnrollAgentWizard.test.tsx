@@ -46,6 +46,14 @@ vi.mock("../../../lib/api", () => ({
     getServerInfo: () => getServerInfo(),
 }));
 
+// The new baseline-plugins step uses the marketplace catalog as its
+// data source. Stub it out so the wizard test doesn't need a real
+// catalog response — empty list is fine, the step renders an empty
+// state and Next still advances.
+vi.mock("../../../lib/api/marketplace", () => ({
+    searchPlugins: vi.fn().mockResolvedValue([]),
+}));
+
 import EnrollAgentWizard from "./EnrollAgentWizard";
 
 function render(initialUrl: string) {
@@ -114,7 +122,9 @@ describe("<EnrollAgentWizard>", () => {
         await screen.findByTestId("enroll-wizard-pat-max-uses");
         await user.click(screen.getByTestId("enroll-wizard-next")); // pat uses -> auto approve
         await screen.findByTestId("enroll-wizard-auto-approve");
-        await user.click(screen.getByTestId("enroll-wizard-next")); // auto approve -> description
+        await user.click(screen.getByTestId("enroll-wizard-next")); // auto approve -> baseline plugins
+        await screen.findByTestId("enroll-wizard-baseline-plugins");
+        await user.click(screen.getByTestId("enroll-wizard-next")); // baseline plugins -> description
         await screen.findByTestId("enroll-wizard-description");
         await user.click(screen.getByTestId("enroll-wizard-next")); // description -> review
         await screen.findByTestId("enroll-wizard-review");
@@ -161,7 +171,7 @@ describe("<EnrollAgentWizard>", () => {
         render("/projects/test-project/hosts?enroll=1");
 
         await screen.findByTestId("enroll-wizard-server");
-        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
         await user.click(screen.getByTestId("enroll-wizard-generate"));
 
@@ -212,7 +222,7 @@ describe("<EnrollAgentWizard>", () => {
         render("/projects/test-project/hosts?enroll=1");
 
         await screen.findByTestId("enroll-wizard-server");
-        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
         await user.click(screen.getByTestId("enroll-wizard-generate"));
 
@@ -266,7 +276,7 @@ describe("<EnrollAgentWizard>", () => {
         render("/projects/test-project/hosts?enroll=1");
 
         await screen.findByTestId("enroll-wizard-server");
-        for (let i = 0; i < 8; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
+        for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
         await user.click(screen.getByTestId("enroll-wizard-generate"));
 
