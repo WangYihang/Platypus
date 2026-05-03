@@ -261,6 +261,48 @@ After C10, `internal/agent/serve_link.go` stops dispatching
 `STREAM_TYPE_PLUGIN_STREAM` to the migrated system plugins. C11 then
 deletes the old dispatch arms.
 
+## Migration status (2026-05-03)
+
+The streaming ABI shipped (slice 1-5 in `wasm_*.go`) and four of
+the six legacy stream handlers have a wasm reference plugin proven
+to work end-to-end via integration tests:
+
+| Stream type | Plugin | Status |
+|---|---|---|
+| `PLUGIN_STREAM` (echo demo) | `example/plugins/echo-stream` | Shipping. Pump-mode dispatch. |
+| `FILE_READ` | `example/plugins/sys-file-read` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_SCAN` | `example/plugins/sys-file-scan` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_WRITE` | `example/plugins/sys-file-write` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_ARCHIVE` | not started | Needs Rust tar/zip/gzip deps; ~2-4 hours impl. |
+| `PROCESS_OPEN` | not started | Needs new `host_process_*` host fn family for streaming exec; ~6-8 hours impl. |
+| `TUNNEL_PULL` | not started | Needs new `host_net_dial` capability; security review on which destinations a plugin may dial. ~4-6 hours impl + design. |
+
+The shipped infrastructure (`internal/agent/plugin/wasm_legacy_dispatch.go`,
+`host_link_read_frame` / `host_link_write_frame` /
+`host_fs_read_range` / `host_fs_write_range`) is reusable for the
+remaining three; each just needs the per-protocol Rust plugin and
+its proto encoder/decoder.
+
+### Cutover (per-plugin)
+
+The legacy Go handler for each migrated stream type still serves
+production traffic until:
+
+1. The plugin's `.wasm` is signed with `PLATYPUS_SYSTEM_KEY` (kept
+   out-of-repo) and staged under
+   `internal/agent/plugin/system/embedded/<id>/<version>/`.
+2. The matching entry is removed from
+   `example/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
+   sys-streams is rebuilt + re-signed (`make sign-system-plugins`).
+3. `internal/agent/<type>_stream.go` and the matching adapter line
+   in `cmd/platypus-agent/stream_adapters.go` are deleted.
+
+Until then the legacy handler keeps serving — the wasm replacement
+sits in `example/plugins/` as proof the migration mechanically
+works, with the integration test under
+`internal/agent/plugin/<type>_integration_test.go` as the canonical
+end-to-end coverage.
+
 ## See also
 
 - [AUTHORS.md](AUTHORS.md) — current one-shot ABI for plugin authors
