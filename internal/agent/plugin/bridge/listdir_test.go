@@ -35,8 +35,8 @@ func TestBridge_ListDir_RoundTripThroughSystemPlugin(t *testing.T) {
 	if r := system.EnsureInstalled(context.Background(), reg, embFS); len(r.Failed) > 0 {
 		t.Fatalf("system bootstrap failures: %+v", r.Failed)
 	}
-	if !reg.HasInstalledVersion("com.platypus.sys-listdir", "1.0.0") {
-		t.Fatalf("sys-listdir not installed; bootstrap result missing")
+	if !reg.HasInstalledVersion("com.platypus.sys-listdir", "1.1.0") {
+		t.Fatalf("sys-listdir v1.1.0 not installed; bootstrap result missing")
 	}
 
 	// Stage a directory with a known set of entries: one file, one
