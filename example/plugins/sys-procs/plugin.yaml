@@ -1,0 +1,35 @@
+api_version: 1
+id: com.platypus.sys-procs
+name: Process list (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — replaces the agent's built-in ProcessList RPC.
+  Forwards the request to the agent's gopsutil-backed collector via
+  host_process_list. Slim by design; data collection logic stays in
+  the agent until a sandbox-friendly process-info crate is mature.
+
+runtime:
+  type: wasm
+  entry: sys_procs.wasm
+  abi: extism/1
+
+rpc:
+  - name: process_list
+    request:  { proto: ProcessListRequest }
+    response: { proto: ProcessListResponse }
+
+capabilities:
+  sysinfo: true
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_procs.wasm.minisig

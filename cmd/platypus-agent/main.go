@@ -136,6 +136,11 @@ func main() {
 	// flaky link doesn't tear down loaded wasm instances. Errors here
 	// are non-fatal — a broken catalog should not block the agent
 	// from serving its built-in RPCs.
+	// Wire the gopsutil-backed CollectProcessList behind the
+	// plugin runtime's host_process_list stub. Done before New() so
+	// the first call from a system plugin already finds it.
+	pluginrt.SetHostProcessListProvider(agent.CollectProcessList)
+
 	pluginRegistry, err := pluginrt.New(pluginrt.Options{
 		Paths: pluginrt.NewPaths(identityDir),
 	})
@@ -308,6 +313,7 @@ func main() {
 		chmod := agent.HandleChmod
 		del := agent.HandleDelete
 		rename := agent.HandleRename
+		processList := agent.HandleProcessList
 		if pluginRegistry != nil {
 			listDir = pluginbridge.ListDir(pluginRegistry)
 			stat = pluginbridge.Stat(pluginRegistry)
@@ -315,6 +321,7 @@ func main() {
 			chmod = pluginbridge.Chmod(pluginRegistry)
 			del = pluginbridge.Delete(pluginRegistry)
 			rename = pluginbridge.Rename(pluginRegistry)
+			processList = pluginbridge.ProcessList(pluginRegistry)
 		}
 		rpc := agent.AgentRPCHandlers{
 			Exec:               agent.HandleExec,
@@ -325,7 +332,7 @@ func main() {
 			Mkdir:              mkdir,
 			Chmod:              chmod,
 			SysInfo:            agent.HandleSysInfo,
-			ProcessList:        agent.HandleProcessList,
+			ProcessList:        processList,
 			SecurityScan:       agent.HandleSecurityScan,
 			ListSecurityChecks: agent.HandleListSecurityChecks,
 			ConfigAudit:        agent.HandleConfigAudit,
