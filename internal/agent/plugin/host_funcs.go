@@ -124,6 +124,10 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 		// stream_not_legacy_bridge from this fn.
 		newHostFunc("host_link_write_frame", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostLinkWriteFrame),
+		newHostFunc("host_link_read_frame", []api.ValueType{},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostLinkReadFrame),
+		newHostFunc("host_fs_write_range", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSWriteRange),
 	}
 }
 

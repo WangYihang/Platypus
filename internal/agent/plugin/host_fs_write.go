@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,6 +48,85 @@ func (pctx *pluginCtx) hostFSWrite(_ context.Context, p *extism.CurrentPlugin, s
 		}
 		return envelope{Ok: true}
 	})
+}
+
+// fsWriteRangeRequest is the JSON shape for streaming-style writers
+// that build a destination file from a sequence of byte slices. The
+// runtime is stateless: each call opens, seeks, writes, closes.
+type fsWriteRangeRequest struct {
+	Path     string `json:"path"`
+	Offset   int64  `json:"offset"`
+	Data     string `json:"data"` // base64-encoded bytes
+	Mode     uint32 `json:"mode,omitempty"`
+	MakeDirs bool   `json:"mkdirs,omitempty"`
+	// Truncate=true creates/truncates the file at offset=0; subsequent
+	// chunks (offset>0) leave the existing tail alone. The streaming
+	// pattern is "first call: truncate=true offset=0; subsequent
+	// calls: truncate=false offset=running".
+	Truncate bool `json:"truncate,omitempty"`
+}
+
+// hostFSWriteRange writes one chunk of bytes at a specific offset of
+// a destination file. Stateless on the host: each call opens with
+// O_WRONLY|O_CREATE (and optionally O_TRUNC), seeks, writes, closes.
+// Per-call overhead is a few syscalls — fine for the 256-KiB-chunk
+// pattern these plugins use, and avoids per-plugin file-handle state.
+func (pctx *pluginCtx) hostFSWriteRange(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	if !pctx.granted[CapFSWrite] {
+		returnEnvelope(p, stack, denied("fs.write"))
+		return
+	}
+	raw, err := readStringArg(p, stack[0])
+	if err != nil {
+		returnEnvelope(p, stack, failed("read_arg: "+err.Error()))
+		return
+	}
+	var req fsWriteRangeRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		returnEnvelope(p, stack, failed("parse_request: "+err.Error()))
+		return
+	}
+	clean, err := pctx.checkFSWritePath(req.Path)
+	if err != nil {
+		returnEnvelope(p, stack, failed(err.Error()))
+		return
+	}
+	if req.MakeDirs {
+		if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
+			returnEnvelope(p, stack, failed("mkdirs: "+err.Error()))
+			return
+		}
+	}
+	mode := os.FileMode(req.Mode) & os.ModePerm
+	if mode == 0 {
+		mode = 0o644
+	}
+	flag := os.O_WRONLY | os.O_CREATE
+	if req.Truncate {
+		flag |= os.O_TRUNC
+	}
+	f, err := os.OpenFile(clean, flag, mode)
+	if err != nil {
+		returnEnvelope(p, stack, failed("open: "+err.Error()))
+		return
+	}
+	defer f.Close()
+	if req.Offset > 0 {
+		if _, err := f.Seek(req.Offset, 0); err != nil {
+			returnEnvelope(p, stack, failed("seek: "+err.Error()))
+			return
+		}
+	}
+	body, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		returnEnvelope(p, stack, failed("base64: "+err.Error()))
+		return
+	}
+	if _, err := f.Write(body); err != nil {
+		returnEnvelope(p, stack, failed("write: "+err.Error()))
+		return
+	}
+	returnEnvelope(p, stack, envelope{Ok: true})
 }
 
 func (pctx *pluginCtx) hostFSMkdir(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {

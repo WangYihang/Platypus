@@ -56,12 +56,14 @@ type streamCtx struct {
 	inboundEOF  atomic.Bool // wire EOF observed; subsequent reads return empty
 
 	// wire is the raw agent stream for the legacy-wasm-bridge path.
-	// Non-nil → host_link_write_frame writes directly here.
-	// Synchronised by extism's per-plugin call serialisation: at most
-	// one wasm call is in flight per loaded plugin, so direct writes
-	// don't race with each other. Cross-stream-instance writes can't
-	// happen because each call gets a fresh streamCtx.
-	wire io.Writer
+	// Non-nil → host_link_write_frame and host_link_read_frame
+	// operate directly on this. Bidirectional (io.ReadWriter) so
+	// plugins like sys-file-write can both ack with an outbound
+	// frame and consume incoming chunked-input frames over the same
+	// stream. Synchronised by extism's per-plugin call serialisation:
+	// at most one wasm call is in flight per loaded plugin, so direct
+	// reads/writes don't race with each other.
+	wire io.ReadWriter
 }
 
 // activeStream returns the current per-plugin active stream, or nil
@@ -238,3 +240,47 @@ func (pctx *pluginCtx) hostLinkWriteFrame(_ context.Context, p *extism.CurrentPl
 // coded rather than imported to avoid pulling internal/link into
 // host_stream.go's import set just for the constant.
 const linkFrameMaxBytes = 1 << 20 // 1 MiB
+
+// hostLinkReadFrame reads one length-prefixed frame from the wire
+// of a legacy-wasm-bridge stream and returns the body bytes (raw,
+// base64-encoded inside the JSON envelope so binary data round-
+// trips cleanly). Mirrors internal/link.ReadFrame: 4-byte big-
+// endian length header + body.
+//
+// Returns ok:true with empty data when the wire EOFs cleanly (caller
+// loop should terminate). On a non-EOF read error returns ok:false
+// with the error in the envelope. In pump-mode (PLUGIN_STREAM)
+// returns "stream_not_legacy_bridge".
+func (pctx *pluginCtx) hostLinkReadFrame(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	s := pctx.activeStream()
+	if s == nil {
+		returnEnvelope(p, stack, failed("stream_not_active"))
+		return
+	}
+	if s.wire == nil {
+		returnEnvelope(p, stack, failed("stream_not_legacy_bridge"))
+		return
+	}
+	var hdr [4]byte
+	if _, err := io.ReadFull(s.wire, hdr[:]); err != nil {
+		if err == io.EOF {
+			returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString("")})
+			return
+		}
+		returnEnvelope(p, stack, failed("read_header: "+err.Error()))
+		return
+	}
+	length := binary.BigEndian.Uint32(hdr[:])
+	if length > linkFrameMaxBytes {
+		returnEnvelope(p, stack, failed("frame_too_large"))
+		return
+	}
+	body := make([]byte, length)
+	if length > 0 {
+		if _, err := io.ReadFull(s.wire, body); err != nil {
+			returnEnvelope(p, stack, failed("read_body: "+err.Error()))
+			return
+		}
+	}
+	returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(base64.StdEncoding.EncodeToString(body))})
+}
