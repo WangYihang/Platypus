@@ -24,6 +24,7 @@ import {
     LineChart,
     Monitor,
     Network,
+    Package,
     Plug,
     Server,
     ServerCog,
@@ -58,6 +59,7 @@ export const icons = {
     projects: LayoutGrid,
     servers: ServerCog,
     admin: ShieldHalf,
+    marketplace: Package,
 
     // Surfaces nested inside History / Operations
     activity: Clock,

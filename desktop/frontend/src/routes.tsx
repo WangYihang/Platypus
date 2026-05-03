@@ -35,6 +35,7 @@ const ProjectSettings = lazy(() => import("./pages/ProjectSettings"));
 const Preferences = lazy(() => import("./pages/Preferences"));
 const Account = lazy(() => import("./pages/Account"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
 const AdminAccessControl = lazy(() => import("./pages/admin/AdminAccessControl"));
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
@@ -177,6 +178,7 @@ export const routeTree: RouteObject[] = [
                     },
                     { path: "/account", element: withSuspense(<Account />) },
                     { path: "/preferences", element: withSuspense(<Preferences />) },
+                    { path: "/marketplace", element: withSuspense(<MarketplacePage />) },
                 ],
             },
             {

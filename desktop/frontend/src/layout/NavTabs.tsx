@@ -104,6 +104,12 @@ export default function NavTabs({ user, currentSlug }: Props) {
             matchPaths: ["/servers"],
         },
         {
+            to: "/marketplace",
+            label: "Marketplace",
+            icon: <I.marketplace className="size-3.5" />,
+            matchPaths: ["/marketplace"],
+        },
+        {
             to: "/admin/users",
             label: "Admin",
             icon: <I.admin className="size-3.5" />,
