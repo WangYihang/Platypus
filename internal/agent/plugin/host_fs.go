@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,13 +64,26 @@ func (pctx *pluginCtx) hostFSRead(_ context.Context, p *extism.CurrentPlugin, st
 			"file_too_large: size=%d max=%d", st.Size(), pctx.maxFileReadSize)))
 		return
 	}
-	data := make([]byte, st.Size())
-	n, err := f.Read(data)
-	if err != nil && int64(n) != st.Size() {
+	// io.ReadAll bounded by maxFileReadSize+1 — a Stat()-reported
+	// size is meaningless for /proc and /sys virtual files (they
+	// report size=0 but stream real content on read). Capping at
+	// maxFileReadSize+1 lets the per-plugin limit still bite for
+	// genuinely large files while letting /proc/meminfo etc. flow
+	// through. Allocates only what's read; no upfront pre-allocation
+	// hurts reading large real files but the write-then-cap shape is
+	// far less subtle than "trust st.Size()".
+	limited := io.LimitReader(f, pctx.maxFileReadSize+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
 		returnEnvelope(p, stack, failed("read: "+err.Error()))
 		return
 	}
-	returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(string(data[:n]))})
+	if int64(len(data)) > pctx.maxFileReadSize {
+		returnEnvelope(p, stack, failed(fmt.Sprintf(
+			"file_too_large: read>%d", pctx.maxFileReadSize)))
+		return
+	}
+	returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(string(data))})
 }
 
 func (pctx *pluginCtx) hostFSListdir(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {

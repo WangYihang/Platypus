@@ -144,12 +144,6 @@ func main() {
 	// Host providers + stream adapters are registered FIRST so the
 	// plugin bootstrap finds them ready when it instantiates each
 	// system plugin's wasm.
-	pluginrt.SetHostProcessListProvider(agent.CollectProcessList)
-	pluginrt.SetHostCollectSysInfoProvider(agent.CollectSysInfo)
-	pluginrt.SetHostSecurityScanProvider(agent.HandleSecurityScan)
-	pluginrt.SetHostListSecurityChecksProvider(agent.HandleListSecurityChecks)
-	pluginrt.SetHostConfigAuditProvider(agent.HandleConfigAudit)
-	pluginrt.SetHostListConfigAuditorsProvider(agent.HandleListConfigAuditors)
 	registerStreamProviders(ctx) // 6 stream adapters for sys-streams plugin
 
 	pluginRegistry, err := pluginrt.New(pluginrt.Options{

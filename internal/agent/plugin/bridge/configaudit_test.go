@@ -4,23 +4,37 @@ import (
 	"context"
 	"testing"
 
-	"github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-func TestBridge_ConfigAudit_RoundTripsStubProvider(t *testing.T) {
-	plugin.SetHostConfigAuditProvider(func(_ context.Context, _ *v2pb.ConfigAuditRequest) *v2pb.ConfigAuditResponse {
-		return &v2pb.ConfigAuditResponse{
-			StartedAtUnix: 22222,
-			ElapsedMs:     11,
-			Leaks: []*v2pb.ConfigLeak{
-				{Id: "test.leak", Risk: "high", Title: "synthetic"},
-			},
-		}
-	})
-	t.Cleanup(func() { plugin.SetHostConfigAuditProvider(nil) })
+// TestBridge_ListConfigAuditors_RealPluginEnumerates exercises the
+// v2 sys-config-audit plugin's auditor registry. The legacy host-fn-
+// backed gitleaks integration is gone; the plugin owns the ruleset
+// (smaller in v2 — shell.history + cloud.aws + ssh.private_keys).
+func TestBridge_ListConfigAuditors_RealPluginEnumerates(t *testing.T) {
+	reg := newRegWithSysPlugins(t)
+	defer reg.Close(context.Background())
 
+	resp := bridge.ListConfigAuditors(reg)(context.Background(), &v2pb.ListConfigAuditorsRequest{})
+	if resp.GetError() != "" {
+		t.Fatalf("err: %s", resp.GetError())
+	}
+	got := map[string]bool{}
+	for _, a := range resp.GetAuditors() {
+		got[a.GetId()] = true
+	}
+	for _, id := range []string{"shell.history", "cloud.aws", "ssh.private_keys"} {
+		if !got[id] {
+			t.Errorf("missing auditor %q in %+v", id, got)
+		}
+	}
+}
+
+// TestBridge_ConfigAudit_RealPluginRuns drives a no-filter scan on
+// the test host. The result depends on /home + /root contents; we
+// only assert the response decoded + each auditor reports a status.
+func TestBridge_ConfigAudit_RealPluginRuns(t *testing.T) {
 	reg := newRegWithSysPlugins(t)
 	defer reg.Close(context.Background())
 
@@ -28,26 +42,7 @@ func TestBridge_ConfigAudit_RoundTripsStubProvider(t *testing.T) {
 	if resp.GetError() != "" {
 		t.Fatalf("err: %s", resp.GetError())
 	}
-	if len(resp.GetLeaks()) != 1 || resp.GetLeaks()[0].GetId() != "test.leak" {
-		t.Errorf("leaks = %+v", resp.GetLeaks())
-	}
-}
-
-func TestBridge_ListConfigAuditors_RoundTripsStubProvider(t *testing.T) {
-	plugin.SetHostListConfigAuditorsProvider(func(_ context.Context, _ *v2pb.ListConfigAuditorsRequest) *v2pb.ListConfigAuditorsResponse {
-		return &v2pb.ListConfigAuditorsResponse{
-			Auditors: []*v2pb.AvailableAuditor{
-				{Id: "test.aud", Category: "synthetic", Applicable: true},
-			},
-		}
-	})
-	t.Cleanup(func() { plugin.SetHostListConfigAuditorsProvider(nil) })
-
-	reg := newRegWithSysPlugins(t)
-	defer reg.Close(context.Background())
-
-	resp := bridge.ListConfigAuditors(reg)(context.Background(), &v2pb.ListConfigAuditorsRequest{})
-	if len(resp.GetAuditors()) != 1 || resp.GetAuditors()[0].GetId() != "test.aud" {
-		t.Errorf("auditors = %+v", resp.GetAuditors())
+	if len(resp.GetAuditors()) == 0 {
+		t.Errorf("expected per-auditor results")
 	}
 }
