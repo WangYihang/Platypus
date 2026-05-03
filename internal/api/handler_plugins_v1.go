@@ -28,7 +28,38 @@ import (
 //   handler_plugins_readonly.go  GET    .../plugins, GET .../logs (single-frame replies)
 //   handler_plugins_mutate.go    DELETE / PATCH .../plugins/:plugin_id
 type AgentPluginsHandler struct {
-	svc *core.AgentLinkService
+	svc     *core.AgentLinkService
+	catalog MarketplaceCatalog // optional; when nil install_marketplace returns 503
+	fetcher ArtefactFetcher    // optional; defaults to net/http when nil
+}
+
+// MarketplaceCatalog is the catalog interface install_marketplace
+// needs. Defined here as the minimal contract (Get one row by
+// plugin_id+version) so the dependency stays one-way: AgentPluginsHandler
+// doesn't have to import internal/core/plugin.
+type MarketplaceCatalog interface {
+	Get(ctx context.Context, pluginID, version string) (MarketplaceRow, bool, error)
+}
+
+// MarketplaceRow is the subset of catalog fields the install path
+// needs. Carries the fetch URLs + the sha256 the agent verifies +
+// the publisher's signing key.
+type MarketplaceRow struct {
+	PluginID        string
+	Version         string
+	PublisherKeyID  string
+	PublisherPubkey []byte
+	WasmURL         string
+	SignatureURL    string
+	ManifestURL     string
+	WasmSHA256Hex   string
+}
+
+// ArtefactFetcher is the seam install_marketplace uses to fetch the
+// manifest / wasm / signature URLs. Production wires the default
+// http.Client; tests substitute an in-memory map keyed by URL.
+type ArtefactFetcher interface {
+	Fetch(ctx context.Context, url string) ([]byte, error)
 }
 
 // NewAgentPluginsHandler binds the handler to the live link registry.
@@ -36,6 +67,16 @@ type AgentPluginsHandler struct {
 // stays grep-able.
 func NewAgentPluginsHandler(svc *core.AgentLinkService) *AgentPluginsHandler {
 	return &AgentPluginsHandler{svc: svc}
+}
+
+// WithMarketplace decorates the handler with the catalog + fetcher
+// the install_marketplace endpoint needs. Called from main.go after
+// the catalog is constructed; without this the endpoint returns
+// 503 "marketplace not configured".
+func (h *AgentPluginsHandler) WithMarketplace(catalog MarketplaceCatalog, fetcher ArtefactFetcher) *AgentPluginsHandler {
+	h.catalog = catalog
+	h.fetcher = fetcher
+	return h
 }
 
 // pluginMgmtTimeout caps how long a non-install REST request blocks
@@ -159,6 +200,7 @@ func RegisterV1AgentPluginRoutes(engine *gin.Engine, h *AgentPluginsHandler, rba
 	{
 		admin.GET("/:agent_id/plugins", h.List)
 		admin.POST("/:agent_id/plugins", h.Install)
+		admin.POST("/:agent_id/plugins/install_marketplace", h.InstallFromMarketplace)
 		admin.DELETE("/:agent_id/plugins/:plugin_id", h.Uninstall)
 		admin.PATCH("/:agent_id/plugins/:plugin_id", h.Enable)
 		admin.GET("/:agent_id/plugins/:plugin_id/logs", h.Logs)

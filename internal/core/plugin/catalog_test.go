@@ -47,6 +47,7 @@ CREATE TABLE marketplace_plugin_versions (
     capabilities_json   TEXT NOT NULL DEFAULT '[]',
     tags_json           TEXT NOT NULL DEFAULT '[]',
     fetched_at_unix     INTEGER NOT NULL,
+    publisher_pubkey    BLOB NOT NULL DEFAULT x'',
     PRIMARY KEY (plugin_id, version)
 );
 CREATE TABLE marketplace_index_refreshes (

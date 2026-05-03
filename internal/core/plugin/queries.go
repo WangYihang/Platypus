@@ -27,6 +27,16 @@ type PluginRow struct {
 	Capabilities   []string `json:"capabilities"`
 	Tags           []string `json:"tags,omitempty"`
 	FetchedAtUnix  int64    `json:"fetched_at_unix"`
+
+	// PublisherPubkey is the raw .pub file contents (minisign Ed25519
+	// public key) the agent uses to verify the wasm signature on
+	// install. Empty for legacy index files; the install_marketplace
+	// REST endpoint refuses to install when empty so the operator
+	// hits a clear error instead of a silent agent-side rejection.
+	// JSON-omitted: never wanted on the wire — REST clients shouldn't
+	// touch the raw key, the install endpoint reads it directly from
+	// the catalog.
+	PublisherPubkey []byte `json:"-"`
 }
 
 // Search returns the latest version of every plugin whose name
@@ -37,7 +47,8 @@ func (c *Catalog) Search(ctx context.Context, q string) ([]PluginRow, error) {
 		SELECT plugin_id, version, name, author, license, homepage,
 		       description, latest_version, publisher_key_id,
 		       wasm_url, signature_url, manifest_url, wasm_sha256_hex,
-		       capabilities_json, tags_json, fetched_at_unix
+		       capabilities_json, tags_json, fetched_at_unix,
+		       publisher_pubkey
 		  FROM marketplace_plugin_versions
 		 WHERE version = latest_version`
 
@@ -70,7 +81,8 @@ func (c *Catalog) Versions(ctx context.Context, pluginID string) ([]PluginRow, e
 		SELECT plugin_id, version, name, author, license, homepage,
 		       description, latest_version, publisher_key_id,
 		       wasm_url, signature_url, manifest_url, wasm_sha256_hex,
-		       capabilities_json, tags_json, fetched_at_unix
+		       capabilities_json, tags_json, fetched_at_unix,
+		       publisher_pubkey
 		  FROM marketplace_plugin_versions
 		 WHERE plugin_id = ?
 		 ORDER BY version DESC`, pluginID)
@@ -89,7 +101,8 @@ func (c *Catalog) Get(ctx context.Context, pluginID, version string) (PluginRow,
 		SELECT plugin_id, version, name, author, license, homepage,
 		       description, latest_version, publisher_key_id,
 		       wasm_url, signature_url, manifest_url, wasm_sha256_hex,
-		       capabilities_json, tags_json, fetched_at_unix
+		       capabilities_json, tags_json, fetched_at_unix,
+		       publisher_pubkey
 		  FROM marketplace_plugin_versions
 		 WHERE plugin_id = ? AND version = ?`, pluginID, version)
 	r, err := scanRow(row.Scan)
@@ -143,6 +156,7 @@ func scanRow(scan func(...any) error) (PluginRow, error) {
 		&r.Description, &r.LatestVersion, &r.PublisherKeyID,
 		&r.WasmURL, &r.SignatureURL, &r.ManifestURL, &r.WasmSHA256Hex,
 		&capsJSON, &tagsJSON, &r.FetchedAtUnix,
+		&r.PublisherPubkey,
 	); err != nil {
 		return PluginRow{}, err
 	}

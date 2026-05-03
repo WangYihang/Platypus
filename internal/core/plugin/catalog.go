@@ -20,6 +20,7 @@ package plugin
 import (
 	"context"
 	"database/sql"
+	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,11 @@ import (
 	"strings"
 	"time"
 )
+
+// base64Std is a tiny alias kept readable at the call site —
+// `base64Std.DecodeString` reads cleaner than spelling out
+// `base64.StdEncoding.DecodeString` inline in the Refresh loop.
+var base64Std = b64.StdEncoding
 
 // IndexEntry is the per-version row the index.json publishes. One
 // plugin contributes one entry per published version.
@@ -46,6 +52,12 @@ type IndexEntry struct {
 	WasmSHA256Hex    string   `json:"wasm_sha256_hex"`
 	Capabilities     []string `json:"capabilities"`
 	Tags             []string `json:"tags,omitempty"`
+
+	// PublisherPubkeyB64 is the base64 of the publisher's minisign
+	// .pub file. Optional in the index format for backward compat;
+	// when absent the install_marketplace REST endpoint refuses to
+	// install (the agent can't verify the signature without it).
+	PublisherPubkeyB64 string `json:"publisher_pubkey_b64,omitempty"`
 }
 
 // Index is the top-level shape of index.json.
@@ -116,11 +128,25 @@ func (c *Catalog) Refresh(ctx context.Context) (int, error) {
 	for _, e := range idx.Plugins {
 		caps, _ := json.Marshal(e.Capabilities)
 		tags, _ := json.Marshal(e.Tags)
+		// Publisher pubkey is base64-encoded in the index for JSON
+		// transport; we decode here so SQLite stores raw bytes.
+		// Empty/invalid → empty BLOB (NOT nil — SQLite rejects nil
+		// against the NOT NULL column even with a DEFAULT). Legacy
+		// index files keep working: install_marketplace will surface
+		// the empty key as 424 Failed Dependency rather than fail at
+		// insert.
+		pubkey := []byte{}
+		if e.PublisherPubkeyB64 != "" {
+			if decoded, derr := base64Std.DecodeString(e.PublisherPubkeyB64); derr == nil {
+				pubkey = decoded
+			}
+		}
 		if _, err := stmt.ExecContext(ctx,
 			e.PluginID, e.Version, e.Name, e.Author, e.License, e.Homepage,
 			e.Description, e.LatestVersion, e.PublisherKeyID,
 			e.WasmURL, e.SignatureURL, e.ManifestURL, e.WasmSHA256Hex,
 			string(caps), string(tags), c.now().Unix(),
+			pubkey,
 		); err != nil {
 			_ = c.recordRefresh(ctx, "db_error", err.Error(), 0)
 			return 0, fmt.Errorf("plugin catalog: insert %s/%s: %w",
@@ -140,8 +166,8 @@ const insertSQL = `INSERT INTO marketplace_plugin_versions
     (plugin_id, version, name, author, license, homepage, description,
      latest_version, publisher_key_id, wasm_url, signature_url,
      manifest_url, wasm_sha256_hex, capabilities_json, tags_json,
-     fetched_at_unix)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+     fetched_at_unix, publisher_pubkey)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 // fetchIndex GETs indexURL + parses the JSON. Separated so tests can
 // substitute the http.Client.

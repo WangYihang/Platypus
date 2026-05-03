@@ -454,7 +454,6 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
-	api.RegisterV1AgentPluginRoutes(rest, api.NewAgentPluginsHandler(agentLinkSvc), rbac)
 
 	// Marketplace catalog: server-side mirror of the platypus-plugins
 	// git index repo. Refresh URL via PLATYPUS_PLUGIN_INDEX env; empty
@@ -462,6 +461,34 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	// alive (returning empty results) so a fresh deployment doesn't
 	// 500 on Marketplace tab loads.
 	pluginCatalog := corepluginpkg.New(db.DB, os.Getenv("PLATYPUS_PLUGIN_INDEX"))
+
+	// install_marketplace endpoint needs the catalog to look up
+	// per-version artefact URLs + the publisher pubkey, plus an HTTP
+	// fetcher for the URLs themselves. WithMarketplace decorates the
+	// handler so the existing inline-source install endpoint keeps
+	// working with or without the catalog (returns 503 when catalog
+	// is unconfigured).
+	pluginsHandler := api.NewAgentPluginsHandler(agentLinkSvc).
+		WithMarketplace(
+			api.CatalogFunc(func(ctx context.Context, pluginID, version string) (api.MarketplaceRow, bool, error) {
+				row, ok, err := pluginCatalog.Get(ctx, pluginID, version)
+				if err != nil || !ok {
+					return api.MarketplaceRow{}, ok, err
+				}
+				return api.MarketplaceRow{
+					PluginID:        row.PluginID,
+					Version:         row.Version,
+					PublisherKeyID:  row.PublisherKeyID,
+					PublisherPubkey: row.PublisherPubkey,
+					WasmURL:         row.WasmURL,
+					SignatureURL:    row.SignatureURL,
+					ManifestURL:     row.ManifestURL,
+					WasmSHA256Hex:   row.WasmSHA256Hex,
+				}, true, nil
+			}),
+			api.NewHTTPArtefactFetcher(),
+		)
+	api.RegisterV1AgentPluginRoutes(rest, pluginsHandler, rbac)
 	api.RegisterV1MarketplaceRoutes(rest, api.NewMarketplaceHandler(pluginCatalog), rbac)
 	if meshNode != nil {
 		meshLinkH := mesh.NewLinkHandler(meshNode, mesh.CertPoolFn(api.ProjectsCAPool(db)))
