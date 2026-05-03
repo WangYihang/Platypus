@@ -18,6 +18,13 @@ func TestPathHasPrefix(t *testing.T) {
 		{"/etc/nginx2", "/etc/nginx", false}, // sibling, not descendant
 		{"/etc", "/etc/nginx", false},
 		{"/var/log", "/etc/nginx", false},
+		// Root prefix is everyday "give the plugin full read access" —
+		// this matches the system ListDir / Stat allowlist; without
+		// the special case in pathHasPrefix it would deny every
+		// non-root absolute path.
+		{"/tmp/foo", "/", true},
+		{"/etc/nginx/nginx.conf", "/", true},
+		{"/", "/", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.p+"|"+tc.prefix, func(t *testing.T) {

@@ -1,0 +1,38 @@
+api_version: 1
+id: com.platypus.sys-listdir
+name: ListDir (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — replaces the agent's built-in ListDir RPC. Reads
+  one directory and returns its entries via host_fs_listdir.
+
+runtime:
+  type: wasm
+  entry: sys_listdir.wasm
+  abi: extism/1
+
+rpc:
+  - name: list_dir
+    request:  { proto: ListDirRequest }
+    response: { proto: ListDirResponse }
+
+# Unrestricted fs.read posture matches the legacy handler's
+# behaviour. System plugin is granted whatever it declares; user
+# plugins would have to be installed with operator-confirmed
+# fs.read.paths.
+capabilities:
+  fs.read:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 5000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_listdir.wasm.minisig

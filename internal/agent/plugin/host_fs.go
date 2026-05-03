@@ -166,10 +166,20 @@ func (pctx *pluginCtx) checkFSReadPath(path string) (string, error) {
 }
 
 // pathHasPrefix reports whether `p` is `prefix` or descends from it.
-// Component-aware (so "/etc/nginx2" is NOT under "/etc/nginx").
+// Component-aware (so "/etc/nginx2" is NOT under "/etc/nginx"). Root
+// prefix "/" is special-cased: any absolute path descends from it,
+// matching the everyday "give the plugin full read access" intent of
+// fs.read.paths=["/"] (used by the system ListDir / Stat plugins).
 func pathHasPrefix(p, prefix string) bool {
 	if p == prefix {
 		return true
+	}
+	if prefix == string(filepath.Separator) {
+		// Root: every absolute path is under it. The general suffix
+		// check below would reject "/tmp/foo" because rest[0]=='t' is
+		// not the separator — that logic is right for "/etc" but
+		// wrong for "/" because the separator is the prefix itself.
+		return filepath.IsAbs(p)
 	}
 	if !strings.HasPrefix(p, prefix) {
 		return false

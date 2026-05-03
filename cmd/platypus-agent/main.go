@@ -23,6 +23,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/agent"
 	pluginrt "github.com/WangYihang/Platypus/internal/agent/plugin"
+	pluginbridge "github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	pluginsys "github.com/WangYihang/Platypus/internal/agent/plugin/system"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
@@ -295,9 +296,18 @@ func main() {
 			slog.Int("attempt", connectAttempt),
 			slog.Duration("dial_elapsed", time.Since(dialStart)),
 		)
+		// ListDir is the first migrated handler: served by the
+		// com.platypus.sys-listdir system plugin. The bridge wrapper
+		// keeps the AgentRPCHandlers signature so the dispatcher
+		// doesn't notice. Falls back to the built-in handler if the
+		// plugin runtime isn't available (e.g. broken catalog at boot).
+		listDir := agent.HandleListDir
+		if pluginRegistry != nil {
+			listDir = pluginbridge.ListDir(pluginRegistry)
+		}
 		rpc := agent.AgentRPCHandlers{
 			Exec:               agent.HandleExec,
-			ListDir:            agent.HandleListDir,
+			ListDir:            listDir,
 			Stat:               agent.HandleStat,
 			Delete:             agent.HandleDelete,
 			Rename:             agent.HandleRename,
