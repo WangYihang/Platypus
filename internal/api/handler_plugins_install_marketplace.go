@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -237,6 +239,23 @@ func NewHTTPArtefactFetcher() ArtefactFetcher {
 }
 
 func (f *httpArtefactFetcher) Fetch(ctx context.Context, url string) ([]byte, error) {
+	// file:// URLs come from the dev-mode publisher container
+	// (PLATYPUS_DEV=1 + bundled marketplace under <data-dir>/plugin-
+	// marketplace/). Read directly off disk rather than spinning up an
+	// in-cluster HTTP server just to serve the artefacts back. Production
+	// indexes use https:// and skip this branch entirely.
+	if strings.HasPrefix(url, "file://") {
+		path := strings.TrimPrefix(url, "file://")
+		if strings.Contains(path, "/../") || strings.HasSuffix(path, "/..") {
+			return nil, fmt.Errorf("file url path contains parent traversal: %s", path)
+		}
+		fh, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = fh.Close() }()
+		return io.ReadAll(io.LimitReader(fh, f.maxBytes+1))
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

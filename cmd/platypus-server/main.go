@@ -460,7 +460,24 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	// means "no index configured", which keeps the REST endpoints
 	// alive (returning empty results) so a fresh deployment doesn't
 	// 500 on Marketplace tab loads.
-	pluginCatalog := corepluginpkg.New(db.DB, os.Getenv("PLATYPUS_PLUGIN_INDEX"))
+	//
+	// Dev-mode shortcut: if PLATYPUS_DEV=1 AND PLATYPUS_PLUGIN_INDEX
+	// is unset AND <data-dir>/plugin-marketplace/index.json exists,
+	// point the catalog at that file://. The agent-publisher compose
+	// sidecar drops a populated index there on every fresh `up` so a
+	// docker compose run lands a working marketplace without any
+	// extra HTTP server / external repo. Production deployments
+	// always set PLATYPUS_PLUGIN_INDEX explicitly and never touch
+	// this branch.
+	pluginIndexURL := os.Getenv("PLATYPUS_PLUGIN_INDEX")
+	if pluginIndexURL == "" && cfg.Dev {
+		bundle := filepath.Join(cfg.DataDir, "plugin-marketplace", "index.json")
+		if _, err := os.Stat(bundle); err == nil {
+			pluginIndexURL = "file://" + bundle
+			log.Info("dev_marketplace_bundle_detected index_url=%s", pluginIndexURL)
+		}
+	}
+	pluginCatalog := corepluginpkg.New(db.DB, pluginIndexURL)
 
 	// install_marketplace endpoint needs the catalog to look up
 	// per-version artefact URLs + the publisher pubkey, plus an HTTP

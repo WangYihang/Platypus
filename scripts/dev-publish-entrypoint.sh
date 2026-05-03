@@ -64,4 +64,85 @@ netbsd/amd64 netbsd/arm64}"
 
 mkdir -p "$RELEASES_DIR"
 
-exec bash scripts/release-publish.sh
+bash scripts/release-publish.sh
+
+# Plugin marketplace bundle for dev mode.
+#
+# After agent binaries are signed + published, build the example wasm
+# plugins, sign them with a per-volume dev publisher key, stage them
+# under /output/plugin-marketplace/, and write an index.json the
+# server can refresh from. The server picks up
+#   <data-dir>/plugin-marketplace/index.json
+# automatically when PLATYPUS_DEV=1 + PLATYPUS_PLUGIN_INDEX is unset
+# (see cmd/platypus-server/main.go), so a fresh `docker compose up`
+# lands a working marketplace with no extra setup.
+#
+# Skipped when SKIP_PLUGIN_MARKETPLACE=1 — useful when iterating on
+# the agent layer and the marketplace is slow to rebuild.
+if [[ "${SKIP_PLUGIN_MARKETPLACE:-0}" == "1" ]]; then
+    echo "→ skipping plugin marketplace bundle (SKIP_PLUGIN_MARKETPLACE=1)"
+    exit 0
+fi
+
+PLUGIN_KEY_SECRET="$KEYS_DIR/plugin-publisher.platypus"
+PLUGIN_KEY_PUBLIC="$KEYS_DIR/plugin-publisher.pub"
+MARKETPLACE_OUT="/output/plugin-marketplace"
+
+# Build the platypus-cli we need for keygen + sign. The agent publish
+# step above already cached most of the Go build; this is a couple of
+# seconds.
+echo "→ building platypus-cli"
+go build -trimpath -ldflags="-s -w" -o /tmp/platypus-cli ./cmd/platypus-cli
+
+if [[ ! -f "$PLUGIN_KEY_SECRET" || ! -f "$PLUGIN_KEY_PUBLIC" ]]; then
+    echo "→ generating dev plugin signing keypair at $KEYS_DIR/"
+    /tmp/platypus-cli plugin keygen \
+        --out-secret "$PLUGIN_KEY_SECRET" \
+        --out-public "$PLUGIN_KEY_PUBLIC" \
+        --force
+fi
+
+echo "→ building + signing example plugins"
+PLATYPUS_PUBLISHER_KEY="$PLUGIN_KEY_SECRET" \
+    BUILD_DIR=/tmp \
+    make example-plugins
+
+# Stage the signed bundles. Mirror is one dir per (id, version) so
+# index.json's wasm_url / signature_url / manifest_url can be a
+# straight file:// URL pointing at the same files.
+echo "→ staging plugin bundle under $MARKETPLACE_OUT"
+rm -rf "$MARKETPLACE_OUT"
+mkdir -p "$MARKETPLACE_OUT/plugins"
+for d in example/plugins/*/; do
+    d="${d%/}"
+    if ! ls "$d"/target/wasm32-unknown-unknown/release/*.wasm >/dev/null 2>&1; then
+        continue
+    fi
+    pid=$(awk '/^id:/ {print $2; exit}' "$d/plugin.yaml")
+    ver=$(awk '/^version:/ {print $2; exit}' "$d/plugin.yaml")
+    out="$MARKETPLACE_OUT/plugins/$pid/$ver"
+    mkdir -p "$out"
+    cp "$d/plugin.yaml" "$out/"
+    cp "$d"/target/wasm32-unknown-unknown/release/*.wasm "$out/"
+    cp "$d"/target/wasm32-unknown-unknown/release/*.wasm.minisig "$out/"
+done
+
+# Generate index.json. The server reads /app/data/plugin-marketplace/...
+# (its <data-dir> is mapped to /app/data on the runtime side); the
+# publisher writes /output/plugin-marketplace/... (its mount of the same
+# volume). file:// URLs need to use the SERVER's path so we hard-code
+# /app/data here. PLATYPUS_DEV=1 + the auto-detect branch in main.go
+# turns the absent env var into a file:// URL pointing at this index.
+echo "→ generating index.json"
+SERVER_BUNDLE_PATH=/app/data/plugin-marketplace \
+PUBKEY_FILE="$PLUGIN_KEY_PUBLIC" \
+BUNDLE_ROOT="$MARKETPLACE_OUT" \
+    python3 /workspace/scripts/dev-publish-marketplace-index.py \
+    > "$MARKETPLACE_OUT/index.json"
+
+# Drop the publisher .pub alongside so an admin curling the volume
+# can spot-check + so a future "dev marketplace publisher" rotation
+# tool has a known location.
+cp "$PLUGIN_KEY_PUBLIC" "$MARKETPLACE_OUT/dev-publisher.pub"
+
+echo "→ marketplace bundle ready ($(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["plugins"]))' "$MARKETPLACE_OUT/index.json") plugins)"

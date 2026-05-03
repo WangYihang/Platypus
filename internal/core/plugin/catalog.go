@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -169,22 +170,13 @@ const insertSQL = `INSERT INTO marketplace_plugin_versions
      fetched_at_unix, publisher_pubkey)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
-// fetchIndex GETs indexURL + parses the JSON. Separated so tests can
-// substitute the http.Client.
+// fetchIndex reads + parses the JSON. Separated so tests can
+// substitute the http.Client. Supports both http(s):// and file://
+// URLs — the latter is how the dev-mode publisher container hands the
+// server an index without standing up a separate HTTP server inside
+// the compose stack.
 func (c *Catalog) fetchIndex(ctx context.Context) (*Index, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.indexURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("index fetch: HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := readURLBytes(ctx, c.httpClient, c.indexURL)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +186,55 @@ func (c *Catalog) fetchIndex(ctx context.Context) (*Index, error) {
 	}
 	return &idx, nil
 }
+
+// readURLBytes is the shared "fetch a URL into a byte slice" helper
+// used by the catalog refresh + (via the api package) the install-from-
+// marketplace artefact fetcher. file:// URLs are handled by reading
+// directly from disk; everything else goes through the http.Client.
+//
+// Limited to what the refresh path needs today — no streaming, no
+// content-type sniffing. Caller decides what to do with the bytes.
+func readURLBytes(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	if strings.HasPrefix(url, "file://") {
+		path := strings.TrimPrefix(url, "file://")
+		// Reject `..` traversal so a malicious index.json can't ask
+		// the server to read /etc/passwd at install time. The dev
+		// publisher only ever writes under <data-dir>, so the cleaned
+		// path should be absolute and free of relative segments.
+		if strings.Contains(path, "/../") || strings.HasSuffix(path, "/..") {
+			return nil, fmt.Errorf("file url path contains parent traversal: %s", path)
+		}
+		return readFileBounded(path)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch: HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// readFileBounded reads a local file, capped at maxLocalArtefactBytes.
+// Cap matches the http fetch's implicit ceiling (LimitReader at 64 MiB
+// in api.NewHTTPArtefactFetcher) so the failure surface is the same
+// regardless of whether the index points at HTTP or file://.
+func readFileBounded(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, maxLocalArtefactBytes+1))
+}
+
+const maxLocalArtefactBytes = 64 << 20 // 64 MiB
 
 // errorBucket maps low-level errors to the small set of buckets the
 // refresh row records. Coarse on purpose — the UI cares about

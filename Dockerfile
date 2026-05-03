@@ -91,10 +91,25 @@ ENTRYPOINT ["/usr/local/bin/platypus-agent"]
 # server's data volume.
 FROM golang:1.25 AS publisher
 WORKDIR /workspace
+# python3 + pyyaml are for the marketplace index.json generator the
+# publisher entrypoint runs after building the example plugins. They
+# add ~25 MB after caches and avoid pulling in a Go-based equivalent.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         openssl ca-certificates \
+        curl build-essential \
+        python3 python3-yaml \
     && rm -rf /var/lib/apt/lists/*
+# Rust toolchain for compiling the example wasm plugins. The publisher
+# script runs `make example-plugins` which `cargo build`s every plugin
+# under example/plugins/ for wasm32-unknown-unknown. Pinned to stable;
+# bumping rustup just to chase a nightly is rarely worth it.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --default-toolchain stable --target wasm32-unknown-unknown \
+    && chmod -R a+rx /usr/local/cargo /usr/local/rustup
 # Bind-mounted /workspace is owned by the host user (uid != 0) but the
 # container runs as a non-root UID, so git refuses to read .git under
 # its "safe.directory" rule and `go build` then fails on VCS stamping
@@ -113,8 +128,11 @@ RUN chmod +x /usr/local/bin/dev-publish-entrypoint.sh
 # runs first.
 ENV HOME=/home/publisher \
     GOCACHE=/cache/go-build \
-    GOMODCACHE=/cache/go-mod
-RUN mkdir -p /home/publisher /keys /output /cache/go-build /cache/go-mod \
-    && chown -R 65532:65532 /home/publisher /keys /output /cache/go-build /cache/go-mod
+    GOMODCACHE=/cache/go-mod \
+    CARGO_TARGET_DIR=/cache/cargo-target
+RUN mkdir -p /home/publisher /keys /output \
+        /cache/go-build /cache/go-mod /cache/cargo-target \
+    && chown -R 65532:65532 /home/publisher /keys /output \
+        /cache/go-build /cache/go-mod /cache/cargo-target
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/dev-publish-entrypoint.sh"]
