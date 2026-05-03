@@ -22,6 +22,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/WangYihang/Platypus/internal/agent"
+	pluginrt "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
@@ -127,6 +128,22 @@ func main() {
 	// BootstrapV2 + agent restart.
 	if node := tryStartMesh(ctx, logger, identityDir, meshPeers, meshProjectID, opts); node != nil {
 		agent.AttachMesh(state, node)
+	}
+
+	// Plugin runtime is process-wide and survives reconnects so a
+	// flaky link doesn't tear down loaded wasm instances. Errors here
+	// are non-fatal — a broken catalog should not block the agent
+	// from serving its built-in RPCs.
+	pluginRegistry, err := pluginrt.New(pluginrt.Options{
+		Paths: pluginrt.NewPaths(identityDir),
+	})
+	if err != nil {
+		logger.Warn("plugin registry init failed; plugin RPCs will be unavailable",
+			slog.String("error", err.Error()))
+		pluginRegistry = nil
+	} else {
+		pluginRegistry.Load(ctx)
+		defer pluginRegistry.Close(ctx)
 	}
 
 	bo := backoff.WithContext(
@@ -257,22 +274,28 @@ func main() {
 			slog.Int("attempt", connectAttempt),
 			slog.Duration("dial_elapsed", time.Since(dialStart)),
 		)
+		rpc := agent.AgentRPCHandlers{
+			Exec:               agent.HandleExec,
+			ListDir:            agent.HandleListDir,
+			Stat:               agent.HandleStat,
+			Delete:             agent.HandleDelete,
+			Rename:             agent.HandleRename,
+			Mkdir:              agent.HandleMkdir,
+			Chmod:              agent.HandleChmod,
+			SysInfo:            agent.HandleSysInfo,
+			ProcessList:        agent.HandleProcessList,
+			SecurityScan:       agent.HandleSecurityScan,
+			ListSecurityChecks: agent.HandleListSecurityChecks,
+			ConfigAudit:        agent.HandleConfigAudit,
+			ListConfigAuditors: agent.HandleListConfigAuditors,
+		}
+		var pluginMgmt agent.PluginMgmtHandler
+		if pluginRegistry != nil {
+			rpc.PluginCall = pluginRegistry.Invoke
+			pluginMgmt = pluginRegistry.HandleMgmt
+		}
 		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
-			RPC: agent.AgentRPCHandlers{
-				Exec:               agent.HandleExec,
-				ListDir:            agent.HandleListDir,
-				Stat:               agent.HandleStat,
-				Delete:             agent.HandleDelete,
-				Rename:             agent.HandleRename,
-				Mkdir:              agent.HandleMkdir,
-				Chmod:              agent.HandleChmod,
-				SysInfo:            agent.HandleSysInfo,
-				ProcessList:        agent.HandleProcessList,
-				SecurityScan:       agent.HandleSecurityScan,
-				ListSecurityChecks: agent.HandleListSecurityChecks,
-				ConfigAudit:        agent.HandleConfigAudit,
-				ListConfigAuditors: agent.HandleListConfigAuditors,
-			},
+			RPC:         rpc,
 			Process:     agent.HandleProcessStream,
 			FileRead:    agent.HandleFileReadStream,
 			FileWrite:   agent.HandleFileWriteStream,
@@ -280,6 +303,7 @@ func main() {
 			FileArchive: agent.HandleFileArchiveStream,
 			TunnelPull:  agent.HandleTunnelPullStream,
 			Upgrade:     buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
+			PluginMgmt:  pluginMgmt,
 		})
 		reason := "peer_close"
 		if serveErr != nil {

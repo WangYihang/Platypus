@@ -2,6 +2,8 @@ syntax = "proto3";
 package platypus.v2;
 option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 
+import "plugin.proto";
+
 // RpcRequest is the StreamHeader.metadata for STREAM_TYPE_RPC.
 // The agent reads exactly one RpcRequest, sends exactly one
 // RpcResponse, then closes the stream. Timeouts are delivered via
@@ -22,6 +24,13 @@ message RpcRequest {
     ListSecurityChecksRequest list_security_checks = 33;
     ConfigAuditRequest config_audit = 34;
     ListConfigAuditorsRequest list_config_auditors = 35;
+
+    // Plugin call: agent looks up plugin_id in its registry and
+    // dispatches to the wasm export named PluginCallRequest.method.
+    // One oneof arm covers every plugin so adding a new plugin
+    // never requires a proto / dispatch / wiring change. Defined in
+    // plugin.proto.
+    PluginCallRequest   plugin_call  = 100;
   }
 }
 
@@ -45,6 +54,8 @@ message RpcResponse {
     ListSecurityChecksResponse list_security_checks = 33;
     ConfigAuditResponse config_audit = 34;
     ListConfigAuditorsResponse list_config_auditors = 35;
+
+    PluginCallResponse  plugin_call  = 100;
   }
 }
 

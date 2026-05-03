@@ -34,6 +34,12 @@ type AgentRPCHandlers struct {
 	ListSecurityChecks func(ctx context.Context, req *v2pb.ListSecurityChecksRequest) *v2pb.ListSecurityChecksResponse
 	ConfigAudit        func(ctx context.Context, req *v2pb.ConfigAuditRequest) *v2pb.ConfigAuditResponse
 	ListConfigAuditors func(ctx context.Context, req *v2pb.ListConfigAuditorsRequest) *v2pb.ListConfigAuditorsResponse
+
+	// PluginCall is the single dispatch hook for the plugin system:
+	// the registry routes by plugin_id+method, so adding a plugin
+	// never requires another field here. nil means the agent was
+	// built without the plugin runtime wired in.
+	PluginCall func(ctx context.Context, req *v2pb.PluginCallRequest) *v2pb.PluginCallResponse
 }
 
 // streamCtxKey carries per-stream identifiers (correlation_id,
@@ -220,6 +226,11 @@ func dispatchRPCInner(ctx context.Context, req *v2pb.RpcRequest, h AgentRPCHandl
 			return unsupported("list_config_auditors")
 		}
 		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_ListConfigAuditors{ListConfigAuditors: h.ListConfigAuditors(ctx, p.ListConfigAuditors)}}
+	case *v2pb.RpcRequest_PluginCall:
+		if h.PluginCall == nil {
+			return unsupported("plugin_call")
+		}
+		return &v2pb.RpcResponse{Payload: &v2pb.RpcResponse_PluginCall{PluginCall: h.PluginCall(ctx, p.PluginCall)}}
 	default:
 		return &v2pb.RpcResponse{Error: "agent: unknown RPC payload type"}
 	}

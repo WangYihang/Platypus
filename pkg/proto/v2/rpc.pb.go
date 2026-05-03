@@ -43,6 +43,7 @@ type RpcRequest struct {
 	//	*RpcRequest_ListSecurityChecks
 	//	*RpcRequest_ConfigAudit
 	//	*RpcRequest_ListConfigAuditors
+	//	*RpcRequest_PluginCall
 	Payload       isRpcRequest_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -202,6 +203,15 @@ func (x *RpcRequest) GetListConfigAuditors() *ListConfigAuditorsRequest {
 	return nil
 }
 
+func (x *RpcRequest) GetPluginCall() *PluginCallRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*RpcRequest_PluginCall); ok {
+			return x.PluginCall
+		}
+	}
+	return nil
+}
+
 type isRpcRequest_Payload interface {
 	isRpcRequest_Payload()
 }
@@ -258,6 +268,15 @@ type RpcRequest_ListConfigAuditors struct {
 	ListConfigAuditors *ListConfigAuditorsRequest `protobuf:"bytes,35,opt,name=list_config_auditors,json=listConfigAuditors,proto3,oneof"`
 }
 
+type RpcRequest_PluginCall struct {
+	// Plugin call: agent looks up plugin_id in its registry and
+	// dispatches to the wasm export named PluginCallRequest.method.
+	// One oneof arm covers every plugin so adding a new plugin
+	// never requires a proto / dispatch / wiring change. Defined in
+	// plugin.proto.
+	PluginCall *PluginCallRequest `protobuf:"bytes,100,opt,name=plugin_call,json=pluginCall,proto3,oneof"`
+}
+
 func (*RpcRequest_Exec) isRpcRequest_Payload() {}
 
 func (*RpcRequest_ListDir) isRpcRequest_Payload() {}
@@ -284,6 +303,8 @@ func (*RpcRequest_ConfigAudit) isRpcRequest_Payload() {}
 
 func (*RpcRequest_ListConfigAuditors) isRpcRequest_Payload() {}
 
+func (*RpcRequest_PluginCall) isRpcRequest_Payload() {}
+
 type RpcResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Populated on transport- or framework-level errors (e.g. unknown
@@ -305,6 +326,7 @@ type RpcResponse struct {
 	//	*RpcResponse_ListSecurityChecks
 	//	*RpcResponse_ConfigAudit
 	//	*RpcResponse_ListConfigAuditors
+	//	*RpcResponse_PluginCall
 	Payload       isRpcResponse_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -471,6 +493,15 @@ func (x *RpcResponse) GetListConfigAuditors() *ListConfigAuditorsResponse {
 	return nil
 }
 
+func (x *RpcResponse) GetPluginCall() *PluginCallResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*RpcResponse_PluginCall); ok {
+			return x.PluginCall
+		}
+	}
+	return nil
+}
+
 type isRpcResponse_Payload interface {
 	isRpcResponse_Payload()
 }
@@ -527,6 +558,10 @@ type RpcResponse_ListConfigAuditors struct {
 	ListConfigAuditors *ListConfigAuditorsResponse `protobuf:"bytes,35,opt,name=list_config_auditors,json=listConfigAuditors,proto3,oneof"`
 }
 
+type RpcResponse_PluginCall struct {
+	PluginCall *PluginCallResponse `protobuf:"bytes,100,opt,name=plugin_call,json=pluginCall,proto3,oneof"`
+}
+
 func (*RpcResponse_Exec) isRpcResponse_Payload() {}
 
 func (*RpcResponse_ListDir) isRpcResponse_Payload() {}
@@ -552,6 +587,8 @@ func (*RpcResponse_ListSecurityChecks) isRpcResponse_Payload() {}
 func (*RpcResponse_ConfigAudit) isRpcResponse_Payload() {}
 
 func (*RpcResponse_ListConfigAuditors) isRpcResponse_Payload() {}
+
+func (*RpcResponse_PluginCall) isRpcResponse_Payload() {}
 
 // --- One-shot exec ---
 type ExecRequest struct {
@@ -3603,7 +3640,7 @@ var File_rpc_proto protoreflect.FileDescriptor
 
 const file_rpc_proto_rawDesc = "" +
 	"\n" +
-	"\trpc.proto\x12\vplatypus.v2\"\xca\x06\n" +
+	"\trpc.proto\x12\vplatypus.v2\x1a\fplugin.proto\"\x8d\a\n" +
 	"\n" +
 	"RpcRequest\x12.\n" +
 	"\x04exec\x18\n" +
@@ -3619,8 +3656,10 @@ const file_rpc_proto_rawDesc = "" +
 	"\rsecurity_scan\x18  \x01(\v2 .platypus.v2.SecurityScanRequestH\x00R\fsecurityScan\x12Z\n" +
 	"\x14list_security_checks\x18! \x01(\v2&.platypus.v2.ListSecurityChecksRequestH\x00R\x12listSecurityChecks\x12D\n" +
 	"\fconfig_audit\x18\" \x01(\v2\x1f.platypus.v2.ConfigAuditRequestH\x00R\vconfigAudit\x12Z\n" +
-	"\x14list_config_auditors\x18# \x01(\v2&.platypus.v2.ListConfigAuditorsRequestH\x00R\x12listConfigAuditorsB\t\n" +
-	"\apayload\"\xee\x06\n" +
+	"\x14list_config_auditors\x18# \x01(\v2&.platypus.v2.ListConfigAuditorsRequestH\x00R\x12listConfigAuditors\x12A\n" +
+	"\vplugin_call\x18d \x01(\v2\x1e.platypus.v2.PluginCallRequestH\x00R\n" +
+	"pluginCallB\t\n" +
+	"\apayload\"\xb2\a\n" +
 	"\vRpcResponse\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12/\n" +
 	"\x04exec\x18\n" +
@@ -3636,7 +3675,9 @@ const file_rpc_proto_rawDesc = "" +
 	"\rsecurity_scan\x18  \x01(\v2!.platypus.v2.SecurityScanResponseH\x00R\fsecurityScan\x12[\n" +
 	"\x14list_security_checks\x18! \x01(\v2'.platypus.v2.ListSecurityChecksResponseH\x00R\x12listSecurityChecks\x12E\n" +
 	"\fconfig_audit\x18\" \x01(\v2 .platypus.v2.ConfigAuditResponseH\x00R\vconfigAudit\x12[\n" +
-	"\x14list_config_auditors\x18# \x01(\v2'.platypus.v2.ListConfigAuditorsResponseH\x00R\x12listConfigAuditorsB\t\n" +
+	"\x14list_config_auditors\x18# \x01(\v2'.platypus.v2.ListConfigAuditorsResponseH\x00R\x12listConfigAuditors\x12B\n" +
+	"\vplugin_call\x18d \x01(\v2\x1f.platypus.v2.PluginCallResponseH\x00R\n" +
+	"pluginCallB\t\n" +
 	"\apayload\"\xd9\x01\n" +
 	"\vExecRequest\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
@@ -3983,6 +4024,8 @@ var file_rpc_proto_goTypes = []any{
 	(*ListConfigAuditorsResponse)(nil), // 39: platypus.v2.ListConfigAuditorsResponse
 	nil,                                // 40: platypus.v2.ExecRequest.EnvEntry
 	nil,                                // 41: platypus.v2.SysInfoResponse.NetworkInterfacesEntry
+	(*PluginCallRequest)(nil),          // 42: platypus.v2.PluginCallRequest
+	(*PluginCallResponse)(nil),         // 43: platypus.v2.PluginCallResponse
 }
 var file_rpc_proto_depIdxs = []int32{
 	2,  // 0: platypus.v2.RpcRequest.exec:type_name -> platypus.v2.ExecRequest
@@ -3998,39 +4041,41 @@ var file_rpc_proto_depIdxs = []int32{
 	30, // 10: platypus.v2.RpcRequest.list_security_checks:type_name -> platypus.v2.ListSecurityChecksRequest
 	33, // 11: platypus.v2.RpcRequest.config_audit:type_name -> platypus.v2.ConfigAuditRequest
 	37, // 12: platypus.v2.RpcRequest.list_config_auditors:type_name -> platypus.v2.ListConfigAuditorsRequest
-	3,  // 13: platypus.v2.RpcResponse.exec:type_name -> platypus.v2.ExecResponse
-	6,  // 14: platypus.v2.RpcResponse.list_dir:type_name -> platypus.v2.ListDirResponse
-	8,  // 15: platypus.v2.RpcResponse.stat:type_name -> platypus.v2.StatResponse
-	10, // 16: platypus.v2.RpcResponse.delete:type_name -> platypus.v2.DeleteResponse
-	12, // 17: platypus.v2.RpcResponse.rename:type_name -> platypus.v2.RenameResponse
-	14, // 18: platypus.v2.RpcResponse.mkdir:type_name -> platypus.v2.MkdirResponse
-	16, // 19: platypus.v2.RpcResponse.chmod:type_name -> platypus.v2.ChmodResponse
-	21, // 20: platypus.v2.RpcResponse.sys_info:type_name -> platypus.v2.SysInfoResponse
-	25, // 21: platypus.v2.RpcResponse.process_list:type_name -> platypus.v2.ProcessListResponse
-	29, // 22: platypus.v2.RpcResponse.security_scan:type_name -> platypus.v2.SecurityScanResponse
-	32, // 23: platypus.v2.RpcResponse.list_security_checks:type_name -> platypus.v2.ListSecurityChecksResponse
-	36, // 24: platypus.v2.RpcResponse.config_audit:type_name -> platypus.v2.ConfigAuditResponse
-	39, // 25: platypus.v2.RpcResponse.list_config_auditors:type_name -> platypus.v2.ListConfigAuditorsResponse
-	40, // 26: platypus.v2.ExecRequest.env:type_name -> platypus.v2.ExecRequest.EnvEntry
-	4,  // 27: platypus.v2.ListDirResponse.entries:type_name -> platypus.v2.FileEntry
-	4,  // 28: platypus.v2.StatResponse.entry:type_name -> platypus.v2.FileEntry
-	41, // 29: platypus.v2.SysInfoResponse.network_interfaces:type_name -> platypus.v2.SysInfoResponse.NetworkInterfacesEntry
-	18, // 30: platypus.v2.SysInfoResponse.interfaces:type_name -> platypus.v2.NetworkInterface
-	19, // 31: platypus.v2.SysInfoResponse.disks:type_name -> platypus.v2.DiskPartition
-	20, // 32: platypus.v2.SysInfoResponse.users:type_name -> platypus.v2.UserSession
-	22, // 33: platypus.v2.SysInfoResponse.gpus:type_name -> platypus.v2.GPUInfo
-	23, // 34: platypus.v2.ProcessListResponse.processes:type_name -> platypus.v2.ProcessInfo
-	27, // 35: platypus.v2.SecurityScanResponse.findings:type_name -> platypus.v2.SecurityFinding
-	28, // 36: platypus.v2.SecurityScanResponse.checks:type_name -> platypus.v2.CheckResult
-	31, // 37: platypus.v2.ListSecurityChecksResponse.checks:type_name -> platypus.v2.AvailableSecurityCheck
-	34, // 38: platypus.v2.ConfigAuditResponse.leaks:type_name -> platypus.v2.ConfigLeak
-	35, // 39: platypus.v2.ConfigAuditResponse.auditors:type_name -> platypus.v2.AuditorResult
-	38, // 40: platypus.v2.ListConfigAuditorsResponse.auditors:type_name -> platypus.v2.AvailableAuditor
-	41, // [41:41] is the sub-list for method output_type
-	41, // [41:41] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	42, // 13: platypus.v2.RpcRequest.plugin_call:type_name -> platypus.v2.PluginCallRequest
+	3,  // 14: platypus.v2.RpcResponse.exec:type_name -> platypus.v2.ExecResponse
+	6,  // 15: platypus.v2.RpcResponse.list_dir:type_name -> platypus.v2.ListDirResponse
+	8,  // 16: platypus.v2.RpcResponse.stat:type_name -> platypus.v2.StatResponse
+	10, // 17: platypus.v2.RpcResponse.delete:type_name -> platypus.v2.DeleteResponse
+	12, // 18: platypus.v2.RpcResponse.rename:type_name -> platypus.v2.RenameResponse
+	14, // 19: platypus.v2.RpcResponse.mkdir:type_name -> platypus.v2.MkdirResponse
+	16, // 20: platypus.v2.RpcResponse.chmod:type_name -> platypus.v2.ChmodResponse
+	21, // 21: platypus.v2.RpcResponse.sys_info:type_name -> platypus.v2.SysInfoResponse
+	25, // 22: platypus.v2.RpcResponse.process_list:type_name -> platypus.v2.ProcessListResponse
+	29, // 23: platypus.v2.RpcResponse.security_scan:type_name -> platypus.v2.SecurityScanResponse
+	32, // 24: platypus.v2.RpcResponse.list_security_checks:type_name -> platypus.v2.ListSecurityChecksResponse
+	36, // 25: platypus.v2.RpcResponse.config_audit:type_name -> platypus.v2.ConfigAuditResponse
+	39, // 26: platypus.v2.RpcResponse.list_config_auditors:type_name -> platypus.v2.ListConfigAuditorsResponse
+	43, // 27: platypus.v2.RpcResponse.plugin_call:type_name -> platypus.v2.PluginCallResponse
+	40, // 28: platypus.v2.ExecRequest.env:type_name -> platypus.v2.ExecRequest.EnvEntry
+	4,  // 29: platypus.v2.ListDirResponse.entries:type_name -> platypus.v2.FileEntry
+	4,  // 30: platypus.v2.StatResponse.entry:type_name -> platypus.v2.FileEntry
+	41, // 31: platypus.v2.SysInfoResponse.network_interfaces:type_name -> platypus.v2.SysInfoResponse.NetworkInterfacesEntry
+	18, // 32: platypus.v2.SysInfoResponse.interfaces:type_name -> platypus.v2.NetworkInterface
+	19, // 33: platypus.v2.SysInfoResponse.disks:type_name -> platypus.v2.DiskPartition
+	20, // 34: platypus.v2.SysInfoResponse.users:type_name -> platypus.v2.UserSession
+	22, // 35: platypus.v2.SysInfoResponse.gpus:type_name -> platypus.v2.GPUInfo
+	23, // 36: platypus.v2.ProcessListResponse.processes:type_name -> platypus.v2.ProcessInfo
+	27, // 37: platypus.v2.SecurityScanResponse.findings:type_name -> platypus.v2.SecurityFinding
+	28, // 38: platypus.v2.SecurityScanResponse.checks:type_name -> platypus.v2.CheckResult
+	31, // 39: platypus.v2.ListSecurityChecksResponse.checks:type_name -> platypus.v2.AvailableSecurityCheck
+	34, // 40: platypus.v2.ConfigAuditResponse.leaks:type_name -> platypus.v2.ConfigLeak
+	35, // 41: platypus.v2.ConfigAuditResponse.auditors:type_name -> platypus.v2.AuditorResult
+	38, // 42: platypus.v2.ListConfigAuditorsResponse.auditors:type_name -> platypus.v2.AvailableAuditor
+	43, // [43:43] is the sub-list for method output_type
+	43, // [43:43] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_rpc_proto_init() }
@@ -4038,6 +4083,7 @@ func file_rpc_proto_init() {
 	if File_rpc_proto != nil {
 		return
 	}
+	file_plugin_proto_init()
 	file_rpc_proto_msgTypes[0].OneofWrappers = []any{
 		(*RpcRequest_Exec)(nil),
 		(*RpcRequest_ListDir)(nil),
@@ -4052,6 +4098,7 @@ func file_rpc_proto_init() {
 		(*RpcRequest_ListSecurityChecks)(nil),
 		(*RpcRequest_ConfigAudit)(nil),
 		(*RpcRequest_ListConfigAuditors)(nil),
+		(*RpcRequest_PluginCall)(nil),
 	}
 	file_rpc_proto_msgTypes[1].OneofWrappers = []any{
 		(*RpcResponse_Exec)(nil),
@@ -4067,6 +4114,7 @@ func file_rpc_proto_init() {
 		(*RpcResponse_ListSecurityChecks)(nil),
 		(*RpcResponse_ConfigAudit)(nil),
 		(*RpcResponse_ListConfigAuditors)(nil),
+		(*RpcResponse_PluginCall)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

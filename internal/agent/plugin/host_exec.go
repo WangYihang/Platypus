@@ -1,0 +1,90 @@
+package plugin
+
+import (
+	"context"
+	"encoding/json"
+	"os/exec"
+	"time"
+
+	extism "github.com/extism/go-sdk"
+)
+
+// host_exec lets a plugin spawn one of an explicit command allowlist
+// (manifest.capabilities.exec.commands) and capture its stdout +
+// stderr. Capability gate: CapExec.
+//
+// Two enforcement layers: the operator-confirmed CapExec grant
+// (catalog) and the manifest's per-command allowlist. Both must be
+// present for the call to proceed.
+
+type execRequest struct {
+	Command   string            `json:"command"`
+	Args      []string          `json:"args"`
+	Env       map[string]string `json:"env"`
+	CWD       string            `json:"cwd"`
+	TimeoutMS uint32            `json:"timeout_ms"`
+}
+
+type execResponse struct {
+	ExitCode int    `json:"exit_code"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+}
+
+func (pctx *pluginCtx) hostExec(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	if !pctx.granted[CapExec] {
+		returnEnvelope(p, stack, denied("exec"))
+		return
+	}
+	raw, err := readStringArg(p, stack[0])
+	if err != nil {
+		returnEnvelope(p, stack, failed("read_request: "+err.Error()))
+		return
+	}
+	var req execRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		returnEnvelope(p, stack, failed("decode_request: "+err.Error()))
+		return
+	}
+	if pctx.manifest.Capabilities.Exec == nil {
+		returnEnvelope(p, stack, denied("exec (no manifest spec)"))
+		return
+	}
+	allowed := false
+	for _, c := range pctx.manifest.Capabilities.Exec.Commands {
+		if c == req.Command {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		returnEnvelope(p, stack, denied("command_not_in_allowlist: "+req.Command))
+		return
+	}
+
+	cctx := ctx
+	if req.TimeoutMS > 0 {
+		var cancel context.CancelFunc
+		cctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(cctx, req.Command, req.Args...)
+	cmd.Dir = req.CWD
+	if len(req.Env) > 0 {
+		env := make([]string, 0, len(req.Env))
+		for k, v := range req.Env {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
+	}
+	stdout, err := cmd.Output()
+	resp := execResponse{Stdout: string(stdout)}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		resp.ExitCode = exitErr.ExitCode()
+		resp.Stderr = string(exitErr.Stderr)
+	} else if err != nil {
+		returnEnvelope(p, stack, failed("exec: "+err.Error()))
+		return
+	}
+	returnEnvelope(p, stack, okData(resp))
+}

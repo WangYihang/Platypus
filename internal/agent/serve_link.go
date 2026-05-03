@@ -30,6 +30,7 @@ type AgentHandlerDeps struct {
 	FileArchive FileArchiveHandler
 	TunnelPull  TunnelPullHandler
 	Upgrade     UpgradeHandler
+	PluginMgmt  PluginMgmtHandler
 }
 
 // ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
@@ -67,6 +68,12 @@ type TunnelPullHandler func(ctx context.Context, stream io.ReadWriteCloser, req 
 //
 // Production impl: (*UpgradeRunner).Handle in upgrade_stream.go.
 type UpgradeHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.AgentUpgradeRequest) error
+
+// PluginMgmtHandler processes one STREAM_TYPE_PLUGIN_MGMT stream:
+// install / uninstall / list / enable / get_logs. The dispatcher inside
+// the handler picks the variant from req.op. Production impl:
+// (*plugin.Registry).HandleMgmt in internal/agent/plugin/mgmt_stream.go.
+type PluginMgmtHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.PluginMgmtRequest) error
 
 // ServeLink is the agent-side accept loop. For each incoming yamux
 // stream it reads the StreamHeader (already done by sess.Accept),
@@ -233,6 +240,19 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 		}
 		if err := deps.Upgrade(ctx, stream, &req); err != nil {
 			log.Warn("agent: upgrade stream for %s: %v", hdr.CorrelationId, err)
+		}
+	case v2pb.StreamType_STREAM_TYPE_PLUGIN_MGMT:
+		if deps.PluginMgmt == nil {
+			rejectStream(stream, "unsupported_type", "plugin-mgmt handler not registered")
+			return
+		}
+		var req v2pb.PluginMgmtRequest
+		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
+			rejectStream(stream, "malformed_metadata", "parse PluginMgmtRequest: "+err.Error())
+			return
+		}
+		if err := deps.PluginMgmt(ctx, stream, &req); err != nil {
+			log.Warn("agent: plugin-mgmt stream for %s: %v", hdr.CorrelationId, err)
 		}
 	default:
 		rejectStream(stream, "unsupported_type", fmt.Sprintf("no handler for %s", hdr.Type))

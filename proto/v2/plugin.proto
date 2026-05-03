@@ -1,0 +1,261 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// Plugin system messages.
+//
+// Two surfaces share this file:
+//
+//   1. Per-call invocation. PluginCallRequest / PluginCallResponse
+//      ride inside RpcRequest.payload (oneof field 100). One agent-side
+//      handler — the plugin Registry's Invoke method — owns this arm
+//      and multiplexes by plugin_id+method, so adding a plugin never
+//      requires another oneof arm or another switch case in
+//      dispatchRPCInner. The plugin author defines the inner payload
+//      schema; we treat it as opaque bytes.
+//
+//   2. Management lifecycle. PluginMgmtRequest is the
+//      StreamHeader.metadata for STREAM_TYPE_PLUGIN_MGMT. Each variant
+//      maps to one operator-driven action (install / uninstall / list /
+//      enable / get_logs). For long-running operations the agent emits
+//      PluginInstallProgress frames over the open stream — same shape
+//      as STREAM_TYPE_AGENT_UPGRADE — until a terminal phase is
+//      reached.
+//
+// Trust model:
+//   - Every .wasm binary must carry a detached minisign signature.
+//   - The agent verifies the signature against a pubkey from
+//     ~/.platypus/agent/plugins/publishers/ at install time and on
+//     every load. Verification failure → quarantine + agent-emitted
+//     event; the binary never executes.
+//   - The capability set the operator confirmed at install time
+//     (PluginInstallRequest.granted_capabilities) is enforced on every
+//     host-function call inside the wasm sandbox. The manifest's
+//     declared capabilities are the upper bound; the granted set is
+//     what's actually allowed.
+
+// PluginCallRequest is wrapped in RpcRequest.plugin_call. The agent
+// looks up plugin_id in its in-memory registry, refuses if the plugin
+// is not installed/enabled, and then dispatches `payload` to the wasm
+// export named `method`. timeout_ms is enforced via context deadline;
+// 0 falls back to the manifest's max_invocation_ms, capped agent-side.
+message PluginCallRequest {
+  string plugin_id  = 1;
+  string method     = 2;
+  bytes  payload    = 3;
+  uint32 timeout_ms = 4;
+}
+
+// PluginCallResponse mirrors the request. `payload` is the raw bytes
+// the plugin wrote to its output (schema is plugin-defined). `error`
+// is set when the wasm export returned a non-zero status, when the
+// plugin/method is unknown, or when a host-function call denied a
+// capability — never on transport failures (those bubble up as the
+// outer RpcResponse.error).
+//
+// fuel_used and mem_peak_bytes are accounting fields populated by the
+// agent runtime so the server-side audit log can spot misbehaving
+// plugins (a plugin chewing through fuel on every call gets visibility
+// even if its caller doesn't notice).
+message PluginCallResponse {
+  bytes  payload         = 1;
+  string error           = 2;
+  uint64 fuel_used       = 3;
+  uint64 mem_peak_bytes  = 4;
+}
+
+// PluginMgmtRequest is the StreamHeader.metadata for
+// STREAM_TYPE_PLUGIN_MGMT. Exactly one variant is set; the agent rejects
+// the stream with code="malformed_metadata" if oneof is empty.
+message PluginMgmtRequest {
+  oneof op {
+    PluginInstallRequest   install   = 1;
+    PluginUninstallRequest uninstall = 2;
+    PluginListRequest      list      = 3;
+    PluginEnableRequest    enable    = 4;
+    PluginGetLogsRequest   get_logs  = 5;
+  }
+}
+
+// PluginMgmtResponse is the terminal response for non-streaming ops
+// (list / uninstall / enable / get_logs). For install the agent emits
+// PluginInstallProgress frames instead and the response is implicit in
+// the terminal PHASE_INSTALLED / PHASE_FAILED frame.
+message PluginMgmtResponse {
+  oneof result {
+    PluginListResponse      list      = 3;
+    PluginUninstallResponse uninstall = 2;
+    PluginEnableResponse    enable    = 4;
+    PluginGetLogsResponse   get_logs  = 5;
+  }
+  // Set when the request itself failed (auth, unknown plugin, etc.)
+  // before the per-op handler ran.
+  string error = 100;
+}
+
+// PluginInstallRequest: install (or upgrade) one plugin on this agent.
+//
+// `source` carries the bytes via one of two paths:
+//   - inline: server already has the .wasm + .minisig (operator
+//     uploaded it via desktop UI) and pushes them as chunked frames
+//     after StreamAccept. Used in MVP and air-gapped deployments.
+//   - url: agent fetches from a marketplace mirror itself over HTTPS.
+//     Used by marketplace installs so the bytes don't roundtrip
+//     through the server.
+//
+// `publisher_pubkey` is the minisign public key the agent will use to
+// verify the binary's detached .minisig. The agent rejects installs
+// whose pubkey is not in publishers/ unless the project policy
+// PROJECT_PLUGIN_POLICY.allow_unknown_publishers is true (Phase 2).
+//
+// `granted_capabilities` is the operator-confirmed authorization set;
+// each entry is a capability id (e.g. "fs.read", "exec",
+// "net.http"). The agent enforces this set on every host-function
+// call regardless of what the manifest claims.
+message PluginInstallRequest {
+  string plugin_id = 1;
+  string version   = 2;
+
+  oneof source {
+    PluginInlineSource inline = 10;
+    PluginURLSource    url    = 11;
+  }
+
+  // Minisign Ed25519 public key, raw 32 bytes (not minisign's base64
+  // wire format — that's parsed server-side and forwarded as raw).
+  bytes publisher_pubkey = 20;
+
+  // Capability ids the operator granted. Must be a subset of the
+  // manifest's declared capabilities; agent verifies this and rejects
+  // with error_code="capability_overgrant" otherwise.
+  repeated string granted_capabilities = 30;
+
+  // Operator string for the audit log (e.g. "user:alice").
+  string actor = 40;
+}
+
+// PluginInlineSource: server pushes the .wasm + .minisig + manifest as
+// chunked frames over the stream after StreamAccept. The first three
+// frames after the install request, in order, are
+// PluginInstallChunk{kind=MANIFEST}, PluginInstallChunk{kind=WASM},
+// PluginInstallChunk{kind=SIGNATURE}; each may be split across
+// multiple frames bounded by `last`.
+message PluginInlineSource {
+  // Total .wasm size in bytes; the agent uses this to validate the
+  // streamed length before instantiating wazero.
+  uint64 wasm_size_bytes = 1;
+}
+
+// PluginURLSource: agent dials the URL itself. sha256 is mandatory
+// and verified before any signature check (defense in depth: catches
+// truncation / mirror-corruption before the more expensive sig
+// verification).
+message PluginURLSource {
+  string wasm_url      = 1;
+  string signature_url = 2;
+  string manifest_url  = 3;
+  bytes  wasm_sha256   = 10; // 32 bytes
+}
+
+message PluginInstallChunk {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_MANIFEST    = 1;
+    KIND_WASM        = 2;
+    KIND_SIGNATURE   = 3;
+  }
+  Kind   kind = 1;
+  bytes  data = 2;
+  bool   last = 3;
+}
+
+// PluginInstallProgress: agent->server frames during inline / URL
+// install. Mirrors UpgradeProgress; new phases reflect the extra
+// signature verification step.
+message PluginInstallProgress {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_RECEIVE     = 1; // reading inline chunks or HTTP body
+    PHASE_VERIFY_SHA  = 2;
+    PHASE_VERIFY_SIG  = 3;
+    PHASE_EXTRACT     = 4; // landing into installed/<id>/<version>/
+    PHASE_LOAD        = 5; // extism.NewPlugin() + smoke instantiate
+    PHASE_INSTALLED   = 6; // terminal ok
+    PHASE_FAILED      = 7; // terminal err; error_* populated
+  }
+  Phase  phase         = 1;
+  uint64 bytes_done    = 2;
+  uint64 bytes_total   = 3;
+  string error_code    = 4;
+  string error_message = 5;
+}
+
+message PluginUninstallRequest {
+  string plugin_id = 1;
+  // When true, also wipes ~/.platypus/agent/plugins/installed/<id>/
+  // /state/. When false (default), state is preserved so a reinstall
+  // of the same plugin id picks back up where it left off.
+  bool   purge_state = 2;
+  string actor       = 3;
+}
+
+message PluginUninstallResponse {
+  string error = 1;
+}
+
+message PluginListRequest {}
+
+message PluginListResponse {
+  repeated PluginInfo plugins = 1;
+  string error                = 2;
+}
+
+// PluginInfo is one row of the agent's installed-plugin catalog as
+// reported back to the server. enabled mirrors the catalog flag; a
+// disabled plugin's wasm is loaded but its Invoke path returns
+// error="plugin disabled" without entering the runtime.
+message PluginInfo {
+  string id                          = 1;
+  string name                        = 2;
+  string version                     = 3;
+  string author                      = 4;
+  bool   enabled                     = 5;
+  repeated string capabilities       = 6; // granted set (not manifest set)
+  uint64 install_unix                = 7;
+  string source_url                  = 8; // empty for inline installs
+  string publisher_key_id            = 9; // human-readable minisign key id
+}
+
+message PluginEnableRequest {
+  string plugin_id = 1;
+  bool   enabled   = 2;
+  string actor     = 3;
+}
+
+message PluginEnableResponse {
+  string error = 1;
+}
+
+// PluginGetLogsRequest pulls the tail of the per-plugin log buffer
+// the agent keeps in memory. The buffer is bounded; entries older
+// than the cap are dropped silently. tail_lines=0 means "everything
+// currently buffered".
+message PluginGetLogsRequest {
+  string plugin_id  = 1;
+  uint32 tail_lines = 2;
+}
+
+message PluginGetLogsResponse {
+  repeated PluginLogEntry entries = 1;
+  string error                    = 2;
+}
+
+message PluginLogEntry {
+  int64  unix_nano = 1;
+  // "debug" | "info" | "warn" | "error". Mirrors host_log levels.
+  string level     = 2;
+  string message   = 3;
+  // Correlation id of the inbound request that produced the log line,
+  // or empty for plugin-internal lines (startup, periodic tasks).
+  string correlation_id = 4;
+}

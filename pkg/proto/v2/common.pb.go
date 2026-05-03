@@ -80,6 +80,20 @@ const (
 	// -ldflags). mTLS to the distributor is incidental — the
 	// signature is the source of trust, not the transport.
 	StreamType_STREAM_TYPE_AGENT_UPGRADE StreamType = 11
+	// server->agent. Plugin lifecycle management: install, uninstall,
+	// list, enable/disable, get logs. Header metadata is
+	// PluginMgmtRequest. For install the stream stays open and carries
+	// PluginInstallChunk frames (inline source) or
+	// PluginInstallProgress frames (URL source) until a terminal
+	// PHASE_INSTALLED / PHASE_FAILED frame closes it. For other ops
+	// the agent writes a single PluginMgmtResponse and closes.
+	//
+	// Trust model: the binary is verified per-plugin against a minisign
+	// Ed25519 publisher key delivered in PluginInstallRequest, not the
+	// agent's bundled SigningPublicKey. The bundled key only protects
+	// the agent's own self-update path; plugins are a separate trust
+	// domain so rotating one doesn't compromise the other.
+	StreamType_STREAM_TYPE_PLUGIN_MGMT StreamType = 12
 )
 
 // Enum value maps for StreamType.
@@ -97,6 +111,7 @@ var (
 		9:  "STREAM_TYPE_FILE_SCAN",
 		10: "STREAM_TYPE_FILE_ARCHIVE",
 		11: "STREAM_TYPE_AGENT_UPGRADE",
+		12: "STREAM_TYPE_PLUGIN_MGMT",
 	}
 	StreamType_value = map[string]int32{
 		"STREAM_TYPE_UNSPECIFIED":   0,
@@ -111,6 +126,7 @@ var (
 		"STREAM_TYPE_FILE_SCAN":     9,
 		"STREAM_TYPE_FILE_ARCHIVE":  10,
 		"STREAM_TYPE_AGENT_UPGRADE": 11,
+		"STREAM_TYPE_PLUGIN_MGMT":   12,
 	}
 )
 
@@ -337,7 +353,7 @@ const file_common_proto_rawDesc = "" +
 	"\fStreamAccept\"<\n" +
 	"\fStreamReject\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xd8\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xf5\x02\n" +
 	"\n" +
 	"StreamType\x12\x1b\n" +
 	"\x17STREAM_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
@@ -352,7 +368,8 @@ const file_common_proto_rawDesc = "" +
 	"\x15STREAM_TYPE_FILE_SCAN\x10\t\x12\x1c\n" +
 	"\x18STREAM_TYPE_FILE_ARCHIVE\x10\n" +
 	"\x12\x1d\n" +
-	"\x19STREAM_TYPE_AGENT_UPGRADE\x10\vB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x19STREAM_TYPE_AGENT_UPGRADE\x10\v\x12\x1b\n" +
+	"\x17STREAM_TYPE_PLUGIN_MGMT\x10\fB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_common_proto_rawDescOnce sync.Once

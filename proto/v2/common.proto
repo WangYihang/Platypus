@@ -70,6 +70,21 @@ enum StreamType {
   // -ldflags). mTLS to the distributor is incidental — the
   // signature is the source of trust, not the transport.
   STREAM_TYPE_AGENT_UPGRADE = 11;
+
+  // server->agent. Plugin lifecycle management: install, uninstall,
+  // list, enable/disable, get logs. Header metadata is
+  // PluginMgmtRequest. For install the stream stays open and carries
+  // PluginInstallChunk frames (inline source) or
+  // PluginInstallProgress frames (URL source) until a terminal
+  // PHASE_INSTALLED / PHASE_FAILED frame closes it. For other ops
+  // the agent writes a single PluginMgmtResponse and closes.
+  //
+  // Trust model: the binary is verified per-plugin against a minisign
+  // Ed25519 publisher key delivered in PluginInstallRequest, not the
+  // agent's bundled SigningPublicKey. The bundled key only protects
+  // the agent's own self-update path; plugins are a separate trust
+  // domain so rotating one doesn't compromise the other.
+  STREAM_TYPE_PLUGIN_MGMT = 12;
 }
 
 // StreamHeader is the first protobuf message on every new yamux
