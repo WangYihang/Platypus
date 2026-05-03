@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { File, Info, Plug, AppWindow, ShieldCheck, KeyRound, Cable } from "lucide-react";
+import { File, Info, Plug, AppWindow, ShieldCheck, KeyRound, Cable, Puzzle } from "lucide-react";
 
 import { palette } from "../../layout/theme";
 
@@ -11,6 +11,7 @@ export const ACTIVITIES = [
     "security",
     "config",
     "tunnels",
+    "plugins",
 ] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 
@@ -30,6 +31,7 @@ export const ACTIVITY_SPECS: ActivitySpec[] = [
     { key: "security", label: "Security", icon: <ShieldCheck className={ICON_SIZE} /> },
     { key: "config", label: "Config", icon: <KeyRound className={ICON_SIZE} /> },
     { key: "tunnels", label: "Tunnels", icon: <Cable className={ICON_SIZE} /> },
+    { key: "plugins", label: "Plugins", icon: <Puzzle className={ICON_SIZE} /> },
 ];
 
 interface Props {

@@ -37,6 +37,7 @@ import SecurityTab from "./host/SecurityTab";
 import ConfigTab from "./host/ConfigTab";
 import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
+import PluginsTab from "./host/PluginsTab";
 
 import { Button } from "@/components/ui/button";
 
@@ -393,6 +394,18 @@ export default function HostView({ projectID, hostID }: Props) {
                             }}
                         >
                             <TunnelsTab projectID={projectID} hostID={hostID} />
+                        </div>
+                        <div
+                            style={{
+                                display: activeActivity === "plugins" ? "block" : "none",
+                                padding: space[4],
+                            }}
+                        >
+                            <PluginsTab
+                                projectID={projectID}
+                                hostID={hostID}
+                                active={activeActivity === "plugins"}
+                            />
                         </div>
                     </div>
                     <BottomPanel
