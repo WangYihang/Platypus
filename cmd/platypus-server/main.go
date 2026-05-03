@@ -453,6 +453,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
+	api.RegisterV1AgentPluginRoutes(rest, api.NewAgentPluginsHandler(agentLinkSvc), rbac)
 	if meshNode != nil {
 		meshLinkH := mesh.NewLinkHandler(meshNode, mesh.CertPoolFn(api.ProjectsCAPool(db)))
 		rest.GET(mesh.LinkPath, gin.WrapH(meshLinkH))
