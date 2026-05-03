@@ -71,14 +71,17 @@ func (pctx *pluginCtx) clearActiveStream() {
 // hostStreamRead pulls one frame off the inbound channel. Returns
 // empty data on EOF. Wire shape: envelope.Data is a base64-encoded
 // JSON string; the plugin's PDK decodes it on the wasm side.
+//
+// We don't short-circuit on s.inboundEOF here even though the pump
+// sets it on close: the pump may have pushed a final DATA chunk into
+// the cap=1 buffer and *then* closed the channel + set the flag, so
+// reading the flag without first draining would lose that last chunk.
+// The receive's `!ok` detection on a closed channel is correct
+// regardless of buffer state.
 func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
 	s := pctx.activeStream()
 	if s == nil {
 		returnEnvelope(p, stack, failed("stream_not_active"))
-		return
-	}
-	if s.inboundEOF.Load() {
-		returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString("")})
 		return
 	}
 	select {

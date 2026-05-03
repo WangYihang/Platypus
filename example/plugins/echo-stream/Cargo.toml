@@ -1,0 +1,21 @@
+[package]
+name = "echo-stream"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "echo_stream"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

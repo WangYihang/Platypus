@@ -1,0 +1,38 @@
+api_version: 1
+id: com.platypus.example-echo-stream
+name: Echo Stream
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Reference wasm-streaming plugin: reads bytes off the inbound stream
+  and writes them straight back. Smoke test for the
+  STREAM_TYPE_PLUGIN_STREAM dispatch path — wire frames in, wire
+  frames out, no host capabilities used beyond the stream primitives
+  themselves.
+
+runtime:
+  type: wasm
+  entry: echo_stream.wasm
+  abi: extism/1
+
+streams:
+  - name: echo
+    stream_type: STREAM_TYPE_PLUGIN_STREAM
+    host_handler: wasm:echo
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 30000
+
+# No capabilities beyond the implicit host_stream_* primitives — those
+# are always available to wasm plugins regardless of the capabilities
+# block (they only operate on the agent-provided active stream, never
+# touch the host system).
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: echo_stream.wasm.minisig
