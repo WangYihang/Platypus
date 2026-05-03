@@ -227,7 +227,6 @@ func loadOne(ctx context.Context, paths Paths, e CatalogEntry, resolve Publisher
 		},
 		maxFileReadSize: opts.MaxFileReadBytes,
 		maxKVValueSize:  opts.MaxKVValueBytes,
-		streams:         newStreamRegistry(),
 	}
 	return l, nil
 }

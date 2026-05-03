@@ -5,52 +5,15 @@ import (
 	"testing"
 )
 
-// Pure-Go unit tests for the streamRegistry + streamCtx state
-// machine. The wasm-side host_stream_* host functions go through
-// extism's runtime, which we don't exercise here (mocking the
-// extism.CurrentPlugin handle is impractical); instead we cover
-// the registry mechanics + the EOF / closed-write atomics, which
-// are the bits the host functions delegate to.
+// Pure-Go unit tests for the streamCtx state machine. The wasm-side
+// host_stream_* host functions go through extism's runtime, which
+// we don't exercise here (mocking the extism.CurrentPlugin handle
+// is impractical); instead we cover the channel + atomics shape
+// that the host functions delegate to. End-to-end coverage with a
+// real wasm-streaming plugin is the dispatchWasmStream tests.
 //
-// End-to-end coverage with a real wasm-streaming plugin is the
-// follow-up commit that migrates one stream type (file_read is
-// the planned candidate).
-
-func TestStreamRegistry_OpenAssignsUniqueIDs(t *testing.T) {
-	r := newStreamRegistry()
-	a := r.open()
-	b := r.open()
-	c := r.open()
-	if a.id == b.id || b.id == c.id || a.id == c.id {
-		t.Fatalf("expected unique ids, got %d %d %d", a.id, b.id, c.id)
-	}
-	if a.id == 0 {
-		t.Errorf("ids should be 1-indexed (0 reserved as 'invalid')")
-	}
-}
-
-func TestStreamRegistry_GetReturnsSameInstance(t *testing.T) {
-	r := newStreamRegistry()
-	s := r.open()
-	got := r.get(s.id)
-	if got != s {
-		t.Errorf("get returned a different *streamCtx than open allocated")
-	}
-	if r.get(99999) != nil {
-		t.Errorf("get of unknown id should return nil")
-	}
-}
-
-func TestStreamRegistry_CloseRemovesEntry(t *testing.T) {
-	r := newStreamRegistry()
-	s := r.open()
-	r.closeID(s.id)
-	if r.get(s.id) != nil {
-		t.Errorf("closed id still resolves")
-	}
-	// Idempotent.
-	r.closeID(s.id)
-}
+// streamRegistry was removed in favour of pctx.activeStream — see
+// host_stream_active_test.go for its lifecycle tests.
 
 func TestStreamCtx_AtomicsZeroValueBehaviour(t *testing.T) {
 	var s streamCtx
@@ -64,22 +27,23 @@ func TestStreamCtx_AtomicsZeroValueBehaviour(t *testing.T) {
 	if old := s.writeClosed.Swap(true); old {
 		t.Errorf("first writeClosed.Swap(true) = %v; want false", old)
 	}
-	// Second Swap returns the previous value (true) — the host fn
-	// uses this to detect "already closed" without an extra mutex.
+	// Second Swap returns true — the host_stream_close path uses
+	// this to detect "already closed" without an extra mutex.
 	if old := s.writeClosed.Swap(true); !old {
 		t.Errorf("second writeClosed.Swap(true) = %v; want true", old)
 	}
 }
 
 // Cross-goroutine smoke: producer + consumer over a channel + EOF
-// signal. Mirrors what the agent's STREAM_TYPE_PLUGIN_STREAM
-// dispatcher does (when it exists): one goroutine drains the wire
-// into ctx.inbound, the wasm-driven consumer reads from it; one
-// goroutine drains ctx.outbound to the wire, the wasm-driven
-// producer writes to it.
+// signal. Mirrors what the dispatcher runs at production time —
+// one goroutine drains the wire into ctx.inbound + closes when EOF;
+// the wasm-driven consumer (via host_stream_read) reads from it.
 func TestStreamCtx_ProducerConsumer(t *testing.T) {
-	r := newStreamRegistry()
-	s := r.open()
+	s := &streamCtx{
+		id:       1,
+		inbound:  make(chan []byte, 1),
+		outbound: make(chan []byte, 1),
+	}
 
 	var produced int32
 	go func() {

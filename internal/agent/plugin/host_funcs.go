@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	extism "github.com/extism/go-sdk"
@@ -32,12 +33,16 @@ type pluginCtx struct {
 	maxFileReadSize int64
 	maxKVValueSize  int64
 
-	// streams holds the per-plugin map of active wasm-streaming
-	// contexts. Populated when STREAM_TYPE_PLUGIN_STREAM dispatch
-	// allocates a per-stream channel pair; the host_stream_*
-	// primitives operate against entries here. Always non-nil for
-	// uniformity even when no stream is active.
-	streams *streamRegistry
+	// activeStreamPtr holds the per-plugin active wasm-streaming
+	// context. Set by the agent's dispatcher just before invoking
+	// the wasm method, cleared after the method returns. The
+	// host_stream_* primitives consult it via the activeStream() /
+	// setActiveStream() / clearActiveStream() helpers.
+	//
+	// Only one stream is in flight per plugin instance because
+	// extism.Plugin.Call is serialised on loaded.mu — so a single
+	// pointer slot (no map / id scheme) is sufficient.
+	activeStreamPtr atomic.Pointer[streamCtx]
 }
 
 // buildHostFunctions returns the slice handed to extism.NewPlugin for
@@ -98,11 +103,16 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 		// allocates per-stream channels + populates pctx.streams
 		// hasn't been wired yet — the primitives return
 		// "stream_not_found" until that lands.
-		newHostFunc("host_stream_read", []api.ValueType{api.ValueTypeI32},
+		// Wasm-streaming primitives operate on the per-plugin
+		// "active stream" slot the dispatcher sets before each
+		// wasm method call. No stream id parameter — extism's
+		// per-plugin call serialisation guarantees at most one
+		// active stream per instance.
+		newHostFunc("host_stream_read", []api.ValueType{},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamRead),
-		newHostFunc("host_stream_write", []api.ValueType{api.ValueTypeI32, api.ValueTypeI64},
+		newHostFunc("host_stream_write", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamWrite),
-		newHostFunc("host_stream_close", []api.ValueType{api.ValueTypeI32},
+		newHostFunc("host_stream_close", []api.ValueType{},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamClose),
 	}
 }

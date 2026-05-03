@@ -3,109 +3,78 @@ package plugin
 import (
 	"context"
 	"encoding/base64"
-	"sync"
 	"sync/atomic"
 
 	extism "github.com/extism/go-sdk"
 )
 
 // host_stream_read / host_stream_write / host_stream_close are the
-// primitives a wasm-streaming plugin uses to do IO mid-stream. Each
-// operates on a "stream id" — a small integer the host hands the
-// plugin via the inbound metadata payload (see PluginStreamRequest).
-// The stream itself is a pair of byte channels owned by the agent;
-// the wasm side never sees raw OS file descriptors.
+// primitives a wasm-streaming plugin uses to do IO mid-stream.
 //
-// Lifecycle (Phase-2 design — no plugin uses these primitives yet,
-// but the surface is wired so the next commit can migrate file_read
-// or process_open without touching this file):
+// The wasm side does NOT pass a stream id — the agent's dispatcher
+// sets pctx.activeStream just before invoking the wasm method, and
+// each host fn dereferences it. extism.Plugin is not goroutine-safe
+// (we already serialise on loaded.mu) so at most one stream is in
+// flight per plugin instance + a single active-stream slot is
+// sufficient.
 //
-//   1. Agent's STREAM_TYPE_PLUGIN_STREAM dispatcher allocates a
-//      *streamCtx via streams.open() and stashes the id in the
-//      inbound PluginStreamRequest payload (a small int the wasm
-//      method reads from extism input).
-//   2. The dispatcher invokes the wasm export named in the
-//      manifest's streams[].host_handler="wasm:<method>" marker.
-//   3. The wasm export calls host_stream_read(stream_id) to consume
-//      incoming bytes (one PluginStreamFrame at a time). Returns
-//      empty data when the inbound side is at EOF.
-//   4. host_stream_write(stream_id, bytes) sends a PluginStreamFrame
-//      outbound. Backpressure = blocking on the channel.
-//   5. host_stream_close(stream_id) signals "done writing"; the
-//      agent emits KIND_EOF on the wire.
-//   6. The wasm export returns; the agent collects pending output,
-//      emits a terminal frame, closes the wire stream.
+// Lifecycle (Phase-2; the dispatchWasmStream landing this surface
+// is the next TDD step — today's host fns return stream_not_found
+// because nothing sets activeStream):
 //
-// Today's state: the primitives are registered (every plugin sees
-// them in its host imports, capability-gated). DispatchStream still
-// goes through the legacy host-provider path for every stream type
-// because no plugin manifest references "wasm:" as host_handler yet.
-// The migration of one stream type (file_read is the simplest
-// candidate — unidirectional bytes, no PTY interleaving) is a
-// follow-up commit.
+//   1. Agent's stream dispatcher receives FILE_READ (or any other
+//      type the manifest's claim resolved to "wasm:method").
+//   2. Allocates a *streamCtx, calls pctx.setActiveStream(s).
+//   3. Spawns two pumps: wire→s.inbound, s.outbound→wire.
+//   4. Calls extism.Plugin.Call(method, marshalled metadata).
+//   5. Wasm reads via host_stream_read, writes via
+//      host_stream_write, signals end-of-output via
+//      host_stream_close.
+//   6. Wasm returns; dispatcher closes s.inbound, joins pumps,
+//      writes terminal frame, calls pctx.clearActiveStream().
 
-// streamCtx is per-active-stream state. One streamCtx per
-// in-flight wasm-streaming call.
+// streamCtx is per-active-stream state. Two channels (cap=1 for
+// natural backpressure) + atomics for the closed/EOF flags the
+// host fns consult.
 type streamCtx struct {
 	id          uint32
-	inbound     chan []byte // wire → plugin
-	outbound    chan []byte // plugin → wire
-	writeClosed atomic.Bool
-	inboundEOF  atomic.Bool
+	inbound     chan []byte // wire → wasm reader
+	outbound    chan []byte // wasm writer → wire
+	writeClosed atomic.Bool // host_stream_close → outbound closed; subsequent writes fail
+	inboundEOF  atomic.Bool // wire EOF observed; subsequent reads return empty
 }
 
-// streamRegistry is the per-plugin-instance map of active streams.
-// Stored on pluginCtx so each plugin's wasm can only address its own
-// streams (cross-plugin id reuse is impossible — different
-// pluginCtx, different registry).
-type streamRegistry struct {
-	mu      sync.Mutex
-	streams map[uint32]*streamCtx
-	nextID  uint32
-}
-
-func newStreamRegistry() *streamRegistry {
-	return &streamRegistry{streams: make(map[uint32]*streamCtx)}
-}
-
-// open allocates a new streamCtx with channels of capacity 1. The
-// returned id is what the wasm side passes to host_stream_*.
-func (r *streamRegistry) open() *streamCtx {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.nextID++
-	id := r.nextID
-	s := &streamCtx{
-		id:       id,
-		inbound:  make(chan []byte, 1),
-		outbound: make(chan []byte, 1),
+// activeStream returns the current per-plugin active stream, or nil
+// when no stream is in flight (the universal state today, and the
+// resting state between calls).
+func (pctx *pluginCtx) activeStream() *streamCtx {
+	if pctx == nil {
+		return nil
 	}
-	r.streams[id] = s
-	return s
+	return pctx.activeStreamPtr.Load()
 }
 
-func (r *streamRegistry) get(id uint32) *streamCtx {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.streams[id]
+// setActiveStream stashes the per-stream state for the upcoming
+// wasm method call. Called by the dispatcher under loaded.mu (the
+// extism.Plugin's own serialisation lock) so concurrent setters are
+// not possible in production.
+func (pctx *pluginCtx) setActiveStream(s *streamCtx) {
+	pctx.activeStreamPtr.Store(s)
 }
 
-// close pulls the stream out of the registry. Safe to call multiple
-// times — second call sees no entry and returns silently.
-func (r *streamRegistry) closeID(id uint32) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.streams, id)
+// clearActiveStream releases the slot when the wasm method returns.
+// Idempotent — a double-clear is a no-op.
+func (pctx *pluginCtx) clearActiveStream() {
+	pctx.activeStreamPtr.Store(nil)
 }
 
 // hostStreamRead pulls one frame off the inbound channel. Returns
-// empty data on EOF. Wire shape: envelope.Data is a base64-of-bytes
-// JSON string; the plugin's PDK decodes it.
+// empty data on EOF. Wire shape: envelope.Data is a base64-encoded
+// JSON string; the plugin's PDK decodes it on the wasm side.
 func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	id := uint32(stack[0])
-	s := pctx.streams.get(id)
+	s := pctx.activeStream()
 	if s == nil {
-		returnEnvelope(p, stack, failed("stream_not_found"))
+		returnEnvelope(p, stack, failed("stream_not_active"))
 		return
 	}
 	if s.inboundEOF.Load() {
@@ -127,20 +96,17 @@ func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlug
 
 // hostStreamWrite enqueues one frame onto the outbound channel.
 // Blocking on a full channel is the natural backpressure mechanism.
-// The wasm side passes the bytes already base64-decoded; this host
-// fn receives raw bytes via extism's PDK.
 func (pctx *pluginCtx) hostStreamWrite(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	id := uint32(stack[0])
-	s := pctx.streams.get(id)
+	s := pctx.activeStream()
 	if s == nil {
-		returnEnvelope(p, stack, failed("stream_not_found"))
+		returnEnvelope(p, stack, failed("stream_not_active"))
 		return
 	}
 	if s.writeClosed.Load() {
 		returnEnvelope(p, stack, failed("stream_write_closed"))
 		return
 	}
-	raw, err := p.ReadBytes(stack[1])
+	raw, err := p.ReadBytes(stack[0])
 	if err != nil {
 		returnEnvelope(p, stack, failed("read_bytes: "+err.Error()))
 		return
@@ -157,10 +123,9 @@ func (pctx *pluginCtx) hostStreamWrite(ctx context.Context, p *extism.CurrentPlu
 // return stream_write_closed. The agent's bridge converts the
 // channel close into a terminal KIND_EOF frame on the wire.
 func (pctx *pluginCtx) hostStreamClose(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	id := uint32(stack[0])
-	s := pctx.streams.get(id)
+	s := pctx.activeStream()
 	if s == nil {
-		returnEnvelope(p, stack, failed("stream_not_found"))
+		returnEnvelope(p, stack, failed("stream_not_active"))
 		return
 	}
 	if !s.writeClosed.Swap(true) {
