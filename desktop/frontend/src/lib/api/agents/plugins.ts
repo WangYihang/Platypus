@@ -105,6 +105,59 @@ export async function uninstallPlugin(
     );
 }
 
+/** One progress phase emitted by the agent during install. */
+export interface InstallProgress {
+    phase: string;
+    bytes_done?: number;
+    bytes_total?: number;
+    error_code?: string;
+    error_message?: string;
+}
+
+/** REST response shape from the install endpoints. Mirrors the Go
+ *  installResponse struct. */
+export interface InstallResult {
+    status: "installed" | "failed" | "in_progress";
+    plugin_id: string;
+    version: string;
+    progress: InstallProgress[];
+}
+
+export interface InstallFromMarketplaceArgs {
+    pluginID: string;
+    version: string;
+    grantedCapabilities: string[];
+}
+
+/**
+ * Install a plugin from the marketplace catalog. Server fetches the
+ * artefacts (no CORS), verifies sha256, then streams into the agent's
+ * install pipeline. Returns the full progress array — last entry's
+ * phase is INSTALLED on the happy path.
+ *
+ * 503 = catalog/marketplace not configured on the server.
+ * 424 = catalog row exists but has no publisher pubkey (sync needed).
+ * 404 = no row matching plugin_id+version.
+ */
+export async function installFromMarketplace(
+    pid: string,
+    agentID: string,
+    args: InstallFromMarketplaceArgs,
+): Promise<InstallResult> {
+    return authJSON<InstallResult>(
+        `/api/v1/projects/${encodeURIComponent(pid)}/agents/${encodeURIComponent(agentID)}/plugins/install_marketplace`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                plugin_id: args.pluginID,
+                version: args.version,
+                granted_capabilities: args.grantedCapabilities,
+            }),
+        },
+    );
+}
+
 /**
  * Tail the most recent N log entries from the agent's in-memory ring
  * for one plugin. tail=0 returns whatever's currently buffered (cap

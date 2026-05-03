@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MoreHorizontal, Trash2, ScrollText } from "lucide-react";
+import { Loader2, MoreHorizontal, Trash2, ScrollText, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
 } from "../../lib/api/agents/plugins";
 
 import PluginLogsDrawer from "./plugins/PluginLogsDrawer";
+import InstallFromMarketplaceDialog from "./plugins/InstallFromMarketplaceDialog";
 
 interface Props {
     projectID: string;
@@ -90,6 +91,7 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
     });
 
     const [logsTarget, setLogsTarget] = useState<InstalledPlugin | null>(null);
+    const [installerOpen, setInstallerOpen] = useState(false);
 
     if (plugins.isLoading) {
         return (
@@ -112,6 +114,12 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button size="sm" onClick={() => setInstallerOpen(true)}>
+                    <Plus className="size-3.5" />
+                    Install from Marketplace
+                </Button>
+            </div>
             {list.length === 0 ? (
                 <EmptyState
                     title="No plugins installed"
@@ -193,6 +201,16 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
                 hostID={hostID}
                 plugin={logsTarget}
                 onClose={() => setLogsTarget(null)}
+            />
+
+            <InstallFromMarketplaceDialog
+                open={installerOpen}
+                projectID={projectID}
+                hostID={hostID}
+                onClose={() => setInstallerOpen(false)}
+                onInstalled={() => {
+                    void queryClient.invalidateQueries({ queryKey });
+                }}
             />
         </div>
     );
