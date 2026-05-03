@@ -1,0 +1,20 @@
+[package]
+name = "sys-process-open"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "sys_process_open"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
