@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -195,13 +196,20 @@ function PluginCard({ plugin }: { plugin: MarketplacePlugin }) {
             style={{
                 border: `1px solid ${palette.border}`,
                 borderRadius: 8,
-                padding: space[3],
-                display: "flex",
-                flexDirection: "column",
-                gap: space[1],
                 background: palette.surface,
             }}
         >
+            <Link
+                to={`/marketplace/plugins/${encodeURIComponent(plugin.plugin_id)}`}
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: space[1],
+                    padding: space[3],
+                    color: "inherit",
+                    textDecoration: "none",
+                }}
+            >
             <div
                 style={{
                     display: "flex",
@@ -271,6 +279,7 @@ function PluginCard({ plugin }: { plugin: MarketplacePlugin }) {
                 <span>{plugin.author || "unknown"}</span>
                 {plugin.license && <span>{plugin.license}</span>}
             </div>
+            </Link>
         </li>
     );
 }
