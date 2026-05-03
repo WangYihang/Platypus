@@ -25,12 +25,21 @@ const (
 	// grant exec without granting process; the manifest splits them so
 	// the install dialog can ask separately.
 	CapProcess CapabilityID = "process"
+	// CapNetDial gates outbound TCP dial — host_net_dial / _relay /
+	// _close — used by the wasm replacement for the legacy
+	// STREAM_TYPE_TUNNEL_PULL handler. Distinct from CapNetHTTP
+	// because the blast radius is fundamentally different: HTTP is a
+	// scoped request/response with declared hosts, whereas net.dial
+	// gives the wasm a raw bidirectional byte pipe to anywhere on the
+	// agent's network — effectively SSRF capability if granted to
+	// "*". The install dialog flags this prominently.
+	CapNetDial CapabilityID = "net.dial"
 )
 
 // allCapabilities is the set the agent is willing to grant. Used by
 // validation to reject manifests that ask for unknown capabilities.
 var allCapabilities = map[CapabilityID]struct{}{
-	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {},
+	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {}, CapNetDial: {},
 }
 
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the
@@ -115,6 +124,7 @@ type ManifestCapabilities struct {
 	FSWrite *CapFSWriteSpec `yaml:"fs.write,omitempty"`
 	NetHTTP *CapNetHTTPSpec `yaml:"net.http,omitempty"`
 	Process *CapProcessSpec `yaml:"process,omitempty"`
+	NetDial *CapNetDialSpec `yaml:"net.dial,omitempty"`
 	KV      bool            `yaml:"kv,omitempty"`
 	SysInfo bool            `yaml:"sysinfo,omitempty"`
 }
@@ -155,6 +165,17 @@ type CapNetHTTPSpec struct {
 // which binaries the plugin can launch as an interactive PTY.
 type CapProcessSpec struct {
 	Commands []string `yaml:"commands"`
+}
+
+// CapNetDialSpec.Targets is the exact "host:port" allowlist for
+// outbound TCP dial. Each entry is a literal target ("10.0.0.5:22",
+// "internal-svc:8080") or "*" for unrestricted. The legacy
+// STREAM_TYPE_TUNNEL_PULL handler had implicit any-target authority,
+// so the system bundle's sys-tunnel-pull replacement uses "*"; a
+// third-party replacement should narrow to a literal list and the
+// install dialog flags "*" prominently.
+type CapNetDialSpec struct {
+	Targets []string `yaml:"targets"`
 }
 
 type ManifestResources struct {

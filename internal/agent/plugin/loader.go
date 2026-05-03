@@ -104,6 +104,7 @@ func (l *loaded) close(ctx context.Context) {
 	defer l.mu.Unlock()
 	if l.pctx != nil {
 		l.pctx.reapProcessHandles()
+		l.pctx.reapNetHandles()
 	}
 	if l.instance != nil {
 		_ = l.instance.Close(ctx)

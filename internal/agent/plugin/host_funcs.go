@@ -55,6 +55,14 @@ type pluginCtx struct {
 	processMu             sync.Mutex
 	processHandles        map[uint32]*processHandle
 	processHandleCounter  uint32
+
+	// netHandles is the per-plugin TCP-dial table for the host_net_*
+	// family. Same lifecycle as processHandles: cleared on plugin
+	// teardown via reapNetHandles so a crashed plugin doesn't leak a
+	// live TCP conn.
+	netMu             sync.Mutex
+	netHandles        map[uint32]*netHandle
+	netHandleCounter  uint32
 }
 
 // buildHostFunctions returns the slice handed to extism.NewPlugin for
@@ -149,6 +157,15 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessRelay),
 		newHostFunc("host_process_kill", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessKill),
+
+		// Outbound TCP dial — wasm migration target for the legacy
+		// STREAM_TYPE_TUNNEL_PULL handler. Gated by CapNetDial.
+		newHostFunc("host_net_dial", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetDial),
+		newHostFunc("host_net_relay", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetRelay),
+		newHostFunc("host_net_close", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetClose),
 	}
 }
 

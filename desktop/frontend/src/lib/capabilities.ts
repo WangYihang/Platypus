@@ -24,6 +24,7 @@ export type CapabilityFamily =
     | "fs.write"
     | "exec"
     | "net.http"
+    | "net.dial"
     | "process";
 
 export interface CapabilityMeta {
@@ -82,6 +83,13 @@ const CAPABILITY_META: Record<CapabilityFamily, CapabilityMeta> = {
         risk: "high",
         summary:
             "Spawn an interactive child process (PTY-backed shells, long-lived daemons). Higher blast radius than `exec` because the operator's stdin reaches the child over the network.",
+    },
+    "net.dial": {
+        family: "net.dial",
+        label: "Outbound TCP dial",
+        risk: "high",
+        summary:
+            "Open a raw TCP connection to the declared targets and splice bytes bidirectionally. Effectively SSRF authority if granted to a wildcard target — review the targets list carefully before approving.",
     },
 };
 

@@ -263,9 +263,9 @@ deletes the old dispatch arms.
 
 ## Migration status (2026-05-03)
 
-The streaming ABI shipped (slice 1-5 in `wasm_*.go`) and **five of
-six** legacy stream handlers have a wasm reference plugin proven
-to work end-to-end via integration tests:
+The streaming ABI shipped (slice 1-5 in `wasm_*.go`) and **all six**
+legacy stream handlers have a wasm reference plugin proven to work
+end-to-end via integration tests:
 
 | Stream type | Plugin | Status |
 |---|---|---|
@@ -274,46 +274,58 @@ to work end-to-end via integration tests:
 | `FILE_SCAN` | `example/plugins/sys-file-scan` | Plugin + e2e test ready. Cutover blocked on system signing key. |
 | `FILE_WRITE` | `example/plugins/sys-file-write` | Plugin + e2e test ready. Cutover blocked on system signing key. |
 | `FILE_ARCHIVE` | `example/plugins/sys-file-archive` | TAR + TAR_GZ supported via flate2; ZIP intentionally omitted (parity gap, see plugin README). Cutover blocked on system signing key. |
-| `PROCESS_OPEN` | not started | Needs new `host_process_*` host fn family for streaming exec; design sketch below. |
-| `TUNNEL_PULL` | not started | Needs new `host_net_dial` capability; security review on which destinations a plugin may dial. Design sketch below. |
+| `PROCESS_OPEN` | `example/plugins/sys-process-open` | Plugin + e2e test ready (happy path + policy denial). Uses spawn+host-relay architecture; wasm owns spawn policy, host owns the bidirectional PTY/pipes pump. Cutover blocked on system signing key. |
+| `TUNNEL_PULL` | `example/plugins/sys-tunnel-pull` | Plugin + e2e test ready (echo round-trip + policy denial). Uses dial+host-relay architecture; wasm owns dial policy, host owns the raw byte splice. Cutover blocked on system signing key. |
 
-### Design sketch for the remaining two
+### Architecture for bidirectional long-lived streams
 
-Both `PROCESS_OPEN` and `TUNNEL_PULL` are bidirectional long-lived
-streams (operator's terminal, TCP relay). Wasm plugins are
-single-threaded — concurrent read-from-server / write-to-server is
-not directly expressible. Two possible architectures:
+`PROCESS_OPEN` and `TUNNEL_PULL` use a **spawn-policy + host-relay**
+split. Wasm plugins are single-threaded — concurrent
+read-from-server / write-to-server is not directly expressible — so
+the wasm validates the request and hands off to a host fn that runs
+the bidirectional pump in goroutines and blocks until EOF. The wasm
+regains control after the relay returns.
 
-**A. spawn + host-side relay** *(preferred)* — the wasm plugin
-validates the request and applies policy (which commands may run,
-which destinations may be dialed), then hands off to a host fn
-that runs the bidirectional pump in goroutines and blocks until
-EOF. Wasm regains control after the relay returns. Needs:
+Pieces shipped:
 
 - `host_process_spawn(spec) → handle` / `host_process_relay(handle)`
   / `host_process_kill(handle)`
-- `host_net_dial(host, port) → handle` / `host_net_relay(handle)`
+- `host_net_dial(spec) → handle` / `host_net_relay(handle)` /
+  `host_net_close(handle)`
 - New capabilities `process` and `net.dial` in `manifest.go` +
-  `lib/capabilities.ts`
-- Per-plugin handle table on `pluginCtx` with cleanup on plugin
-  close
-- Refactor of `internal/agent/process_stream.go`'s pump funcs into
-  a reusable `RelayProcessIO(ctx, wire, cmd)` helper
+  `lib/capabilities.ts` (frontend dialog flags both as high-risk;
+  `net.dial` with `*` target is the most-flagged grant)
+- Per-plugin handle tables on `pluginCtx` with `reapProcessHandles`
+  / `reapNetHandles` called from `loaded.close` so a plugin that
+  crashes mid-relay doesn't leak children/conns
 
-The PolicyAuthority lives in wasm (replaceable, auditable, can
+The policy authority lives in wasm (replaceable, auditable, can
 enforce per-fleet allowlists); the byte-pumping infrastructure
-stays in Go. Estimated impl: 6-8 hours for `PROCESS_OPEN`, 4-6
-hours for `TUNNEL_PULL`.
+stays in Go.
 
-**B. event-loop with non-blocking host fns** — wasm runs an event
-loop calling `host_link_read_frame_nonblock`, `host_process_poll`,
-`host_process_write_stdin`, etc. Pure-wasm policy + IO. More
-complex API surface but no Go-side relay code. Less natural fit
-for wasm's blocking call semantics; rejected for now.
+### Cutover (per-plugin)
 
-After the remaining two land, `internal/agent/serve_link.go` can
-delete its legacy stream-type switch entirely (every stream type
-flows through the unified `Registry.DispatchStream`).
+The legacy Go handler for each migrated stream type still serves
+production traffic until:
+
+1. The plugin's `.wasm` is signed with `PLATYPUS_SYSTEM_KEY` (kept
+   out-of-repo) and staged under
+   `internal/agent/plugin/system/embedded/<id>/<version>/`.
+2. The matching entry is removed from
+   `example/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
+   sys-streams is rebuilt + re-signed (`make sign-system-plugins`).
+3. `internal/agent/<type>_stream.go` and the matching adapter line
+   in `cmd/platypus-agent/stream_adapters.go` are deleted.
+
+After all six cutovers, `internal/agent/serve_link.go` can delete
+its legacy stream-type switch entirely — every stream type then
+flows through the unified `Registry.DispatchStream`.
+
+Until then the legacy handler keeps serving — the wasm replacement
+sits in `example/plugins/` as proof the migration mechanically
+works, with the integration test under
+`internal/agent/plugin/<type>_integration_test.go` as the canonical
+end-to-end coverage.
 
 The shipped infrastructure (`internal/agent/plugin/wasm_legacy_dispatch.go`,
 `host_link_read_frame` / `host_link_write_frame` /

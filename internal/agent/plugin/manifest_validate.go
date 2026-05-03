@@ -194,6 +194,28 @@ func (c ManifestCapabilities) validate() error {
 			}
 		}
 	}
+	if c.NetDial != nil {
+		if len(c.NetDial.Targets) == 0 {
+			errs = append(errs, errors.New("capabilities.net.dial set without any targets"))
+		}
+		for i, t := range c.NetDial.Targets {
+			if t == "*" {
+				// Unrestricted-dial marker. Effectively SSRF
+				// authority — only sane for the system bundle. The
+				// install-time capability dialog flags this.
+				continue
+			}
+			if t == "" || strings.ContainsAny(t, " \t/") {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.net.dial.targets[%d]=%q must be host:port or \"*\"", i, t))
+				continue
+			}
+			if !strings.Contains(t, ":") {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.net.dial.targets[%d]=%q missing :port", i, t))
+			}
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -224,6 +246,9 @@ func (m *Manifest) DeclaredCapabilities() []CapabilityID {
 	}
 	if m.Capabilities.Process != nil {
 		out = append(out, CapProcess)
+	}
+	if m.Capabilities.NetDial != nil {
+		out = append(out, CapNetDial)
 	}
 	return out
 }
