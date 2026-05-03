@@ -31,6 +31,13 @@ type pluginCtx struct {
 	correlationID   func() string // updated per-invocation; never nil
 	maxFileReadSize int64
 	maxKVValueSize  int64
+
+	// streams holds the per-plugin map of active wasm-streaming
+	// contexts. Populated when STREAM_TYPE_PLUGIN_STREAM dispatch
+	// allocates a per-stream channel pair; the host_stream_*
+	// primitives operate against entries here. Always non-nil for
+	// uniformity even when no stream is active.
+	streams *streamRegistry
 }
 
 // buildHostFunctions returns the slice handed to extism.NewPlugin for
@@ -83,6 +90,20 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostUname),
 		newHostFunc("host_http", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostHTTP),
+
+		// Wasm-streaming primitives (groundwork for migrating
+		// PROCESS_OPEN / FILE_* / TUNNEL_PULL off the legacy host-
+		// provider claim path). Today no plugin manifest references
+		// "wasm:" host_handler markers, so the dispatch path that
+		// allocates per-stream channels + populates pctx.streams
+		// hasn't been wired yet — the primitives return
+		// "stream_not_found" until that lands.
+		newHostFunc("host_stream_read", []api.ValueType{api.ValueTypeI32},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamRead),
+		newHostFunc("host_stream_write", []api.ValueType{api.ValueTypeI32, api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamWrite),
+		newHostFunc("host_stream_close", []api.ValueType{api.ValueTypeI32},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostStreamClose),
 	}
 }
 

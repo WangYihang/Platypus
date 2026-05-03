@@ -259,3 +259,61 @@ message PluginLogEntry {
   // or empty for plugin-internal lines (startup, periodic tasks).
   string correlation_id = 4;
 }
+
+// ---- Streaming plugin shapes (STREAM_TYPE_PLUGIN_STREAM) ----
+//
+// PluginStreamRequest is the StreamHeader.metadata for the
+// STREAM_TYPE_PLUGIN_STREAM type defined in common.proto. Identifies
+// which plugin + which named stream the server is opening; `payload`
+// carries the legacy-stream-shape request proto serialised inline
+// (e.g. ProcessOpenRequest, FileReadRequest, ...) so the plugin
+// keeps the existing typed inputs without an extra round-trip.
+//
+// Bytes flow as PluginStreamFrame in BOTH directions after
+// StreamAccept. Direction is carried by the .source field —
+// SOURCE_INBOUND means "this byte chunk goes to the wasm plugin's
+// reader"; SOURCE_OUTBOUND means "the plugin produced this; forward
+// it to the wire". The agent's bridge multiplexes both.
+//
+// Today only system plugins reference these messages — a manifest
+// stream entry with host_handler="wasm:<method>" tells the agent's
+// DispatchStream to allocate per-stream channels + run the wasm
+// export instead of delegating to a registered host provider. Real
+// wasm-mediated stream IO is the Phase-2 work this proto unblocks;
+// the legacy claim-via-host-handler shape (in use by sys-streams
+// today) keeps working unchanged for all six built-in stream types.
+message PluginStreamRequest {
+  string plugin_id   = 1;
+  string stream_name = 2;
+  // Wire-level v2pb.StreamType value as a string (e.g.
+  // "STREAM_TYPE_PROCESS_OPEN"). Lets the plugin runtime route the
+  // call to the matching wasm method without re-parsing the
+  // StreamHeader.
+  string stream_type = 3;
+  // Original typed request (ProcessOpenRequest, FileReadRequest,
+  // ...) marshalled into bytes. The plugin's wasm method decodes
+  // it; the agent treats it as opaque.
+  bytes  payload     = 10;
+  uint64 timeout_ms  = 20;
+}
+
+// PluginStreamFrame is one chunk of byte data flowing in either
+// direction during a STREAM_TYPE_PLUGIN_STREAM lifetime.
+message PluginStreamFrame {
+  enum Source {
+    SOURCE_UNSPECIFIED = 0;
+    SOURCE_INBOUND     = 1; // wire → plugin (wasm reader)
+    SOURCE_OUTBOUND    = 2; // plugin → wire (wasm writer)
+  }
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_DATA        = 1; // `data` populated
+    KIND_EOF         = 2; // sender finished writing this side
+    KIND_ERROR       = 3; // `error_*` populated; terminal
+  }
+  Source source        = 1;
+  Kind   kind          = 2;
+  bytes  data          = 3;
+  string error_code    = 4;
+  string error_message = 5;
+}

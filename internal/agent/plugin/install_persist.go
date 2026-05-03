@@ -94,6 +94,7 @@ func (r *Registry) hotLoad(ctx context.Context, e CatalogEntry, m *Manifest, pk 
 		},
 		maxFileReadSize: opts.MaxFileReadBytes,
 		maxKVValueSize:  opts.MaxKVValueBytes,
+		streams:         newStreamRegistry(),
 	}
 	// Smoke-instantiate so a malformed wasm is caught here, not on
 	// the first invocation.

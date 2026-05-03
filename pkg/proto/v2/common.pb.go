@@ -94,6 +94,22 @@ const (
 	// the agent's own self-update path; plugins are a separate trust
 	// domain so rotating one doesn't compromise the other.
 	StreamType_STREAM_TYPE_PLUGIN_MGMT StreamType = 12
+	// server->agent. Wasm-mediated stream IO. Header metadata is
+	// PluginStreamRequest (plugin.proto). After StreamAccept,
+	// PluginStreamFrame frames flow in both directions until either
+	// side sends KIND_EOF. The agent multiplexes inbound frames into
+	// a per-stream wasm-readable channel; the plugin's wasm export
+	// calls host_stream_read / host_stream_write to interleave IO
+	// inside its own goroutine-equivalent.
+	//
+	// Distinct from STREAM_TYPE_PLUGIN_MGMT — that's lifecycle
+	// (install/uninstall); this one is "actual workload" the
+	// operator drives (pty / file / tunnel). Today every stream
+	// type still flows through the legacy host-provider claim model
+	// (sys-streams plugin claims them with host_handler="agent.X");
+	// streams whose manifest declares host_handler="wasm:<method>"
+	// route through this type instead.
+	StreamType_STREAM_TYPE_PLUGIN_STREAM StreamType = 13
 )
 
 // Enum value maps for StreamType.
@@ -112,6 +128,7 @@ var (
 		10: "STREAM_TYPE_FILE_ARCHIVE",
 		11: "STREAM_TYPE_AGENT_UPGRADE",
 		12: "STREAM_TYPE_PLUGIN_MGMT",
+		13: "STREAM_TYPE_PLUGIN_STREAM",
 	}
 	StreamType_value = map[string]int32{
 		"STREAM_TYPE_UNSPECIFIED":   0,
@@ -127,6 +144,7 @@ var (
 		"STREAM_TYPE_FILE_ARCHIVE":  10,
 		"STREAM_TYPE_AGENT_UPGRADE": 11,
 		"STREAM_TYPE_PLUGIN_MGMT":   12,
+		"STREAM_TYPE_PLUGIN_STREAM": 13,
 	}
 )
 
@@ -353,7 +371,7 @@ const file_common_proto_rawDesc = "" +
 	"\fStreamAccept\"<\n" +
 	"\fStreamReject\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xf5\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\x94\x03\n" +
 	"\n" +
 	"StreamType\x12\x1b\n" +
 	"\x17STREAM_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
@@ -369,7 +387,8 @@ const file_common_proto_rawDesc = "" +
 	"\x18STREAM_TYPE_FILE_ARCHIVE\x10\n" +
 	"\x12\x1d\n" +
 	"\x19STREAM_TYPE_AGENT_UPGRADE\x10\v\x12\x1b\n" +
-	"\x17STREAM_TYPE_PLUGIN_MGMT\x10\fB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x17STREAM_TYPE_PLUGIN_MGMT\x10\f\x12\x1d\n" +
+	"\x19STREAM_TYPE_PLUGIN_STREAM\x10\rB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_common_proto_rawDescOnce sync.Once

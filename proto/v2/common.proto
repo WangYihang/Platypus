@@ -85,6 +85,23 @@ enum StreamType {
   // the agent's own self-update path; plugins are a separate trust
   // domain so rotating one doesn't compromise the other.
   STREAM_TYPE_PLUGIN_MGMT = 12;
+
+  // server->agent. Wasm-mediated stream IO. Header metadata is
+  // PluginStreamRequest (plugin.proto). After StreamAccept,
+  // PluginStreamFrame frames flow in both directions until either
+  // side sends KIND_EOF. The agent multiplexes inbound frames into
+  // a per-stream wasm-readable channel; the plugin's wasm export
+  // calls host_stream_read / host_stream_write to interleave IO
+  // inside its own goroutine-equivalent.
+  //
+  // Distinct from STREAM_TYPE_PLUGIN_MGMT — that's lifecycle
+  // (install/uninstall); this one is "actual workload" the
+  // operator drives (pty / file / tunnel). Today every stream
+  // type still flows through the legacy host-provider claim model
+  // (sys-streams plugin claims them with host_handler="agent.X");
+  // streams whose manifest declares host_handler="wasm:<method>"
+  // route through this type instead.
+  STREAM_TYPE_PLUGIN_STREAM = 13;
 }
 
 // StreamHeader is the first protobuf message on every new yamux

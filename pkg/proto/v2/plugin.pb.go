@@ -137,6 +137,107 @@ func (PluginInstallProgress_Phase) EnumDescriptor() ([]byte, []int) {
 	return file_plugin_proto_rawDescGZIP(), []int{8, 0}
 }
 
+type PluginStreamFrame_Source int32
+
+const (
+	PluginStreamFrame_SOURCE_UNSPECIFIED PluginStreamFrame_Source = 0
+	PluginStreamFrame_SOURCE_INBOUND     PluginStreamFrame_Source = 1 // wire → plugin (wasm reader)
+	PluginStreamFrame_SOURCE_OUTBOUND    PluginStreamFrame_Source = 2 // plugin → wire (wasm writer)
+)
+
+// Enum value maps for PluginStreamFrame_Source.
+var (
+	PluginStreamFrame_Source_name = map[int32]string{
+		0: "SOURCE_UNSPECIFIED",
+		1: "SOURCE_INBOUND",
+		2: "SOURCE_OUTBOUND",
+	}
+	PluginStreamFrame_Source_value = map[string]int32{
+		"SOURCE_UNSPECIFIED": 0,
+		"SOURCE_INBOUND":     1,
+		"SOURCE_OUTBOUND":    2,
+	}
+)
+
+func (x PluginStreamFrame_Source) Enum() *PluginStreamFrame_Source {
+	p := new(PluginStreamFrame_Source)
+	*p = x
+	return p
+}
+
+func (x PluginStreamFrame_Source) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PluginStreamFrame_Source) Descriptor() protoreflect.EnumDescriptor {
+	return file_plugin_proto_enumTypes[2].Descriptor()
+}
+
+func (PluginStreamFrame_Source) Type() protoreflect.EnumType {
+	return &file_plugin_proto_enumTypes[2]
+}
+
+func (x PluginStreamFrame_Source) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PluginStreamFrame_Source.Descriptor instead.
+func (PluginStreamFrame_Source) EnumDescriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{20, 0}
+}
+
+type PluginStreamFrame_Kind int32
+
+const (
+	PluginStreamFrame_KIND_UNSPECIFIED PluginStreamFrame_Kind = 0
+	PluginStreamFrame_KIND_DATA        PluginStreamFrame_Kind = 1 // `data` populated
+	PluginStreamFrame_KIND_EOF         PluginStreamFrame_Kind = 2 // sender finished writing this side
+	PluginStreamFrame_KIND_ERROR       PluginStreamFrame_Kind = 3 // `error_*` populated; terminal
+)
+
+// Enum value maps for PluginStreamFrame_Kind.
+var (
+	PluginStreamFrame_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "KIND_DATA",
+		2: "KIND_EOF",
+		3: "KIND_ERROR",
+	}
+	PluginStreamFrame_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"KIND_DATA":        1,
+		"KIND_EOF":         2,
+		"KIND_ERROR":       3,
+	}
+)
+
+func (x PluginStreamFrame_Kind) Enum() *PluginStreamFrame_Kind {
+	p := new(PluginStreamFrame_Kind)
+	*p = x
+	return p
+}
+
+func (x PluginStreamFrame_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PluginStreamFrame_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_plugin_proto_enumTypes[3].Descriptor()
+}
+
+func (PluginStreamFrame_Kind) Type() protoreflect.EnumType {
+	return &file_plugin_proto_enumTypes[3]
+}
+
+func (x PluginStreamFrame_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PluginStreamFrame_Kind.Descriptor instead.
+func (PluginStreamFrame_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{20, 1}
+}
+
 // PluginCallRequest is wrapped in RpcRequest.plugin_call. The agent
 // looks up plugin_id in its in-memory registry, refuses if the plugin
 // is not installed/enabled, and then dispatches `payload` to the wasm
@@ -1550,6 +1651,189 @@ func (x *PluginLogEntry) GetCorrelationId() string {
 	return ""
 }
 
+// ---- Streaming plugin shapes (STREAM_TYPE_PLUGIN_STREAM) ----
+//
+// PluginStreamRequest is the StreamHeader.metadata for the
+// STREAM_TYPE_PLUGIN_STREAM type defined in common.proto. Identifies
+// which plugin + which named stream the server is opening; `payload`
+// carries the legacy-stream-shape request proto serialised inline
+// (e.g. ProcessOpenRequest, FileReadRequest, ...) so the plugin
+// keeps the existing typed inputs without an extra round-trip.
+//
+// Bytes flow as PluginStreamFrame in BOTH directions after
+// StreamAccept. Direction is carried by the .source field —
+// SOURCE_INBOUND means "this byte chunk goes to the wasm plugin's
+// reader"; SOURCE_OUTBOUND means "the plugin produced this; forward
+// it to the wire". The agent's bridge multiplexes both.
+//
+// Today only system plugins reference these messages — a manifest
+// stream entry with host_handler="wasm:<method>" tells the agent's
+// DispatchStream to allocate per-stream channels + run the wasm
+// export instead of delegating to a registered host provider. Real
+// wasm-mediated stream IO is the Phase-2 work this proto unblocks;
+// the legacy claim-via-host-handler shape (in use by sys-streams
+// today) keeps working unchanged for all six built-in stream types.
+type PluginStreamRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PluginId   string                 `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`
+	StreamName string                 `protobuf:"bytes,2,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
+	// Wire-level v2pb.StreamType value as a string (e.g.
+	// "STREAM_TYPE_PROCESS_OPEN"). Lets the plugin runtime route the
+	// call to the matching wasm method without re-parsing the
+	// StreamHeader.
+	StreamType string `protobuf:"bytes,3,opt,name=stream_type,json=streamType,proto3" json:"stream_type,omitempty"`
+	// Original typed request (ProcessOpenRequest, FileReadRequest,
+	// ...) marshalled into bytes. The plugin's wasm method decodes
+	// it; the agent treats it as opaque.
+	Payload       []byte `protobuf:"bytes,10,opt,name=payload,proto3" json:"payload,omitempty"`
+	TimeoutMs     uint64 `protobuf:"varint,20,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginStreamRequest) Reset() {
+	*x = PluginStreamRequest{}
+	mi := &file_plugin_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginStreamRequest) ProtoMessage() {}
+
+func (x *PluginStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginStreamRequest.ProtoReflect.Descriptor instead.
+func (*PluginStreamRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PluginStreamRequest) GetPluginId() string {
+	if x != nil {
+		return x.PluginId
+	}
+	return ""
+}
+
+func (x *PluginStreamRequest) GetStreamName() string {
+	if x != nil {
+		return x.StreamName
+	}
+	return ""
+}
+
+func (x *PluginStreamRequest) GetStreamType() string {
+	if x != nil {
+		return x.StreamType
+	}
+	return ""
+}
+
+func (x *PluginStreamRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *PluginStreamRequest) GetTimeoutMs() uint64 {
+	if x != nil {
+		return x.TimeoutMs
+	}
+	return 0
+}
+
+// PluginStreamFrame is one chunk of byte data flowing in either
+// direction during a STREAM_TYPE_PLUGIN_STREAM lifetime.
+type PluginStreamFrame struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Source        PluginStreamFrame_Source `protobuf:"varint,1,opt,name=source,proto3,enum=platypus.v2.PluginStreamFrame_Source" json:"source,omitempty"`
+	Kind          PluginStreamFrame_Kind   `protobuf:"varint,2,opt,name=kind,proto3,enum=platypus.v2.PluginStreamFrame_Kind" json:"kind,omitempty"`
+	Data          []byte                   `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	ErrorCode     string                   `protobuf:"bytes,4,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	ErrorMessage  string                   `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginStreamFrame) Reset() {
+	*x = PluginStreamFrame{}
+	mi := &file_plugin_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginStreamFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginStreamFrame) ProtoMessage() {}
+
+func (x *PluginStreamFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginStreamFrame.ProtoReflect.Descriptor instead.
+func (*PluginStreamFrame) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PluginStreamFrame) GetSource() PluginStreamFrame_Source {
+	if x != nil {
+		return x.Source
+	}
+	return PluginStreamFrame_SOURCE_UNSPECIFIED
+}
+
+func (x *PluginStreamFrame) GetKind() PluginStreamFrame_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return PluginStreamFrame_KIND_UNSPECIFIED
+}
+
+func (x *PluginStreamFrame) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *PluginStreamFrame) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *PluginStreamFrame) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -1667,7 +1951,34 @@ const file_plugin_proto_rawDesc = "" +
 	"\tunix_nano\x18\x01 \x01(\x03R\bunixNano\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12%\n" +
-	"\x0ecorrelation_id\x18\x04 \x01(\tR\rcorrelationIdB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x0ecorrelation_id\x18\x04 \x01(\tR\rcorrelationId\"\xad\x01\n" +
+	"\x13PluginStreamRequest\x12\x1b\n" +
+	"\tplugin_id\x18\x01 \x01(\tR\bpluginId\x12\x1f\n" +
+	"\vstream_name\x18\x02 \x01(\tR\n" +
+	"streamName\x12\x1f\n" +
+	"\vstream_type\x18\x03 \x01(\tR\n" +
+	"streamType\x12\x18\n" +
+	"\apayload\x18\n" +
+	" \x01(\fR\apayload\x12\x1d\n" +
+	"\n" +
+	"timeout_ms\x18\x14 \x01(\x04R\ttimeoutMs\"\xf9\x02\n" +
+	"\x11PluginStreamFrame\x12=\n" +
+	"\x06source\x18\x01 \x01(\x0e2%.platypus.v2.PluginStreamFrame.SourceR\x06source\x127\n" +
+	"\x04kind\x18\x02 \x01(\x0e2#.platypus.v2.PluginStreamFrame.KindR\x04kind\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x04 \x01(\tR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\"I\n" +
+	"\x06Source\x12\x16\n" +
+	"\x12SOURCE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eSOURCE_INBOUND\x10\x01\x12\x13\n" +
+	"\x0fSOURCE_OUTBOUND\x10\x02\"I\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tKIND_DATA\x10\x01\x12\f\n" +
+	"\bKIND_EOF\x10\x02\x12\x0e\n" +
+	"\n" +
+	"KIND_ERROR\x10\x03B2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -1681,52 +1992,58 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_plugin_proto_goTypes = []any{
 	(PluginInstallChunk_Kind)(0),     // 0: platypus.v2.PluginInstallChunk.Kind
 	(PluginInstallProgress_Phase)(0), // 1: platypus.v2.PluginInstallProgress.Phase
-	(*PluginCallRequest)(nil),        // 2: platypus.v2.PluginCallRequest
-	(*PluginCallResponse)(nil),       // 3: platypus.v2.PluginCallResponse
-	(*PluginMgmtRequest)(nil),        // 4: platypus.v2.PluginMgmtRequest
-	(*PluginMgmtResponse)(nil),       // 5: platypus.v2.PluginMgmtResponse
-	(*PluginInstallRequest)(nil),     // 6: platypus.v2.PluginInstallRequest
-	(*PluginInlineSource)(nil),       // 7: platypus.v2.PluginInlineSource
-	(*PluginURLSource)(nil),          // 8: platypus.v2.PluginURLSource
-	(*PluginInstallChunk)(nil),       // 9: platypus.v2.PluginInstallChunk
-	(*PluginInstallProgress)(nil),    // 10: platypus.v2.PluginInstallProgress
-	(*PluginUninstallRequest)(nil),   // 11: platypus.v2.PluginUninstallRequest
-	(*PluginUninstallResponse)(nil),  // 12: platypus.v2.PluginUninstallResponse
-	(*PluginListRequest)(nil),        // 13: platypus.v2.PluginListRequest
-	(*PluginListResponse)(nil),       // 14: platypus.v2.PluginListResponse
-	(*PluginInfo)(nil),               // 15: platypus.v2.PluginInfo
-	(*PluginEnableRequest)(nil),      // 16: platypus.v2.PluginEnableRequest
-	(*PluginEnableResponse)(nil),     // 17: platypus.v2.PluginEnableResponse
-	(*PluginGetLogsRequest)(nil),     // 18: platypus.v2.PluginGetLogsRequest
-	(*PluginGetLogsResponse)(nil),    // 19: platypus.v2.PluginGetLogsResponse
-	(*PluginLogEntry)(nil),           // 20: platypus.v2.PluginLogEntry
+	(PluginStreamFrame_Source)(0),    // 2: platypus.v2.PluginStreamFrame.Source
+	(PluginStreamFrame_Kind)(0),      // 3: platypus.v2.PluginStreamFrame.Kind
+	(*PluginCallRequest)(nil),        // 4: platypus.v2.PluginCallRequest
+	(*PluginCallResponse)(nil),       // 5: platypus.v2.PluginCallResponse
+	(*PluginMgmtRequest)(nil),        // 6: platypus.v2.PluginMgmtRequest
+	(*PluginMgmtResponse)(nil),       // 7: platypus.v2.PluginMgmtResponse
+	(*PluginInstallRequest)(nil),     // 8: platypus.v2.PluginInstallRequest
+	(*PluginInlineSource)(nil),       // 9: platypus.v2.PluginInlineSource
+	(*PluginURLSource)(nil),          // 10: platypus.v2.PluginURLSource
+	(*PluginInstallChunk)(nil),       // 11: platypus.v2.PluginInstallChunk
+	(*PluginInstallProgress)(nil),    // 12: platypus.v2.PluginInstallProgress
+	(*PluginUninstallRequest)(nil),   // 13: platypus.v2.PluginUninstallRequest
+	(*PluginUninstallResponse)(nil),  // 14: platypus.v2.PluginUninstallResponse
+	(*PluginListRequest)(nil),        // 15: platypus.v2.PluginListRequest
+	(*PluginListResponse)(nil),       // 16: platypus.v2.PluginListResponse
+	(*PluginInfo)(nil),               // 17: platypus.v2.PluginInfo
+	(*PluginEnableRequest)(nil),      // 18: platypus.v2.PluginEnableRequest
+	(*PluginEnableResponse)(nil),     // 19: platypus.v2.PluginEnableResponse
+	(*PluginGetLogsRequest)(nil),     // 20: platypus.v2.PluginGetLogsRequest
+	(*PluginGetLogsResponse)(nil),    // 21: platypus.v2.PluginGetLogsResponse
+	(*PluginLogEntry)(nil),           // 22: platypus.v2.PluginLogEntry
+	(*PluginStreamRequest)(nil),      // 23: platypus.v2.PluginStreamRequest
+	(*PluginStreamFrame)(nil),        // 24: platypus.v2.PluginStreamFrame
 }
 var file_plugin_proto_depIdxs = []int32{
-	6,  // 0: platypus.v2.PluginMgmtRequest.install:type_name -> platypus.v2.PluginInstallRequest
-	11, // 1: platypus.v2.PluginMgmtRequest.uninstall:type_name -> platypus.v2.PluginUninstallRequest
-	13, // 2: platypus.v2.PluginMgmtRequest.list:type_name -> platypus.v2.PluginListRequest
-	16, // 3: platypus.v2.PluginMgmtRequest.enable:type_name -> platypus.v2.PluginEnableRequest
-	18, // 4: platypus.v2.PluginMgmtRequest.get_logs:type_name -> platypus.v2.PluginGetLogsRequest
-	14, // 5: platypus.v2.PluginMgmtResponse.list:type_name -> platypus.v2.PluginListResponse
-	12, // 6: platypus.v2.PluginMgmtResponse.uninstall:type_name -> platypus.v2.PluginUninstallResponse
-	17, // 7: platypus.v2.PluginMgmtResponse.enable:type_name -> platypus.v2.PluginEnableResponse
-	19, // 8: platypus.v2.PluginMgmtResponse.get_logs:type_name -> platypus.v2.PluginGetLogsResponse
-	7,  // 9: platypus.v2.PluginInstallRequest.inline:type_name -> platypus.v2.PluginInlineSource
-	8,  // 10: platypus.v2.PluginInstallRequest.url:type_name -> platypus.v2.PluginURLSource
+	8,  // 0: platypus.v2.PluginMgmtRequest.install:type_name -> platypus.v2.PluginInstallRequest
+	13, // 1: platypus.v2.PluginMgmtRequest.uninstall:type_name -> platypus.v2.PluginUninstallRequest
+	15, // 2: platypus.v2.PluginMgmtRequest.list:type_name -> platypus.v2.PluginListRequest
+	18, // 3: platypus.v2.PluginMgmtRequest.enable:type_name -> platypus.v2.PluginEnableRequest
+	20, // 4: platypus.v2.PluginMgmtRequest.get_logs:type_name -> platypus.v2.PluginGetLogsRequest
+	16, // 5: platypus.v2.PluginMgmtResponse.list:type_name -> platypus.v2.PluginListResponse
+	14, // 6: platypus.v2.PluginMgmtResponse.uninstall:type_name -> platypus.v2.PluginUninstallResponse
+	19, // 7: platypus.v2.PluginMgmtResponse.enable:type_name -> platypus.v2.PluginEnableResponse
+	21, // 8: platypus.v2.PluginMgmtResponse.get_logs:type_name -> platypus.v2.PluginGetLogsResponse
+	9,  // 9: platypus.v2.PluginInstallRequest.inline:type_name -> platypus.v2.PluginInlineSource
+	10, // 10: platypus.v2.PluginInstallRequest.url:type_name -> platypus.v2.PluginURLSource
 	0,  // 11: platypus.v2.PluginInstallChunk.kind:type_name -> platypus.v2.PluginInstallChunk.Kind
 	1,  // 12: platypus.v2.PluginInstallProgress.phase:type_name -> platypus.v2.PluginInstallProgress.Phase
-	15, // 13: platypus.v2.PluginListResponse.plugins:type_name -> platypus.v2.PluginInfo
-	20, // 14: platypus.v2.PluginGetLogsResponse.entries:type_name -> platypus.v2.PluginLogEntry
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	17, // 13: platypus.v2.PluginListResponse.plugins:type_name -> platypus.v2.PluginInfo
+	22, // 14: platypus.v2.PluginGetLogsResponse.entries:type_name -> platypus.v2.PluginLogEntry
+	2,  // 15: platypus.v2.PluginStreamFrame.source:type_name -> platypus.v2.PluginStreamFrame.Source
+	3,  // 16: platypus.v2.PluginStreamFrame.kind:type_name -> platypus.v2.PluginStreamFrame.Kind
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -1756,8 +2073,8 @@ func file_plugin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   19,
+			NumEnums:      4,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
