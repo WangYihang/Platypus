@@ -23,6 +23,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/agent"
 	pluginrt "github.com/WangYihang/Platypus/internal/agent/plugin"
+	pluginsys "github.com/WangYihang/Platypus/internal/agent/plugin/system"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
@@ -144,6 +145,26 @@ func main() {
 	} else {
 		pluginRegistry.Load(ctx)
 		defer pluginRegistry.Close(ctx)
+
+		// System-plugin bootstrap: walk the embedded FS, install any
+		// bundled plugins missing from the catalog. Per-bundle errors
+		// are logged inside EnsureInstalled and do not fail boot.
+		// SetupError (no publisher.pub yet because no system plugins
+		// have shipped) is also non-fatal — the agent continues with
+		// zero system plugins installed; user-installed plugins still
+		// work over REST.
+		if embFS, fsErr := pluginsys.EmbeddedFS(); fsErr == nil {
+			res := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS)
+			logger.Info("system plugins bootstrap",
+				slog.Int("installed", len(res.Installed)),
+				slog.Int("skipped", len(res.Skipped)),
+				slog.Int("failed", len(res.Failed)),
+			)
+			if res.SetupError != nil {
+				logger.Debug("system plugins setup",
+					slog.String("error", res.SetupError.Error()))
+			}
+		}
 	}
 
 	bo := backoff.WithContext(

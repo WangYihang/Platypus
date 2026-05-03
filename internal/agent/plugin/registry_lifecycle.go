@@ -32,6 +32,15 @@ func (r *Registry) List() []*v2pb.PluginInfo {
 	return out
 }
 
+// HasInstalledVersion reports whether the catalog already contains an
+// entry for `pluginID` at exactly `version`. Used by the system-plugin
+// bootstrap to short-circuit re-install on every boot for plugins
+// that are already up to date.
+func (r *Registry) HasInstalledVersion(pluginID, version string) bool {
+	e, ok := r.catalog.Get(pluginID)
+	return ok && e.Version == version
+}
+
 // Tail returns the most recent N log lines for one plugin, or
 // (nil, os.ErrNotExist) when the plugin id is unknown.
 func (r *Registry) Tail(pluginID string, n int) ([]*v2pb.PluginLogEntry, error) {
@@ -59,10 +68,23 @@ func (r *Registry) SetEnabled(pluginID string, enabled bool) error {
 	return nil
 }
 
+// ErrPluginIsSystem signals an attempted uninstall of a plugin marked
+// system (auto-managed by the bundled-plugin bootstrap). The REST
+// layer surfaces this as 4xx so operators see the explicit reason
+// instead of a 200 with a stale catalog (the bootstrap would
+// reinstall the plugin on the next boot anyway).
+var ErrPluginIsSystem = errors.New("plugin: cannot uninstall system plugin")
+
 // Remove uninstalls one plugin: drops it from the catalog, closes the
 // instance, deletes the on-disk version directory. When purgeState is
 // true the plugin's state/ dir is also removed; otherwise it's
 // preserved for a future reinstall.
+//
+// Returns ErrPluginIsSystem when the catalog entry has System=true —
+// system plugins are owned by the agent build and the bundled
+// bootstrap will reinstate them on the next start, so we refuse the
+// transient remove rather than letting it succeed and confuse
+// operators.
 //
 // Note on state preservation: the current layout has state/ inside
 // PluginDir, so an uninstall removes it either way. The purge_state
@@ -71,6 +93,9 @@ func (r *Registry) SetEnabled(pluginID string, enabled bool) error {
 // genuinely survive a remove+install cycle.
 func (r *Registry) Remove(ctx context.Context, pluginID string, purgeState bool) error {
 	_ = purgeState // see comment above
+	if e, ok := r.catalog.Get(pluginID); ok && e.System {
+		return ErrPluginIsSystem
+	}
 	r.mu.Lock()
 	l, ok := r.plugins[pluginID]
 	if ok {

@@ -23,6 +23,13 @@ type CatalogEntry struct {
 	InstalledAt         time.Time `json:"installed_at"`
 	SourceURL           string    `json:"source_url,omitempty"` // empty for inline installs
 	PublisherKeyID      string    `json:"publisher_key_id"`
+
+	// System marks plugins shipped inside the agent binary and
+	// auto-installed on startup by the system-plugin bootstrap. Their
+	// uninstall path returns plugin_is_system; the bootstrap
+	// re-installs them on the next boot anyway, so a forced uninstall
+	// would be transient at best.
+	System bool `json:"system,omitempty"`
 }
 
 // Catalog is the in-memory + on-disk view of installed plugins. All

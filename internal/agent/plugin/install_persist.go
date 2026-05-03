@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 
 	"github.com/jedisct1/go-minisign"
-
-	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// persistInstall writes the three artefacts atomically into
+// persistInstallBytes writes the three artefacts atomically into
 // installed/<id>/<version>/. Any failure rewinds the partial dir so a
-// failed install never leaves a stray .tmp tree behind.
-func (r *Registry) persistInstall(req *v2pb.PluginInstallRequest, m *Manifest, manifestBytes, wasmBytes, sigBytes []byte) error {
-	dir := r.paths.VersionDir(req.GetPluginId(), req.GetVersion())
+// failed install never leaves a stray .tmp tree behind. Operates on
+// already-loaded bytes so it's reusable from both the streaming
+// install path and the system-plugin bootstrap.
+func (r *Registry) persistInstallBytes(pluginID, version string, m *Manifest, manifestBytes, wasmBytes, sigBytes []byte) error {
+	dir := r.paths.VersionDir(pluginID, version)
 	tmp := dir + ".tmp"
 	if err := os.RemoveAll(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("clean tmp: %w", err)
