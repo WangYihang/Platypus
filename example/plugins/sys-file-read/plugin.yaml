@@ -1,0 +1,37 @@
+api_version: 1
+id: com.platypus.sys-file-read
+name: File Read (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — owns STREAM_TYPE_FILE_READ. Replaces the previous
+  Go HandleFileReadStream by hand-rolling the same wire frames
+  (FileReadResponse + FileChunk[]) on top of host_fs_read_range +
+  host_link_write_frame. Wire format is byte-for-byte identical so
+  the server-side reader is unchanged.
+
+runtime:
+  type: wasm
+  entry: sys_file_read.wasm
+  abi: extism/1
+
+streams:
+  - name: read
+    stream_type: STREAM_TYPE_FILE_READ
+    host_handler: wasm:read
+
+capabilities:
+  fs.read:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_file_read.wasm.minisig
