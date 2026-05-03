@@ -133,29 +133,69 @@ test.describe("recording playback", () => {
                 await expect(page.getByRole("tab", { name: /Recordings/ })).toBeVisible();
                 const previewBtn = page.getByRole("button", { name: /Preview/ }).first();
                 await expect(previewBtn).toBeVisible({ timeout: 15_000 });
+
+                // Thumbnail regression: each completed recording's
+                // card mounts a chrome-less asciinema-player as a
+                // thumbnail. Assert at least one thumbnail painted
+                // a non-uniform canvas (i.e. the poster actually
+                // replayed terminal content). Without the lazy-mount
+                // working OR without the poster, the canvas would be
+                // a solid color and this would fail. Only on the
+                // prod variant — vite's dev StrictMode double-mount
+                // makes canvas state racey.
+                // Thumbnail regression: each completed recording's
+                // card mounts a chrome-less asciinema-player as a
+                // thumbnail. We just assert the thumbnail's canvas
+                // is attached + visible — proves the
+                // IntersectionObserver lazy-mount fired and the
+                // player painted into the page. We deliberately do
+                // NOT read pixels: asciinema-player's renderer
+                // calls getImageData internally and Chrome's
+                // willReadFrequently perf hint trips the suite's
+                // quietConsole fixture if we add more reads on top.
+                await expect(
+                    page.locator(".recording-thumbnail .ap-term canvas").first(),
+                ).toBeVisible({ timeout: 10_000 });
+
                 await previewBtn.click();
 
-                // Wait for the player chrome.
-                await expect(page.locator(".ap-overlay-start")).toBeVisible({
+                // Scope every player assertion to the preview modal.
+                // Each card now mounts its own (chrome-less)
+                // asciinema-player as a thumbnail, so a bare
+                // `.ap-overlay-start` locator resolves to N+1
+                // elements on this page.
+                const preview = page.getByTestId("recording-preview");
+                await expect(preview.locator(".ap-overlay-start")).toBeVisible({
                     timeout: 10_000,
                 });
-                await expect(page.locator(".ap-playback-button")).toBeAttached();
+                await expect(preview.locator(".ap-playback-button")).toBeAttached();
 
-                // Pre-click sanity: timer is "--:--".
-                expect(
-                    (await page.locator(".ap-time-elapsed").first().textContent())?.trim(),
-                ).toBe("--:--");
+                // Pre-click: the player's poster ("npt:0:0.5") forces
+                // init() to run synchronously inside create(), so by
+                // the time the chrome is mounted the timer label
+                // already shows a real value (not the lazy-init
+                // "--:--" placeholder). This pins both the black-
+                // preview fix AND the "duration not shown" complaint.
+                await expect
+                    .poll(
+                        async () =>
+                            (
+                                await preview.locator(".ap-time-elapsed").first().textContent()
+                            )?.trim(),
+                        { timeout: 5_000 },
+                    )
+                    .not.toBe("--:--");
 
                 // Click the big start overlay. v3 keeps
                 // `.ap-overlay-start` in the DOM until the driver has
                 // produced its first real frame; once the click
                 // resolves successfully the overlay is removed.
-                await page.locator(".ap-overlay-start").click();
+                await preview.locator(".ap-overlay-start").click();
 
                 // Assert playback actually started:
                 //   a. .ap-overlay-start gets removed.
                 //   b. The timer advances off "--:--".
-                await expect(page.locator(".ap-overlay-start")).toHaveCount(0, {
+                await expect(preview.locator(".ap-overlay-start")).toHaveCount(0, {
                     timeout: 5_000,
                 });
                 await expect

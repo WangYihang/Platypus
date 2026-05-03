@@ -53,10 +53,26 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
                 const text = await resp.text();
                 if (cancelled || !containerRef.current) return;
 
+                // poster: "npt:0:0.5" tells the player to replay the
+                // first half-second of the cast and render the
+                // resulting terminal state as a static frame BEFORE
+                // the user clicks Play. Without it the preview area
+                // is just a black rectangle (the asciinema-player
+                // default — empty terminal grid) and the timer
+                // shows "--:--" because init() runs lazily on the
+                // first play click. The poster forces init now,
+                // so the timer label can render the real duration
+                // (e.g. "0:00 / 0:37") immediately and the operator
+                // can see *what* they're about to play.
+                //
+                // 0.5 s is a compromise: long enough to capture the
+                // initial prompt + first command echo on most
+                // sessions, short enough not to spoil the recording
+                // or take meaningful time to render.
                 playerRef.current = api.create(
                     { data: text },
                     containerRef.current,
-                    { autoPlay },
+                    { autoPlay, poster: "npt:0:0.5" },
                 );
                 setLoading(false);
             } catch (e) {

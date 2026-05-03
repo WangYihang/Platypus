@@ -11,9 +11,11 @@ import { fromNow } from "../../lib/time";
 import { Button } from "@/components/ui/button";
 
 import { STATUS_TONE, formatDuration } from "./format";
+import RecordingThumbnail from "./RecordingThumbnail";
 
 interface Props {
     rec: TerminalRecording;
+    projectId: string;
     onPreview: () => void;
     onRename: () => void;
     onDelete: () => void;
@@ -22,11 +24,13 @@ interface Props {
 
 export default function RecordingCard({
     rec,
+    projectId,
     onPreview,
     onRename,
     onDelete,
     onDownload,
 }: Props) {
+    const thumbAvailable = rec.status !== "recording" && rec.size_bytes > 0;
     const hostLabel = rec.host_alias || rec.host_hostname || rec.host_id || "—";
     const tone = STATUS_TONE[rec.status] ?? "neutral";
     const I = icons;
@@ -38,9 +42,22 @@ export default function RecordingCard({
 
     return (
         <Card padding={0}>
+            {thumbAvailable && (
+                <div
+                    style={{
+                        padding: `${space[3]}px ${space[3]}px 0`,
+                    }}
+                >
+                    <RecordingThumbnail
+                        projectId={projectId}
+                        recordingId={rec.id}
+                        onClick={onPreview}
+                    />
+                </div>
+            )}
             <div
                 style={{
-                    padding: `${space[4]}px ${space[5]}px ${space[3]}px`,
+                    padding: `${space[3]}px ${space[5]}px ${space[3]}px`,
                     display: "flex",
                     flexDirection: "column",
                     gap: space[2],

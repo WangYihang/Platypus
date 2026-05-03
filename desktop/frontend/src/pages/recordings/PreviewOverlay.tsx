@@ -49,6 +49,7 @@ export default function PreviewOverlay({ rec, projectId, onClose, onDownload }: 
         // event target being the backdrop itself, so descendants'
         // clicks reach document normally.
         <div
+            data-testid="recording-preview"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}

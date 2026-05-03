@@ -255,6 +255,7 @@ export default function RecordingsPage() {
                             <RecordingCard
                                 key={rec.id}
                                 rec={rec}
+                                projectId={project.id}
                                 onPreview={() => setPreviewing(rec)}
                                 onRename={() => {
                                     setRenameDraft(rec.title || "");
