@@ -122,6 +122,33 @@ example-plugins:
 	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_PUBLISHER_KEY --wasm $$wasm || exit 1; \
 	done
 
+# sign-system-plugins re-signs every bundle currently staged under
+# internal/agent/plugin/system/embedded/ with the system signing key
+# at PLATYPUS_SYSTEM_KEY. Run this when:
+#   - you've rotated the system signing key (new pubkey replaces
+#     internal/agent/plugin/system/embedded/publisher.pub)
+#   - you've added a new system plugin and need its .minisig staged
+#   - you've rebuilt a system plugin's .wasm and want a fresh signature
+#
+# The signed bundle (manifest + .wasm + .minisig) under each
+# <id>/<version>/ is what ships in the agent binary; this target
+# updates them in place. Bumping the wasm content REQUIRES re-signing
+# or the agent's at-load verify step will quarantine the plugin.
+sign-system-plugins:
+	@if [ -z "$$PLATYPUS_SYSTEM_KEY" ]; then \
+	  echo "PLATYPUS_SYSTEM_KEY=path/to/system-secret.platypus is required"; exit 1; \
+	fi
+	@if [ ! -x $(BUILD_DIR)/platypus-cli ]; then \
+	  echo "$(BUILD_DIR)/platypus-cli missing — run \`make build\` first"; exit 1; \
+	fi
+	@for d in internal/agent/plugin/system/embedded/*/*/plugin.yaml; do \
+	  dir=$$(dirname $$d); \
+	  entry=$$(grep '^  entry:' $$d | awk '{print $$2}'); \
+	  wasm=$$dir/$$entry; \
+	  echo "→ $$dir ($$entry)"; \
+	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_SYSTEM_KEY --wasm $$wasm || exit 1; \
+	done
+
 hooks:
 	pre-commit install
 

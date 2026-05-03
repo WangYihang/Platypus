@@ -1,0 +1,37 @@
+api_version: 1
+id: com.platypus.sys-hostname
+name: Hostname (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — first migration step toward a fully plugin-ified
+  agent. Returns the host's hostname via the host_sysinfo host
+  function.
+
+runtime:
+  type: wasm
+  entry: sys_hostname.wasm
+  abi: extism/1
+
+rpc:
+  - name: hostname
+    request:  { proto: HostnameRequest }
+    response: { proto: HostnameResponse }
+
+capabilities:
+  sysinfo: true
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 2000
+
+# key_id is the system signing key id; will be filled in by the
+# `make sign-system-plugins` target. The committed .minisig matches
+# this id; rotating the key requires re-signing every system plugin.
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_hostname.wasm.minisig
