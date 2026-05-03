@@ -101,14 +101,24 @@ RUN apt-get update \
         python3 python3-yaml \
     && rm -rf /var/lib/apt/lists/*
 # Rust toolchain for compiling the example wasm plugins. The publisher
-# script runs `make example-plugins` which `cargo build`s every plugin
-# under example/plugins/ for wasm32-unknown-unknown. Pinned to stable;
-# bumping rustup just to chase a nightly is rarely worth it.
+# script `cargo build`s every plugin under example/plugins/ for
+# wasm32-unknown-unknown. Pinned to stable; bumping rustup just to
+# chase a nightly is rarely worth it.
+#
+# Two CARGO_HOMEs at play:
+#   - /usr/local/cargo (build-time)  — where rustup drops the proxy
+#     binaries that delegate to RUSTUP_HOME. Read-only after install
+#     so the runtime user can't tamper with the toolchain.
+#   - /cache/cargo-home (run-time)   — where `cargo build` populates
+#     the registry index + crate downloads. Owned by uid 65532 and
+#     mounted as a docker volume so warm rebuilds skip the network.
+# The runtime ENV below overrides CARGO_HOME to the writable cache;
+# rustup's proxy binaries on PATH still resolve via $RUSTUP_HOME.
 ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --default-toolchain stable --target wasm32-unknown-unknown \
+        | CARGO_HOME=/usr/local/cargo \
+          sh -s -- -y --default-toolchain stable --target wasm32-unknown-unknown \
     && chmod -R a+rx /usr/local/cargo /usr/local/rustup
 # Bind-mounted /workspace is owned by the host user (uid != 0) but the
 # container runs as a non-root UID, so git refuses to read .git under
@@ -129,10 +139,16 @@ RUN chmod +x /usr/local/bin/dev-publish-entrypoint.sh
 ENV HOME=/home/publisher \
     GOCACHE=/cache/go-build \
     GOMODCACHE=/cache/go-mod \
-    CARGO_TARGET_DIR=/cache/cargo-target
+    CARGO_HOME=/cache/cargo-home
+# CARGO_TARGET_DIR is intentionally NOT set globally — each example
+# plugin gets its own per-plugin target dir from the entrypoint
+# (BUILD_BASE_DIR/<plugin>/). Setting it globally would force every
+# plugin's outputs into a shared dir, causing cross-plugin name
+# collisions and breaking the staging logic that reads
+# <plugin_dir>/target/ relative paths.
 RUN mkdir -p /home/publisher /keys /output \
-        /cache/go-build /cache/go-mod /cache/cargo-target \
+        /cache/go-build /cache/go-mod /cache/cargo-home /cache/cargo-target \
     && chown -R 65532:65532 /home/publisher /keys /output \
-        /cache/go-build /cache/go-mod /cache/cargo-target
+        /cache/go-build /cache/go-mod /cache/cargo-home /cache/cargo-target
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/dev-publish-entrypoint.sh"]

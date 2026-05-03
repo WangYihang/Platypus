@@ -25,6 +25,12 @@ services:
       - publisher_keys:/keys
       - publisher_gocache:/cache/go-build
       - publisher_gomod:/cache/go-mod
+      # Cargo registry cache (downloaded crate sources) + per-plugin
+      # build outputs. Without these the wasm plugin step re-pulls
+      # ~50 MB of crates + recompiles from scratch on every up,
+      # turning a 3-second warm rebuild into a 90-second cold one.
+      - publisher_cargo_home:/cache/cargo-home
+      - publisher_cargo_target:/cache/cargo-target
       - platypus_data:/output
     restart: "no"
 
@@ -33,3 +39,5 @@ volumes:
   publisher_keys:
   publisher_gocache:
   publisher_gomod:
+  publisher_cargo_home:
+  publisher_cargo_target:

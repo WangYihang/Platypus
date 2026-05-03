@@ -102,30 +102,58 @@ if [[ ! -f "$PLUGIN_KEY_SECRET" || ! -f "$PLUGIN_KEY_PUBLIC" ]]; then
         --force
 fi
 
+# /workspace is bind-mounted RO, so cargo can't write `./target/`
+# next to each Cargo.toml. Use a per-plugin CARGO_TARGET_DIR under
+# the writable /cache/cargo-target volume (cached across runs);
+# keep them per-plugin so the lib name collisions don't bite (each
+# crate's [lib] name is unique inside its own target dir).
+#
+# Done inline rather than via `make example-plugins` because the
+# Makefile's rule reads `<plugin_dir>/target/` literal paths that
+# only work on a writable workspace. Local dev still uses the
+# Makefile; the publisher container needs this RO-aware variant.
 echo "→ building + signing example plugins"
-PLATYPUS_PUBLISHER_KEY="$PLUGIN_KEY_SECRET" \
-    BUILD_DIR=/tmp \
-    make example-plugins
-
-# Stage the signed bundles. Mirror is one dir per (id, version) so
-# index.json's wasm_url / signature_url / manifest_url can be a
-# straight file:// URL pointing at the same files.
-echo "→ staging plugin bundle under $MARKETPLACE_OUT"
 rm -rf "$MARKETPLACE_OUT"
 mkdir -p "$MARKETPLACE_OUT/plugins"
-for d in example/plugins/*/; do
-    d="${d%/}"
-    if ! ls "$d"/target/wasm32-unknown-unknown/release/*.wasm >/dev/null 2>&1; then
-        continue
+mkdir -p /cache/cargo-target
+
+for plugin_dir in example/plugins/*/; do
+    plugin_dir="${plugin_dir%/}"
+    name=$(basename "$plugin_dir")
+    [ -f "$plugin_dir/Cargo.toml" ] || continue
+    target_dir="/cache/cargo-target/$name"
+    mkdir -p "$target_dir"
+    echo "  → $name"
+    (cd "$plugin_dir" && \
+        CARGO_TARGET_DIR="$target_dir" \
+        cargo build --release --target wasm32-unknown-unknown) || exit 1
+
+    # Find + sign the produced wasm. Glob handles the case where
+    # cargo's [lib] name doesn't match the dir basename
+    # (e.g. sys-info → sys_info_plugin.wasm).
+    wasm_count=$(ls -1 "$target_dir"/wasm32-unknown-unknown/release/*.wasm 2>/dev/null | wc -l)
+    if [ "$wasm_count" -ne 1 ]; then
+        echo "expected 1 .wasm under $target_dir/wasm32-unknown-unknown/release/, got $wasm_count" >&2
+        exit 1
     fi
-    pid=$(awk '/^id:/ {print $2; exit}' "$d/plugin.yaml")
-    ver=$(awk '/^version:/ {print $2; exit}' "$d/plugin.yaml")
+    wasm=$(ls -1 "$target_dir"/wasm32-unknown-unknown/release/*.wasm)
+    /tmp/platypus-cli plugin sign --force \
+        --key "$PLUGIN_KEY_SECRET" \
+        --wasm "$wasm" || exit 1
+
+    # Stage straight into the marketplace bundle. Mirror is one dir
+    # per (id, version) so index.json's wasm_url / signature_url /
+    # manifest_url can be straight file:// URLs.
+    pid=$(awk '/^id:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
+    ver=$(awk '/^version:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
     out="$MARKETPLACE_OUT/plugins/$pid/$ver"
     mkdir -p "$out"
-    cp "$d/plugin.yaml" "$out/"
-    cp "$d"/target/wasm32-unknown-unknown/release/*.wasm "$out/"
-    cp "$d"/target/wasm32-unknown-unknown/release/*.wasm.minisig "$out/"
+    cp "$plugin_dir/plugin.yaml" "$out/"
+    cp "$wasm" "$out/"
+    cp "$wasm.minisig" "$out/"
 done
+
+echo "→ staged plugin bundle under $MARKETPLACE_OUT"
 
 # Generate index.json. The server reads /app/data/plugin-marketplace/...
 # (its <data-dir> is mapped to /app/data on the runtime side); the
