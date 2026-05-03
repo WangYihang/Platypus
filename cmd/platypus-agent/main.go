@@ -316,6 +316,7 @@ func main() {
 		rename := agent.HandleRename
 		processList := agent.HandleProcessList
 		sysInfo := agent.HandleSysInfo
+		exec := agent.HandleExec
 		if pluginRegistry != nil {
 			listDir = pluginbridge.ListDir(pluginRegistry)
 			stat = pluginbridge.Stat(pluginRegistry)
@@ -325,9 +326,10 @@ func main() {
 			rename = pluginbridge.Rename(pluginRegistry)
 			processList = pluginbridge.ProcessList(pluginRegistry)
 			sysInfo = pluginbridge.SysInfo(pluginRegistry)
+			exec = pluginbridge.Exec(pluginRegistry)
 		}
 		rpc := agent.AgentRPCHandlers{
-			Exec:               agent.HandleExec,
+			Exec:               exec,
 			ListDir:            listDir,
 			Stat:               stat,
 			Delete:             del,

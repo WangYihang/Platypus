@@ -50,9 +50,14 @@ func (pctx *pluginCtx) hostExec(ctx context.Context, p *extism.CurrentPlugin, st
 		returnEnvelope(p, stack, denied("exec (no manifest spec)"))
 		return
 	}
+	// "*" in the commands list is the unrestricted-exec marker. It's
+	// only a sane choice for system plugins (which the operator
+	// implicitly trusts via the agent build); the install-time
+	// capability dialog should call out a "*" entry prominently for
+	// third-party plugins so it doesn't get rubber-stamped.
 	allowed := false
 	for _, c := range pctx.manifest.Capabilities.Exec.Commands {
-		if c == req.Command {
+		if c == "*" || c == req.Command {
 			allowed = true
 			break
 		}
