@@ -129,6 +129,17 @@ func (c ManifestCapabilities) validate() error {
 			}
 		}
 	}
+	if c.FSWrite != nil {
+		if len(c.FSWrite.Paths) == 0 {
+			errs = append(errs, errors.New("capabilities.fs.write set without any paths"))
+		}
+		for i, p := range c.FSWrite.Paths {
+			if !filepath.IsAbs(p) {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.fs.write.paths[%d]=%q must be an absolute path", i, p))
+			}
+		}
+	}
 	if c.NetHTTP != nil {
 		if len(c.NetHTTP.Hosts) == 0 {
 			errs = append(errs, errors.New("capabilities.net.http set without any hosts"))
@@ -161,6 +172,9 @@ func (m *Manifest) DeclaredCapabilities() []CapabilityID {
 	}
 	if m.Capabilities.FSRead != nil {
 		out = append(out, CapFSRead)
+	}
+	if m.Capabilities.FSWrite != nil {
+		out = append(out, CapFSWrite)
 	}
 	if m.Capabilities.NetHTTP != nil {
 		out = append(out, CapNetHTTP)

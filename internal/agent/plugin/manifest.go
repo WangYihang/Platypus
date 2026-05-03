@@ -13,13 +13,14 @@ const (
 	CapSysInfo CapabilityID = "sysinfo"  // host_sysinfo: read-only host snapshot
 	CapExec    CapabilityID = "exec"     // host_exec; requires Capabilities.Exec.Commands allowlist
 	CapFSRead  CapabilityID = "fs.read"  // host_fs_read/listdir/stat; requires Capabilities.FSRead.Paths
+	CapFSWrite CapabilityID = "fs.write" // host_fs_write/mkdir/chmod/rename/delete; requires Capabilities.FSWrite.Paths
 	CapNetHTTP CapabilityID = "net.http" // host_http; requires Capabilities.NetHTTP.Hosts
 )
 
 // allCapabilities is the set the agent is willing to grant. Used by
 // validation to reject manifests that ask for unknown capabilities.
 var allCapabilities = map[CapabilityID]struct{}{
-	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapNetHTTP: {},
+	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {},
 }
 
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the
@@ -66,6 +67,7 @@ type ManifestSchema struct {
 type ManifestCapabilities struct {
 	Exec    *CapExecSpec    `yaml:"exec,omitempty"`
 	FSRead  *CapFSReadSpec  `yaml:"fs.read,omitempty"`
+	FSWrite *CapFSWriteSpec `yaml:"fs.write,omitempty"`
 	NetHTTP *CapNetHTTPSpec `yaml:"net.http,omitempty"`
 	KV      bool            `yaml:"kv,omitempty"`
 	SysInfo bool            `yaml:"sysinfo,omitempty"`
@@ -84,6 +86,13 @@ type CapExecSpec struct {
 // traversal is NOT followed across allowlist boundaries (resolved
 // runtime-side in host_fs.go).
 type CapFSReadSpec struct {
+	Paths []string `yaml:"paths"`
+}
+
+// CapFSWriteSpec.Paths is the directory allowlist for fs mutations:
+// create / delete / rename / chmod under one of these. Same
+// component-aware + symlink-resolved enforcement as CapFSReadSpec.
+type CapFSWriteSpec struct {
 	Paths []string `yaml:"paths"`
 }
 

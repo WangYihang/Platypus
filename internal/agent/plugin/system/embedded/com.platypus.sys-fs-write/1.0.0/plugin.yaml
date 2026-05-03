@@ -1,0 +1,46 @@
+api_version: 1
+id: com.platypus.sys-fs-write
+name: Filesystem write (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — replaces the agent's built-in fs.write RPCs (Mkdir,
+  Chmod, Rename, Delete). Each method calls the matching host_fs_*
+  host function.
+
+runtime:
+  type: wasm
+  entry: sys_fs_write.wasm
+  abi: extism/1
+
+rpc:
+  - name: mkdir
+    request:  { proto: MkdirRequest }
+    response: { proto: MkdirResponse }
+  - name: chmod
+    request:  { proto: ChmodRequest }
+    response: { proto: ChmodResponse }
+  - name: delete
+    request:  { proto: DeleteRequest }
+    response: { proto: DeleteResponse }
+  - name: rename
+    request:  { proto: RenameRequest }
+    response: { proto: RenameResponse }
+
+# Unrestricted fs.write posture matches the legacy handlers' behaviour.
+# System plugins are granted whatever they declare.
+capabilities:
+  fs.write:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 5000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_fs_write.wasm.minisig

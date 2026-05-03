@@ -296,25 +296,34 @@ func main() {
 			slog.Int("attempt", connectAttempt),
 			slog.Duration("dial_elapsed", time.Since(dialStart)),
 		)
-		// fs.read RPCs (ListDir, Stat) served by the
-		// com.platypus.sys-listdir system plugin. Bridge wrappers keep
-		// the AgentRPCHandlers signature so the dispatcher doesn't
-		// notice. Falls back to the built-in handler if the plugin
-		// runtime isn't available (e.g. broken catalog at boot).
+		// fs.read (ListDir, Stat) served by com.platypus.sys-listdir;
+		// fs.write (Mkdir, Chmod, Delete, Rename) served by
+		// com.platypus.sys-fs-write. Bridge wrappers preserve the
+		// AgentRPCHandlers signatures so the dispatcher doesn't
+		// notice. Each falls back to the legacy built-in handler if
+		// the plugin runtime isn't available (broken catalog at boot).
 		listDir := agent.HandleListDir
 		stat := agent.HandleStat
+		mkdir := agent.HandleMkdir
+		chmod := agent.HandleChmod
+		del := agent.HandleDelete
+		rename := agent.HandleRename
 		if pluginRegistry != nil {
 			listDir = pluginbridge.ListDir(pluginRegistry)
 			stat = pluginbridge.Stat(pluginRegistry)
+			mkdir = pluginbridge.Mkdir(pluginRegistry)
+			chmod = pluginbridge.Chmod(pluginRegistry)
+			del = pluginbridge.Delete(pluginRegistry)
+			rename = pluginbridge.Rename(pluginRegistry)
 		}
 		rpc := agent.AgentRPCHandlers{
 			Exec:               agent.HandleExec,
 			ListDir:            listDir,
 			Stat:               stat,
-			Delete:             agent.HandleDelete,
-			Rename:             agent.HandleRename,
-			Mkdir:              agent.HandleMkdir,
-			Chmod:              agent.HandleChmod,
+			Delete:             del,
+			Rename:             rename,
+			Mkdir:              mkdir,
+			Chmod:              chmod,
 			SysInfo:            agent.HandleSysInfo,
 			ProcessList:        agent.HandleProcessList,
 			SecurityScan:       agent.HandleSecurityScan,
