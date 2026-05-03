@@ -97,6 +97,31 @@ vet:
 tidy:
 	$(GO) mod tidy
 
+# example-plugins builds + signs every plugin under example/plugins/.
+# Requires:
+#   - rustup with the wasm32-unknown-unknown target installed
+#   - $(BUILD_DIR)/platypus-cli (run `make build` first)
+#   - PLATYPUS_PUBLISHER_KEY pointing at a secret key file produced
+#     by `platypus-cli plugin keygen`
+#
+# Each example plugin's .wasm + .minisig land next to its Cargo.toml
+# under target/wasm32-unknown-unknown/release/. Re-run after editing
+# the plugin source.
+example-plugins:
+	@if [ -z "$$PLATYPUS_PUBLISHER_KEY" ]; then \
+	  echo "PLATYPUS_PUBLISHER_KEY=path/to/secret.platypus is required"; exit 1; \
+	fi
+	@if [ ! -x $(BUILD_DIR)/platypus-cli ]; then \
+	  echo "$(BUILD_DIR)/platypus-cli missing — run \`make build\` first"; exit 1; \
+	fi
+	@for d in example/plugins/*/Cargo.toml; do \
+	  dir=$$(dirname $$d); name=$$(basename $$dir); \
+	  echo "→ $$name"; \
+	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
+	  wasm=$$dir/target/wasm32-unknown-unknown/release/$${name}.wasm; \
+	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_PUBLISHER_KEY --wasm $$wasm || exit 1; \
+	done
+
 hooks:
 	pre-commit install
 

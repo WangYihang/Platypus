@@ -1,0 +1,38 @@
+api_version: 1
+id: com.platypus.example-echo
+name: Echo
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Reference plugin: takes a string, returns the same string. Useful as
+  a smoke test that the runtime + signing + install pipeline are wired
+  up end-to-end on a target host.
+
+runtime:
+  type: wasm
+  entry: echo.wasm
+  abi: extism/1
+
+rpc:
+  - name: echo
+    request:  { proto: EchoRequest }
+    response: { proto: EchoResponse }
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 5000
+
+# Echo claims no capabilities — no fs/exec/net access. The agent will
+# reject any host_fs_read / host_exec / host_http call from this
+# plugin with capability_denied.
+
+signature:
+  algo: minisign-ed25519
+  # Replace with your publisher key id once `platypus-cli plugin keygen`
+  # has produced one. The agent matches signatures against this id at
+  # install time.
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: echo.wasm.minisig

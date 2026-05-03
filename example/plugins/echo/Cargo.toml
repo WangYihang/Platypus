@@ -1,0 +1,23 @@
+[package]
+name = "echo"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# cdylib is what wasm32-unknown-unknown wants — produces a dynamic
+# library shape that wraps as a WebAssembly module rather than the
+# usual rlib (which would be a Rust-only binary archive).
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+
+# Strip debug + symbols + LTO. Plugin .wasm files round-trip the
+# Platypus install pipeline (stream + base64), so trimming a few KB at
+# build time matters.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
