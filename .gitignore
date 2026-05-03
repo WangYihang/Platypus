@@ -46,8 +46,14 @@ dist/
 # build outputs; we don't commit them. System plugin bundles under
 # internal/agent/plugin/system/embedded/ are signed + checked in
 # deliberately and not affected by this rule.
+#
+# Cargo.lock files ARE checked in even though they're build artefacts:
+# the publisher container bind-mounts /workspace read-only + cargo
+# refuses to build a crate without a Cargo.lock unless it can generate
+# one (and it can't on a RO mount). Committing them also pins the
+# toolchain dep tree for reproducible CI builds. Compile/sign in the
+# publisher's writable cache via CARGO_TARGET_DIR.
 example/plugins/*/target/
-example/plugins/*/Cargo.lock
 
 # Wails desktop — un-ignore project scaffold under desktop/build/
 # (global build/ rule above would otherwise hide platform configs).
