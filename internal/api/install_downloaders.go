@@ -75,7 +75,10 @@ func downloaderOSFamily(targetOS string) string {
 // (skip-cert-verify, default for self-signed) and strict (relies on
 // the system trust store, for prod servers with a real cert). Each
 // map is keyed by downloader name; the defaults are the family's
-// first entry in the matching flavour.
+// first entry in the matching flavour. Caller wires the
+// download_tls=insecure marker onto the insecure URL so the inner
+// script honours the same TLS trust mode (see renderInstallCommands
+// in handler_install_tokens_v1.go).
 func renderInstallCommandsFor(url, targetOS string) (
 	insecureCommands, strictCommands map[string]string,
 	insecureDefault, strictDefault string,
@@ -86,6 +89,8 @@ func renderInstallCommandsFor(url, targetOS string) (
 // renderBundleCommandsFor is the bundle-shape sibling: same registry,
 // same flavours, but the rendered command runs `platypus-agent` on
 // the fetched pinst_ token instead of piping the body to a shell.
+// Bundle URLs use the same value for both flavours — the agent CLI
+// handles trust independently and ignores skip_verify.
 func renderBundleCommandsFor(url, targetOS string) (
 	insecureCommands, strictCommands map[string]string,
 	insecureDefault, strictDefault string,
@@ -93,9 +98,10 @@ func renderBundleCommandsFor(url, targetOS string) (
 	return renderCommandsForURLs(url, url, targetOS, true)
 }
 
-// renderCommandsFor is the shared driver. Walks the registry filtered
-// by OS family, runs each entry's render twice (insecure + strict),
-// records the first family entry's render as the family default.
+// renderCommandsForURLs is the shared driver. Walks the registry
+// filtered by OS family, runs each entry's render twice (insecure +
+// strict) against potentially-distinct URLs, records the first
+// family entry's render as the family default.
 func renderCommandsForURLs(insecureURL, strictURL, targetOS string, asBundle bool) (
 	insecure, strict map[string]string,
 	insecureDefault, strictDefault string,

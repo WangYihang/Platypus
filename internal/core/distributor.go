@@ -570,9 +570,31 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string,
 		"  Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Bin",
 		"  $DownloadOk = $true",
 		"} catch {",
-		"  Write-Warning \"Invoke-WebRequest failed: $($_.Exception.Message). Trying Start-BitsTransfer...\"",
-		"  try { Start-BitsTransfer -Source $Url -Destination $Bin -ErrorAction Stop; $DownloadOk = $true }",
-		"  catch { Write-Error \"Start-BitsTransfer also failed: $($_.Exception.Message)\"; exit 1 }",
+	)
+	if forceInsecureDownload {
+		// Start-BitsTransfer goes through BITS, which uses Windows'
+		// system trust store and IGNORES the per-process SPM
+		// callback. In force-insecure mode the operator has
+		// explicitly opted out of cert verification — falling
+		// through to BITS would replace one misleading error with
+		// another ("certificate authority is invalid or incorrect"
+		// from BITS even though IWR's `{ $true }` accepts the cert).
+		// Surface the IWR failure instead.
+		lines = append(lines,
+			"  Write-Error \"Invoke-WebRequest failed in force-insecure mode: $($_.Exception.Message)\"; exit 1",
+		)
+	} else {
+		// Cert-pinning mode: IWR honours the SPM callback so the
+		// only reasons it fails here are network-level. BITS is a
+		// useful escape hatch on locked-down hosts that block IWR
+		// but allow background transfers.
+		lines = append(lines,
+			"  Write-Warning \"Invoke-WebRequest failed: $($_.Exception.Message). Trying Start-BitsTransfer...\"",
+			"  try { Start-BitsTransfer -Source $Url -Destination $Bin -ErrorAction Stop; $DownloadOk = $true }",
+			"  catch { Write-Error \"Start-BitsTransfer also failed: $($_.Exception.Message)\"; exit 1 }",
+		)
+	}
+	lines = append(lines,
 		"}",
 		"if (-not $DownloadOk) { Write-Error 'platypus: no working downloader on this Windows host'; exit 1 }",
 		// Single --server flag carries host:port, token stays positional.

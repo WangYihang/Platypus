@@ -195,6 +195,13 @@ func TestRenderInstallScript_ForceInsecureDownload(t *testing.T) {
 	}
 }
 
+// TestRenderInstallScriptPS1_ForceInsecureDownload covers the Windows
+// half of the same thread-through: force-insecure mode must install
+// `{ $true }` on the SPM (so IWR succeeds against any cert) and must
+// drop the BITS fallback. BITS uses the Windows system trust store
+// and IGNORES the SPM callback — falling through to it would replace
+// the IWR result with a misleading "certificate authority is invalid"
+// error from the BITS layer.
 func TestRenderInstallScriptPS1_ForceInsecureDownload(t *testing.T) {
 	r := &enrollment.ConsumeResult{
 		ServerEndpoint: "agent.example.com:13337",
@@ -207,5 +214,8 @@ func TestRenderInstallScriptPS1_ForceInsecureDownload(t *testing.T) {
 	}
 	if strings.Contains(got, "$CaB64 = ") {
 		t.Fatalf("PS1 script should not install CA-pinning callback in force-insecure mode\n%s", got)
+	}
+	if strings.Contains(got, "Start-BitsTransfer") {
+		t.Fatalf("PS1 script should not fall back to BITS in force-insecure mode (BITS ignores the SPM callback)\n%s", got)
 	}
 }
