@@ -1,7 +1,7 @@
 GO         ?= go
 LDFLAGS    := -s -w
 BUILD_DIR  := build
-BINS       := platypus-server platypus-agent
+BINS       := platypus-server platypus-agent platypus-cli
 PROTO_V2_SRC := $(wildcard proto/v2/*.proto)
 PROTO_V2_OUT := pkg/proto/v2/common.pb.go
 
