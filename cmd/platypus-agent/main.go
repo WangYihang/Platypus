@@ -132,13 +132,18 @@ func main() {
 		agent.AttachMesh(state, node)
 	}
 
-	// Plugin runtime is process-wide and survives reconnects so a
-	// flaky link doesn't tear down loaded wasm instances. Errors here
-	// are non-fatal — a broken catalog should not block the agent
-	// from serving its built-in RPCs.
-	// Wire the gopsutil-backed collectors behind the plugin runtime's
-	// host_* stubs. Done before New() so the first call from a system
-	// plugin already finds them.
+	// The plugin runtime is now load-bearing: every RPC handler and
+	// every stream type the agent serves dispatches through a system
+	// plugin (sys-listdir, sys-fs-write, sys-procs, sys-info,
+	// sys-exec, sys-security, sys-config-audit, sys-streams,
+	// sys-hostname). Failure to bring it up means the agent can't do
+	// anything useful, so we exit hard rather than running in a
+	// degraded mode that silently drops every server-initiated
+	// action.
+	//
+	// Host providers + stream adapters are registered FIRST so the
+	// plugin bootstrap finds them ready when it instantiates each
+	// system plugin's wasm.
 	pluginrt.SetHostProcessListProvider(agent.CollectProcessList)
 	pluginrt.SetHostCollectSysInfoProvider(agent.CollectSysInfo)
 	pluginrt.SetHostSecurityScanProvider(agent.HandleSecurityScan)
@@ -151,31 +156,47 @@ func main() {
 		Paths: pluginrt.NewPaths(identityDir),
 	})
 	if err != nil {
-		logger.Warn("plugin registry init failed; plugin RPCs will be unavailable",
+		logger.Error("plugin registry init failed; agent cannot serve RPCs without it",
 			slog.String("error", err.Error()))
-		pluginRegistry = nil
-	} else {
-		pluginRegistry.Load(ctx)
-		defer pluginRegistry.Close(ctx)
+		os.Exit(1)
+	}
+	pluginRegistry.Load(ctx)
+	defer pluginRegistry.Close(ctx)
 
-		// System-plugin bootstrap: walk the embedded FS, install any
-		// bundled plugins missing from the catalog. Per-bundle errors
-		// are logged inside EnsureInstalled and do not fail boot.
-		// SetupError (no publisher.pub yet because no system plugins
-		// have shipped) is also non-fatal — the agent continues with
-		// zero system plugins installed; user-installed plugins still
-		// work over REST.
-		if embFS, fsErr := pluginsys.EmbeddedFS(); fsErr == nil {
-			res := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS)
-			logger.Info("system plugins bootstrap",
-				slog.Int("installed", len(res.Installed)),
-				slog.Int("skipped", len(res.Skipped)),
-				slog.Int("failed", len(res.Failed)),
-			)
-			if res.SetupError != nil {
-				logger.Debug("system plugins setup",
-					slog.String("error", res.SetupError.Error()))
-			}
+	// System-plugin bootstrap: walk the embedded FS, install any
+	// bundled plugins missing from the catalog. Per-bundle failures
+	// are surfaced + counted so a corrupt build is loud, not silent;
+	// the operator gets to see exactly which plugins didn't load.
+	embFS, fsErr := pluginsys.EmbeddedFS()
+	if fsErr != nil {
+		logger.Error("system plugin embedded FS unavailable; agent build is broken",
+			slog.String("error", fsErr.Error()))
+		os.Exit(1)
+	}
+	bootRes := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS)
+	logger.Info("system plugins bootstrap",
+		slog.Int("installed", len(bootRes.Installed)),
+		slog.Int("skipped", len(bootRes.Skipped)),
+		slog.Int("failed", len(bootRes.Failed)),
+	)
+	if bootRes.SetupError != nil {
+		// publisher.pub missing or unreadable — every signature
+		// verify will fail, every plugin load will fail. Hard exit so
+		// the operator sees the build issue immediately rather than
+		// at first RPC.
+		logger.Error("system plugins setup failed; cannot verify bundled plugins",
+			slog.String("error", bootRes.SetupError.Error()))
+		os.Exit(1)
+	}
+	if len(bootRes.Failed) > 0 {
+		// At least one bundled system plugin couldn't be installed.
+		// Don't exit — the rest may still be functional — but log
+		// loudly so the operator notices the partial fleet.
+		for _, f := range bootRes.Failed {
+			logger.Error("system plugin install failed",
+				slog.String("plugin_id", f.ID),
+				slog.String("version", f.Version),
+				slog.String("error", f.Err.Error()))
 		}
 	}
 
@@ -307,64 +328,37 @@ func main() {
 			slog.Int("attempt", connectAttempt),
 			slog.Duration("dial_elapsed", time.Since(dialStart)),
 		)
-		// fs.read (ListDir, Stat) served by com.platypus.sys-listdir;
-		// fs.write (Mkdir, Chmod, Delete, Rename) served by
-		// com.platypus.sys-fs-write. Bridge wrappers preserve the
-		// AgentRPCHandlers signatures so the dispatcher doesn't
-		// notice. Each falls back to the legacy built-in handler if
-		// the plugin runtime isn't available (broken catalog at boot).
-		listDir := agent.HandleListDir
-		stat := agent.HandleStat
-		mkdir := agent.HandleMkdir
-		chmod := agent.HandleChmod
-		del := agent.HandleDelete
-		rename := agent.HandleRename
-		processList := agent.HandleProcessList
-		sysInfo := agent.HandleSysInfo
-		exec := agent.HandleExec
-		securityScan := agent.HandleSecurityScan
-		listSecurityChecks := agent.HandleListSecurityChecks
-		configAudit := agent.HandleConfigAudit
-		listConfigAuditors := agent.HandleListConfigAuditors
-		if pluginRegistry != nil {
-			listDir = pluginbridge.ListDir(pluginRegistry)
-			stat = pluginbridge.Stat(pluginRegistry)
-			mkdir = pluginbridge.Mkdir(pluginRegistry)
-			chmod = pluginbridge.Chmod(pluginRegistry)
-			del = pluginbridge.Delete(pluginRegistry)
-			rename = pluginbridge.Rename(pluginRegistry)
-			processList = pluginbridge.ProcessList(pluginRegistry)
-			sysInfo = pluginbridge.SysInfo(pluginRegistry)
-			exec = pluginbridge.Exec(pluginRegistry)
-			securityScan = pluginbridge.SecurityScan(pluginRegistry)
-			listSecurityChecks = pluginbridge.ListSecurityChecks(pluginRegistry)
-			configAudit = pluginbridge.ConfigAudit(pluginRegistry)
-			listConfigAuditors = pluginbridge.ListConfigAuditors(pluginRegistry)
-		}
-		rpc := agent.AgentRPCHandlers{
-			Exec:               exec,
-			ListDir:            listDir,
-			Stat:               stat,
-			Delete:             del,
-			Rename:             rename,
-			Mkdir:              mkdir,
-			Chmod:              chmod,
-			SysInfo:            sysInfo,
-			ProcessList:        processList,
-			SecurityScan:       securityScan,
-			ListSecurityChecks: listSecurityChecks,
-			ConfigAudit:        configAudit,
-			ListConfigAuditors: listConfigAuditors,
-		}
-		var pluginMgmt agent.PluginMgmtHandler
-		var pluginStream agent.PluginStreamDispatcher
-		if pluginRegistry != nil {
-			rpc.PluginCall = pluginRegistry.Invoke
-			pluginMgmt = pluginRegistry.HandleMgmt
-			pluginStream = pluginRegistry.DispatchStream
-		}
+		// Every RPC handler dispatches through a bridge wrapper that
+		// proxies to the matching system plugin. The legacy
+		// agent.HandleX functions are still wired in as the
+		// AgentHandlerDeps stream entries (Process / FileRead /
+		// FileWrite / FileScan / FileArchive / TunnelPull) — they're
+		// the host-side implementation the system plugins delegate
+		// to via the registered StreamProvider names. Removing them
+		// would break the providers.
 		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
-			RPC:          rpc,
+			RPC: agent.AgentRPCHandlers{
+				Exec:               pluginbridge.Exec(pluginRegistry),
+				ListDir:            pluginbridge.ListDir(pluginRegistry),
+				Stat:               pluginbridge.Stat(pluginRegistry),
+				Delete:             pluginbridge.Delete(pluginRegistry),
+				Rename:             pluginbridge.Rename(pluginRegistry),
+				Mkdir:              pluginbridge.Mkdir(pluginRegistry),
+				Chmod:              pluginbridge.Chmod(pluginRegistry),
+				SysInfo:            pluginbridge.SysInfo(pluginRegistry),
+				ProcessList:        pluginbridge.ProcessList(pluginRegistry),
+				SecurityScan:       pluginbridge.SecurityScan(pluginRegistry),
+				ListSecurityChecks: pluginbridge.ListSecurityChecks(pluginRegistry),
+				ConfigAudit:        pluginbridge.ConfigAudit(pluginRegistry),
+				ListConfigAuditors: pluginbridge.ListConfigAuditors(pluginRegistry),
+				PluginCall:         pluginRegistry.Invoke,
+			},
+			// Stream entries below stay populated for the rare case
+			// where the plugin claim registry has no entry for the
+			// inbound stream type — the legacy switch in
+			// dispatchAgentStream is the safety net. In production
+			// (sys-streams loaded) the PluginStream hook above
+			// handles every type before the switch fires.
 			Process:      agent.HandleProcessStream,
 			FileRead:     agent.HandleFileReadStream,
 			FileWrite:    agent.HandleFileWriteStream,
@@ -372,8 +366,8 @@ func main() {
 			FileArchive:  agent.HandleFileArchiveStream,
 			TunnelPull:   agent.HandleTunnelPullStream,
 			Upgrade:      buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
-			PluginMgmt:   pluginMgmt,
-			PluginStream: pluginStream,
+			PluginMgmt:   pluginRegistry.HandleMgmt,
+			PluginStream: pluginRegistry.DispatchStream,
 		})
 		reason := "peer_close"
 		if serveErr != nil {
