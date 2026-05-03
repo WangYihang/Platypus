@@ -145,3 +145,7 @@ A fresh project with no listener and no agent. Empty-state CTA points to the lis
 ### activity audit
 
 <img src="23-activity-audit.png" alt="activity audit" width="900">
+
+### marketplace empty
+
+<img src="30-marketplace-empty.png" alt="marketplace empty" width="900">

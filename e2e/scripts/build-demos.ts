@@ -61,6 +61,11 @@ const META: Record<string, DemoMeta> = {
         caption:
             "Login → server returns a single `pst_…` bearer (no JWT pair). Logout revokes it server-side; subsequent requests fail with 401 immediately.",
     },
+    "07-marketplace": {
+        title: "Plugin Marketplace tab",
+        caption:
+            "Global Marketplace tab opens, Refresh syncs the SQLite catalog from the platypus-plugins git index, search filters by plugin name, capability chips disclose what each plugin asks for.",
+    },
 };
 
 const ORDER = [
@@ -70,6 +75,7 @@ const ORDER = [
     "04-terminal-persistence",
     "05-command-palette",
     "06-auth-redesign",
+    "07-marketplace",
 ];
 
 interface Found {
