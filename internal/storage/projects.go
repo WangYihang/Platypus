@@ -18,6 +18,12 @@ type Project struct {
 	Slug      string
 	CreatedAt time.Time
 	CreatedBy string
+	// AISummariesEnabled gates the LLM round-trip in
+	// internal/recording/manager.go::Session.Finish. Off by default;
+	// the project owner toggles it from Settings → AI. Cast files
+	// can contain pasted secrets so we never send them out without
+	// explicit per-project consent.
+	AISummariesEnabled bool
 }
 
 func (db *DB) Projects() *ProjectRepo {
@@ -38,19 +44,19 @@ func (r *ProjectRepo) Create(ctx context.Context, p *Project) error {
 
 func (r *ProjectRepo) GetByID(ctx context.Context, id string) (*Project, error) {
 	return r.queryOne(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects WHERE id = ?`, id)
 }
 
 func (r *ProjectRepo) GetBySlug(ctx context.Context, slug string) (*Project, error) {
 	return r.queryOne(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects WHERE slug = ?`, slug)
 }
 
 func (r *ProjectRepo) List(ctx context.Context) ([]*Project, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects ORDER BY slug ASC`)
 	if err != nil {
 		return nil, err
@@ -76,7 +82,7 @@ func (r *ProjectRepo) ListForUser(ctx context.Context, userID string, globalRole
 		return r.List(ctx)
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT p.id, p.name, p.slug, p.created_at, p.created_by
+		SELECT p.id, p.name, p.slug, p.created_at, p.created_by, p.ai_summaries_enabled
 		  FROM projects p
 		  JOIN project_members m ON m.project_id = p.id
 		 WHERE m.user_id = ?
@@ -177,12 +183,33 @@ func (r *ProjectRepo) ListMembers(ctx context.Context, projectID string) ([]*Pro
 }
 
 func scanProject(s rowScanner) (*Project, error) {
-	var p Project
-	err := s.Scan(&p.ID, &p.Name, &p.Slug, &p.CreatedAt, &p.CreatedBy)
+	var (
+		p          Project
+		aiEnabled  int
+	)
+	err := s.Scan(&p.ID, &p.Name, &p.Slug, &p.CreatedAt, &p.CreatedBy, &aiEnabled)
 	if err != nil {
 		return nil, err
 	}
+	p.AISummariesEnabled = aiEnabled != 0
 	return &p, nil
+}
+
+// SetAISummariesEnabled flips the per-project opt-in for LLM
+// session summaries. Intended to be called by the project-settings
+// API handler; row missing → ErrNotFound.
+func (r *ProjectRepo) SetAISummariesEnabled(ctx context.Context, projectID string, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE projects SET ai_summaries_enabled = ? WHERE id = ?`,
+		v, projectID)
+	if err != nil {
+		return err
+	}
+	return expectOneRow(res)
 }
 
 func (r *ProjectRepo) queryOne(ctx context.Context, q string, args ...any) (*Project, error) {

@@ -37,6 +37,11 @@ type TerminalRecording struct {
 	ErrorMessage string
 	StartedAt    time.Time
 	EndedAt      *time.Time
+	// Summary is the LLM-generated one-line description of the
+	// session (see internal/llm). NULL until the summariser runs;
+	// stays NULL when the project hasn't opted in or the LLM call
+	// fails. Clients MUST tolerate empty.
+	Summary string
 }
 
 // RecordingFilter narrows a List query. Zero-value fields are ignored.
@@ -60,24 +65,28 @@ func (db *DB) TerminalRecordings() *RecordingsRepo {
 
 type RecordingsRepo struct{ db *sql.DB }
 
-const recordingColumns = "id, project_id, host_id, agent_id, user_id, cols, rows, shell, title, file_path, size_bytes, duration_ms, frame_count, status, error_message, started_at, ended_at"
+const recordingColumns = "id, project_id, host_id, agent_id, user_id, cols, rows, shell, title, file_path, size_bytes, duration_ms, frame_count, status, error_message, started_at, ended_at, summary"
 
 func scanRecording(scanner interface{ Scan(...any) error }) (*TerminalRecording, error) {
 	var (
 		r       TerminalRecording
 		endedAt sql.NullTime
+		summary sql.NullString
 	)
 	if err := scanner.Scan(
 		&r.ID, &r.ProjectID, &r.HostID, &r.AgentID, &r.UserID,
 		&r.Cols, &r.Rows, &r.Shell, &r.Title, &r.FilePath,
 		&r.SizeBytes, &r.DurationMs, &r.FrameCount,
-		&r.Status, &r.ErrorMessage, &r.StartedAt, &endedAt,
+		&r.Status, &r.ErrorMessage, &r.StartedAt, &endedAt, &summary,
 	); err != nil {
 		return nil, err
 	}
 	if endedAt.Valid {
 		t := endedAt.Time
 		r.EndedAt = &t
+	}
+	if summary.Valid {
+		r.Summary = summary.String
 	}
 	return &r, nil
 }
@@ -137,6 +146,17 @@ func (r *RecordingsRepo) SetTitle(ctx context.Context, id, title string) error {
 		return err
 	}
 	return expectOneRow(res)
+}
+
+// SetSummary stores the LLM-generated one-line description. The
+// summariser runs out-of-band after Finish; row may have been
+// deleted in the meantime, so this is a soft update — no error
+// when the row is missing (we don't want a deleted recording to
+// surface as a goroutine log line).
+func (r *RecordingsRepo) SetSummary(ctx context.Context, id, summary string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE terminal_recordings SET summary = ? WHERE id = ?`, summary, id)
+	return err
 }
 
 // Delete removes the row. The caller is responsible for unlinking the
