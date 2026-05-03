@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,17 @@ type pluginCtx struct {
 	// extism.Plugin.Call is serialised on loaded.mu — so a single
 	// pointer slot (no map / id scheme) is sufficient.
 	activeStreamPtr atomic.Pointer[streamCtx]
+
+	// processHandles is the per-plugin spawn table for the
+	// host_process_* family. Cleared on plugin teardown via
+	// reapProcessHandles so a crashed plugin doesn't leak a
+	// background child. processHandleCounter is the monotonically-
+	// increasing handle id; uint32 is plenty (the table is short-
+	// lived per plugin instance and a busy plugin spawning thousands
+	// of long-lived processes is out of scope).
+	processMu             sync.Mutex
+	processHandles        map[uint32]*processHandle
+	processHandleCounter  uint32
 }
 
 // buildHostFunctions returns the slice handed to extism.NewPlugin for
@@ -128,6 +140,15 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostLinkReadFrame),
 		newHostFunc("host_fs_write_range", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostFSWriteRange),
+
+		// Streaming process spawn — wasm migration target for the
+		// legacy STREAM_TYPE_PROCESS_OPEN handler. Gated by CapProcess.
+		newHostFunc("host_process_spawn", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessSpawn),
+		newHostFunc("host_process_relay", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessRelay),
+		newHostFunc("host_process_kill", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessKill),
 	}
 }
 

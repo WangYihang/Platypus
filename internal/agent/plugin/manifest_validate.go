@@ -176,6 +176,24 @@ func (c ManifestCapabilities) validate() error {
 			}
 		}
 	}
+	if c.Process != nil {
+		if len(c.Process.Commands) == 0 {
+			errs = append(errs, errors.New("capabilities.process set without any commands"))
+		}
+		for i, cmd := range c.Process.Commands {
+			if cmd == "*" {
+				// Unrestricted-spawn marker; same posture as exec.
+				// Required for the wasm replacement of the legacy
+				// PROCESS_OPEN handler which had implicit any-command
+				// access via the agent's process group.
+				continue
+			}
+			if !filepath.IsAbs(cmd) {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.process.commands[%d]=%q must be an absolute path or \"*\"", i, cmd))
+			}
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -203,6 +221,9 @@ func (m *Manifest) DeclaredCapabilities() []CapabilityID {
 	}
 	if m.Capabilities.NetHTTP != nil {
 		out = append(out, CapNetHTTP)
+	}
+	if m.Capabilities.Process != nil {
+		out = append(out, CapProcess)
 	}
 	return out
 }

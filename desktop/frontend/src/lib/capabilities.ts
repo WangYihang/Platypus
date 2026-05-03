@@ -23,7 +23,8 @@ export type CapabilityFamily =
     | "fs.read"
     | "fs.write"
     | "exec"
-    | "net.http";
+    | "net.http"
+    | "process";
 
 export interface CapabilityMeta {
     family: CapabilityFamily;
@@ -74,6 +75,13 @@ const CAPABILITY_META: Record<CapabilityFamily, CapabilityMeta> = {
         label: "HTTP requests",
         risk: "high",
         summary: "Make outbound HTTP requests to the declared hosts.",
+    },
+    process: {
+        family: "process",
+        label: "Spawn processes (streaming)",
+        risk: "high",
+        summary:
+            "Spawn an interactive child process (PTY-backed shells, long-lived daemons). Higher blast radius than `exec` because the operator's stdin reaches the child over the network.",
     },
 };
 

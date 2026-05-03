@@ -15,12 +15,22 @@ const (
 	CapFSRead  CapabilityID = "fs.read"  // host_fs_read/listdir/stat; requires Capabilities.FSRead.Paths
 	CapFSWrite CapabilityID = "fs.write" // host_fs_write/mkdir/chmod/rename/delete; requires Capabilities.FSWrite.Paths
 	CapNetHTTP CapabilityID = "net.http" // host_http; requires Capabilities.NetHTTP.Hosts
+	// CapProcess gates streaming process spawn — host_process_spawn /
+	// _relay / _kill — used by the wasm replacement for the legacy
+	// STREAM_TYPE_PROCESS_OPEN handler. Distinct from CapExec because
+	// the blast radius is different: exec captures stdout+stderr after
+	// the child completes (short-lived, bounded), whereas process spawn
+	// gives the wasm an interactive PTY with stdin from the network
+	// (long-lived, an operator's full shell). An operator may want to
+	// grant exec without granting process; the manifest splits them so
+	// the install dialog can ask separately.
+	CapProcess CapabilityID = "process"
 )
 
 // allCapabilities is the set the agent is willing to grant. Used by
 // validation to reject manifests that ask for unknown capabilities.
 var allCapabilities = map[CapabilityID]struct{}{
-	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {},
+	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {},
 }
 
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the
@@ -104,6 +114,7 @@ type ManifestCapabilities struct {
 	FSRead  *CapFSReadSpec  `yaml:"fs.read,omitempty"`
 	FSWrite *CapFSWriteSpec `yaml:"fs.write,omitempty"`
 	NetHTTP *CapNetHTTPSpec `yaml:"net.http,omitempty"`
+	Process *CapProcessSpec `yaml:"process,omitempty"`
 	KV      bool            `yaml:"kv,omitempty"`
 	SysInfo bool            `yaml:"sysinfo,omitempty"`
 }
@@ -136,6 +147,14 @@ type CapFSWriteSpec struct {
 // literals (127.0.0.1, ::1) are accepted.
 type CapNetHTTPSpec struct {
 	Hosts []string `yaml:"hosts"`
+}
+
+// CapProcessSpec.Commands is the exact-path allowlist for streaming
+// process spawn. Same posture as CapExecSpec: literal paths only, no
+// wildcards, so an operator reading the manifest knows precisely
+// which binaries the plugin can launch as an interactive PTY.
+type CapProcessSpec struct {
+	Commands []string `yaml:"commands"`
 }
 
 type ManifestResources struct {

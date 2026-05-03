@@ -96,9 +96,15 @@ func (l *loaded) instanceOf(ctx context.Context) (*extism.Plugin, error) {
 }
 
 // close releases the wazero runtime backing this plugin. Idempotent.
+// Also reaps any orphaned child processes — a plugin that crashed
+// mid-host_process_relay would otherwise leak a long-lived child
+// owned by the now-defunct wasm instance.
 func (l *loaded) close(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.pctx != nil {
+		l.pctx.reapProcessHandles()
+	}
 	if l.instance != nil {
 		_ = l.instance.Close(ctx)
 		l.instance = nil
