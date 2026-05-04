@@ -35,19 +35,22 @@ import (
 //   6. Wasm returns; dispatcher closes s.inbound, joins pumps,
 //      writes terminal frame, calls pctx.clearActiveStream().
 
-// streamCtx is per-active-stream state. Two channels (cap=1 for
-// natural backpressure) + atomics for the closed/EOF flags the
-// host fns consult.
+// streamCtx is per-active-stream state. Two backend modes:
 //
-// The legacy-wasm-bridge path (DispatchLegacyWasmStream) leaves the
-// channels nil and instead sets `wire` to the raw agent stream so
-// host_link_write_frame can write length-prefixed proto frames
-// directly to the wire — matching the byte-for-byte format the
-// pre-migration Go handlers emitted (link.WriteFrame). Pump-mode
-// (PLUGIN_STREAM) leaves `wire` nil and uses the channels.
+//   - PLUGIN_STREAM (envelope mode): channels feed
+//     pumpInboundFrames / pumpOutboundFrames which wrap chunks in
+//     PluginStreamFrame envelopes on the wire. wire is nil.
+//
+//   - typed-stream (raw wire mode): host_stream_read /
+//     host_stream_write read & write length-prefixed proto frames
+//     directly on `wire`, matching the byte format
+//     internal/link.{ReadFrame,WriteFrame} use. wire is non-nil and
+//     the channels are unused. Set up by DispatchLegacyWasmStream
+//     (legacy name kept; the dispatcher itself is fine — only the
+//     host_link_*_frame fns it relied on were retired in E6).
 //
 // Exactly one of {channels, wire} is populated for any given
-// streamCtx; host fns route based on which is non-nil.
+// streamCtx; host_stream_* routes based on which is non-nil.
 type streamCtx struct {
 	id          uint32
 	inbound     chan []byte // pump-mode: wire → wasm reader
@@ -55,13 +58,14 @@ type streamCtx struct {
 	writeClosed atomic.Bool // host_stream_close → outbound closed; subsequent writes fail
 	inboundEOF  atomic.Bool // wire EOF observed; subsequent reads return empty
 
-	// wire is the raw agent stream for the legacy-wasm-bridge path.
-	// Non-nil → host_link_write_frame and host_link_read_frame
-	// operate directly on this. Bidirectional (io.ReadWriter) so
-	// plugins like sys-file-write can both ack with an outbound
-	// frame and consume incoming chunked-input frames over the same
-	// stream. Synchronised by extism's per-plugin call serialisation:
-	// at most one wasm call is in flight per loaded plugin, so direct
+	// wire is the raw agent stream for typed-stream-type dispatch
+	// (DispatchLegacyWasmStream). Non-nil → host_stream_read /
+	// host_stream_write operate directly on this with length-
+	// prefixed framing. Bidirectional (io.ReadWriter) so plugins
+	// like sys-files-write can both ack with an outbound frame and
+	// consume incoming chunked-input frames over the same stream.
+	// Synchronised by extism's per-plugin call serialisation: at
+	// most one wasm call is in flight per loaded plugin, so direct
 	// reads/writes don't race with each other.
 	wire io.ReadWriter
 }
@@ -95,12 +99,13 @@ func (pctx *pluginCtx) clearActiveStream() {
 // decodes it on the wasm side. Returns empty data on EOF.
 //
 // Two backend modes:
-//   - legacy-wasm-bridge (s.wire != nil): reads a length-prefixed
-//     frame straight off the wire (same protocol as the soon-to-be-
-//     retired host_link_read_frame). Matches the wire shape the
-//     server-side legacy stream-type handlers (FILE_WRITE etc) emit.
-//   - pump mode (s.wire == nil): pulls one already-decoded chunk off
-//     the inbound channel that pumpInboundFrames feeds.
+//   - raw-wire mode (s.wire != nil; set up by DispatchLegacyWasmStream
+//     for typed stream types): reads a length-prefixed frame straight
+//     off the wire. Matches the wire shape the server-side typed
+//     stream-type handlers (FILE_WRITE etc) emit.
+//   - pump mode (s.wire == nil; set up by DispatchPluginStream): pulls
+//     one already-decoded chunk off the inbound channel that
+//     pumpInboundFrames feeds.
 //
 // On the pump-mode path we don't short-circuit on s.inboundEOF here
 // even though the pump sets it on close: the pump may have pushed a
@@ -155,14 +160,14 @@ func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlug
 // hostStreamWrite emits one frame on the outbound side of the stream.
 //
 // Two backend modes:
-//   - legacy-wasm-bridge (s.wire != nil): writes a length-prefixed
-//     frame straight to the wire. Matches the wire format the
-//     server-side legacy stream-type handlers (FILE_READ, PROCESS_OPEN,
-//     etc) read with `link.ReadFrame(stream, &TypedResponse{})`.
-//     Identical effect to the soon-to-be-retired host_link_write_frame.
-//   - pump mode (s.wire == nil): enqueues onto the outbound channel
-//     that pumpOutboundFrames wraps in PluginStreamFrame envelopes.
-//     Blocking on a full channel is the natural backpressure mechanism.
+//   - raw-wire mode (s.wire != nil; set up by DispatchLegacyWasmStream
+//     for typed stream types): writes a length-prefixed frame straight
+//     to the wire. Matches the format the server-side typed stream
+//     handlers read with `link.ReadFrame(stream, &TypedResponse{})`.
+//   - pump mode (s.wire == nil; set up by DispatchPluginStream):
+//     enqueues onto the outbound channel that pumpOutboundFrames wraps
+//     in PluginStreamFrame envelopes. Blocking on a full channel is
+//     the natural backpressure mechanism.
 func (pctx *pluginCtx) hostStreamWrite(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
 	s := pctx.activeStream()
 	if s == nil {
@@ -231,102 +236,9 @@ func (pctx *pluginCtx) hostStreamClose(_ context.Context, p *extism.CurrentPlugi
 	returnEnvelope(p, stack, envelope{Ok: true})
 }
 
-// hostLinkWriteFrame writes a length-prefixed frame straight to the
-// wire of a legacy-wasm-bridge stream. The wasm side is responsible
-// for marshalling the inner proto (e.g. v2pb.FileReadResponse) and
-// passing the marshalled bytes as the argument; this fn prepends
-// the 4-byte big-endian length prefix that link.ReadFrame on the
-// peer side expects, matching the bytes the legacy Go handlers used
-// to emit via link.WriteFrame.
-//
-// In pump-mode (PLUGIN_STREAM) the host fn returns
-// "stream_not_legacy_bridge" — those plugins should write via the
-// pumped host_stream_write instead so the pumps can wrap each chunk
-// in a PluginStreamFrame.
-func (pctx *pluginCtx) hostLinkWriteFrame(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	s := pctx.activeStream()
-	if s == nil {
-		returnEnvelope(p, stack, failed("stream_not_active"))
-		return
-	}
-	if s.wire == nil {
-		returnEnvelope(p, stack, failed("stream_not_legacy_bridge"))
-		return
-	}
-	if s.writeClosed.Load() {
-		returnEnvelope(p, stack, failed("stream_write_closed"))
-		return
-	}
-	body, err := p.ReadBytes(stack[0])
-	if err != nil {
-		returnEnvelope(p, stack, failed("read_bytes: "+err.Error()))
-		return
-	}
-	if len(body) > linkFrameMaxBytes {
-		returnEnvelope(p, stack, failed("frame_too_large"))
-		return
-	}
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(body)))
-	if _, err := s.wire.Write(hdr[:]); err != nil {
-		returnEnvelope(p, stack, failed("write_header: "+err.Error()))
-		return
-	}
-	if len(body) > 0 {
-		if _, err := s.wire.Write(body); err != nil {
-			returnEnvelope(p, stack, failed("write_body: "+err.Error()))
-			return
-		}
-	}
-	returnEnvelope(p, stack, envelope{Ok: true})
-}
-
-// linkFrameMaxBytes mirrors internal/link.FrameMaxBytes to keep the
-// host fn's bound aligned with the wire-side reader's check. Hard-
-// coded rather than imported to avoid pulling internal/link into
-// host_stream.go's import set just for the constant.
+// linkFrameMaxBytes mirrors internal/link.FrameMaxBytes to keep
+// host_stream_*'s legacy-wire-mode bound aligned with the wire-side
+// reader's check. Hard-coded rather than imported to avoid pulling
+// internal/link into host_stream.go's import set just for the
+// constant.
 const linkFrameMaxBytes = 1 << 20 // 1 MiB
-
-// hostLinkReadFrame reads one length-prefixed frame from the wire
-// of a legacy-wasm-bridge stream and returns the body bytes (raw,
-// base64-encoded inside the JSON envelope so binary data round-
-// trips cleanly). Mirrors internal/link.ReadFrame: 4-byte big-
-// endian length header + body.
-//
-// Returns ok:true with empty data when the wire EOFs cleanly (caller
-// loop should terminate). On a non-EOF read error returns ok:false
-// with the error in the envelope. In pump-mode (PLUGIN_STREAM)
-// returns "stream_not_legacy_bridge".
-func (pctx *pluginCtx) hostLinkReadFrame(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	s := pctx.activeStream()
-	if s == nil {
-		returnEnvelope(p, stack, failed("stream_not_active"))
-		return
-	}
-	if s.wire == nil {
-		returnEnvelope(p, stack, failed("stream_not_legacy_bridge"))
-		return
-	}
-	var hdr [4]byte
-	if _, err := io.ReadFull(s.wire, hdr[:]); err != nil {
-		if err == io.EOF {
-			returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString("")})
-			return
-		}
-		returnEnvelope(p, stack, failed("read_header: "+err.Error()))
-		return
-	}
-	length := binary.BigEndian.Uint32(hdr[:])
-	if length > linkFrameMaxBytes {
-		returnEnvelope(p, stack, failed("frame_too_large"))
-		return
-	}
-	body := make([]byte, length)
-	if length > 0 {
-		if _, err := io.ReadFull(s.wire, body); err != nil {
-			returnEnvelope(p, stack, failed("read_body: "+err.Error()))
-			return
-		}
-	}
-	returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(base64.StdEncoding.EncodeToString(body))})
-}

@@ -8,24 +8,28 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 )
 
-// DispatchLegacyWasmStream is the dispatch path for plugins that
-// claim a legacy stream type (FILE_READ, FILE_WRITE, PROCESS_OPEN,
-// …) with a `wasm:method` host_handler instead of the host-provider
-// `agent.X` marker. Bridges the wire protocol the legacy Go handlers
-// emit (length-prefixed proto frames via internal/link.WriteFrame)
-// to a wasm method that owns the byte production.
+// DispatchLegacyWasmStream is the dispatch path for typed stream
+// types (FILE_READ, FILE_WRITE, PROCESS_OPEN, …) — server opens the
+// stream with a typed metadata payload (FileReadRequest etc) and
+// expects to read length-prefixed typed-response frames back. The
+// "Legacy" in the name is historical: post-E6 the plugin reads &
+// writes via the unified host_stream_*, the same host fns the
+// PLUGIN_STREAM path uses; the dispatcher just runs in raw-wire
+// mode (streamCtx.wire != nil) so host_stream_* skips its envelope
+// wrapping and operates directly on the wire.
 //
 // Differences from DispatchPluginStream (the PLUGIN_STREAM path):
 //   - No PluginStreamFrame wrapping. The wire IS a sequence of
 //     length-prefixed proto frames matching the existing wire
 //     contract — server-side readers don't change.
-//   - No inbound pump. The request is in `metadata` (the typed proto
-//     bytes the server put in the stream header) and is passed
-//     directly to the wasm method as input. host_stream_read on the
-//     wasm side returns immediate EOF.
-//   - No outbound pump. Wasm calls host_link_write_frame to write
-//     length-prefixed frames straight to the wire; the streamCtx's
-//     `wire` field is the destination.
+//   - No inbound pump. The request is in `metadata` (the typed
+//     proto bytes the server put in the stream header) and is
+//     passed directly to the wasm method as input. host_stream_read
+//     in raw-wire mode reads any subsequent inbound frames the
+//     server emits (the FILE_WRITE chunks, in particular).
+//   - No outbound pump. Wasm calls host_stream_write which, in
+//     raw-wire mode, emits length-prefixed frames straight to the
+//     wire; the streamCtx's `wire` field is the destination.
 //
 // Acquires loaded.mu for the wasm call's duration — extism plugins
 // are not goroutine-safe, so concurrent streams (or a stream + an
@@ -57,8 +61,8 @@ func (r *Registry) DispatchLegacyWasmStream(
 	}
 
 	// Set the active stream slot to a wire-backed streamCtx (no
-	// channels). host_link_write_frame consults pctx.activeStream()
-	// and writes to s.wire directly.
+	// channels). host_stream_read / host_stream_write consult
+	// pctx.activeStream() and operate on s.wire directly.
 	s := &streamCtx{wire: stream}
 	l.pctx.setActiveStream(s)
 	defer l.pctx.clearActiveStream()
