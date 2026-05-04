@@ -344,14 +344,44 @@ export interface V2FileEntry {
 const GO_MODE_DIR = 1 << 31;
 const GO_MODE_SYMLINK = 1 << 27;
 
+// POSIX S_IFMT bits — wasm system plugins (sys-listdir, sys-info)
+// emit raw POSIX mode bits where the file type sits in 0o170000:
+//   S_IFDIR  = 0o040000
+//   S_IFLNK  = 0o120000
+//
+// We accept both encodings because the legacy Go file_list_stream
+// emitted Go's os.FileMode (bit 31), while every wasm replacement
+// post-Phase-B emits POSIX. Without both checks, a wasm-served
+// listdir renders every entry as a regular file (folder icons gone,
+// double-click opens the editor instead of navigating).
+const POSIX_S_IFMT = 0o170000;
+const POSIX_S_IFDIR = 0o040000;
+const POSIX_S_IFLNK = 0o120000;
+
+function modeIsDir(mode: number): boolean {
+    // Coerce to unsigned 32-bit so `& (1<<31)` works against a signed
+    // JS number; otherwise (1<<31) flips the sign and the AND fails
+    // for naturally-positive values.
+    const unsigned = mode >>> 0;
+    if ((unsigned & GO_MODE_DIR) !== 0) return true;
+    return (mode & POSIX_S_IFMT) === POSIX_S_IFDIR;
+}
+
+function modeIsSymlink(mode: number): boolean {
+    const unsigned = mode >>> 0;
+    if ((unsigned & GO_MODE_SYMLINK) !== 0) return true;
+    return (mode & POSIX_S_IFMT) === POSIX_S_IFLNK;
+}
+
 export function adaptEntry(e: V2FileEntry): FileEntryDTO {
+    const mode = e.mode ?? 0;
     return {
         name: e.name,
         size: e.size ?? 0,
-        mode: e.mode ?? 0,
+        mode,
         modTimeUnix: e.mtime_unix_nano ?? 0,
-        isDir: ((e.mode ?? 0) & GO_MODE_DIR) !== 0,
-        isSymlink: ((e.mode ?? 0) & GO_MODE_SYMLINK) !== 0,
+        isDir: modeIsDir(mode),
+        isSymlink: modeIsSymlink(mode),
         symlinkTarget: e.symlink_target,
         mime: e.mime,
     };

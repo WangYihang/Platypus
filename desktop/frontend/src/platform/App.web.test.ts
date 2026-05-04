@@ -58,4 +58,47 @@ describe("adaptEntry", () => {
         expect(got.symlinkTarget).toBe("/etc/hosts");
         expect(got.mime).toBe("inode/symlink");
     });
+
+    // Post-Phase-B regression: the wasm sys-listdir plugin emits
+    // raw POSIX mode bits (S_IFDIR = 0o040000, bit 14) instead of
+    // Go's os.FileMode (ModeDir = 1 << 31). Without this branch in
+    // adaptEntry, every directory in a wasm-served listing renders
+    // as a regular file — folder icons disappear and double-clicking
+    // a directory opens the file editor instead of navigating.
+    it("recognises POSIX S_IFDIR (0o040000) as a directory", () => {
+        const got = adaptEntry({
+            name: "home",
+            mode: 0o040755, // POSIX dir mode emitted by sys-listdir
+            size: 0,
+            mtime_unix_nano: 0,
+        });
+        expect(got.isDir).toBe(true);
+        expect(got.isSymlink).toBe(false);
+    });
+
+    it("recognises POSIX S_IFLNK (0o120000) as a symlink", () => {
+        const got = adaptEntry({
+            name: "link",
+            mode: 0o120777,
+            size: 0,
+            mtime_unix_nano: 0,
+            symlink_target: "/usr/bin/python3",
+        });
+        expect(got.isSymlink).toBe(true);
+        expect(got.isDir).toBe(false);
+    });
+
+    it("treats POSIX regular files (0o100644) as non-dir / non-symlink", () => {
+        // S_IFREG = 0o100000 — must NOT be misclassified as dir or
+        // symlink. A miscategorisation here would either hide the
+        // file or send the file's content into the symlink toast.
+        const got = adaptEntry({
+            name: "flag.txt",
+            mode: 0o100644,
+            size: 11,
+            mtime_unix_nano: 0,
+        });
+        expect(got.isDir).toBe(false);
+        expect(got.isSymlink).toBe(false);
+    });
 });
