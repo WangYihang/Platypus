@@ -90,28 +90,53 @@ func (pctx *pluginCtx) clearActiveStream() {
 	pctx.activeStreamPtr.Store(nil)
 }
 
-// hostStreamRead pulls one frame off the inbound channel. Returns
-// empty data on EOF. Wire shape: envelope.Data is a base64-encoded
-// JSON string; the plugin's PDK decodes it on the wasm side.
+// hostStreamRead pulls one frame off the inbound stream. Wire shape:
+// envelope.Data is a base64-encoded JSON string; the plugin's PDK
+// decodes it on the wasm side. Returns empty data on EOF.
 //
-// We don't short-circuit on s.inboundEOF here even though the pump
-// sets it on close: the pump may have pushed a final DATA chunk into
-// the cap=1 buffer and *then* closed the channel + set the flag, so
-// reading the flag without first draining would lose that last chunk.
-// The receive's `!ok` detection on a closed channel is correct
-// regardless of buffer state.
+// Two backend modes:
+//   - legacy-wasm-bridge (s.wire != nil): reads a length-prefixed
+//     frame straight off the wire (same protocol as the soon-to-be-
+//     retired host_link_read_frame). Matches the wire shape the
+//     server-side legacy stream-type handlers (FILE_WRITE etc) emit.
+//   - pump mode (s.wire == nil): pulls one already-decoded chunk off
+//     the inbound channel that pumpInboundFrames feeds.
+//
+// On the pump-mode path we don't short-circuit on s.inboundEOF here
+// even though the pump sets it on close: the pump may have pushed a
+// final DATA chunk into the cap=1 buffer and *then* closed the
+// channel + set the flag, so reading the flag without first draining
+// would lose that last chunk. The receive's `!ok` detection on a
+// closed channel is correct regardless of buffer state.
 func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
 	s := pctx.activeStream()
 	if s == nil {
 		returnEnvelope(p, stack, failed("stream_not_active"))
 		return
 	}
-	// Legacy-wasm-bridge plugins receive their request bytes via the
-	// wasm method's input parameter, not the stream — the stream is
-	// outbound-only. Reads from the bridge return EOF immediately so
-	// a defensive plugin doing read-until-EOF doesn't hang.
 	if s.wire != nil {
-		returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString("")})
+		var hdr [4]byte
+		if _, err := io.ReadFull(s.wire, hdr[:]); err != nil {
+			if err == io.EOF {
+				returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString("")})
+				return
+			}
+			returnEnvelope(p, stack, failed("read_header: "+err.Error()))
+			return
+		}
+		length := binary.BigEndian.Uint32(hdr[:])
+		if length > linkFrameMaxBytes {
+			returnEnvelope(p, stack, failed("frame_too_large"))
+			return
+		}
+		body := make([]byte, length)
+		if length > 0 {
+			if _, err := io.ReadFull(s.wire, body); err != nil {
+				returnEnvelope(p, stack, failed("read_body: "+err.Error()))
+				return
+			}
+		}
+		returnEnvelope(p, stack, envelope{Ok: true, Data: rawJSONString(base64.StdEncoding.EncodeToString(body))})
 		return
 	}
 	select {
@@ -127,20 +152,21 @@ func (pctx *pluginCtx) hostStreamRead(ctx context.Context, p *extism.CurrentPlug
 	}
 }
 
-// hostStreamWrite enqueues one frame onto the outbound channel.
-// Blocking on a full channel is the natural backpressure mechanism.
+// hostStreamWrite emits one frame on the outbound side of the stream.
 //
-// Pump-mode only — in legacy-wasm-bridge mode the wasm should call
-// host_link_write_frame instead so each frame gets the 4-byte BE
-// length prefix the wire-side link.ReadFrame expects.
+// Two backend modes:
+//   - legacy-wasm-bridge (s.wire != nil): writes a length-prefixed
+//     frame straight to the wire. Matches the wire format the
+//     server-side legacy stream-type handlers (FILE_READ, PROCESS_OPEN,
+//     etc) read with `link.ReadFrame(stream, &TypedResponse{})`.
+//     Identical effect to the soon-to-be-retired host_link_write_frame.
+//   - pump mode (s.wire == nil): enqueues onto the outbound channel
+//     that pumpOutboundFrames wraps in PluginStreamFrame envelopes.
+//     Blocking on a full channel is the natural backpressure mechanism.
 func (pctx *pluginCtx) hostStreamWrite(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
 	s := pctx.activeStream()
 	if s == nil {
 		returnEnvelope(p, stack, failed("stream_not_active"))
-		return
-	}
-	if s.wire != nil {
-		returnEnvelope(p, stack, failed("stream_legacy_bridge_use_host_link_write_frame"))
 		return
 	}
 	if s.writeClosed.Load() {
@@ -150,6 +176,26 @@ func (pctx *pluginCtx) hostStreamWrite(ctx context.Context, p *extism.CurrentPlu
 	raw, err := p.ReadBytes(stack[0])
 	if err != nil {
 		returnEnvelope(p, stack, failed("read_bytes: "+err.Error()))
+		return
+	}
+	if s.wire != nil {
+		if len(raw) > linkFrameMaxBytes {
+			returnEnvelope(p, stack, failed("frame_too_large"))
+			return
+		}
+		var hdr [4]byte
+		binary.BigEndian.PutUint32(hdr[:], uint32(len(raw)))
+		if _, err := s.wire.Write(hdr[:]); err != nil {
+			returnEnvelope(p, stack, failed("write_header: "+err.Error()))
+			return
+		}
+		if len(raw) > 0 {
+			if _, err := s.wire.Write(raw); err != nil {
+				returnEnvelope(p, stack, failed("write_body: "+err.Error()))
+				return
+			}
+		}
+		returnEnvelope(p, stack, envelope{Ok: true})
 		return
 	}
 	select {
