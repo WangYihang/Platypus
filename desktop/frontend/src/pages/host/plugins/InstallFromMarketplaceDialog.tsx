@@ -33,7 +33,9 @@ import {
 interface Props {
     open: boolean;
     projectID: string;
-    hostID: string;
+    /** The host's agent_id (cert SAN). NOT the host row UUID — the
+     *  per-agent install endpoint keys on this. */
+    agentID: string;
     onClose: () => void;
     /** Called once after a plugin is successfully installed so the
      *  parent can invalidate its plugin list. */
@@ -54,7 +56,7 @@ interface Props {
 export default function InstallFromMarketplaceDialog({
     open,
     projectID,
-    hostID,
+    agentID,
     onClose,
     onInstalled,
 }: Props) {
@@ -81,7 +83,7 @@ export default function InstallFromMarketplaceDialog({
 
     const install = useMutation({
         mutationFn: (vars: { pluginID: string; version: string; granted: string[] }) =>
-            installFromMarketplace(projectID, hostID, {
+            installFromMarketplace(projectID, agentID, {
                 pluginID: vars.pluginID,
                 version: vars.version,
                 grantedCapabilities: vars.granted,

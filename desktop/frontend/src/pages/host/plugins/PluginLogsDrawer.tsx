@@ -20,7 +20,8 @@ import {
 
 interface Props {
     projectID: string;
-    hostID: string;
+    /** The host's agent_id (cert SAN). The logs endpoint keys on this. */
+    agentID: string;
     /** Open when non-null. Closing fires onClose; the parent unsets
      *  this back to null. */
     plugin: InstalledPlugin | null;
@@ -40,7 +41,7 @@ const REFRESH_INTERVAL_MS = 5_000;
 
 export default function PluginLogsDrawer({
     projectID,
-    hostID,
+    agentID,
     plugin,
     onClose,
 }: Props) {
@@ -50,11 +51,11 @@ export default function PluginLogsDrawer({
         queryKey: [
             "agent-plugin-logs",
             projectID,
-            hostID,
+            agentID,
             plugin?.id ?? "",
         ],
-        queryFn: () => pluginLogs(projectID, hostID, plugin!.id, TAIL_LINES),
-        enabled: open,
+        queryFn: () => pluginLogs(projectID, agentID, plugin!.id, TAIL_LINES),
+        enabled: open && agentID !== "",
         refetchInterval: open ? REFRESH_INTERVAL_MS : false,
         refetchOnWindowFocus: false,
         retry: false,

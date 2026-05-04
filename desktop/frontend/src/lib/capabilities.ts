@@ -120,3 +120,113 @@ export function sortCapabilities<T extends { family: string }>(caps: T[]): T[] {
         return a.family.localeCompare(b.family);
     });
 }
+
+// --- Capability collections -----------------------------------------
+//
+// Operators almost never want to grant individual primitives — they
+// want a coherent group ("can read files", "can run commands +
+// processes"). Collections are presets that map a single click to
+// the underlying capability families.
+//
+// Design intent:
+//   · Five tiers ordered by power: read-only → file mgmt → process →
+//     network → full. Operators pick the lowest tier that still lets
+//     the plugin do its job.
+//   · Each collection is OPEN — operators can still tick individual
+//     families afterwards; selecting a collection just pre-fills
+//     them. Likewise, deselecting a collection unticks its members.
+//   · "Logging" is granted by every collection (and implicitly by
+//     the agent for every plugin). It's not surfaced as a separate
+//     toggle since that would be noise.
+//   · The "Custom" path — picking individual families with no
+//     collection selected — is always available; collections are a
+//     convenience layer, not a constraint.
+
+export type CollectionID = "read-only" | "file-management" | "process" | "network" | "full";
+
+export interface CapabilityCollection {
+    id: CollectionID;
+    label: string;
+    summary: string;
+    risk: CapabilityRisk;
+    /** Capability families auto-granted when this collection is picked. */
+    families: CapabilityFamily[];
+}
+
+export const CAPABILITY_COLLECTIONS: CapabilityCollection[] = [
+    {
+        id: "read-only",
+        label: "Read-only inspection",
+        summary:
+            "Read files and report system metadata. Safe for monitoring / audit-style plugins. No mutations, no command execution, no network.",
+        risk: "low",
+        families: ["log", "sysinfo", "fs.read", "kv"],
+    },
+    {
+        id: "file-management",
+        label: "File management",
+        summary:
+            "Read AND write files within the declared paths. Use for sync / backup / config-deploy plugins.",
+        risk: "medium",
+        families: ["log", "sysinfo", "fs.read", "fs.write", "kv"],
+    },
+    {
+        id: "process",
+        label: "Process control",
+        summary:
+            "Read files + spawn declared commands + open interactive processes. Use for shell / orchestration plugins.",
+        risk: "high",
+        families: ["log", "sysinfo", "fs.read", "exec", "process", "kv"],
+    },
+    {
+        id: "network",
+        label: "Network access",
+        summary:
+            "Read files + reach declared HTTP hosts + open raw TCP. Use for plugins that integrate with remote services.",
+        risk: "high",
+        families: ["log", "sysinfo", "fs.read", "net.http", "net.dial", "kv"],
+    },
+    {
+        id: "full",
+        label: "Full access",
+        summary:
+            "Every capability the plugin's manifest declares. Equivalent to ticking every box. Only grant when the plugin's docs require it.",
+        risk: "high",
+        families: ["log", "sysinfo", "fs.read", "fs.write", "exec", "process", "net.http", "net.dial", "kv"],
+    },
+];
+
+export function collectionByID(id: string): CapabilityCollection | undefined {
+    return CAPABILITY_COLLECTIONS.find((c) => c.id === id);
+}
+
+// matchingCollection returns the highest-coverage collection that's
+// fully satisfied by `granted` AND whose families are all declared
+// (we can't claim "process" if the plugin doesn't even declare exec).
+// Returns null when no collection matches — i.e. the operator's set
+// is a custom mix.
+//
+// "Highest-coverage" = the longest families[] of the matching ones,
+// so picking { fs.read, fs.write } highlights "file-management"
+// rather than "read-only".
+export function matchingCollection(
+    declared: Set<string>,
+    granted: Set<string>,
+): CapabilityCollection | null {
+    let best: CapabilityCollection | null = null;
+    for (const c of CAPABILITY_COLLECTIONS) {
+        // The collection's intent must be fully covered by `granted`,
+        // restricted to the families this plugin actually declares.
+        const expected = c.families.filter((f) => declared.has(f));
+        if (expected.length === 0) continue;
+        const allCovered = expected.every((f) => granted.has(f));
+        if (!allCovered) continue;
+        // No granted family outside the collection's authority.
+        const noExtras = [...granted].every((f) => c.families.includes(f as CapabilityFamily) || !declared.has(f));
+        if (!noExtras) continue;
+        if (best === null || expected.length > best.families.filter((f) => declared.has(f)).length) {
+            best = c;
+        }
+    }
+    return best;
+}

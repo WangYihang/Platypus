@@ -65,7 +65,7 @@ function renderOpen() {
         <InstallFromMarketplaceDialog
             open={true}
             projectID="proj1"
-            hostID="host1"
+            agentID="agent-a1"
             onClose={onClose}
             onInstalled={onInstalled}
         />,
@@ -129,21 +129,26 @@ describe("<InstallFromMarketplaceDialog>", () => {
         await user.click(screen.getByText(/Example Plugin/i));
 
         // CapabilityConfirmDialog opens with the plugin's declared
-        // capabilities. Tick log (low-risk) then click Install.
+        // capabilities. The new UX leads with collection presets;
+        // the plugin declares fs.read + log, so picking "Read-only
+        // inspection" grants exactly { fs.read, log } (sysinfo / kv
+        // are filtered because the plugin doesn't declare them).
         await waitFor(() => {
-            expect(screen.getByRole("checkbox", { name: /Logging/i })).toBeInTheDocument();
+            expect(
+                screen.getByRole("button", { name: /read-only inspection/i }),
+            ).toBeInTheDocument();
         });
-        await user.click(screen.getByRole("checkbox", { name: /Logging/i }));
+        await user.click(screen.getByRole("button", { name: /read-only inspection/i }));
         await user.click(screen.getByRole("button", { name: /^install$/i }));
 
         await waitFor(() => {
             expect(mocked.installFromMarketplace).toHaveBeenCalledWith(
                 "proj1",
-                "host1",
+                "agent-a1",
                 expect.objectContaining({
                     pluginID: "com.example.x",
                     version: "1.0.0",
-                    grantedCapabilities: ["log"],
+                    grantedCapabilities: expect.arrayContaining(["log", "fs.read"]),
                 }),
             );
         });
@@ -173,7 +178,10 @@ describe("<InstallFromMarketplaceDialog>", () => {
         const user = userEvent.setup();
         await waitFor(() => screen.getByText(/Example Plugin/i));
         await user.click(screen.getByText(/Example Plugin/i));
-        await waitFor(() => screen.getByRole("checkbox", { name: /Logging/i }));
+        // Just open + immediately install (empty grant set is allowed).
+        await waitFor(() =>
+            screen.getByRole("button", { name: /read-only inspection/i }),
+        );
         await user.click(screen.getByRole("button", { name: /^install$/i }));
 
         await waitFor(() => {

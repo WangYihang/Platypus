@@ -54,7 +54,12 @@ function renderTab(active = true) {
         return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
     }
     return render(
-        <PluginsTab projectID="proj1" hostID="host1" active={active} />,
+        <PluginsTab
+            projectID="proj1"
+            hostID="agent-a1"
+            agentID="agent-a1"
+            active={active}
+        />,
         { wrapper: Wrapper },
     );
 }
@@ -148,7 +153,7 @@ describe("<PluginsTab>", () => {
         await waitFor(() => {
             expect(mocked.enablePlugin).toHaveBeenCalledWith(
                 "proj1",
-                "host1",
+                "agent-a1",
                 "com.platypus.sys-info",
                 false,
             );
@@ -194,7 +199,7 @@ describe("<PluginsTab>", () => {
         await waitFor(() => {
             expect(mocked.uninstallPlugin).toHaveBeenCalledWith(
                 "proj1",
-                "host1",
+                "agent-a1",
                 "com.platypus.sys-info",
                 expect.objectContaining({ purgeState: false }),
             );

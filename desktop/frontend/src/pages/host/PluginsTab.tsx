@@ -39,7 +39,16 @@ import InstallFromMarketplaceDialog from "./plugins/InstallFromMarketplaceDialog
 
 interface Props {
     projectID: string;
+    /** Host row UUID — used for cache keys + react-query invalidation. */
     hostID: string;
+    /**
+     * The host's agent_id (cert SAN). All `/agents/:agent_id/...`
+     * endpoints key on this, NOT on the host row UUID. Empty string
+     * when the host record exists but the agent has never enrolled
+     * (e.g. fingerprint-only fallback rows); the tab renders an
+     * empty-state in that case rather than firing a guaranteed-404.
+     */
+    agentID: string;
     active: boolean;
 }
 
@@ -51,24 +60,36 @@ interface Props {
 // Install-from-marketplace lives in a sibling iteration; that flow
 // reuses the CapabilityConfirmDialog from components/ and posts to
 // the same `/plugins` endpoint this tab reads from.
-export default function PluginsTab({ projectID, hostID, active }: Props) {
+export default function PluginsTab({ projectID, hostID, agentID, active }: Props) {
     const queryClient = useQueryClient();
 
     const queryKey = ["agent-plugins", projectID, hostID] as const;
 
     const plugins = useQuery({
         queryKey,
-        queryFn: () => listPlugins(projectID, hostID),
-        enabled: active,
+        queryFn: () => listPlugins(projectID, agentID),
+        // Don't fire when we don't have an agent_id yet — would always
+        // 404 ("agent not connected") and the empty-state below covers
+        // the "host exists but agent never enrolled" case more cleanly.
+        enabled: active && agentID !== "",
         // Plugins state changes only on operator action; no need to
         // poll. Mutations invalidate this key.
         refetchOnWindowFocus: false,
         retry: false,
     });
 
+    if (agentID === "") {
+        return (
+            <EmptyState
+                title="Agent not enrolled"
+                description="This host record exists but no agent has connected yet. Plugins can be managed once the agent's mTLS handshake completes."
+            />
+        );
+    }
+
     const enable = useMutation({
         mutationFn: (vars: { id: string; enabled: boolean }) =>
-            enablePlugin(projectID, hostID, vars.id, vars.enabled),
+            enablePlugin(projectID, agentID, vars.id, vars.enabled),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey });
         },
@@ -80,7 +101,7 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
 
     const uninstall = useMutation({
         mutationFn: (vars: { id: string; purgeState: boolean }) =>
-            uninstallPlugin(projectID, hostID, vars.id, { purgeState: vars.purgeState }),
+            uninstallPlugin(projectID, agentID, vars.id, { purgeState: vars.purgeState }),
         onSuccess: () => {
             toast.success("Plugin uninstalled");
             setConfirming(null);
@@ -198,7 +219,7 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
 
             <PluginLogsDrawer
                 projectID={projectID}
-                hostID={hostID}
+                agentID={agentID}
                 plugin={logsTarget}
                 onClose={() => setLogsTarget(null)}
             />
@@ -206,7 +227,7 @@ export default function PluginsTab({ projectID, hostID, active }: Props) {
             <InstallFromMarketplaceDialog
                 open={installerOpen}
                 projectID={projectID}
-                hostID={hostID}
+                agentID={agentID}
                 onClose={() => setInstallerOpen(false)}
                 onInstalled={() => {
                     void queryClient.invalidateQueries({ queryKey });

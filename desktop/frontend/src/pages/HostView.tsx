@@ -404,6 +404,7 @@ export default function HostView({ projectID, hostID }: Props) {
                             <PluginsTab
                                 projectID={projectID}
                                 hostID={hostID}
+                                agentID={host?.agent_id ?? ""}
                                 active={activeActivity === "plugins"}
                             />
                         </div>
