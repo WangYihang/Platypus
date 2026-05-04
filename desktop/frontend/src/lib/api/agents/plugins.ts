@@ -159,6 +159,38 @@ export async function installFromMarketplace(
 }
 
 /**
+ * Install a SYSTEM plugin from the server's local catalog under
+ * <data-dir>/system-plugins/. Distinct from the marketplace path
+ * because system plugins are signed by the system publisher key
+ * and live on the server's local disk (the publisher writes them
+ * there at compose-up; production seeds them out-of-band). Same
+ * agent-side install pipeline — verify_sig, sha256, load — so the
+ * progress array shape matches.
+ *
+ * 503 = WithSystemBundle was not called on the handler (no data-dir).
+ * 404 = the plugin / version isn't staged on this server.
+ * 424 = system bundle is missing publisher.pub at its root.
+ */
+export async function installFromSystem(
+    pid: string,
+    agentID: string,
+    args: InstallFromMarketplaceArgs,
+): Promise<InstallResult> {
+    return authJSON<InstallResult>(
+        `/api/v1/projects/${encodeURIComponent(pid)}/agents/${encodeURIComponent(agentID)}/plugins/install_system`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                plugin_id: args.pluginID,
+                version: args.version,
+                granted_capabilities: args.grantedCapabilities,
+            }),
+        },
+    );
+}
+
+/**
  * Tail the most recent N log entries from the agent's in-memory ring
  * for one plugin. tail=0 returns whatever's currently buffered (cap
  * decided agent-side).

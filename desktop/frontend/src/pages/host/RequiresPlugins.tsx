@@ -11,7 +11,7 @@ import { capabilityMeta } from "../../lib/capabilities";
 import { humanizeError } from "../../lib/humanizeError";
 import {
     InstalledPlugin,
-    installFromMarketplace,
+    installFromSystem,
 } from "../../lib/api/agents/plugins";
 import { listSystemPlugins, SystemPlugin } from "../../lib/api/system_plugins";
 import { useQuery } from "@tanstack/react-query";
@@ -103,16 +103,16 @@ function InstallGuide({
 
     const installOne = useMutation({
         mutationFn: async (entry: SystemPlugin) => {
-            // System plugins live in the server's <data-dir>/system-plugins/.
-            // The agent's install endpoint accepts a marketplace-style
-            // (plugin_id, version) tuple; the server-side resolver
-            // handles fetching from the system catalog when the id has
-            // a system entry. The capability set we pass in is what
-            // the manifest declares — system plugins are signed by
-            // the trusted publisher key, so granting their declared
-            // caps wholesale matches the trust the operator already
-            // gave at enroll time when they accepted the system bundle.
-            return installFromMarketplace(projectID, agentID, {
+            // System plugins live on the server's local disk under
+            // <data-dir>/system-plugins/. The dedicated install_system
+            // endpoint reads them from there + streams to the agent
+            // via the same install pipeline the marketplace path uses.
+            // The capability set we pass in is what the manifest
+            // declares — system plugins are signed by the trusted
+            // publisher key, so granting their declared caps wholesale
+            // matches the trust the operator already gave at enroll
+            // time when they accepted the system bundle.
+            return installFromSystem(projectID, agentID, {
                 pluginID: entry.id,
                 version: entry.version,
                 grantedCapabilities: entry.capabilities,

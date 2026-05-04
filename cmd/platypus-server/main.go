@@ -505,7 +505,13 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 				}, true, nil
 			}),
 			api.NewHTTPArtefactFetcher(),
-		)
+		).
+		// System bundle: per-host plugin install for the wasm
+		// system plugins staged by the publisher under
+		// <data-dir>/system-plugins/. Without this the install_system
+		// endpoint returns 503; the per-tab "Install" button in the
+		// host UI surfaces that as a clear error.
+		WithSystemBundle(cfg.DataDir)
 	api.RegisterV1AgentPluginRoutes(rest, pluginsHandler, rbac)
 	api.RegisterV1MarketplaceRoutes(rest, api.NewMarketplaceHandler(pluginCatalog), rbac)
 	if meshNode != nil {

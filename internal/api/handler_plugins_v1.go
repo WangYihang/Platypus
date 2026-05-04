@@ -28,9 +28,10 @@ import (
 //   handler_plugins_readonly.go  GET    .../plugins, GET .../logs (single-frame replies)
 //   handler_plugins_mutate.go    DELETE / PATCH .../plugins/:plugin_id
 type AgentPluginsHandler struct {
-	svc     *core.AgentLinkService
-	catalog MarketplaceCatalog // optional; when nil install_marketplace returns 503
-	fetcher ArtefactFetcher    // optional; defaults to net/http when nil
+	svc             *core.AgentLinkService
+	catalog         MarketplaceCatalog // optional; when nil install_marketplace returns 503
+	fetcher         ArtefactFetcher    // optional; defaults to net/http when nil
+	systemBundleDir string             // optional; when "" install_system returns 503
 }
 
 // MarketplaceCatalog is the catalog interface install_marketplace
@@ -201,6 +202,7 @@ func RegisterV1AgentPluginRoutes(engine *gin.Engine, h *AgentPluginsHandler, rba
 		admin.GET("/:agent_id/plugins", h.List)
 		admin.POST("/:agent_id/plugins", h.Install)
 		admin.POST("/:agent_id/plugins/install_marketplace", h.InstallFromMarketplace)
+		admin.POST("/:agent_id/plugins/install_system", h.InstallFromSystem)
 		admin.DELETE("/:agent_id/plugins/:plugin_id", h.Uninstall)
 		admin.PATCH("/:agent_id/plugins/:plugin_id", h.Enable)
 		admin.GET("/:agent_id/plugins/:plugin_id/logs", h.Logs)
