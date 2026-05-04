@@ -17,7 +17,12 @@ use serde::{Deserialize, Serialize};
 // ============================================================
 // Shared host-fn declarations
 // ============================================================
+//
+// Gated to wasm32 so `cargo test --lib` on the host can still compile
+// the pure helpers (varint, proto wire, request parsers) and exercise
+// them in #[cfg(test)] units below.
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_fs_mkdir(req: String) -> Json<Envelope>;
@@ -73,6 +78,7 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
     Err(Error::msg("truncated varint"))
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_frame(body: &[u8]) -> Result<(), Error> {
     let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
     if !env.ok {
@@ -150,6 +156,7 @@ fn into_resp(env: Envelope) -> ErrorOnlyResponse {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn mkdir(req: Json<MkdirRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     let body = serde_json::to_string(&HostFsWriteJSON {
@@ -162,6 +169,7 @@ pub fn mkdir(req: Json<MkdirRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     Ok(Json(into_resp(env)))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn chmod(req: Json<ChmodRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     let body = serde_json::to_string(&HostFsWriteJSON {
@@ -174,6 +182,7 @@ pub fn chmod(req: Json<ChmodRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     Ok(Json(into_resp(env)))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn delete(req: Json<DeleteRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     let body = serde_json::to_string(&HostFsWriteJSON {
@@ -186,6 +195,7 @@ pub fn delete(req: Json<DeleteRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     Ok(Json(into_resp(env)))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn rename(req: Json<RenameRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
     let body = serde_json::to_string(&HostFsRenameJSON {
@@ -217,6 +227,7 @@ struct WriteRangeArgs {
     truncate: bool,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn write(input: Vec<u8>) -> FnResult<()> {
     let req = parse_file_write_request(&input);
@@ -279,6 +290,7 @@ pub fn write(input: Vec<u8>) -> FnResult<()> {
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn call_write_range(
     path: &str,
     offset: i64,
@@ -303,6 +315,7 @@ fn call_write_range(
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_response_frame(error: &str) -> Result<(), Error> {
     // FileWriteResponse{error=1:string}
     let mut buf = Vec::with_capacity(error.len() + 8);
@@ -314,6 +327,7 @@ fn write_response_frame(error: &str) -> Result<(), Error> {
     write_frame(&buf)
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_result_frame(bytes_written: i64, error: &str) -> Result<(), Error> {
     // FileWriteResult{bytes_written=1:int64, error=2:string}
     let mut buf = Vec::with_capacity(error.len() + 16);
@@ -481,4 +495,146 @@ fn parse_file_chunk(buf: &[u8]) -> FileChunkParsed {
         }
     }
     out
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// `cargo test --lib` from this crate's directory runs these on the
+// host triple. The wasm-only glue (host_fn declarations, plugin_fn
+// entries, frame writers) is excluded by cfg(target_arch="wasm32")
+// gates above; full end-to-end coverage of the wasm side lives in
+// internal/agent/plugin/files_write_integration_test.go.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- varint encode/decode ---------------------------------
+
+    #[test]
+    fn varint_round_trip_zero_and_boundaries() {
+        for n in [0u64, 1, 127, 128, 16_383, 16_384, u64::MAX] {
+            let mut buf = Vec::new();
+            write_varint(&mut buf, n);
+            let (got, _) = read_varint(&buf).unwrap();
+            assert_eq!(got, n, "round-trip failed for {n}");
+        }
+    }
+
+    #[test]
+    fn varint_truncated_errors() {
+        assert!(read_varint(&[0xFF]).is_err());
+    }
+
+    // ---- write_tag --------------------------------------------
+
+    #[test]
+    fn write_tag_packs_field_and_wire_type() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN); // (1<<3)|2 = 10
+        assert_eq!(buf, vec![0x0a]);
+        buf.clear();
+        write_tag(&mut buf, 4, WIRE_VARINT); // (4<<3)|0 = 32
+        assert_eq!(buf, vec![0x20]);
+    }
+
+    // ---- parse_file_write_request -----------------------------
+
+    #[test]
+    fn parse_file_write_request_path_only() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 4);
+        buf.extend_from_slice(b"/out");
+        let req = parse_file_write_request(&buf);
+        assert_eq!(req.path, "/out");
+        assert!(!req.append);
+        assert_eq!(req.mode, 0);
+        assert!(!req.mkdirs);
+    }
+
+    #[test]
+    fn parse_file_write_request_full_field_set() {
+        // {path: "f", append: true, mode: 0o644, mkdirs: true}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 1);
+        buf.push(b'f');
+        write_tag(&mut buf, 2, WIRE_VARINT);
+        write_varint(&mut buf, 1);
+        write_tag(&mut buf, 3, WIRE_VARINT);
+        write_varint(&mut buf, 0o644);
+        write_tag(&mut buf, 4, WIRE_VARINT);
+        write_varint(&mut buf, 1);
+        let req = parse_file_write_request(&buf);
+        assert_eq!(req.path, "f");
+        assert!(req.append);
+        assert_eq!(req.mode, 0o644);
+        assert!(req.mkdirs);
+    }
+
+    #[test]
+    fn parse_file_write_request_skips_unknown_fields() {
+        // unknown field 99 (varint) + unknown field 88 (LEN-prefixed) + path
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 99, WIRE_VARINT);
+        write_varint(&mut buf, 7);
+        write_tag(&mut buf, 88, WIRE_LEN);
+        write_varint(&mut buf, 3);
+        buf.extend_from_slice(b"abc");
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 4);
+        buf.extend_from_slice(b"/foo");
+        let req = parse_file_write_request(&buf);
+        assert_eq!(req.path, "/foo");
+    }
+
+    #[test]
+    fn parse_file_write_request_truncated_string_does_not_panic() {
+        // Tag(1,LEN) + len(20) but only 5 bytes follow. The function
+        // breaks out cleanly rather than panicking on the slice op.
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 20);
+        buf.extend_from_slice(b"hello");
+        let req = parse_file_write_request(&buf);
+        // path stayed empty because the read aborted before assignment.
+        assert_eq!(req.path, "");
+    }
+
+    // ---- parse_file_chunk -------------------------------------
+
+    #[test]
+    fn parse_file_chunk_data_eof() {
+        // {data: "ABCDE", eof: true}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 5);
+        buf.extend_from_slice(b"ABCDE");
+        write_tag(&mut buf, 2, WIRE_VARINT);
+        write_varint(&mut buf, 1);
+        let chunk = parse_file_chunk(&buf);
+        assert_eq!(chunk.data, b"ABCDE");
+        assert!(chunk.eof);
+    }
+
+    #[test]
+    fn parse_file_chunk_with_error() {
+        // {error: "boom"}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 3, WIRE_LEN);
+        write_varint(&mut buf, 4);
+        buf.extend_from_slice(b"boom");
+        let chunk = parse_file_chunk(&buf);
+        assert_eq!(chunk.error, "boom");
+    }
+
+    #[test]
+    fn parse_file_chunk_empty_buffer() {
+        let chunk = parse_file_chunk(&[]);
+        assert!(chunk.data.is_empty());
+        assert!(!chunk.eof);
+        assert_eq!(chunk.error, "");
+    }
 }
