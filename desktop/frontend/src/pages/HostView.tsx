@@ -33,6 +33,9 @@ import FilesTab from "./host/FilesTab";
 import HostHeaderBar from "./host/HostHeaderBar";
 import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
+import RequiresPlugins from "./host/RequiresPlugins";
+
+import { activitiesNeedingInstall, useInstalledPluginIDs } from "../lib/activityPlugins";
 import SecurityTab from "./host/SecurityTab";
 import ConfigTab from "./host/ConfigTab";
 import SessionsTab from "./host/SessionsTab";
@@ -75,6 +78,14 @@ export default function HostView({ projectID, hostID }: Props) {
     });
 
     const host: Host | null = hostQuery.data ?? null;
+    const agentID = host?.agent_id ?? "";
+    // Per-tab plugin gating. Reads the agent's installed-plugins list
+    // once, drives both the dimmed-icon visual on ActivityBar and the
+    // RequiresPlugins guard inside each tab body. Same query-key as
+    // PluginsTab so an install there refreshes here without an
+    // explicit refetch.
+    const installedPlugins = useInstalledPluginIDs(projectID, agentID);
+    const needsInstall = activitiesNeedingInstall(installedPlugins.ids);
     const sessions: SessionRow[] = sessionsQuery.data ?? [];
     const sysInfo: HostSysInfo | null = sysInfoQuery.data ?? null;
     const sysInfoError: string | null = sysInfoQuery.error
@@ -279,6 +290,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     active={activeActivity}
                     onSelect={setActiveActivity}
                     badges={{ sessions: sessions.length || undefined }}
+                    needsInstall={needsInstall}
                 />
                 <div
                     style={{
@@ -318,15 +330,21 @@ export default function HostView({ projectID, hostID }: Props) {
                                 padding: space[3],
                             }}
                         >
-                            {pickedSessionID ? (
-                                <FilesTab
-                                    projectID={projectID}
-                                    sessionHash={pickedSessionID}
-                                    host={host}
-                                />
-                            ) : (
-                                <NoLiveSessionNote />
-                            )}
+                            <RequiresPlugins
+                                projectID={projectID}
+                                agentID={agentID}
+                                activity="files"
+                            >
+                                {pickedSessionID ? (
+                                    <FilesTab
+                                        projectID={projectID}
+                                        sessionHash={pickedSessionID}
+                                        host={host}
+                                    />
+                                ) : (
+                                    <NoLiveSessionNote />
+                                )}
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -348,7 +366,13 @@ export default function HostView({ projectID, hostID }: Props) {
                                 padding: space[4],
                             }}
                         >
-                            <SessionsTab sessions={sessions} />
+                            <RequiresPlugins
+                                projectID={projectID}
+                                agentID={agentID}
+                                activity="sessions"
+                            >
+                                <SessionsTab sessions={sessions} />
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -356,11 +380,17 @@ export default function HostView({ projectID, hostID }: Props) {
                                 padding: space[4],
                             }}
                         >
-                            <ProcessesTab
+                            <RequiresPlugins
                                 projectID={projectID}
-                                hostID={hostID}
-                                active={activeActivity === "processes"}
-                            />
+                                agentID={agentID}
+                                activity="processes"
+                            >
+                                <ProcessesTab
+                                    projectID={projectID}
+                                    hostID={hostID}
+                                    active={activeActivity === "processes"}
+                                />
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -368,11 +398,17 @@ export default function HostView({ projectID, hostID }: Props) {
                                 padding: space[4],
                             }}
                         >
-                            <SecurityTab
+                            <RequiresPlugins
                                 projectID={projectID}
-                                hostID={hostID}
-                                active={activeActivity === "security"}
-                            />
+                                agentID={agentID}
+                                activity="security"
+                            >
+                                <SecurityTab
+                                    projectID={projectID}
+                                    hostID={hostID}
+                                    active={activeActivity === "security"}
+                                />
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -380,11 +416,17 @@ export default function HostView({ projectID, hostID }: Props) {
                                 padding: space[4],
                             }}
                         >
-                            <ConfigTab
+                            <RequiresPlugins
                                 projectID={projectID}
-                                hostID={hostID}
-                                active={activeActivity === "config"}
-                            />
+                                agentID={agentID}
+                                activity="config"
+                            >
+                                <ConfigTab
+                                    projectID={projectID}
+                                    hostID={hostID}
+                                    active={activeActivity === "config"}
+                                />
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -393,7 +435,13 @@ export default function HostView({ projectID, hostID }: Props) {
                                 height: "100%",
                             }}
                         >
-                            <TunnelsTab projectID={projectID} hostID={hostID} />
+                            <RequiresPlugins
+                                projectID={projectID}
+                                agentID={agentID}
+                                activity="tunnels"
+                            >
+                                <TunnelsTab projectID={projectID} hostID={hostID} />
+                            </RequiresPlugins>
                         </div>
                         <div
                             style={{
@@ -404,7 +452,7 @@ export default function HostView({ projectID, hostID }: Props) {
                             <PluginsTab
                                 projectID={projectID}
                                 hostID={hostID}
-                                agentID={host?.agent_id ?? ""}
+                                agentID={agentID}
                                 active={activeActivity === "plugins"}
                             />
                         </div>

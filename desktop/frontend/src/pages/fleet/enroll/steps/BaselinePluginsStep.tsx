@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 
@@ -9,6 +10,11 @@ import EmptyState from "../../../../components/EmptyState";
 import { palette, radius, space } from "../../../../layout/theme";
 import { capabilityMeta, sortCapabilities } from "../../../../lib/capabilities";
 import { listSystemPlugins } from "../../../../lib/api/system_plugins";
+import {
+    BASELINE_PRESETS,
+    BaselinePreset,
+    matchingPreset,
+} from "../../../../lib/baselinePresets";
 import { humanizeError } from "../../../../lib/humanizeError";
 
 interface Props {
@@ -97,11 +103,22 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                     color: palette.textMuted,
                 }}
             >
-                Plugins to auto-install on first boot. Default empty: the
-                agent connects with no host capabilities and you add them
-                later from the host's Plugins tab. Pick only what this host
-                needs out of the box.
+                Plugins to auto-install on first boot. Pick a preset that
+                matches the host's role, or fine-tune the individual plugins
+                below. Anything you skip can still be added later from the
+                host's Plugins tab.
             </p>
+            <PresetGrid
+                catalogIDs={new Set(list.map((p) => p.id))}
+                selected={selected}
+                onPick={(p) =>
+                    onChange(
+                        p.pluginIDs.filter((id) =>
+                            list.some((catalog) => catalog.id === id),
+                        ),
+                    )
+                }
+            />
             <ScrollArea className="max-h-[40vh] pr-1">
                 <ul
                     style={{
@@ -227,6 +244,92 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                     ? "No baseline plugins selected — agent will boot empty."
                     : `${selected.length} plugin${selected.length === 1 ? "" : "s"} selected.`}
             </p>
+        </div>
+    );
+}
+
+// PresetGrid is the row of "preset" cards above the per-plugin
+// list. Each card shows what the preset bundles in plain English;
+// clicking it sets the operator's selection to the preset's
+// plugin IDs (filtered to what the catalog actually offers, so a
+// preset referencing a plugin the server isn't shipping yet just
+// drops it instead of leaving the operator with a stuck "Install"
+// step downstream).
+function PresetGrid({
+    catalogIDs,
+    selected,
+    onPick,
+}: {
+    catalogIDs: Set<string>;
+    selected: string[];
+    onPick: (p: BaselinePreset) => void;
+}) {
+    const active = useMemo(
+        () => matchingPreset(selected, catalogIDs),
+        [selected, catalogIDs],
+    );
+    return (
+        <div
+            role="group"
+            aria-label="baseline plugin presets"
+            style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                gap: space[2],
+                margin: `${space[2]}px 0 ${space[3]}px`,
+            }}
+        >
+            {BASELINE_PRESETS.map((p) => {
+                const isActive = active?.id === p.id;
+                const declaredCount = p.pluginIDs.filter((id) => catalogIDs.has(id)).length;
+                const totalCount = p.pluginIDs.length;
+                const missing = totalCount - declaredCount;
+                return (
+                    <button
+                        key={p.id}
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => onPick(p)}
+                        style={{
+                            textAlign: "left",
+                            padding: space[3],
+                            borderRadius: radius.md,
+                            border: `1px solid ${isActive ? palette.accent : palette.border}`,
+                            background: isActive ? palette.surfaceHover : palette.surface,
+                            color: palette.textPrimary,
+                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                        }}
+                    >
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</span>
+                        <p
+                            style={{
+                                margin: 0,
+                                fontSize: 11,
+                                color: palette.textSecondary,
+                                lineHeight: 1.4,
+                            }}
+                        >
+                            {p.summary}
+                        </p>
+                        <span
+                            style={{
+                                marginTop: 4,
+                                fontSize: 10,
+                                color: palette.textMuted,
+                            }}
+                        >
+                            {totalCount === 0
+                                ? "Empty selection"
+                                : missing > 0
+                                ? `${declaredCount} of ${totalCount} plugins available`
+                                : `${declaredCount} plugin${declaredCount === 1 ? "" : "s"}`}
+                        </span>
+                    </button>
+                );
+            })}
         </div>
     );
 }

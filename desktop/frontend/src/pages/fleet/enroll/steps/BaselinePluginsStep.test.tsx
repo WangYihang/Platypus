@@ -72,9 +72,9 @@ describe("<BaselinePluginsStep>", () => {
         mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
         renderStep([]);
         await waitFor(() => {
-            expect(screen.getByText(/System Info/i)).toBeInTheDocument();
+            expect(screen.getByRole("checkbox", { name: /System Info/i })).toBeInTheDocument();
         });
-        expect(screen.getByText(/System Procs/i)).toBeInTheDocument();
+        expect(screen.getByRole("checkbox", { name: /System Procs/i })).toBeInTheDocument();
     });
 
     it("renders an empty-state hint when the catalog is empty", async () => {
@@ -88,7 +88,7 @@ describe("<BaselinePluginsStep>", () => {
     it("toggling a row calls onChange with the new selection", async () => {
         mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
         const { onChange } = renderStep([]);
-        await waitFor(() => screen.getByText(/System Info/i));
+        await waitFor(() => screen.getByRole("checkbox", { name: /System Info/i }));
 
         const user = userEvent.setup();
         const cb = screen.getByRole("checkbox", { name: /System Info/i });
@@ -100,7 +100,7 @@ describe("<BaselinePluginsStep>", () => {
     it("clearing a previously selected row removes it", async () => {
         mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
         const { onChange } = renderStep(["com.platypus.sys-info"]);
-        await waitFor(() => screen.getByText(/System Info/i));
+        await waitFor(() => screen.getByRole("checkbox", { name: /System Info/i }));
 
         const user = userEvent.setup();
         const cb = screen.getByRole("checkbox", { name: /System Info/i });
@@ -117,5 +117,40 @@ describe("<BaselinePluginsStep>", () => {
         // (No render needed — this is a contract assertion against
         // the component's documented defaults via the prop shape.)
         expect(true).toBe(true);
+    });
+
+    it("clicking a preset card pre-fills onChange with the preset's plugin IDs", async () => {
+        mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
+        const { onChange } = renderStep([]);
+        await waitFor(() =>
+            screen.getByRole("checkbox", { name: /System Info/i }),
+        );
+
+        // The "Read-only inspection" preset wants sys-info,
+        // sys-hostname, sys-listdir, sys-procs, sys-file-read,
+        // sys-file-scan. The fake catalog only has sys-info +
+        // sys-procs, so the preset filters down to those two.
+        const user = userEvent.setup();
+        await user.click(
+            screen.getByRole("button", { name: /Read-only inspection/i }),
+        );
+        expect(onChange).toHaveBeenCalledWith([
+            "com.platypus.sys-info",
+            "com.platypus.sys-procs",
+        ]);
+    });
+
+    it("clicking the Minimal preset clears any prior selection", async () => {
+        mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
+        const { onChange } = renderStep([
+            "com.platypus.sys-info",
+            "com.platypus.sys-procs",
+        ]);
+        await waitFor(() =>
+            screen.getByRole("checkbox", { name: /System Info/i }),
+        );
+        const user = userEvent.setup();
+        await user.click(screen.getByRole("button", { name: /Minimal/i }));
+        expect(onChange).toHaveBeenCalledWith([]);
     });
 });

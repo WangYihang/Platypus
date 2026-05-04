@@ -1,0 +1,119 @@
+// Per-activity plugin requirements + the helper hook + wrapper that
+// enforces them. The mapping is the single source of truth for
+// "which capability lives in which plugin": one place to look at
+// when an activity tab is added or a plugin id changes.
+//
+// Wire shape: every tab body wraps in <RequiresPlugins activity={...}>.
+// The component reads the host's installed plugin list (cached),
+// compares against REQUIRED_PLUGINS[activity], and either renders
+// children (all installed) or an InstallGuide that points the
+// operator at the Plugins tab to add the missing pieces.
+//
+// The activity icon greying lives on top of the same hook in
+// ActivityBar — we expose missingPlugins() so the bar can dim
+// icons whose tab would land on the install guide.
+
+import { useQuery } from "@tanstack/react-query";
+
+import { listPlugins } from "./api/agents/plugins";
+
+import type { Activity } from "../pages/host/ActivityBar";
+
+// REQUIRED_PLUGINS lists the system-plugin ids each activity tab
+// needs to be useful. "Useful" = the primary affordance works:
+//   · Files — needs sys-listdir to enumerate; sys-file-read to
+//     preview / download; sys-fs-write for create / rename / delete.
+//     We list all three because partial install produces a confusing
+//     state (e.g. browse but can't preview).
+//   · Info / Hardware — sys-info paints the overview cards; sys-hostname
+//     fills the alias. We don't list sys-info as required because
+//     mandatoryCorePluginIDs guarantees it; sys-hostname is opt-in.
+//   · Sessions — terminal sessions need sys-process-open.
+//   · Processes — needs sys-procs (the RPC catalogue) AND
+//     sys-process-open (open a shell from a process row).
+//   · Security — sys-security drives the security scan UI.
+//   · Config — sys-config-audit drives the config audit UI.
+//   · Tunnels — sys-tunnel-pull is the agent-side stream owner.
+//   · Plugins — meta tab; needs nothing.
+//
+// Plugins outside the operator's allowlist surface as "Install"
+// prompts; once installed, the tab activates without any further
+// state plumbing because the per-tab queries get their normal
+// 200 from the agent.
+export const REQUIRED_PLUGINS: Partial<Record<Activity, readonly string[]>> = {
+    files: [
+        "com.platypus.sys-listdir",
+        "com.platypus.sys-file-read",
+        "com.platypus.sys-fs-write",
+    ],
+    sessions: ["com.platypus.sys-process-open"],
+    processes: [
+        "com.platypus.sys-procs",
+        "com.platypus.sys-process-open",
+    ],
+    security: ["com.platypus.sys-security"],
+    config: ["com.platypus.sys-config-audit"],
+    tunnels: ["com.platypus.sys-tunnel-pull"],
+    // info + plugins intentionally absent — info needs only
+    // sys-info (mandatory core, always present); plugins is the
+    // catalogue tab and would create a recursive prompt.
+};
+
+// useInstalledPluginIDs returns the set of installed plugin ids on
+// the agent. Single shared query-key so every tab reads the same
+// cached result; mutations from PluginsTab invalidate the same
+// key. agentID="" disables the query (host record without an
+// agent yet — see the corresponding empty state in PluginsTab).
+//
+// data is `null` while loading; callers render a neutral state in
+// that case so they don't flash the install guide for a host that
+// turns out to have everything installed.
+export function useInstalledPluginIDs(
+    projectID: string,
+    agentID: string,
+): {
+    ids: Set<string> | null;
+    isLoading: boolean;
+    isError: boolean;
+} {
+    const q = useQuery({
+        queryKey: ["agent-plugins", projectID, agentID],
+        queryFn: () => listPlugins(projectID, agentID),
+        enabled: agentID !== "",
+        refetchOnWindowFocus: false,
+        retry: false,
+    });
+    return {
+        ids: q.data ? new Set(q.data.filter((p) => p.enabled).map((p) => p.id)) : null,
+        isLoading: q.isLoading,
+        isError: q.isError,
+    };
+}
+
+// missingFor returns the subset of REQUIRED_PLUGINS[activity] that
+// the operator hasn't installed (or has installed but disabled).
+// Empty list = activity ready to render. installed=null surfaces
+// as "all OK, render children" — the loading state gets a neutral
+// flash from the children's own loaders rather than a spurious
+// install guide.
+export function missingFor(activity: Activity, installed: Set<string> | null): string[] {
+    const required = REQUIRED_PLUGINS[activity];
+    if (!required || required.length === 0) return [];
+    if (installed === null) return [];
+    return required.filter((id) => !installed.has(id));
+}
+
+// activitiesNeedingInstall returns a map { activity: true } for
+// every activity whose required plugins aren't all installed.
+// Used by ActivityBar to dim icons + paint the "needs plugin" dot
+// without each tab needing to compute it separately.
+export function activitiesNeedingInstall(installed: Set<string> | null): Partial<Record<Activity, boolean>> {
+    if (installed === null) return {};
+    const out: Partial<Record<Activity, boolean>> = {};
+    for (const activity of Object.keys(REQUIRED_PLUGINS) as Activity[]) {
+        if (missingFor(activity, installed).length > 0) {
+            out[activity] = true;
+        }
+    }
+    return out;
+}
