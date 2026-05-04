@@ -44,6 +44,10 @@ type AgentLinkHandler struct {
 	// after each successful link connect. Kept optional so tests
 	// that exercise the auth / ws plumbing don't need a DB.
 	db *storage.DB
+	// systemBundleDir, when non-empty, lets the handler reconcile the
+	// agent's installed system plugins against the host's
+	// baseline_plugin_ids on every connect. Empty disables sync.
+	systemBundleDir string
 }
 
 func NewAgentLinkHandler(svc *core.AgentLinkService, caPoolFn CertPoolFunc) *AgentLinkHandler {
@@ -55,6 +59,16 @@ func NewAgentLinkHandler(svc *core.AgentLinkService, caPoolFn CertPoolFunc) *Age
 // handle so wiring is idempotent.
 func (h *AgentLinkHandler) WithDB(db *storage.DB) *AgentLinkHandler {
 	h.db = db
+	return h
+}
+
+// WithSystemBundle wires the data-dir holding the server's system
+// plugin catalog (publisher.pub + <id>/<v>/{plugin.yaml,wasm,sig}).
+// On every successful agent connect the handler spawns a
+// reconciliation goroutine that pushes any plugins missing from the
+// agent's runtime catalog. Empty dir = sync disabled.
+func (h *AgentLinkHandler) WithSystemBundle(dataDir string) *AgentLinkHandler {
+	h.systemBundleDir = dataDir
 	return h
 }
 
@@ -220,6 +234,15 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 	// agent is already serving RPCs to end users.
 	if h.db != nil {
 		go h.refreshHostFromSysInfo(agentID, projectID)
+
+		// Reconcile the agent's installed system plugins against the
+		// host's baseline_plugin_ids ∪ mandatory core. Each missing
+		// plugin gets pushed via PluginMgmt:install, sourced from the
+		// configured system bundle dir. Idempotent: on a steady-state
+		// reconnect this is a single PluginMgmt:list and nothing else.
+		if h.systemBundleDir != "" {
+			go h.reconcilePlugins(agentID, sess)
+		}
 		// Long-lived heartbeat: bump hosts.last_seen_at on a tick so
 		// the Web UI's "online" presence dot (60s lookback against
 		// last_seen_at; see desktop/.../lib/time.ts:isOnline) stays
@@ -473,6 +496,39 @@ func RegisterV2AgentLinkRoute(engine *gin.Engine, h *AgentLinkHandler) {
 // forever. If no host row exists yet for this agent (fresh
 // enrollment on an older server, or the enroll-time upsert is still
 // in flight) the Upsert will fall through to the insert path.
+// reconcilePlugins runs in a goroutine after every successful link
+// connect. It fetches the host's baseline_plugin_ids, lists the
+// agent's currently-installed plugins, and pushes any missing ones
+// from <data_dir>/system-plugins/. Bounded by pluginSyncTimeout so a
+// wedged agent doesn't keep an orphan goroutine alive forever.
+//
+// All failure paths are non-fatal: the link continues serving RPCs;
+// missing plugins surface to the UI as humanizeError-translated
+// "feature needs plugin X" messages instead.
+func (h *AgentLinkHandler) reconcilePlugins(agentID string, sess *link.Session) {
+	ctx, cancel := context.WithTimeout(context.Background(), pluginSyncTimeout)
+	defer cancel()
+
+	host, err := h.db.Hosts().GetByAgentID(ctx, agentID)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			log.L.Warn("plugin sync: lookup host",
+				"agent_id", agentID,
+				"error", err.Error(),
+			)
+		}
+		// ErrNotFound: enroll-time Upsert hasn't settled yet; the
+		// next reconnect will catch up.
+		return
+	}
+	if err := reconcileSystemPlugins(ctx, sess, agentID, host.BaselinePluginIDs, h.systemBundleDir); err != nil {
+		log.L.Warn("plugin sync: reconcile",
+			"agent_id", agentID,
+			"error", err.Error(),
+		)
+	}
+}
+
 func (h *AgentLinkHandler) refreshHostFromSysInfo(agentID, projectID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

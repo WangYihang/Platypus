@@ -406,7 +406,9 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	// v2 agent link handler (yamux-over-WebSocket, mTLS-auth'd).
 	// agentLinkSvc was constructed upstream because SessionsV2Handler
 	// also depends on it for project-dispatch.
-	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db)).WithDB(db)
+	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db)).
+		WithDB(db).
+		WithSystemBundle(cfg.DataDir)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db).WithAgentLinks(agentLinkSvc)
