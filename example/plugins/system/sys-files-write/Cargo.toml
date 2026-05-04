@@ -1,0 +1,29 @@
+[package]
+name = "sys-files-write"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Single wasm exporting five #[plugin_fn] entries:
+#   mkdir, chmod, delete, rename  ← was sys-fs-write
+#   write                          ← was sys-file-write
+#
+# All five share the same fs.write capability surface, so merging
+# them collapses the operator's enroll-time selection from 2 plugins
+# to 1 without changing the wire / capability boundary.
+
+[lib]
+name = "sys_files_write"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

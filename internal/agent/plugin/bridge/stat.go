@@ -8,17 +8,16 @@ import (
 )
 
 // Stat is the plugin-backed replacement for agent.HandleStat.
-// Lives in the same com.platypus.sys-listdir bundle as ListDir
-// (since both want the fs.read capability with the same allowlist;
-// sharing one .wasm halves the embedded-bundle bytes vs. shipping a
-// dedicated sys-stat plugin).
+// Lives in the same com.platypus.sys-files-read bundle as ListDir
+// (and read / scan / archive — every fs.read-class capability shares
+// one .wasm + one operator-grant boundary).
 //
 // Wire shape: StatRequest{path} → StatResponse{entry|error}, same
 // JSON↔proto bridge pattern as ListDir.
 func Stat(reg *plugin.Registry) func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse {
 	return func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse {
 		var jsonResp statJSONResponse
-		pluginErr, err := invokeJSON(ctx, reg, listDirPluginID, "stat",
+		pluginErr, err := invokeJSONFallback(ctx, reg, listDirPluginIDs, "stat",
 			statJSONRequest{Path: req.GetPath()}, &jsonResp)
 		if err != nil {
 			return &v2pb.StatResponse{Error: "bridge: " + err.Error()}

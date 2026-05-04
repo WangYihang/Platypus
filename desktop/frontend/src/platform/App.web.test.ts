@@ -59,16 +59,17 @@ describe("adaptEntry", () => {
         expect(got.mime).toBe("inode/symlink");
     });
 
-    // Post-Phase-B regression: the wasm sys-listdir plugin emits
-    // raw POSIX mode bits (S_IFDIR = 0o040000, bit 14) instead of
-    // Go's os.FileMode (ModeDir = 1 << 31). Without this branch in
-    // adaptEntry, every directory in a wasm-served listing renders
-    // as a regular file — folder icons disappear and double-clicking
-    // a directory opens the file editor instead of navigating.
+    // Post-Phase-B regression: the wasm sys-files-read plugin (was
+    // sys-listdir before the merge) emits raw POSIX mode bits
+    // (S_IFDIR = 0o040000, bit 14) instead of Go's os.FileMode
+    // (ModeDir = 1 << 31). Without this branch in adaptEntry, every
+    // directory in a wasm-served listing renders as a regular file
+    // — folder icons disappear and double-clicking a directory
+    // opens the file editor instead of navigating.
     it("recognises POSIX S_IFDIR (0o040000) as a directory", () => {
         const got = adaptEntry({
             name: "home",
-            mode: 0o040755, // POSIX dir mode emitted by sys-listdir
+            mode: 0o040755, // POSIX dir mode emitted by sys-files-read
             size: 0,
             mtime_unix_nano: 0,
         });

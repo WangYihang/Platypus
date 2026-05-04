@@ -1,0 +1,58 @@
+api_version: 1
+id: com.platypus.sys-files-read
+name: Filesystem read (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — owns every fs.read-class capability the agent
+  exposes. Consolidation of four older plugins into one (capability
+  is identical, so the operator only needs to grant fs.read once):
+
+    - RPC list_dir    — replaces sys-listdir's list_dir
+    - RPC stat        — replaces sys-listdir's stat
+    - stream read     — replaces sys-file-read (STREAM_TYPE_FILE_READ)
+    - stream scan     — replaces sys-file-scan (STREAM_TYPE_FILE_SCAN)
+    - stream archive  — replaces sys-file-archive (STREAM_TYPE_FILE_ARCHIVE)
+
+  Wire formats stay byte-for-byte identical to the originals so the
+  server-side readers don't change.
+
+runtime:
+  type: wasm
+  entry: sys_files_read.wasm
+  abi: extism/1
+
+rpc:
+  - name: list_dir
+    request:  { proto: ListDirRequest }
+    response: { proto: ListDirResponse }
+  - name: stat
+    request:  { proto: StatRequest }
+    response: { proto: StatResponse }
+
+streams:
+  - name: read
+    stream_type: STREAM_TYPE_FILE_READ
+    host_handler: wasm:read
+  - name: scan
+    stream_type: STREAM_TYPE_FILE_SCAN
+    host_handler: wasm:scan
+  - name: archive
+    stream_type: STREAM_TYPE_FILE_ARCHIVE
+    host_handler: wasm:archive
+
+capabilities:
+  fs.read:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_files_read.wasm.minisig

@@ -1,20 +1,32 @@
-// sys-file-write replaces HandleFileWriteStream. Receives a
-// FileWriteRequest as input, opens the destination via
-// host_fs_write_range (truncate first call), reads incoming
-// FileChunk frames from the wire via host_link_read_frame, writes
-// each chunk's data through subsequent host_fs_write_range calls
-// at running offsets, and emits FileWriteResponse + FileWriteResult
-// frames matching the legacy wire contract.
+// sys-files-write consolidates two older plugins into a single wasm:
+//
+//   mkdir + chmod + delete + rename  ← was sys-fs-write
+//   write (stream pump)              ← was sys-file-write (FILE_WRITE)
+//
+// Capabilities required (declared in plugin.yaml):
+//   fs.write with paths=["/"] — same posture as the two predecessors.
+//
+// Wire formats stay byte-for-byte identical (FileWriteResponse +
+// FileWriteResult for the stream; ErrorOnlyResponse JSON for the
+// RPCs) so the server-side readers don't change.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
 
+// ============================================================
+// Shared host-fn declarations
+// ============================================================
+
 #[host_fn("platypus")]
 extern "ExtismHost" {
+    fn host_fs_mkdir(req: String) -> Json<Envelope>;
+    fn host_fs_chmod(req: String) -> Json<Envelope>;
+    fn host_fs_delete(req: String) -> Json<Envelope>;
+    fn host_fs_rename(req: String) -> Json<Envelope>;
+    fn host_fs_write_range(req: String) -> Json<Envelope>;
     fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
     fn host_link_read_frame() -> Json<Envelope>;
-    fn host_fs_write_range(req: String) -> Json<Envelope>;
 }
 
 #[derive(Deserialize, Default)]
@@ -25,6 +37,175 @@ struct Envelope {
     #[serde(default)]
     error: String,
 }
+
+// ============================================================
+// Shared proto-wire helpers
+// ============================================================
+
+const WIRE_VARINT: u32 = 0;
+const WIRE_LEN: u32 = 2;
+
+fn write_tag(buf: &mut Vec<u8>, field: u32, wire_type: u32) {
+    write_varint(buf, ((field << 3) | wire_type) as u64);
+}
+
+fn write_varint(buf: &mut Vec<u8>, mut n: u64) {
+    while n >= 0x80 {
+        buf.push((n as u8) | 0x80);
+        n >>= 7;
+    }
+    buf.push(n as u8);
+}
+
+fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
+    let mut result: u64 = 0;
+    let mut shift: u32 = 0;
+    for (i, &b) in buf.iter().enumerate() {
+        result |= ((b & 0x7f) as u64) << shift;
+        if b & 0x80 == 0 {
+            return Ok((result, i + 1));
+        }
+        shift += 7;
+        if shift >= 64 {
+            return Err(Error::msg("varint overflow"));
+        }
+    }
+    Err(Error::msg("truncated varint"))
+}
+
+fn write_frame(body: &[u8]) -> Result<(), Error> {
+    let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
+    if !env.ok {
+        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
+    }
+    Ok(())
+}
+
+// ============================================================
+// mkdir + chmod + delete + rename (RPCs)
+// ============================================================
+
+#[derive(Deserialize)]
+pub struct MkdirRequest {
+    pub path: String,
+    #[serde(default)]
+    pub mode: u32,
+    #[serde(default)]
+    pub mkdirs: bool,
+}
+
+#[derive(Deserialize)]
+pub struct ChmodRequest {
+    pub path: String,
+    pub mode: u32,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteRequest {
+    pub path: String,
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RenameRequest {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Serialize, Default)]
+pub struct ErrorOnlyResponse {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub error: String,
+}
+
+/// HostFsWriteJSON is the JSON shape the host fn family decodes.
+/// Mirrors the Go-side fsWriteRequest struct in host_fs_write.go.
+#[derive(Serialize)]
+struct HostFsWriteJSON<'a> {
+    path: &'a str,
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    mode: u32,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    mkdirs: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    recursive: bool,
+}
+
+#[derive(Serialize)]
+struct HostFsRenameJSON<'a> {
+    from: &'a str,
+    to: &'a str,
+}
+
+fn is_zero_u32(x: &u32) -> bool {
+    *x == 0
+}
+
+fn into_resp(env: Envelope) -> ErrorOnlyResponse {
+    if env.ok {
+        ErrorOnlyResponse::default()
+    } else {
+        ErrorOnlyResponse { error: env.error }
+    }
+}
+
+#[plugin_fn]
+pub fn mkdir(req: Json<MkdirRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
+    let body = serde_json::to_string(&HostFsWriteJSON {
+        path: &req.0.path,
+        mode: req.0.mode,
+        mkdirs: req.0.mkdirs,
+        recursive: false,
+    })?;
+    let env: Envelope = unsafe { host_fs_mkdir(body)?.0 };
+    Ok(Json(into_resp(env)))
+}
+
+#[plugin_fn]
+pub fn chmod(req: Json<ChmodRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
+    let body = serde_json::to_string(&HostFsWriteJSON {
+        path: &req.0.path,
+        mode: req.0.mode,
+        mkdirs: false,
+        recursive: false,
+    })?;
+    let env: Envelope = unsafe { host_fs_chmod(body)?.0 };
+    Ok(Json(into_resp(env)))
+}
+
+#[plugin_fn]
+pub fn delete(req: Json<DeleteRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
+    let body = serde_json::to_string(&HostFsWriteJSON {
+        path: &req.0.path,
+        mode: 0,
+        mkdirs: false,
+        recursive: req.0.recursive,
+    })?;
+    let env: Envelope = unsafe { host_fs_delete(body)?.0 };
+    Ok(Json(into_resp(env)))
+}
+
+#[plugin_fn]
+pub fn rename(req: Json<RenameRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
+    let body = serde_json::to_string(&HostFsRenameJSON {
+        from: &req.0.from,
+        to: &req.0.to,
+    })?;
+    let env: Envelope = unsafe { host_fs_rename(body)?.0 };
+    Ok(Json(into_resp(env)))
+}
+
+// ============================================================
+// write (stream)
+// ============================================================
+//
+// Receives a FileWriteRequest as input, opens the destination via
+// host_fs_write_range (truncate first call), reads incoming
+// FileChunk frames from the wire via host_link_read_frame, writes
+// each chunk's data through subsequent host_fs_write_range calls
+// at running offsets, emits FileWriteResponse + FileWriteResult
+// frames matching the legacy wire contract.
 
 #[derive(Serialize)]
 struct WriteRangeArgs {
@@ -40,47 +221,25 @@ struct WriteRangeArgs {
 pub fn write(input: Vec<u8>) -> FnResult<()> {
     let req = parse_file_write_request(&input);
     if req.path.is_empty() {
-        write_response("empty path")?;
+        write_response_frame("empty path")?;
         return Ok(());
     }
 
-    // Initial open: write 0 bytes at offset 0 to create / truncate the
-    // file. Append mode skips O_TRUNC; legacy handler uses O_APPEND
-    // there too, but with stateless writes we just start at the file's
-    // current size — our caller chunked the source so each chunk's
-    // data is correctly ordered.
-    let truncate = !req.append;
     let mut offset: i64 = 0;
     if !req.append {
-        // Truncate-mode: empty initial write to create + truncate.
         if let Err(e) = call_write_range(&req.path, 0, &[], req.mode, req.mkdirs, true) {
-            write_response(&e)?;
+            write_response_frame(&e)?;
             return Ok(());
         }
     } else {
-        // Append-mode: stat existing file's size by writing 0 bytes
-        // and starting offset there. host_fs_write_range with a 0-byte
-        // data + truncate=false simply opens, seeks to 0, writes
-        // nothing — but we don't get the size back. So just assume
-        // existing tail and hand subsequent writes the running offset
-        // we'd compute as we read chunks; the OS handles seek beyond
-        // current EOF by zero-padding (matches O_APPEND-then-Write
-        // semantics for sequential writers).
-        // For exactly-matching legacy behaviour the agent needs an
-        // explicit append host fn; this simpler model handles the
-        // typical "uploader writes a fresh file" path correctly.
         if let Err(e) = call_write_range(&req.path, 0, &[], req.mode, req.mkdirs, false) {
-            write_response(&e)?;
+            write_response_frame(&e)?;
             return Ok(());
         }
     }
-    let _ = truncate; // keep doc comment relevant; flag is captured via the truncate=true above
 
-    // Ack — open succeeded.
-    write_response("")?;
+    write_response_frame("")?;
 
-    // Stream-in loop: read FileChunk frames until eof (or wire EOF /
-    // error), write each chunk's bytes to disk, accumulate total.
     let mut bytes_written: i64 = 0;
     let mut first_error = String::new();
     loop {
@@ -91,9 +250,6 @@ pub fn write(input: Vec<u8>) -> FnResult<()> {
         }
         let body_b64 = env.data.as_str().unwrap_or("");
         if body_b64.is_empty() {
-            // Wire EOF without a terminal eof=true chunk — surface as
-            // a soft error in the result so callers see the unclean
-            // close.
             first_error = "stream closed before eof chunk".into();
             break;
         }
@@ -119,8 +275,7 @@ pub fn write(input: Vec<u8>) -> FnResult<()> {
         }
     }
 
-    // Trailer: FileWriteResult.
-    write_result(bytes_written, &first_error)?;
+    write_result_frame(bytes_written, &first_error)?;
     Ok(())
 }
 
@@ -148,7 +303,7 @@ fn call_write_range(
     Ok(())
 }
 
-fn write_response(error: &str) -> Result<(), Error> {
+fn write_response_frame(error: &str) -> Result<(), Error> {
     // FileWriteResponse{error=1:string}
     let mut buf = Vec::with_capacity(error.len() + 8);
     if !error.is_empty() {
@@ -159,7 +314,7 @@ fn write_response(error: &str) -> Result<(), Error> {
     write_frame(&buf)
 }
 
-fn write_result(bytes_written: i64, error: &str) -> Result<(), Error> {
+fn write_result_frame(bytes_written: i64, error: &str) -> Result<(), Error> {
     // FileWriteResult{bytes_written=1:int64, error=2:string}
     let mut buf = Vec::with_capacity(error.len() + 16);
     if bytes_written != 0 {
@@ -174,26 +329,18 @@ fn write_result(bytes_written: i64, error: &str) -> Result<(), Error> {
     write_frame(&buf)
 }
 
-fn write_frame(body: &[u8]) -> Result<(), Error> {
-    let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
-    if !env.ok {
-        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
-    }
-    Ok(())
-}
-
 // ---- proto decoders -----------------------------------------------
 
 #[derive(Default)]
-struct FileWriteRequest {
+struct FileWriteRequestParsed {
     path: String,
     append: bool,
     mode: u32,
     mkdirs: bool,
 }
 
-fn parse_file_write_request(buf: &[u8]) -> FileWriteRequest {
-    let mut req = FileWriteRequest::default();
+fn parse_file_write_request(buf: &[u8]) -> FileWriteRequestParsed {
+    let mut req = FileWriteRequestParsed::default();
     let mut i = 0;
     while i < buf.len() {
         let (tag, n) = match read_varint(&buf[i..]) {
@@ -334,35 +481,4 @@ fn parse_file_chunk(buf: &[u8]) -> FileChunkParsed {
         }
     }
     out
-}
-
-const WIRE_VARINT: u32 = 0;
-const WIRE_LEN: u32 = 2;
-
-fn write_tag(buf: &mut Vec<u8>, field: u32, wire_type: u32) {
-    write_varint(buf, ((field << 3) | wire_type) as u64);
-}
-
-fn write_varint(buf: &mut Vec<u8>, mut n: u64) {
-    while n >= 0x80 {
-        buf.push((n as u8) | 0x80);
-        n >>= 7;
-    }
-    buf.push(n as u8);
-}
-
-fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
-    let mut result: u64 = 0;
-    let mut shift: u32 = 0;
-    for (i, &b) in buf.iter().enumerate() {
-        result |= ((b & 0x7f) as u64) << shift;
-        if b & 0x80 == 0 {
-            return Ok((result, i + 1));
-        }
-        shift += 7;
-        if shift >= 64 {
-            return Err(Error::msg("varint overflow"));
-        }
-    }
-    Err(Error::msg("truncated varint"))
 }

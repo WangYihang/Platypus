@@ -7,11 +7,15 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// fsWritePluginID owns Mkdir / Chmod / Delete / Rename. One bundle
-// instead of four because all four want the same fs.write capability
-// with the same allowlist; sharing the .wasm cuts embedded-bundle
-// bytes by ~75%.
-const fsWritePluginID = "com.platypus.sys-fs-write"
+// fsWritePluginIDs is the preference chain. Merged sys-files-write
+// (post-merge, also owns the file_write stream) wins where the
+// publisher staged it; sys-fs-write is the legacy fallback for
+// production agents still on the read-only embed FS. Mkdir / Chmod
+// / Delete / Rename have byte-identical wire shapes in both ids.
+var fsWritePluginIDs = []string{
+	"com.platypus.sys-files-write",
+	"com.platypus.sys-fs-write",
+}
 
 // errOnlyJSON is the response shape every fs.write handler returns:
 // just an error string (empty on success). Mirrors the legacy
@@ -24,7 +28,7 @@ type errOnlyJSON struct {
 func Mkdir(reg *plugin.Registry) func(ctx context.Context, req *v2pb.MkdirRequest) *v2pb.MkdirResponse {
 	return func(ctx context.Context, req *v2pb.MkdirRequest) *v2pb.MkdirResponse {
 		var resp errOnlyJSON
-		pluginErr, err := invokeJSON(ctx, reg, fsWritePluginID, "mkdir", mkdirJSON{
+		pluginErr, err := invokeJSONFallback(ctx, reg, fsWritePluginIDs, "mkdir", mkdirJSON{
 			Path: req.GetPath(), Mode: req.GetMode(), Mkdirs: req.GetMkdirs(),
 		}, &resp)
 		if err != nil {
@@ -41,7 +45,7 @@ func Mkdir(reg *plugin.Registry) func(ctx context.Context, req *v2pb.MkdirReques
 func Chmod(reg *plugin.Registry) func(ctx context.Context, req *v2pb.ChmodRequest) *v2pb.ChmodResponse {
 	return func(ctx context.Context, req *v2pb.ChmodRequest) *v2pb.ChmodResponse {
 		var resp errOnlyJSON
-		pluginErr, err := invokeJSON(ctx, reg, fsWritePluginID, "chmod", chmodJSON{
+		pluginErr, err := invokeJSONFallback(ctx, reg, fsWritePluginIDs, "chmod", chmodJSON{
 			Path: req.GetPath(), Mode: req.GetMode(),
 		}, &resp)
 		if err != nil {
@@ -58,7 +62,7 @@ func Chmod(reg *plugin.Registry) func(ctx context.Context, req *v2pb.ChmodReques
 func Delete(reg *plugin.Registry) func(ctx context.Context, req *v2pb.DeleteRequest) *v2pb.DeleteResponse {
 	return func(ctx context.Context, req *v2pb.DeleteRequest) *v2pb.DeleteResponse {
 		var resp errOnlyJSON
-		pluginErr, err := invokeJSON(ctx, reg, fsWritePluginID, "delete", deleteJSON{
+		pluginErr, err := invokeJSONFallback(ctx, reg, fsWritePluginIDs, "delete", deleteJSON{
 			Path: req.GetPath(), Recursive: req.GetRecursive(),
 		}, &resp)
 		if err != nil {
@@ -75,7 +79,7 @@ func Delete(reg *plugin.Registry) func(ctx context.Context, req *v2pb.DeleteRequ
 func Rename(reg *plugin.Registry) func(ctx context.Context, req *v2pb.RenameRequest) *v2pb.RenameResponse {
 	return func(ctx context.Context, req *v2pb.RenameRequest) *v2pb.RenameResponse {
 		var resp errOnlyJSON
-		pluginErr, err := invokeJSON(ctx, reg, fsWritePluginID, "rename", renameJSON{
+		pluginErr, err := invokeJSONFallback(ctx, reg, fsWritePluginIDs, "rename", renameJSON{
 			From: req.GetFrom(), To: req.GetTo(),
 		}, &resp)
 		if err != nil {

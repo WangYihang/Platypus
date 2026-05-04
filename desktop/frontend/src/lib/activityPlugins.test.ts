@@ -32,20 +32,18 @@ describe("missingFor", () => {
     it("returns the required plugins minus the installed ones", () => {
         const got = missingFor(
             "files",
-            new Set(["com.platypus.sys-listdir"]),
+            new Set(["com.platypus.sys-files-read"]),
         );
-        // sys-listdir installed; sys-file-read + sys-fs-write missing.
+        // sys-files-read installed; sys-files-write still missing.
         expect(got).toEqual([
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-fs-write",
+            "com.platypus.sys-files-write",
         ]);
     });
 
     it("returns [] when every required plugin is installed", () => {
         const installed = new Set([
-            "com.platypus.sys-listdir",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-fs-write",
+            "com.platypus.sys-files-read",
+            "com.platypus.sys-files-write",
         ]);
         expect(missingFor("files", installed)).toEqual([]);
     });
@@ -58,8 +56,8 @@ describe("activitiesNeedingInstall", () => {
 
     it("flags activities whose required plugins aren't installed", () => {
         // Only sys-procs installed → processes still missing
-        // sys-process-open; sessions also needs sys-process-open;
-        // every other gated activity has all plugins missing.
+        // sys-process; sessions also needs sys-process; every other
+        // gated activity has all plugins missing.
         const got = activitiesNeedingInstall(
             new Set(["com.platypus.sys-procs"]),
         );
@@ -105,7 +103,7 @@ describe("REQUIRED_PLUGINS", () => {
     });
 
     it("every required id matches the system catalog naming convention", () => {
-        // Sanity check: avoid "sys-listdir" vs "com.platypus.sys-listdir"
+        // Sanity check: avoid "sys-files-read" vs "com.platypus.sys-files-read"
         // typos that would silently break the gate.
         for (const list of Object.values(REQUIRED_PLUGINS)) {
             for (const id of list ?? []) {

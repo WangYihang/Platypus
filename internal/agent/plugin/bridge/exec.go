@@ -7,11 +7,19 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// execPluginID owns the Exec RPC. The system plugin declares
-// exec.commands=["*"] so it inherits the legacy any-command posture;
-// third-party plugins should declare a narrow command list, gated by
-// the install-time capability dialog.
-const execPluginID = "com.platypus.sys-exec"
+// execPluginIDs is the preference chain. Merged sys-process
+// (post-merge, also owns the process_open stream) wins where the
+// publisher staged it; sys-exec is the legacy fallback for
+// production agents still on the read-only embed FS. Both ids
+// expose the exec RPC with byte-identical wire shapes.
+//
+// Capability-wise the merge does NOT widen authorisation: the
+// merged plugin declares both `exec` and `process` independently,
+// and the host's runtime check still gates each call separately.
+var execPluginIDs = []string{
+	"com.platypus.sys-process",
+	"com.platypus.sys-exec",
+}
 
 // Exec is the plugin-backed replacement for agent.HandleExec.
 //
@@ -26,7 +34,7 @@ func Exec(reg *plugin.Registry) func(ctx context.Context, req *v2pb.ExecRequest)
 			envCopy[k] = v
 		}
 		var resp execJSONResponse
-		pluginErr, err := invokeJSON(ctx, reg, execPluginID, "exec", execJSONRequest{
+		pluginErr, err := invokeJSONFallback(ctx, reg, execPluginIDs, "exec", execJSONRequest{
 			Command:   req.GetCommand(),
 			Args:      req.GetArgs(),
 			Env:       envCopy,

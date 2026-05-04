@@ -326,9 +326,10 @@ func main() {
 		// Every RPC handler dispatches through a bridge wrapper that
 		// proxies to the matching system plugin. Stream-type
 		// dispatch goes through pluginRegistry.DispatchStream below
-		// — the wasm system plugins (sys-file-read, sys-file-write,
-		// sys-file-scan, sys-file-archive, sys-process-open,
-		// sys-tunnel-pull) claim the corresponding STREAM_TYPE_* and
+		// — the wasm system plugins (sys-files-read [file_read +
+		// file_scan + file_archive], sys-files-write [file_write],
+		// sys-process [process_open], sys-tunnel-pull) claim the
+		// corresponding STREAM_TYPE_* and
 		// serve every wire frame in-sandbox. There are no Go-resident
 		// stream handlers any more.
 		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{

@@ -16,7 +16,7 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// TestProcessOpen_RustPluginNonPty drives sys-process-open through
+// TestProcessOpen_RustPluginNonPty drives sys-process through
 // the legacy-wasm bridge against a fixed `/bin/echo hello` invocation.
 // Asserts the ProcessOpenResponse carries a non-zero pid, that we
 // receive `hello\n` on stdout, and that the final ProcessFrame.exit
@@ -34,10 +34,10 @@ func TestProcessOpen_RustPluginNonPty(t *testing.T) {
 	wasmPath := processOpenWasmPath()
 	wasm, err := os.ReadFile(wasmPath)
 	if err != nil {
-		t.Skipf("sys_process_open.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/sys-process-open/", err)
+		t.Skipf("sys_process_open.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/sys-process/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-process-open", "plugin.yaml"))
+		"example", "plugins", "sys-process", "plugin.yaml"))
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestProcessOpen_RustPluginNonPty(t *testing.T) {
 	defer reg.Close(context.Background())
 
 	if err := reg.InstallFromBytes(context.Background(), InstallParams{
-		PluginID:            "com.platypus.sys-process-open",
+		PluginID:            "com.platypus.sys-process",
 		Version:             "1.0.0",
 		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
@@ -167,7 +167,7 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 		t.Skipf("sys_process_open.wasm not built (%v)", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-process-open", "plugin.yaml"))
+		"example", "plugins", "sys-process", "plugin.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	defer reg.Close(context.Background())
 
 	if err := reg.InstallFromBytes(context.Background(), InstallParams{
-		PluginID:            "com.platypus.sys-process-open",
+		PluginID:            "com.platypus.sys-process",
 		Version:             "1.0.0",
 		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
@@ -250,6 +250,6 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 }
 
 func processOpenWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "sys-process-open",
+	return filepath.Join("..", "..", "..", "example", "plugins", "sys-process",
 		"target", "wasm32-unknown-unknown", "release", "sys_process_open.wasm")
 }

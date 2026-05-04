@@ -1,0 +1,51 @@
+api_version: 1
+id: com.platypus.sys-process
+name: Process control (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — owns every process / command-execution capability
+  the agent exposes. Consolidation of two older plugins:
+
+    - RPC exec     — replaces sys-exec (one-shot command, capability `exec`)
+    - stream open  — replaces sys-process-open (interactive PTY,
+                     capability `process`)
+
+  The two predecessors had distinct capability families — `exec`
+  governs synchronous command runs, `process` governs the long-lived
+  interactive shell. The merged plugin DECLARES both so the operator
+  authorises them independently at install time; the host's runtime
+  capability check still gates each call separately.
+
+runtime:
+  type: wasm
+  entry: sys_process.wasm
+  abi: extism/1
+
+rpc:
+  - name: exec
+    request:  { proto: ExecRequest }
+    response: { proto: ExecResponse }
+
+streams:
+  - name: open
+    stream_type: STREAM_TYPE_PROCESS_OPEN
+    host_handler: wasm:open
+
+capabilities:
+  exec:
+    commands: ["*"]
+  process:
+    commands: ["*"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 3600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_process.wasm.minisig

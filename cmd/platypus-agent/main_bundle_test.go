@@ -97,7 +97,7 @@ func TestExpandInstallBundle_PropagatesBaselinePluginIDs(t *testing.T) {
 	wire, err := installbundle.Encode(installbundle.Bundle{
 		Server:            "agent.corp:9443",
 		PAT:               "plt_a.b",
-		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-files-read"},
 	})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -106,7 +106,7 @@ func TestExpandInstallBundle_PropagatesBaselinePluginIDs(t *testing.T) {
 	if _, err := expandInstallBundle(opts); err != nil {
 		t.Fatalf("expandInstallBundle: %v", err)
 	}
-	if !equalStrSlice(opts.BaselinePluginIDs, []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}) {
+	if !equalStrSlice(opts.BaselinePluginIDs, []string{"com.platypus.sys-info", "com.platypus.sys-files-read"}) {
 		t.Fatalf("BaselinePluginIDs = %v", opts.BaselinePluginIDs)
 	}
 }
@@ -119,7 +119,7 @@ func TestExpandInstallBundle_BaselineCLIWins(t *testing.T) {
 	wire, err := installbundle.Encode(installbundle.Bundle{
 		Server:            "agent.corp:9443",
 		PAT:               "plt_a.b",
-		BaselinePluginIDs: []string{"com.platypus.sys-listdir"},
+		BaselinePluginIDs: []string{"com.platypus.sys-files-read"},
 	})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -147,9 +147,9 @@ func TestMergeWithCore_AppendsMandatoryCoreOnce(t *testing.T) {
 		want []string
 	}{
 		{name: "empty operator pick", in: nil, want: []string{"com.platypus.sys-info"}},
-		{name: "operator picks one", in: []string{"com.platypus.sys-listdir"}, want: []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}},
-		{name: "operator already picked core", in: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}, want: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"}},
-		{name: "trims and dedups", in: []string{" com.platypus.sys-listdir ", "com.platypus.sys-listdir", ""}, want: []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}},
+		{name: "operator picks one", in: []string{"com.platypus.sys-files-read"}, want: []string{"com.platypus.sys-files-read", "com.platypus.sys-info"}},
+		{name: "operator already picked core", in: []string{"com.platypus.sys-info", "com.platypus.sys-files-read"}, want: []string{"com.platypus.sys-info", "com.platypus.sys-files-read"}},
+		{name: "trims and dedups", in: []string{" com.platypus.sys-files-read ", "com.platypus.sys-files-read", ""}, want: []string{"com.platypus.sys-files-read", "com.platypus.sys-info"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

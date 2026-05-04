@@ -344,7 +344,7 @@ export interface V2FileEntry {
 const GO_MODE_DIR = 1 << 31;
 const GO_MODE_SYMLINK = 1 << 27;
 
-// POSIX S_IFMT bits — wasm system plugins (sys-listdir, sys-info)
+// POSIX S_IFMT bits — wasm system plugins (sys-files-read, sys-info)
 // emit raw POSIX mode bits where the file type sits in 0o170000:
 //   S_IFDIR  = 0o040000
 //   S_IFLNK  = 0o120000

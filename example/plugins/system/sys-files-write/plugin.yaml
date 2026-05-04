@@ -1,0 +1,58 @@
+api_version: 1
+id: com.platypus.sys-files-write
+name: Filesystem write (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — owns every fs.write-class capability the agent
+  exposes. Consolidation of two older plugins into one (capability
+  is identical, so the operator only needs to grant fs.write once):
+
+    - RPC mkdir       — replaces sys-fs-write's mkdir
+    - RPC chmod       — replaces sys-fs-write's chmod
+    - RPC delete      — replaces sys-fs-write's delete
+    - RPC rename      — replaces sys-fs-write's rename
+    - stream write    — replaces sys-file-write (STREAM_TYPE_FILE_WRITE)
+
+  Wire formats stay byte-for-byte identical to the originals so the
+  server-side readers don't change.
+
+runtime:
+  type: wasm
+  entry: sys_files_write.wasm
+  abi: extism/1
+
+rpc:
+  - name: mkdir
+    request:  { proto: MkdirRequest }
+    response: { proto: MkdirResponse }
+  - name: chmod
+    request:  { proto: ChmodRequest }
+    response: { proto: ChmodResponse }
+  - name: delete
+    request:  { proto: DeleteRequest }
+    response: { proto: DeleteResponse }
+  - name: rename
+    request:  { proto: RenameRequest }
+    response: { proto: RenameResponse }
+
+streams:
+  - name: write
+    stream_type: STREAM_TYPE_FILE_WRITE
+    host_handler: wasm:write
+
+capabilities:
+  fs.write:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_files_write.wasm.minisig

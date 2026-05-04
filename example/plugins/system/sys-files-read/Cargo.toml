@@ -1,0 +1,35 @@
+[package]
+name = "sys-files-read"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Single wasm exporting five #[plugin_fn] entries:
+#   list_dir, stat        ← was sys-listdir
+#   read                  ← was sys-file-read
+#   scan                  ← was sys-file-scan
+#   archive               ← was sys-file-archive
+#
+# All four share the same fs.read capability surface, so consolidating
+# them collapses the operator's enroll-time selection from 4 plugins
+# to 1 without changing the wire / capability boundary.
+
+[lib]
+name = "sys_files_read"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+# Pure-Rust DEFLATE (no C deps), small wasm footprint. Used for the
+# gzip wrapping in archive's TAR_GZ. flate2 selects miniz_oxide when
+# no system zlib backend is requested.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

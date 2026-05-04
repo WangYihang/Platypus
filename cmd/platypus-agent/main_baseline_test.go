@@ -18,14 +18,14 @@ func silentLogger() *slog.Logger {
 }
 
 // TestResolveBaselineAllowlist_FirstBootPersists exercises the
-// "no baseline.json on disk yet, opts says install sys-listdir" path:
+// "no baseline.json on disk yet, opts says install sys-files-read" path:
 //
-//   - the function returns sys-listdir + sys-info (the mandatory core)
+//   - the function returns sys-files-read + sys-info (the mandatory core)
 //   - baseline.json is written so subsequent boots take the persisted path
 func TestResolveBaselineAllowlist_FirstBootPersists(t *testing.T) {
 	dir := t.TempDir()
-	got := resolveBaselineAllowlist(silentLogger(), dir, []string{"com.platypus.sys-listdir"})
-	want := []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}
+	got := resolveBaselineAllowlist(silentLogger(), dir, []string{"com.platypus.sys-files-read"})
+	want := []string{"com.platypus.sys-files-read", "com.platypus.sys-info"}
 	if !equalStrSlice(got, want) {
 		t.Fatalf("resolveBaselineAllowlist = %v; want %v", got, want)
 	}
@@ -33,7 +33,7 @@ func TestResolveBaselineAllowlist_FirstBootPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("baseline.json was not persisted: %v", err)
 	}
-	if !equalStrSlice(persisted, []string{"com.platypus.sys-listdir"}) {
+	if !equalStrSlice(persisted, []string{"com.platypus.sys-files-read"}) {
 		t.Fatalf("persisted = %v; want only operator pick (mandatory core lives in the runtime merge, not the file)", persisted)
 	}
 }
@@ -44,12 +44,12 @@ func TestResolveBaselineAllowlist_FirstBootPersists(t *testing.T) {
 // a re-run with stale opts cannot silently widen the allowlist.
 func TestResolveBaselineAllowlist_SteadyStateIgnoresOpts(t *testing.T) {
 	dir := t.TempDir()
-	if err := agent.SaveBaseline(dir, []string{"com.platypus.sys-listdir"}); err != nil {
+	if err := agent.SaveBaseline(dir, []string{"com.platypus.sys-files-read"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	got := resolveBaselineAllowlist(silentLogger(), dir,
-		[]string{"com.platypus.sys-procs", "com.platypus.sys-exec"})
-	want := []string{"com.platypus.sys-listdir", "com.platypus.sys-info"}
+		[]string{"com.platypus.sys-procs", "com.platypus.sys-process"})
+	want := []string{"com.platypus.sys-files-read", "com.platypus.sys-info"}
 	if !equalStrSlice(got, want) {
 		t.Fatalf("resolveBaselineAllowlist = %v; want %v (persisted baseline must win)", got, want)
 	}

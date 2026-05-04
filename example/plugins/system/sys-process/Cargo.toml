@@ -1,0 +1,30 @@
+[package]
+name = "sys-process"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Single wasm exporting two #[plugin_fn] entries:
+#   exec  ← was sys-exec      (one-shot RPC)
+#   open  ← was sys-process-open (interactive PTY stream)
+#
+# Capability-wise the two are distinct (`exec` allowlist vs `process`
+# allowlist), so the merged plugin DECLARES BOTH. The operator's
+# install dialog still gates the two separately — merging only
+# changes how many plugin ids the operator has to think about, not
+# the trust boundary at host_fn time.
+
+[lib]
+name = "sys_process"
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

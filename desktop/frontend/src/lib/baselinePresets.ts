@@ -1,7 +1,6 @@
 // Baseline plugin presets — one-click bundles for the Enroll
 // wizard's plugin picker. Operators rarely want to think in terms
-// of individual plugins ("sys-listdir, sys-file-read, sys-fs-write,
-// sys-file-archive…"); they want to think in terms of intent
+// of individual plugin ids; they want to think in terms of intent
 // ("I need to inspect this host", "I need to manage files",
 // "I need shell + tunnels"). Presets map intent → plugin IDs.
 //
@@ -16,6 +15,19 @@
 //     includes everything in "Read-only inspection" + the process
 //     bits, "Full" is every plugin. Operators stop at the lowest
 //     tier that lets the host do what they need.
+//
+// Post-merge plugin layout (8 system plugins; was 14):
+//   · sys-info            — host overview RPC + hostname
+//   · sys-procs           — process list RPC
+//   · sys-files-read      — list_dir + stat + file_read + file_scan
+//                           + file_archive (every fs.read use)
+//   · sys-files-write     — mkdir + chmod + delete + rename +
+//                           file_write (every fs.write use)
+//   · sys-process         — exec RPC + process_open stream
+//                           (declares both `exec` and `process` caps)
+//   · sys-security        — security scan RPCs
+//   · sys-config-audit    — config-audit RPCs
+//   · sys-tunnel-pull     — outbound TCP relay stream
 
 export interface BaselinePreset {
     id: string;
@@ -39,10 +51,8 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Browse files, see processes, read system info. No mutations, no shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-file-scan",
+            "com.platypus.sys-files-read",
         ],
     },
     {
@@ -52,13 +62,9 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Everything in Read-only plus create / rename / delete files and tar+gz archives. No shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-file-scan",
-            "com.platypus.sys-fs-write",
-            "com.platypus.sys-file-write",
-            "com.platypus.sys-file-archive",
+            "com.platypus.sys-files-read",
+            "com.platypus.sys-files-write",
         ],
     },
     {
@@ -68,15 +74,10 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "File management + interactive shell sessions. Use for hosts you actively administer.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-file-scan",
-            "com.platypus.sys-fs-write",
-            "com.platypus.sys-file-write",
-            "com.platypus.sys-file-archive",
-            "com.platypus.sys-exec",
-            "com.platypus.sys-process-open",
+            "com.platypus.sys-files-read",
+            "com.platypus.sys-files-write",
+            "com.platypus.sys-process",
         ],
     },
     {
@@ -86,10 +87,8 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Read-only host inspection + the security scan + config audit plugins. Use for compliance / forensics roles.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-file-scan",
+            "com.platypus.sys-files-read",
             "com.platypus.sys-security",
             "com.platypus.sys-config-audit",
         ],
@@ -101,15 +100,10 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Every system plugin the catalog ships. Equivalent to every checkbox below ticked. Higher trust surface — pick a tighter preset when the role allows it.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
-            "com.platypus.sys-file-read",
-            "com.platypus.sys-file-scan",
-            "com.platypus.sys-fs-write",
-            "com.platypus.sys-file-write",
-            "com.platypus.sys-file-archive",
-            "com.platypus.sys-exec",
-            "com.platypus.sys-process-open",
+            "com.platypus.sys-files-read",
+            "com.platypus.sys-files-write",
+            "com.platypus.sys-process",
             "com.platypus.sys-security",
             "com.platypus.sys-config-audit",
             "com.platypus.sys-tunnel-pull",

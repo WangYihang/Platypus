@@ -21,17 +21,19 @@ import type { Activity } from "../pages/host/ActivityBar";
 
 // REQUIRED_PLUGINS lists the system-plugin ids each activity tab
 // needs to be useful. "Useful" = the primary affordance works:
-//   · Files — needs sys-listdir to enumerate; sys-file-read to
-//     preview / download; sys-fs-write for create / rename / delete.
-//     We list all three because partial install produces a confusing
-//     state (e.g. browse but can't preview).
+//   · Files — needs sys-files-read (list_dir + stat + read +
+//     scan + archive) AND sys-files-write (mkdir / chmod / delete /
+//     rename + write stream). The two were 6 separate plugins
+//     before the merge; collapsing fs.read and fs.write each into
+//     one plugin halves the operator's "Install" buttons here.
 //   · Info / Hardware — sys-info paints the overview cards
 //     (including hostname; sys-hostname was folded into sys-info).
 //     We don't list sys-info as required here because
 //     mandatoryCorePluginIDs guarantees it on every boot.
-//   · Sessions — terminal sessions need sys-process-open.
+//   · Sessions — terminal sessions need sys-process (was
+//     sys-process-open before merging with sys-exec).
 //   · Processes — needs sys-procs (the RPC catalogue) AND
-//     sys-process-open (open a shell from a process row).
+//     sys-process (open a shell from a process row).
 //   · Security — sys-security drives the security scan UI.
 //   · Config — sys-config-audit drives the config audit UI.
 //   · Tunnels — sys-tunnel-pull is the agent-side stream owner.
@@ -43,14 +45,13 @@ import type { Activity } from "../pages/host/ActivityBar";
 // 200 from the agent.
 export const REQUIRED_PLUGINS: Partial<Record<Activity, readonly string[]>> = {
     files: [
-        "com.platypus.sys-listdir",
-        "com.platypus.sys-file-read",
-        "com.platypus.sys-fs-write",
+        "com.platypus.sys-files-read",
+        "com.platypus.sys-files-write",
     ],
-    sessions: ["com.platypus.sys-process-open"],
+    sessions: ["com.platypus.sys-process"],
     processes: [
         "com.platypus.sys-procs",
-        "com.platypus.sys-process-open",
+        "com.platypus.sys-process",
     ],
     security: ["com.platypus.sys-security"],
     config: ["com.platypus.sys-config-audit"],
