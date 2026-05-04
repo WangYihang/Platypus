@@ -43,7 +43,7 @@ extern "ExtismHost" {
     fn host_fs_listdir(path: String) -> Json<Envelope>;
     fn host_fs_stat(path: String) -> Json<Envelope>;
     fn host_fs_read_range(req: String) -> Json<Envelope>;
-    fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
+    fn host_stream_write(bytes: Vec<u8>) -> Json<Envelope>;
 }
 
 #[derive(Deserialize, Default)]
@@ -92,9 +92,9 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
 
 #[cfg(target_arch = "wasm32")]
 fn write_frame(body: &[u8]) -> Result<(), Error> {
-    let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
+    let env: Envelope = unsafe { host_stream_write(body.to_vec())?.0 };
     if !env.ok {
-        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
+        return Err(Error::msg(format!("host_stream_write: {}", env.error)));
     }
     Ok(())
 }
@@ -491,7 +491,7 @@ fn write_file_chunk(data: &[u8], eof: bool, error: &str, source_bytes_so_far: i6
 //
 // Walks the requested paths via host_fs_listdir + host_fs_stat
 // (recurses into subdirectories), then emits a single
-// FileScanResponse via host_link_write_frame matching the legacy
+// FileScanResponse via host_stream_write matching the legacy
 // handler's wire format.
 
 #[derive(Default)]
