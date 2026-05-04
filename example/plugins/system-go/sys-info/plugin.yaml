@@ -1,0 +1,39 @@
+api_version: 1
+id: com.platypus.sys-info-go
+name: SysInfo (system, Go)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  TinyGo port of the Rust com.platypus.sys-info plugin. Same wire
+  output (protojson-shaped SysInfoResponse with camelCase keys);
+  same /proc + /etc parsing strategy. Different plugin id (-go
+  suffix) so both Rust and Go versions can ship side-by-side and
+  the operator picks one via baseline_plugin_ids.
+
+runtime:
+  type: wasm
+  entry: sys_info_plugin.wasm
+  abi: extism/1
+  lang: go
+
+rpc:
+  - name: sys_info
+    request:  { proto: SysInfoRequest }
+    response: { proto: SysInfoResponse }
+
+capabilities:
+  sysinfo: true
+  fs.read:
+    paths: ["/proc", "/etc", "/sys"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 5000
+
+signature:
+  algo: minisign-ed25519
+  key_id: REPLACE_WITH_YOUR_KEY_ID
+  sig_file: sys_info_plugin.wasm.minisig
