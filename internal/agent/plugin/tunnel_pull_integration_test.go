@@ -27,7 +27,7 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 		t.Skipf("sys_tunnel_pull.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/sys-tunnel-pull/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-tunnel-pull", "plugin.yaml"))
+		"example", "plugins", "system", "sys-tunnel-pull", "plugin.yaml"))
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 		t.Skipf("sys_tunnel_pull.wasm not built (%v)", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-tunnel-pull", "plugin.yaml"))
+		"example", "plugins", "system", "sys-tunnel-pull", "plugin.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,6 +238,6 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 }
 
 func tunnelPullWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "sys-tunnel-pull",
+	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-tunnel-pull",
 		"target", "wasm32-unknown-unknown", "release", "sys_tunnel_pull.wasm")
 }

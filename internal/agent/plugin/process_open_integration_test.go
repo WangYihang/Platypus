@@ -34,10 +34,10 @@ func TestProcessOpen_RustPluginNonPty(t *testing.T) {
 	wasmPath := processOpenWasmPath()
 	wasm, err := os.ReadFile(wasmPath)
 	if err != nil {
-		t.Skipf("sys_process_open.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/sys-process/", err)
+		t.Skipf("sys_process.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-process/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-process", "plugin.yaml"))
+		"example", "plugins", "system", "sys-process", "plugin.yaml"))
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
@@ -164,10 +164,10 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	wasmPath := processOpenWasmPath()
 	wasm, err := os.ReadFile(wasmPath)
 	if err != nil {
-		t.Skipf("sys_process_open.wasm not built (%v)", err)
+		t.Skipf("sys_process.wasm not built (%v)", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "sys-process", "plugin.yaml"))
+		"example", "plugins", "system", "sys-process", "plugin.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,10 +187,14 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	}
 	manifestStr := strings.Replace(string(manifestBytes),
 		"REPLACE_WITH_YOUR_KEY_ID", HumanKeyID(pk), 1)
-	// Narrow the wildcard to /bin/true. Any other binary should be
-	// rejected with command_not_in_allowlist.
-	manifestStr = strings.Replace(manifestStr, `commands: ["*"]`,
-		`commands: ["/bin/true"]`, 1)
+	// Narrow BOTH wildcards (sys-process declares exec + process
+	// capability families post-merge; this test exercises the
+	// `process` family via STREAM_TYPE_PROCESS_OPEN, so leaving the
+	// `process:` block at "*" would let /bin/false through). Any
+	// other binary on either family should be rejected with
+	// command_not_in_allowlist.
+	manifestStr = strings.ReplaceAll(manifestStr, `commands: ["*"]`,
+		`commands: ["/bin/true"]`)
 	sig, err := Sign(sk, wasm, DefaultTrustedComment("sys_process_open.wasm"))
 	if err != nil {
 		t.Fatal(err)
@@ -250,6 +254,6 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 }
 
 func processOpenWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "sys-process",
-		"target", "wasm32-unknown-unknown", "release", "sys_process_open.wasm")
+	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-process",
+		"target", "wasm32-unknown-unknown", "release", "sys_process.wasm")
 }
