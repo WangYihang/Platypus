@@ -23,6 +23,7 @@
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_fs_read(path: String) -> Json<Envelope>;
@@ -124,7 +125,12 @@ fn is_zero_u64(x: &u64) -> bool { *x == 0 }
 fn is_zero_i64(x: &i64) -> bool { *x == 0 }
 
 // ---- registered auditors ----------------------------------------
+//
+// Gated to wasm32: the runner fns (audit_*) read files via
+// host_fs_read, so they only exist in the wasm build. Pure scan_*
+// helpers stay open for unit tests on the host.
 
+#[cfg(target_arch = "wasm32")]
 struct Auditor {
     id: &'static str,
     category: &'static str,
@@ -133,6 +139,7 @@ struct Auditor {
     run: fn() -> Vec<ConfigLeak>,
 }
 
+#[cfg(target_arch = "wasm32")]
 const AUDITORS: &[Auditor] = &[
     Auditor {
         id: "shell.history",
@@ -159,6 +166,7 @@ const AUDITORS: &[Auditor] = &[
 
 // ---- entry points -----------------------------------------------
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn list_config_auditors(_: ()) -> FnResult<String> {
     let auditors: Vec<AvailableAuditor> = AUDITORS
@@ -178,6 +186,7 @@ pub fn list_config_auditors(_: ()) -> FnResult<String> {
     })?)
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn config_audit(req: Json<AuditRequest>) -> FnResult<String> {
     let want = &req.0.auditor_ids;
@@ -214,6 +223,7 @@ pub fn config_audit(req: Json<AuditRequest>) -> FnResult<String> {
 
 // ---- auditor implementations ------------------------------------
 
+#[cfg(target_arch = "wasm32")]
 fn audit_shell_history() -> Vec<ConfigLeak> {
     // v2 uses simple substring + length scans instead of regex to
     // keep the wasm artefact small and the runtime panic-free in
@@ -330,6 +340,7 @@ fn scan_bearer(line: &str) -> Option<String> {
 // candidate_history_files enumerates /home/<user> + /root looking
 // for known shell history filenames. Paths that don't exist or
 // aren't readable are skipped silently.
+#[cfg(target_arch = "wasm32")]
 fn candidate_history_files() -> Vec<String> {
     let mut out = Vec::new();
     // Root user.
@@ -347,6 +358,7 @@ fn candidate_history_files() -> Vec<String> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 fn audit_aws_credentials() -> Vec<ConfigLeak> {
     let mut out = Vec::new();
     for path in candidate_aws_files() {
@@ -388,6 +400,7 @@ fn audit_aws_credentials() -> Vec<ConfigLeak> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 fn candidate_aws_files() -> Vec<String> {
     let mut out = Vec::new();
     out.push("/root/.aws/credentials".to_string());
@@ -399,6 +412,7 @@ fn candidate_aws_files() -> Vec<String> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 fn audit_ssh_private_keys() -> Vec<ConfigLeak> {
     let mut out = Vec::new();
     let dirs = candidate_ssh_dirs();
@@ -437,6 +451,7 @@ fn audit_ssh_private_keys() -> Vec<ConfigLeak> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 fn candidate_ssh_dirs() -> Vec<String> {
     let mut out = Vec::new();
     out.push("/root/.ssh".to_string());
@@ -465,6 +480,7 @@ fn redact(s: &str) -> String {
     format!("{}****{}", head, tail)
 }
 
+#[cfg(target_arch = "wasm32")]
 fn read_string(path: &str) -> Option<String> {
     let env: Envelope = unsafe { host_fs_read(path.to_string()).ok()?.0 };
     if !env.ok {
@@ -473,10 +489,171 @@ fn read_string(path: &str) -> Option<String> {
     env.data.as_str().map(|s| s.to_string())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn list_dir(path: &str) -> Option<Vec<DirEntryJSON>> {
     let env: Envelope = unsafe { host_fs_listdir(path.to_string()).ok()?.0 };
     if !env.ok {
         return None;
     }
     serde_json::from_value(env.data).ok()
+}
+
+// is_encrypted_ssh_key checks whether the raw body of a private key
+// file carries an "ENCRYPTED" marker — true for both OpenSSH
+// passphrase-protected keys (the marker appears in the body) and
+// PEM-format encrypted keys ("Proc-Type: 4,ENCRYPTED"). Extracted
+// from audit_ssh_private_keys so the boolean decision is testable
+// without host_fs_read.
+fn is_encrypted_ssh_key(raw: &str) -> bool {
+    raw.contains("ENCRYPTED")
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- scan_aws_key ----------------------------------------
+
+    #[test]
+    fn scan_aws_key_finds_full_token() {
+        // 20 chars total: "AKIA" + 16 [A-Z0-9].
+        let line = "export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE";
+        assert_eq!(scan_aws_key(line).as_deref(), Some("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn scan_aws_key_skips_lowercase_after_prefix() {
+        // The 16 chars after AKIA must be uppercase or digits.
+        // "akialowercase" has lowercase a → no match for that occurrence;
+        // also no other valid match in the line.
+        let line = "AKIA-aaaaaaaaaaaaaaa"; // dash isn't [A-Z0-9]
+        assert_eq!(scan_aws_key(line), None);
+    }
+
+    #[test]
+    fn scan_aws_key_misses_when_too_short() {
+        // 4 + only 8 chars after = 12 < 20.
+        assert_eq!(scan_aws_key("AKIA01234567"), None);
+    }
+
+    #[test]
+    fn scan_aws_key_no_prefix_returns_none() {
+        assert_eq!(scan_aws_key("plain text without any aws key"), None);
+    }
+
+    // ---- scan_github_token -----------------------------------
+
+    #[test]
+    fn scan_github_token_personal_access_token() {
+        // "ghp_" + 20 alphanumeric/_ chars
+        let line = "GITHUB_TOKEN=ghp_aaaaaaaaaaaaaaaaaaaa";
+        assert_eq!(scan_github_token(line).as_deref(), Some("ghp_aaaaaaaaaaaaaaaaaaaa"));
+    }
+
+    #[test]
+    fn scan_github_token_oauth_prefix_variants() {
+        // ghp / gho / ghs / ghu are all valid prefixes.
+        for prefix in ["gho", "ghs", "ghu"] {
+            let token = format!("{}_aaaaaaaaaaaaaaaaaaaa", prefix); // 20 a's
+            let line = format!("X={}", token);
+            assert_eq!(scan_github_token(&line).as_deref(), Some(token.as_str()));
+        }
+    }
+
+    #[test]
+    fn scan_github_token_below_min_length_skipped() {
+        // 19 chars after prefix is below 20.
+        assert_eq!(scan_github_token("ghp_aaaaaaaaaaaaaaaaaaa"), None);
+    }
+
+    #[test]
+    fn scan_github_token_invalid_kind_byte_skipped() {
+        // ghX_ is not in {p,o,s,u}.
+        assert_eq!(scan_github_token("ghx_aaaaaaaaaaaaaaaaaaaa"), None);
+    }
+
+    // ---- scan_bearer ------------------------------------------
+
+    #[test]
+    fn scan_bearer_authorization_header() {
+        let line = "Authorization: Bearer abcdef1234567890ABCDEF.signature";
+        let got = scan_bearer(line);
+        assert!(got.is_some(), "expected match, got None");
+        assert!(got.unwrap().starts_with("Bearer "));
+    }
+
+    #[test]
+    fn scan_bearer_case_insensitive_keyword() {
+        // "bearer" lowercased internally.
+        let line = "x-token: bearer aaaaaaaaaaaaaaaaaaaa";
+        assert!(scan_bearer(line).is_some());
+    }
+
+    #[test]
+    fn scan_bearer_short_token_skipped() {
+        // "Bearer " followed by only 5 chars is below the 20-char floor.
+        assert_eq!(scan_bearer("Authorization: Bearer short"), None);
+    }
+
+    #[test]
+    fn scan_bearer_no_keyword_returns_none() {
+        assert_eq!(scan_bearer("plain text with no auth header"), None);
+    }
+
+    // ---- redact ---------------------------------------------
+
+    #[test]
+    fn redact_long_string_keeps_head_tail() {
+        // 30-char string → "ABCD****WXYZ" pattern.
+        let s = "AKIAIOSFODNN7EXAMPLE_padding"; // 28 chars
+        let r = redact(s);
+        assert!(r.starts_with("AKIA"));
+        assert!(r.contains("****"));
+        assert!(r.ends_with("ding"));
+    }
+
+    #[test]
+    fn redact_short_string_all_stars() {
+        assert_eq!(redact("short"), "*****");
+        assert_eq!(redact("12345678"), "********"); // exactly 8 → all stars
+    }
+
+    #[test]
+    fn redact_empty_string() {
+        assert_eq!(redact(""), "");
+    }
+
+    // ---- is_encrypted_ssh_key -------------------------------
+
+    #[test]
+    fn is_encrypted_openssh_key_with_marker() {
+        // OpenSSH passphrase-protected keys embed an ENCRYPTED line
+        // somewhere in the body.
+        let body = "-----BEGIN OPENSSH PRIVATE KEY-----\n\
+            b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jYmM=\n\
+            <bytes redacted; \"ENCRYPTED\" appears here>\n\
+            -----END OPENSSH PRIVATE KEY-----\n";
+        assert!(is_encrypted_ssh_key(body));
+    }
+
+    #[test]
+    fn is_encrypted_pem_proc_type_marker() {
+        let body = "-----BEGIN RSA PRIVATE KEY-----\n\
+            Proc-Type: 4,ENCRYPTED\n\
+            DEK-Info: AES-128-CBC,...\n\
+            ...\n\
+            -----END RSA PRIVATE KEY-----\n";
+        assert!(is_encrypted_ssh_key(body));
+    }
+
+    #[test]
+    fn is_unencrypted_no_marker_anywhere() {
+        let body = "-----BEGIN OPENSSH PRIVATE KEY-----\n\
+            <plain key bytes, no passphrase>\n\
+            -----END OPENSSH PRIVATE KEY-----\n";
+        assert!(!is_encrypted_ssh_key(body));
+    }
 }
