@@ -60,6 +60,8 @@ $(PROTO_V2_OUT): $(PROTO_V2_SRC)
 	  --proto_path=proto/v2 \
 	  --go_out=pkg/proto/v2 \
 	  --go_opt=paths=source_relative \
+	  --go-grpc_out=pkg/proto/v2 \
+	  --go-grpc_opt=paths=source_relative \
 	  $(notdir $(PROTO_V2_SRC))
 
 proto: $(PROTO_V2_OUT)
