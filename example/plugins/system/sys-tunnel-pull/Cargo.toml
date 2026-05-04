@@ -6,7 +6,9 @@ publish = false
 
 [lib]
 name = "sys_tunnel_pull"
-crate-type = ["cdylib"]
+# cdylib for the wasm32 build (production); rlib so `cargo test` on
+# the host compiles the pure parsers + their #[cfg(test)] blocks.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 extism-pdk = "1.4"

@@ -15,6 +15,7 @@
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
@@ -44,6 +45,7 @@ struct DialResponse {
     resolved_addr: String,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn pull(input: Vec<u8>) -> FnResult<()> {
     let req = parse_tunnel_pull_request(&input);
@@ -88,6 +90,7 @@ pub fn pull(input: Vec<u8>) -> FnResult<()> {
 
 // ---- TunnelPullResponse encoder ---------------------------------
 
+#[cfg(target_arch = "wasm32")]
 fn write_pull_response(resolved: &str, error: &str) -> Result<(), Error> {
     // TunnelPullResponse{resolved_addr=1:string, error=2:string}
     let mut buf = Vec::with_capacity(resolved.len() + error.len() + 8);
@@ -199,4 +202,104 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
         }
     }
     Err(Error::msg("truncated varint"))
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// `cargo test --lib` runs these on the host triple. The wasm-only
+// glue (host_fn declarations, plugin_fn entries, write_pull_response
+// frame writer) is excluded by cfg(target_arch="wasm32") above; full
+// end-to-end coverage of the wasm side lives in
+// internal/agent/plugin/tunnel_pull_integration_test.go.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- varint round-trip ----------------------------------
+
+    #[test]
+    fn varint_round_trip_boundaries() {
+        for n in [0u64, 1, 127, 128, 16_383, 16_384, u64::MAX] {
+            let mut buf = Vec::new();
+            write_varint(&mut buf, n);
+            let (got, _) = read_varint(&buf).unwrap();
+            assert_eq!(got, n, "round-trip failed for {n}");
+        }
+    }
+
+    #[test]
+    fn varint_truncated_errors() {
+        assert!(read_varint(&[0xFF]).is_err());
+    }
+
+    // ---- write_tag ------------------------------------------
+
+    #[test]
+    fn write_tag_packs_field_and_wire_type() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN); // (1<<3)|2 = 10
+        assert_eq!(buf, vec![0x0a]);
+    }
+
+    // ---- parse_tunnel_pull_request --------------------------
+
+    #[test]
+    fn parse_tunnel_pull_request_target_only() {
+        // {target: "10.0.0.1:443"}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        let target = b"10.0.0.1:443";
+        write_varint(&mut buf, target.len() as u64);
+        buf.extend_from_slice(target);
+        let req = parse_tunnel_pull_request(&buf);
+        assert_eq!(req.target, "10.0.0.1:443");
+        assert_eq!(req.dial_timeout_ms, 0);
+    }
+
+    #[test]
+    fn parse_tunnel_pull_request_with_timeout() {
+        // {target: "host:80", dial_timeout_ms: 5000}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 7);
+        buf.extend_from_slice(b"host:80");
+        write_tag(&mut buf, 2, WIRE_VARINT);
+        write_varint(&mut buf, 5000);
+        let req = parse_tunnel_pull_request(&buf);
+        assert_eq!(req.target, "host:80");
+        assert_eq!(req.dial_timeout_ms, 5000);
+    }
+
+    #[test]
+    fn parse_tunnel_pull_request_truncated_string_does_not_panic() {
+        // Promises 50-byte target but provides 5.
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 50);
+        buf.extend_from_slice(b"abcde");
+        let req = parse_tunnel_pull_request(&buf);
+        // Aborts cleanly without writing target.
+        assert_eq!(req.target, "");
+    }
+
+    #[test]
+    fn parse_tunnel_pull_request_skips_unknown_fields() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 99, WIRE_VARINT);
+        write_varint(&mut buf, 42);
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 5);
+        buf.extend_from_slice(b"a:123");
+        let req = parse_tunnel_pull_request(&buf);
+        assert_eq!(req.target, "a:123");
+    }
+
+    #[test]
+    fn parse_tunnel_pull_request_empty_buffer() {
+        let req = parse_tunnel_pull_request(&[]);
+        assert_eq!(req.target, "");
+        assert_eq!(req.dial_timeout_ms, 0);
+    }
 }
