@@ -21,6 +21,7 @@ use std::collections::{BTreeMap, HashMap};
 // Shared host-fn declarations
 // ============================================================
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_exec(req: String) -> Json<Envelope>;
@@ -103,6 +104,7 @@ pub struct ExecResponse {
     pub error: String,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn exec(req: Json<ExecRequest>) -> FnResult<Json<ExecResponse>> {
     let body = serde_json::to_string(&req.0)?;
@@ -151,6 +153,7 @@ struct SpawnResponse {
     pid: i32,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn open(input: Vec<u8>) -> FnResult<()> {
     let req = parse_process_open_request(&input);
@@ -193,6 +196,7 @@ pub fn open(input: Vec<u8>) -> FnResult<()> {
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_open_response(pid: i64, error: &str) -> Result<(), Error> {
     // ProcessOpenResponse{pid=1:int64, error=2:string}
     let mut buf = Vec::with_capacity(32);
@@ -393,4 +397,165 @@ fn parse_map_entry(buf: &[u8]) -> (String, String) {
         }
     }
     (k, v)
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// Covers the proto wire helpers + the two request-decoders that
+// take raw bytes off the stream. The wasm-only host_fn bridge layer
+// is exercised end-to-end by Go's
+// internal/agent/plugin/process_open_integration_test.go and
+// process_exec_integration_test.go.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn varint_round_trip_boundaries() {
+        for n in [0u64, 1, 127, 128, 16_383, 16_384, u64::MAX] {
+            let mut buf = Vec::new();
+            write_varint(&mut buf, n);
+            let (got, _) = read_varint(&buf).unwrap();
+            assert_eq!(got, n, "round-trip failed for {n}");
+        }
+    }
+
+    #[test]
+    fn write_tag_layout() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 7, WIRE_VARINT); // (7<<3)|0 = 56 = 0x38
+        assert_eq!(buf, vec![0x38]);
+    }
+
+    // ---- parse_process_open_request --------------------------
+
+    #[test]
+    fn parse_process_open_request_command_only() {
+        // {command: "/bin/sh"}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 7);
+        buf.extend_from_slice(b"/bin/sh");
+        let req = parse_process_open_request(&buf);
+        assert_eq!(req.command, "/bin/sh");
+        assert!(req.args.is_empty());
+        assert_eq!(req.cwd, "");
+        assert!(!req.pty);
+    }
+
+    #[test]
+    fn parse_process_open_request_with_args_pty_dimensions() {
+        // {command: "ls", args: ["-l", "/tmp"], pty: true, cols: 80, rows: 24}
+        let mut buf = Vec::new();
+        // command
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 2);
+        buf.extend_from_slice(b"ls");
+        // args (repeated, field 2)
+        for arg in ["-l", "/tmp"] {
+            write_tag(&mut buf, 2, WIRE_LEN);
+            write_varint(&mut buf, arg.len() as u64);
+            buf.extend_from_slice(arg.as_bytes());
+        }
+        // cols (field 5)
+        write_tag(&mut buf, 5, WIRE_VARINT);
+        write_varint(&mut buf, 80);
+        // rows (field 6)
+        write_tag(&mut buf, 6, WIRE_VARINT);
+        write_varint(&mut buf, 24);
+        // pty (field 7)
+        write_tag(&mut buf, 7, WIRE_VARINT);
+        write_varint(&mut buf, 1);
+
+        let req = parse_process_open_request(&buf);
+        assert_eq!(req.command, "ls");
+        assert_eq!(req.args, vec!["-l".to_string(), "/tmp".to_string()]);
+        assert_eq!(req.cols, 80);
+        assert_eq!(req.rows, 24);
+        assert!(req.pty);
+    }
+
+    #[test]
+    fn parse_process_open_request_truncated_string_does_not_panic() {
+        // command tag promises 50 bytes but provides 3.
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 50);
+        buf.extend_from_slice(b"abc");
+        let req = parse_process_open_request(&buf);
+        // Aborts before the command field is filled.
+        assert_eq!(req.command, "");
+    }
+
+    #[test]
+    fn parse_process_open_request_skips_unknown_fields() {
+        // unknown field 99 (varint) before command
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 99, WIRE_VARINT);
+        write_varint(&mut buf, 7);
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 1);
+        buf.push(b'q');
+        let req = parse_process_open_request(&buf);
+        assert_eq!(req.command, "q");
+    }
+
+    // ---- parse_map_entry -------------------------------------
+    //
+    // Proto map<string,string> wire: each entry is a length-delimited
+    // submessage with field 1 = key, field 2 = value (both LEN-prefixed
+    // strings).
+
+    #[test]
+    fn parse_map_entry_full_kv() {
+        let mut sub = Vec::new();
+        write_tag(&mut sub, 1, WIRE_LEN);
+        write_varint(&mut sub, 4);
+        sub.extend_from_slice(b"PATH");
+        write_tag(&mut sub, 2, WIRE_LEN);
+        write_varint(&mut sub, 8);
+        sub.extend_from_slice(b"/usr/bin");
+        let (k, v) = parse_map_entry(&sub);
+        assert_eq!(k, "PATH");
+        assert_eq!(v, "/usr/bin");
+    }
+
+    #[test]
+    fn parse_map_entry_value_only_keeps_key_empty() {
+        let mut sub = Vec::new();
+        write_tag(&mut sub, 2, WIRE_LEN);
+        write_varint(&mut sub, 1);
+        sub.push(b'x');
+        let (k, v) = parse_map_entry(&sub);
+        assert_eq!(k, "");
+        assert_eq!(v, "x");
+    }
+
+    // env field is field 4 in ProcessOpenRequest, where each entry
+    // is a LEN-prefixed (key,value) submessage. Verify the full
+    // round-trip from request bytes through to populated env map.
+    #[test]
+    fn parse_process_open_request_env_map() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 1);
+        buf.push(b'c');
+        // Build the env entry submessage (key=K, value=V).
+        let mut entry = Vec::new();
+        write_tag(&mut entry, 1, WIRE_LEN);
+        write_varint(&mut entry, 1);
+        entry.push(b'K');
+        write_tag(&mut entry, 2, WIRE_LEN);
+        write_varint(&mut entry, 1);
+        entry.push(b'V');
+        // Embed the submessage as field 4.
+        write_tag(&mut buf, 4, WIRE_LEN);
+        write_varint(&mut buf, entry.len() as u64);
+        buf.extend_from_slice(&entry);
+
+        let req = parse_process_open_request(&buf);
+        assert_eq!(req.env.get("K"), Some(&"V".to_string()));
+    }
 }
