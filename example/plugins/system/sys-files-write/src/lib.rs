@@ -30,8 +30,8 @@ extern "ExtismHost" {
     fn host_fs_delete(req: String) -> Json<Envelope>;
     fn host_fs_rename(req: String) -> Json<Envelope>;
     fn host_fs_write_range(req: String) -> Json<Envelope>;
-    fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
-    fn host_link_read_frame() -> Json<Envelope>;
+    fn host_stream_write(bytes: Vec<u8>) -> Json<Envelope>;
+    fn host_stream_read() -> Json<Envelope>;
 }
 
 #[derive(Deserialize, Default)]
@@ -80,9 +80,9 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
 
 #[cfg(target_arch = "wasm32")]
 fn write_frame(body: &[u8]) -> Result<(), Error> {
-    let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
+    let env: Envelope = unsafe { host_stream_write(body.to_vec())?.0 };
     if !env.ok {
-        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
+        return Err(Error::msg(format!("host_stream_write: {}", env.error)));
     }
     Ok(())
 }
@@ -212,7 +212,7 @@ pub fn rename(req: Json<RenameRequest>) -> FnResult<Json<ErrorOnlyResponse>> {
 //
 // Receives a FileWriteRequest as input, opens the destination via
 // host_fs_write_range (truncate first call), reads incoming
-// FileChunk frames from the wire via host_link_read_frame, writes
+// FileChunk frames from the wire via host_stream_read, writes
 // each chunk's data through subsequent host_fs_write_range calls
 // at running offsets, emits FileWriteResponse + FileWriteResult
 // frames matching the legacy wire contract.
@@ -254,7 +254,7 @@ pub fn write(input: Vec<u8>) -> FnResult<()> {
     let mut bytes_written: i64 = 0;
     let mut first_error = String::new();
     loop {
-        let env: Envelope = unsafe { host_link_read_frame()?.0 };
+        let env: Envelope = unsafe { host_stream_read()?.0 };
         if !env.ok {
             first_error = format!("read frame: {}", env.error);
             break;
