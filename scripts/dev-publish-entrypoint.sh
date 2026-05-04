@@ -117,33 +117,42 @@ rm -rf "$MARKETPLACE_OUT"
 mkdir -p "$MARKETPLACE_OUT/plugins"
 mkdir -p /cache/cargo-target
 
-for plugin_dir in example/plugins/*/; do
-    plugin_dir="${plugin_dir%/}"
-    name=$(basename "$plugin_dir")
-    [ -f "$plugin_dir/Cargo.toml" ] || continue
-    target_dir="/cache/cargo-target/$name"
+# build_and_sign_plugin <plugin_dir> — common build/sign step shared
+# between the marketplace + system loops below. Echoes the produced
+# .wasm path on stdout (stderr-only for progress lines).
+build_and_sign_plugin() {
+    local plugin_dir="$1"
+    local name=$(basename "$plugin_dir")
+    local target_dir="/cache/cargo-target/$name"
     mkdir -p "$target_dir"
-    echo "  → $name"
+    echo "  → $name" >&2
     (cd "$plugin_dir" && \
         CARGO_TARGET_DIR="$target_dir" \
-        cargo build --release --target wasm32-unknown-unknown) || exit 1
+        cargo build --release --target wasm32-unknown-unknown) >&2 || return 1
 
-    # Find + sign the produced wasm. Glob handles the case where
-    # cargo's [lib] name doesn't match the dir basename
-    # (e.g. sys-info → sys_info_plugin.wasm).
+    local wasm_count
     wasm_count=$(ls -1 "$target_dir"/wasm32-unknown-unknown/release/*.wasm 2>/dev/null | wc -l)
     if [ "$wasm_count" -ne 1 ]; then
         echo "expected 1 .wasm under $target_dir/wasm32-unknown-unknown/release/, got $wasm_count" >&2
-        exit 1
+        return 1
     fi
+    local wasm
     wasm=$(ls -1 "$target_dir"/wasm32-unknown-unknown/release/*.wasm)
     /tmp/platypus-cli plugin sign --force \
         --key "$PLUGIN_KEY_SECRET" \
-        --wasm "$wasm" || exit 1
+        --wasm "$wasm" >&2 || return 1
+    echo "$wasm"
+}
 
-    # Stage straight into the marketplace bundle. Mirror is one dir
-    # per (id, version) so index.json's wasm_url / signature_url /
-    # manifest_url can be straight file:// URLs.
+# Marketplace plugins: every example/plugins/*/ that has a Cargo.toml,
+# excluding the system/ subtree (those get their own pass below). Each
+# bundle ships into MARKETPLACE_OUT/plugins/<id>/<version>/ for the
+# operator to pick up via the marketplace UI.
+for plugin_dir in example/plugins/*/; do
+    plugin_dir="${plugin_dir%/}"
+    [ -f "$plugin_dir/Cargo.toml" ] || continue
+    wasm=$(build_and_sign_plugin "$plugin_dir") || exit 1
+
     pid=$(awk '/^id:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
     ver=$(awk '/^version:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
     out="$MARKETPLACE_OUT/plugins/$pid/$ver"
@@ -154,6 +163,41 @@ for plugin_dir in example/plugins/*/; do
 done
 
 echo "→ staged plugin bundle under $MARKETPLACE_OUT"
+
+# System plugins: example/plugins/system/*/ holds the wasm
+# replacements for the legacy Go stream handlers (file_read,
+# file_write, file_scan, file_archive, process_open, tunnel_pull).
+# These are NOT marketplace plugins — they're meant to be installed
+# automatically on agent boot, gated by the operator's enroll-time
+# baseline allowlist (see Phase A).
+#
+# Layout matches what system.ResolveSource expects in
+# <data-dir>/system-plugins/: publisher.pub at the root, then
+# <plugin_id>/<version>/ subdirs each holding plugin.yaml + .wasm
+# + .minisig. Same minisign key as the marketplace bundle: in dev
+# mode there's only one publisher, and the agent verifies all
+# system plugins against that one pubkey at boot.
+SYSTEM_OUT="/output/system-plugins"
+echo "→ building + signing system plugins"
+rm -rf "$SYSTEM_OUT"
+mkdir -p "$SYSTEM_OUT"
+cp "$PLUGIN_KEY_PUBLIC" "$SYSTEM_OUT/publisher.pub"
+
+for plugin_dir in example/plugins/system/*/; do
+    plugin_dir="${plugin_dir%/}"
+    [ -f "$plugin_dir/Cargo.toml" ] || continue
+    wasm=$(build_and_sign_plugin "$plugin_dir") || exit 1
+
+    pid=$(awk '/^id:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
+    ver=$(awk '/^version:/ {print $2; exit}' "$plugin_dir/plugin.yaml")
+    out="$SYSTEM_OUT/$pid/$ver"
+    mkdir -p "$out"
+    cp "$plugin_dir/plugin.yaml" "$out/"
+    cp "$wasm" "$out/"
+    cp "$wasm.minisig" "$out/"
+done
+
+echo "→ staged system bundle under $SYSTEM_OUT"
 
 # Generate index.json. The server reads /app/data/plugin-marketplace/...
 # (its <data-dir> is mapped to /app/data on the runtime side); the

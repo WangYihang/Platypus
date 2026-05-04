@@ -13,33 +13,37 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// AgentHandlerDeps bundles the per-stream-type handlers the agent
-// exposes. Only populated fields are dispatched; unhandled stream
-// types get a StreamReject back to the server so dashboards can
-// surface capability gaps explicitly.
+// AgentHandlerDeps bundles the agent's per-stream handler entry
+// points. The wire-level dispatch table is intentionally tiny now:
 //
-// Process is optional: when nil, STREAM_TYPE_PROCESS_OPEN streams
-// get rejected. Tunnel / file / event / socks5 slots will land
-// alongside their respective handlers.
+//   - RPC          — STREAM_TYPE_RPC, the unary-RPC carrier
+//   - Upgrade      — STREAM_TYPE_AGENT_UPGRADE, agent self-update
+//   - PluginMgmt   — STREAM_TYPE_PLUGIN_MGMT, install/uninstall/list
+//   - PluginStream — pre-dispatch hook owned by the plugin runtime
+//
+// Every other stream type (file_read, file_write, file_scan,
+// file_archive, process_open, tunnel_pull) is owned by a system
+// wasm plugin: the plugin's manifest claims the stream type, the
+// runtime registers the claim with the registry, and PluginStream
+// dispatches the wire frames straight into the wasm sandbox. The
+// previous Go-resident handlers (HandleFileReadStream et al.) are
+// gone — their byte-for-byte wire equivalents now live inside
+// example/plugins/system/sys-{file,process,tunnel}-* and are
+// delivered to the agent via the system-plugin bundle.
 type AgentHandlerDeps struct {
-	RPC         AgentRPCHandlers
-	Process     ProcessHandler
-	FileRead    FileReadHandler
-	FileWrite   FileWriteHandler
-	FileScan    FileScanHandler
-	FileArchive FileArchiveHandler
-	TunnelPull  TunnelPullHandler
-	Upgrade     UpgradeHandler
-	PluginMgmt  PluginMgmtHandler
+	RPC        AgentRPCHandlers
+	Upgrade    UpgradeHandler
+	PluginMgmt PluginMgmtHandler
 
-	// PluginStream is the optional pre-dispatch hook the plugin
-	// runtime injects. Called before the legacy hardcoded type
-	// switch; when it returns handled=true the legacy switch is
-	// skipped. Used by system plugins that have claimed ownership of
-	// a stream type via their manifest's `streams:` arm.
+	// PluginStream is the dispatch hook the plugin runtime injects.
+	// Called before the per-type switch below; when it returns
+	// handled=true the switch is skipped. Used by system plugins
+	// that have claimed ownership of a stream type via their
+	// manifest's `streams:` arm.
 	//
-	// When nil (e.g. plugin runtime unavailable at boot), the legacy
-	// switch handles every stream as it always did.
+	// When nil (the plugin runtime didn't initialise — e.g. unit
+	// tests that don't need the wasm path), the type switch handles
+	// only the four built-ins above and rejects everything else.
 	PluginStream PluginStreamDispatcher
 }
 
@@ -52,33 +56,9 @@ type AgentHandlerDeps struct {
 //   - (true, nil)   plugin owned + ran the stream successfully
 //   - (true, err)   plugin owned the stream but the provider errored
 //   - (false, nil)  no plugin claimed this type → fall through to the
-//                   legacy switch in dispatchAgentStream
+//                   built-in switch in dispatchAgentStream (RPC /
+//                   upgrade / plugin-mgmt) or end with a reject
 type PluginStreamDispatcher func(ctx context.Context, t v2pb.StreamType, stream io.ReadWriteCloser, metadata []byte) (handled bool, err error)
-
-// ProcessHandler processes one STREAM_TYPE_PROCESS_OPEN stream.
-// The production implementation is HandleProcessStream; tests can
-// substitute a stub.
-type ProcessHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.ProcessOpenRequest) error
-
-// FileReadHandler processes one STREAM_TYPE_FILE_READ stream.
-// Production impl: HandleFileReadStream.
-type FileReadHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileReadRequest) error
-
-// FileWriteHandler processes one STREAM_TYPE_FILE_WRITE stream.
-// Production impl: HandleFileWriteStream.
-type FileWriteHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileWriteRequest) error
-
-// FileScanHandler processes one STREAM_TYPE_FILE_SCAN stream.
-// Production impl: HandleFileScanStream.
-type FileScanHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileScanRequest) error
-
-// FileArchiveHandler processes one STREAM_TYPE_FILE_ARCHIVE stream.
-// Production impl: HandleFileArchiveStream.
-type FileArchiveHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.FileArchiveRequest) error
-
-// TunnelPullHandler processes one STREAM_TYPE_TUNNEL_PULL stream.
-// Production impl: HandleTunnelPullStream.
-type TunnelPullHandler func(ctx context.Context, stream io.ReadWriteCloser, req *v2pb.TunnelPullRequest) error
 
 // UpgradeHandler processes one STREAM_TYPE_AGENT_UPGRADE stream.
 // Terminal: when the install phase succeeds the handler emits a final
@@ -188,84 +168,6 @@ func dispatchAgentStream(ctx context.Context, hdr *v2pb.StreamHeader, stream io.
 	case v2pb.StreamType_STREAM_TYPE_RPC:
 		if err := ServeRPCStream(ctx, stream, deps.RPC); err != nil {
 			log.Warn("agent: RPC stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN:
-		if deps.Process == nil {
-			rejectStream(stream, "unsupported_type", "process handler not registered")
-			return
-		}
-		var req v2pb.ProcessOpenRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse ProcessOpenRequest: "+err.Error())
-			return
-		}
-		if err := deps.Process(ctx, stream, &req); err != nil {
-			log.Warn("agent: process stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_FILE_READ:
-		if deps.FileRead == nil {
-			rejectStream(stream, "unsupported_type", "file-read handler not registered")
-			return
-		}
-		var req v2pb.FileReadRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse FileReadRequest: "+err.Error())
-			return
-		}
-		if err := deps.FileRead(ctx, stream, &req); err != nil {
-			log.Warn("agent: file-read stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_FILE_WRITE:
-		if deps.FileWrite == nil {
-			rejectStream(stream, "unsupported_type", "file-write handler not registered")
-			return
-		}
-		var req v2pb.FileWriteRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse FileWriteRequest: "+err.Error())
-			return
-		}
-		if err := deps.FileWrite(ctx, stream, &req); err != nil {
-			log.Warn("agent: file-write stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_FILE_SCAN:
-		if deps.FileScan == nil {
-			rejectStream(stream, "unsupported_type", "file-scan handler not registered")
-			return
-		}
-		var req v2pb.FileScanRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse FileScanRequest: "+err.Error())
-			return
-		}
-		if err := deps.FileScan(ctx, stream, &req); err != nil {
-			log.Warn("agent: file-scan stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_FILE_ARCHIVE:
-		if deps.FileArchive == nil {
-			rejectStream(stream, "unsupported_type", "file-archive handler not registered")
-			return
-		}
-		var req v2pb.FileArchiveRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse FileArchiveRequest: "+err.Error())
-			return
-		}
-		if err := deps.FileArchive(ctx, stream, &req); err != nil {
-			log.Warn("agent: file-archive stream for %s: %v", hdr.CorrelationId, err)
-		}
-	case v2pb.StreamType_STREAM_TYPE_TUNNEL_PULL:
-		if deps.TunnelPull == nil {
-			rejectStream(stream, "unsupported_type", "tunnel-pull handler not registered")
-			return
-		}
-		var req v2pb.TunnelPullRequest
-		if err := proto.Unmarshal(hdr.Metadata, &req); err != nil {
-			rejectStream(stream, "malformed_metadata", "parse TunnelPullRequest: "+err.Error())
-			return
-		}
-		if err := deps.TunnelPull(ctx, stream, &req); err != nil {
-			log.Warn("agent: tunnel-pull stream for %s: %v", hdr.CorrelationId, err)
 		}
 	case v2pb.StreamType_STREAM_TYPE_AGENT_UPGRADE:
 		if deps.Upgrade == nil {

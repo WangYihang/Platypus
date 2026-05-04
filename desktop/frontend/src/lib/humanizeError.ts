@@ -81,6 +81,18 @@ export function humanizeError(e: unknown): string {
         return "Cannot reach the server. Check your connection.";
     }
 
+    // Plugin-gated capability: the agent rejected a stream because
+    // the operator's baseline allowlist (or post-enroll opt-in)
+    // never installed the plugin that owns it. Surfaces through any
+    // REST that opens a wire stream — file browse, terminal, file
+    // download / upload, file scan, archive, tunnel pull. Map the
+    // raw "plugin_not_installed: com.platypus.sys-X" string into
+    // something a non-engineer can act on.
+    const missing = tryParsePluginNotInstalled(e);
+    if (missing) {
+        return `This action needs the "${missing}" plugin. Install it from the Plugins tab.`;
+    }
+
     const http = tryParseHTTP(e);
     if (http) {
         switch (http.status) {
@@ -130,4 +142,32 @@ export function humanizeError(e: unknown): string {
 function capitalise(s: string): string {
     if (s.length === 0) return s;
     return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// pluginIDDisplay strips the canonical "com.platypus." prefix so the
+// user sees "sys-process-open" instead of the full reverse-DNS form.
+// Unknown prefixes are returned verbatim — never lose information
+// the user might need to identify the plugin in the marketplace.
+function pluginIDDisplay(id: string): string {
+    return id.startsWith("com.platypus.") ? id.slice("com.platypus.".length) : id;
+}
+
+/**
+ * tryParsePluginNotInstalled looks for the agent-side error string
+ * format "plugin_not_installed: <plugin_id>" anywhere in the error
+ * text. The agent emits this when a stream type lands at
+ * Registry.DispatchStream and no claim is registered, or when the
+ * registered claim points at a wasm method that isn't loaded. Both
+ * cases mean the operator's baseline didn't include the plugin
+ * that owns the requested capability.
+ *
+ * Returns the human-display plugin id ("sys-file-read"), or null if
+ * the error text doesn't carry the marker. The full id stays
+ * available in the original message for log/copy purposes.
+ */
+function tryParsePluginNotInstalled(e: unknown): string | null {
+    const text = e instanceof Error ? e.message : String(e ?? "");
+    const m = text.match(/plugin_not_installed:\s*([A-Za-z0-9._-]+)/);
+    if (!m) return null;
+    return pluginIDDisplay(m[1]);
 }

@@ -134,18 +134,9 @@ func main() {
 
 	// The plugin runtime is now load-bearing: every RPC handler and
 	// every stream type the agent serves dispatches through a system
-	// plugin (sys-listdir, sys-fs-write, sys-procs, sys-info,
-	// sys-exec, sys-security, sys-config-audit, sys-streams,
-	// sys-hostname). Failure to bring it up means the agent can't do
+	// plugin. Failure to bring it up means the agent can't do
 	// anything useful, so we exit hard rather than running in a
-	// degraded mode that silently drops every server-initiated
-	// action.
-	//
-	// Host providers + stream adapters are registered FIRST so the
-	// plugin bootstrap finds them ready when it instantiates each
-	// system plugin's wasm.
-	registerStreamProviders(ctx) // 6 stream adapters for sys-streams plugin
-
+	// degraded mode that silently drops every server-initiated action.
 	pluginRegistry, err := pluginrt.New(pluginrt.Options{
 		Paths: pluginrt.NewPaths(identityDir),
 	})
@@ -157,21 +148,24 @@ func main() {
 	pluginRegistry.Load(ctx)
 	defer pluginRegistry.Close(ctx)
 
-	// System-plugin bootstrap: walk the embedded FS, install any
-	// bundled plugins missing from the catalog. Per-bundle failures
-	// are surfaced + counted so a corrupt build is loud, not silent;
-	// the operator gets to see exactly which plugins didn't load.
-	embFS, fsErr := pluginsys.EmbeddedFS()
+	// System-plugin bootstrap: resolve the active source tree
+	// (data-dir override > embedded fallback) then walk it,
+	// installing any bundled plugins missing from the catalog.
+	// Per-bundle failures are surfaced + counted so a corrupt
+	// build is loud, not silent; the operator gets to see exactly
+	// which plugins didn't load.
+	src, fsErr := pluginsys.ResolveSource(opts.DataDir)
 	if fsErr != nil {
-		logger.Error("system plugin embedded FS unavailable; agent build is broken",
+		logger.Error("system plugin source unavailable; agent build is broken",
 			slog.String("error", fsErr.Error()))
 		os.Exit(1)
 	}
 	allowlist := resolveBaselineAllowlist(logger, identityDir, opts.BaselinePluginIDs)
-	bootRes := pluginsys.EnsureInstalled(ctx, pluginRegistry, embFS, pluginsys.EnsureOptions{
+	bootRes := pluginsys.EnsureInstalled(ctx, pluginRegistry, src.FS, pluginsys.EnsureOptions{
 		Allowlist: allowlist,
 	})
 	logger.Info("system plugins bootstrap",
+		slog.String("source", src.Origin),
 		slog.Any("allowlist", allowlist),
 		slog.Int("installed", len(bootRes.Installed)),
 		slog.Int("skipped", len(bootRes.Skipped)),
@@ -198,6 +192,8 @@ func main() {
 				slog.String("error", f.Err.Error()))
 		}
 	}
+
+	warnUncoveredStreams(logger, pluginRegistry)
 
 	bo := backoff.WithContext(
 		backoff.NewExponentialBackOff(
@@ -328,13 +324,13 @@ func main() {
 			slog.Duration("dial_elapsed", time.Since(dialStart)),
 		)
 		// Every RPC handler dispatches through a bridge wrapper that
-		// proxies to the matching system plugin. The legacy
-		// agent.HandleX functions are still wired in as the
-		// AgentHandlerDeps stream entries (Process / FileRead /
-		// FileWrite / FileScan / FileArchive / TunnelPull) — they're
-		// the host-side implementation the system plugins delegate
-		// to via the registered StreamProvider names. Removing them
-		// would break the providers.
+		// proxies to the matching system plugin. Stream-type
+		// dispatch goes through pluginRegistry.DispatchStream below
+		// — the wasm system plugins (sys-file-read, sys-file-write,
+		// sys-file-scan, sys-file-archive, sys-process-open,
+		// sys-tunnel-pull) claim the corresponding STREAM_TYPE_* and
+		// serve every wire frame in-sandbox. There are no Go-resident
+		// stream handlers any more.
 		serveErr := agent.ServeLink(ctx, sess, agent.AgentHandlerDeps{
 			RPC: agent.AgentRPCHandlers{
 				Exec:               pluginbridge.Exec(pluginRegistry),
@@ -352,18 +348,6 @@ func main() {
 				ListConfigAuditors: pluginbridge.ListConfigAuditors(pluginRegistry),
 				PluginCall:         pluginRegistry.Invoke,
 			},
-			// Stream entries below stay populated for the rare case
-			// where the plugin claim registry has no entry for the
-			// inbound stream type — the legacy switch in
-			// dispatchAgentStream is the safety net. In production
-			// (sys-streams loaded) the PluginStream hook above
-			// handles every type before the switch fires.
-			Process:      agent.HandleProcessStream,
-			FileRead:     agent.HandleFileReadStream,
-			FileWrite:    agent.HandleFileWriteStream,
-			FileScan:     agent.HandleFileScanStream,
-			FileArchive:  agent.HandleFileArchiveStream,
-			TunnelPull:   agent.HandleTunnelPullStream,
 			Upgrade:      buildUpgradeHandler(logger, fmt.Sprintf("https://%s", endpoint), caPool),
 			PluginMgmt:   pluginRegistry.HandleMgmt,
 			PluginStream: pluginRegistry.DispatchStream,
@@ -588,6 +572,47 @@ func projectIDFromURIs(uris []*url.URL) string {
 // per-agent plugin REST surface afterwards).
 var mandatoryCorePluginIDs = []string{
 	"com.platypus.sys-info",
+}
+
+// expectedStreamTypes is the set of stream types the desktop UI
+// drives in production: the 6 file-system / process / tunnel
+// capabilities that used to live in 1194 lines of Go and now live
+// in the wasm replacements under example/plugins/system/. We use
+// this list at boot to warn the operator when the agent's baseline
+// allowlist left one or more uncovered — server-initiated streams
+// of those types will return plugin_not_installed at dispatch time,
+// and the operator should know up front rather than discovering
+// the gap by clicking around.
+//
+// AGENT_UPGRADE / RPC / PLUGIN_MGMT / PLUGIN_STREAM are deliberately
+// not in this list — they're handled by built-ins (Upgrade /
+// AgentRPCHandlers / PluginMgmt / DispatchPluginStream) that don't
+// depend on a plugin claim.
+var expectedStreamTypes = []string{
+	"STREAM_TYPE_PROCESS_OPEN",
+	"STREAM_TYPE_FILE_READ",
+	"STREAM_TYPE_FILE_WRITE",
+	"STREAM_TYPE_FILE_SCAN",
+	"STREAM_TYPE_FILE_ARCHIVE",
+	"STREAM_TYPE_TUNNEL_PULL",
+}
+
+// warnUncoveredStreams scans the plugin registry's claim table and
+// emits one Warn line per expectedStreamTypes member that no
+// enabled plugin owns. Non-fatal: the agent boots regardless. The
+// warning gives operators a heads-up that a server-initiated
+// stream of that type will come back as
+// "plugin_not_installed: <id>" until they install the matching
+// wasm plugin via the per-agent plugin REST.
+func warnUncoveredStreams(logger *slog.Logger, reg *pluginrt.Registry) {
+	claimed := reg.ClaimedStreamTypes()
+	for _, t := range expectedStreamTypes {
+		if _, ok := claimed[t]; ok {
+			continue
+		}
+		logger.Warn("system stream uncovered; server invocations will return plugin_not_installed",
+			slog.String("stream_type", t))
+	}
 }
 
 // resolveBaselineAllowlist decides which embedded system plugins

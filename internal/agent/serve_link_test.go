@@ -97,16 +97,22 @@ func TestServeLink_DispatchesRPC(t *testing.T) {
 // file write handlers can block in synchronous cleanup (fsync, kill
 // + wait), causing goroutines to overlap across reconnects and grow
 // over time on flapping links.
+//
+// Post-Phase-B every stream type other than RPC / upgrade /
+// plugin-mgmt is dispatched through PluginStream, so we exercise
+// the wait-for-inflight semantics through that path. The test
+// injects a PluginStreamDispatcher closure that claims the stream
+// and blocks until released.
 func TestServeLink_WaitsForInflightHandlers(t *testing.T) {
 	clientSess, agentSess := pairedAgentSessions(t)
 
 	handlerEntered := make(chan struct{})
 	releaseHandler := make(chan struct{})
 	deps := AgentHandlerDeps{
-		Process: func(ctx context.Context, stream io.ReadWriteCloser, _ *v2pb.ProcessOpenRequest) error {
+		PluginStream: func(_ context.Context, _ v2pb.StreamType, _ io.ReadWriteCloser, _ []byte) (bool, error) {
 			close(handlerEntered)
 			<-releaseHandler
-			return nil
+			return true, nil
 		},
 	}
 
@@ -118,7 +124,9 @@ func TestServeLink_WaitsForInflightHandlers(t *testing.T) {
 		serveErr <- ServeLink(ctx, agentSess, deps)
 	}()
 
-	// Open a stream so a Process handler enters its critical section.
+	// Open a stream that the PluginStream dispatcher will claim and
+	// block inside. Any non-built-in type works; PROCESS_OPEN is the
+	// canonical example since wasm replacements claim it in production.
 	stream, err := clientSess.Open(v2pb.StreamType_STREAM_TYPE_PROCESS_OPEN, nil, "stuck-corr")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
