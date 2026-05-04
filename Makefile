@@ -135,26 +135,40 @@ example-plugins:
 	done
 
 # stage-system-plugins (re)builds + signs every plugin under
-# example/plugins/system/, then copies plugin.yaml + .wasm + .minisig
-# under internal/server/sysplugins/embedded/system-plugins/<id>/<v>/
-# so go:embed can pick them up. Run this when:
+# example/plugins/system/ (Rust) and example/plugins/system-go/
+# (TinyGo), then copies plugin.yaml + .wasm + .minisig under
+# internal/server/sysplugins/embedded/system-plugins/<id>/<v>/ so
+# go:embed can pick them up. Run this when:
 #   - you've changed a rust source file under example/plugins/system/,
+#   - you've changed a go source file under example/plugins/system-go/,
 #   - you've rotated the system signing key (delete
 #     hack/.system-signing.secret to mint a fresh one),
-#   - you've added a new system plugin to example/plugins/system/.
+#   - you've added a new system plugin in either tree.
 #
 # The staged tree IS the source of truth the server binary ships with;
 # operators can override per-host by dropping their own tree under
 # <data-dir>/system-plugins/. See internal/server/sysplugins/embed.go.
 #
-# Requires the rust wasm32 target:
-#   rustup target add wasm32-unknown-unknown
+# Requires:
+#   - rustup target add wasm32-unknown-unknown
+#   - tinygo (https://tinygo.org) — TinyGo plugins are skipped with a
+#     warning if `tinygo` is not on PATH, so the Rust set keeps building.
 stage-system-plugins:
 	@for d in example/plugins/system/*/Cargo.toml; do \
 	  dir=$$(dirname $$d); name=$$(basename $$dir); \
-	  echo "→ $$name"; \
+	  echo "→ rust:$$name"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done
+	@if command -v tinygo >/dev/null 2>&1; then \
+	  for d in example/plugins/system-go/*/go.mod; do \
+	    dir=$$(dirname $$d); name=$$(basename $$dir); \
+	    entry=$$(grep '^  entry:' $$dir/plugin.yaml | awk '{print $$2}'); \
+	    echo "→ go:$$name ($$entry)"; \
+	    (cd $$dir && tinygo build -target wasi -o $$entry .) || exit 1; \
+	  done; \
+	else \
+	  echo "warning: tinygo not on PATH — system-go/ plugins will not be rebuilt"; \
+	fi
 	$(GO) run ./hack/stage_system_plugins
 
 hooks:

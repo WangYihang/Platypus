@@ -56,6 +56,11 @@ dist/
 example/plugins/*/target/
 example/plugins/system/*/target/
 
+# TinyGo build outputs for system-go plugins. The .wasm artefacts
+# are build outputs; we don't commit them under example/, only under
+# internal/server/sysplugins/embedded/ via the staging helper.
+example/plugins/system-go/*/*.wasm
+
 # Wails desktop — un-ignore project scaffold under desktop/build/
 # (global build/ rule above would otherwise hide platform configs).
 # Desktop-specific build/bin, node_modules, frontend/dist live in desktop/.gitignore.

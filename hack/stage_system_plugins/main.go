@@ -41,11 +41,39 @@ import (
 )
 
 const (
-	pluginsRoot   = "example/plugins/system"
-	stagedRoot    = "internal/server/sysplugins/embedded/system-plugins"
-	secretPath    = "hack/.system-signing.secret"
-	publisherName = "untrusted comment: Platypus system publisher"
+	pluginsRustRoot = "example/plugins/system"
+	pluginsGoRoot   = "example/plugins/system-go"
+	stagedRoot      = "internal/server/sysplugins/embedded/system-plugins"
+	secretPath      = "hack/.system-signing.secret"
+	publisherName   = "untrusted comment: Platypus system publisher"
 )
+
+// pluginSource is one (source-tree, build-output-glob) pair the
+// staging helper walks. Rust crates put their .wasm under
+// target/wasm32-unknown-unknown/release/<entry>; tinygo Go modules
+// put theirs at <entry> next to the manifest.
+type pluginSource struct {
+	root        string
+	wasmRelPath func(dir, entry string) string
+	label       string
+}
+
+var pluginSources = []pluginSource{
+	{
+		root:  pluginsRustRoot,
+		label: "rust",
+		wasmRelPath: func(dir, entry string) string {
+			return filepath.Join(dir, "target/wasm32-unknown-unknown/release", entry)
+		},
+	},
+	{
+		root:  pluginsGoRoot,
+		label: "go",
+		wasmRelPath: func(dir, entry string) string {
+			return filepath.Join(dir, entry)
+		},
+	},
+}
 
 type manifestSnippet struct {
 	ID      string `yaml:"id"`
@@ -77,62 +105,66 @@ func run() error {
 		return fmt.Errorf("write publisher.pub: %w", err)
 	}
 
-	plugins, err := os.ReadDir(pluginsRoot)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", pluginsRoot, err)
-	}
-
 	staged := 0
-	for _, d := range plugins {
-		if !d.IsDir() {
-			continue
-		}
-		dir := filepath.Join(pluginsRoot, d.Name())
-		manifestPath := filepath.Join(dir, "plugin.yaml")
-		raw, err := os.ReadFile(manifestPath)
+	for _, src := range pluginSources {
+		plugins, err := os.ReadDir(src.root)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  skip %s: %v\n", d.Name(), err)
-			continue
+			if os.IsNotExist(err) {
+				continue // optional: system-go/ dir may not exist yet
+			}
+			return fmt.Errorf("read %s: %w", src.root, err)
 		}
-		var ms manifestSnippet
-		if err := yaml.Unmarshal(raw, &ms); err != nil {
-			fmt.Fprintf(os.Stderr, "  skip %s: %v\n", d.Name(), err)
-			continue
-		}
-		if ms.ID == "" || ms.Version == "" || ms.Runtime.Entry == "" {
-			fmt.Fprintf(os.Stderr, "  skip %s: incomplete manifest\n", d.Name())
-			continue
-		}
-		wasmPath := filepath.Join(dir, "target/wasm32-unknown-unknown/release", ms.Runtime.Entry)
-		wasmBytes, err := os.ReadFile(wasmPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  skip %s: build it first (%v)\n", d.Name(), err)
-			continue
-		}
+		for _, d := range plugins {
+			if !d.IsDir() {
+				continue
+			}
+			dir := filepath.Join(src.root, d.Name())
+			manifestPath := filepath.Join(dir, "plugin.yaml")
+			raw, err := os.ReadFile(manifestPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  skip %s/%s: %v\n", src.label, d.Name(), err)
+				continue
+			}
+			var ms manifestSnippet
+			if err := yaml.Unmarshal(raw, &ms); err != nil {
+				fmt.Fprintf(os.Stderr, "  skip %s/%s: %v\n", src.label, d.Name(), err)
+				continue
+			}
+			if ms.ID == "" || ms.Version == "" || ms.Runtime.Entry == "" {
+				fmt.Fprintf(os.Stderr, "  skip %s/%s: incomplete manifest\n", src.label, d.Name())
+				continue
+			}
+			wasmPath := src.wasmRelPath(dir, ms.Runtime.Entry)
+			wasmBytes, err := os.ReadFile(wasmPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  skip %s/%s: build it first (%v)\n", src.label, d.Name(), err)
+				continue
+			}
 
-		stagedDir := filepath.Join(stagedRoot, ms.ID, ms.Version)
-		if err := os.MkdirAll(stagedDir, 0o755); err != nil {
-			return err
+			stagedDir := filepath.Join(stagedRoot, ms.ID, ms.Version)
+			if err := os.MkdirAll(stagedDir, 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(stagedDir, "plugin.yaml"),
+				[]byte(rewriteKeyID(string(raw), keyID)), 0o644); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(stagedDir, ms.Runtime.Entry),
+				wasmBytes, 0o644); err != nil {
+				return err
+			}
+			sig, err := plugin.Sign(sk, wasmBytes,
+				fmt.Sprintf("%s@%s", ms.ID, ms.Version))
+			if err != nil {
+				return fmt.Errorf("sign %s: %w", ms.ID, err)
+			}
+			if err := os.WriteFile(filepath.Join(stagedDir, ms.Runtime.Entry+".minisig"),
+				[]byte(plugin.EncodeSignature(sig)), 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("  staged %s/%s@%s -> %s\n", src.label, ms.ID, ms.Version, stagedDir)
+			staged++
 		}
-		if err := os.WriteFile(filepath.Join(stagedDir, "plugin.yaml"),
-			[]byte(rewriteKeyID(string(raw), keyID)), 0o644); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(stagedDir, ms.Runtime.Entry),
-			wasmBytes, 0o644); err != nil {
-			return err
-		}
-		sig, err := plugin.Sign(sk, wasmBytes,
-			fmt.Sprintf("%s@%s", ms.ID, ms.Version))
-		if err != nil {
-			return fmt.Errorf("sign %s: %w", ms.ID, err)
-		}
-		if err := os.WriteFile(filepath.Join(stagedDir, ms.Runtime.Entry+".minisig"),
-			[]byte(plugin.EncodeSignature(sig)), 0o644); err != nil {
-			return err
-		}
-		fmt.Printf("  staged %s@%s -> %s\n", ms.ID, ms.Version, stagedDir)
-		staged++
 	}
 	fmt.Printf("staged %d plugin(s) under %s with key %s\n", staged, stagedRoot, keyID)
 	return nil

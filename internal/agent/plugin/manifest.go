@@ -105,6 +105,12 @@ type ManifestRuntime struct {
 	Type  string `yaml:"type"`  // "wasm"; only valid value in MVP
 	Entry string `yaml:"entry"` // .wasm filename relative to manifest
 	ABI   string `yaml:"abi"`   // "extism/1"
+	// Lang is informational (the agent doesn't branch on it). Useful
+	// for the web UI / authoring docs to render a "written in Rust"
+	// vs "written in Go" badge. Plugin authors are expected to set
+	// this honestly so the operator-facing tooling can surface it;
+	// it's not a security boundary.
+	Lang string `yaml:"lang,omitempty"`
 }
 
 type ManifestRPC struct {
