@@ -7,7 +7,7 @@
 // Flow:
 //   1. parse TunnelPullRequest from input bytes (target, timeout)
 //   2. host_net_dial(spec_json) → {handle, resolved_addr} or error
-//   3. write TunnelPullResponse via host_link_write_frame
+//   3. write TunnelPullResponse via host_stream_write
 //   4. host_net_relay(handle) → blocks until either side closes;
 //      during the call the host pumps wire ↔ TCP raw bytes
 //   5. return — the host already closed the dialed conn
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
-    fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
+    fn host_stream_write(bytes: Vec<u8>) -> Json<Envelope>;
     fn host_net_dial(spec: String) -> Json<Envelope>;
     fn host_net_relay(handle: String) -> Json<Envelope>;
     fn host_net_close(handle: String) -> Json<Envelope>;
@@ -104,9 +104,9 @@ fn write_pull_response(resolved: &str, error: &str) -> Result<(), Error> {
         write_varint(&mut buf, error.len() as u64);
         buf.extend_from_slice(error.as_bytes());
     }
-    let env: Envelope = unsafe { host_link_write_frame(buf)?.0 };
+    let env: Envelope = unsafe { host_stream_write(buf)?.0 };
     if !env.ok {
-        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
+        return Err(Error::msg(format!("host_stream_write: {}", env.error)));
     }
     Ok(())
 }
