@@ -275,6 +275,13 @@ type RedeemResult struct {
 	// the result rather than re-fetched from the DB so the redeem +
 	// host insert stay decoupled.
 	AutoApprove bool
+
+	// BaselinePluginIDs is the operator's system-plugin allowlist,
+	// recovered from the install_download_tokens row that minted this
+	// PAT. The v2 enroll handler stamps it onto the host record so
+	// the link-handler reconciler has something to push at connect
+	// time. nil when the PAT was minted directly (no install flow).
+	BaselinePluginIDs []string
 }
 
 // RedeemContext is the per-request metadata the enrollment code needs
@@ -323,13 +330,24 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 
 	certPEM, caPEM := s.maybeIssueCert(ctx, tok.ProjectID, agentID, rctx.AgentPubKey, "enroll")
 
+	// Recover the operator's system-plugin allowlist via the install
+	// token that minted this PAT. Best-effort: PATs minted outside the
+	// install flow (admin REST direct mint) won't have a parent row,
+	// in which case the host gets only the mandatory core after
+	// reconciliation.
+	var baselinePluginIDs []string
+	if installTok, lookupErr := s.db.InstallDownloadTokens().GetByConsumedPATID(ctx, parsed.ID); lookupErr == nil {
+		baselinePluginIDs = installTok.BaselinePluginIDs
+	}
+
 	return &RedeemResult{
-		AgentID:     agentID,
-		ProjectID:   tok.ProjectID,
-		Outcome:     "success",
-		CertPEM:     certPEM,
-		CAPem:       caPEM,
-		AutoApprove: tok.AutoApprove,
+		AgentID:           agentID,
+		ProjectID:         tok.ProjectID,
+		Outcome:           "success",
+		CertPEM:           certPEM,
+		CAPem:             caPEM,
+		AutoApprove:       tok.AutoApprove,
+		BaselinePluginIDs: baselinePluginIDs,
 	}, nil
 }
 

@@ -37,11 +37,12 @@ type InstallDownloadToken struct {
 	// the resulting host enrolls straight to `approved` instead of
 	// the default `pending`. See migration 000022.
 	AutoApprove bool
-	// BaselinePluginIDs propagates from the admin's install-token mint
-	// all the way to the agent boot: the agent will only install
-	// system plugins whose id is in this list (plus the mandatory
-	// core, e.g. sys-info). Empty slice = "no allowlist provided",
-	// which results in mandatory-core-only.
+	// BaselinePluginIDs is the operator-chosen system-plugin allowlist
+	// at mint time. Carried on this row only as a mint→consume
+	// stash; ConsumeInstallDownload copies it onto the host record
+	// (long-term source of truth, see migration 000032) and the
+	// link-handler reconciler pushes the missing plugins from
+	// <data_dir>/system-plugins/ on every connect.
 	BaselinePluginIDs []string
 	Revoked           bool
 	RevokedAt         *time.Time
@@ -122,6 +123,19 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 // Get returns the row for a given download_id, or ErrNotFound.
 func (r *InstallDownloadTokenRepo) Get(ctx context.Context, id string) (*InstallDownloadToken, error) {
 	row := r.db.QueryRowContext(ctx, installDownloadColumns+` WHERE download_id = ?`, id)
+	return scanInstallDownloadSingle(row)
+}
+
+// GetByConsumedPATID looks up the install token that was consumed to
+// mint a given PAT id. Used at enroll time to recover the operator's
+// baseline plugin allowlist (which is stored on the install token row,
+// not the PAT) and copy it onto the freshly-created hosts row.
+//
+// Returns ErrNotFound when no install token claims that PAT — either
+// the PAT was minted directly via /api/v1/pat-tokens (no install
+// flow) or the join is broken.
+func (r *InstallDownloadTokenRepo) GetByConsumedPATID(ctx context.Context, patID string) (*InstallDownloadToken, error) {
+	row := r.db.QueryRowContext(ctx, installDownloadColumns+` WHERE consumed_pat_id = ?`, patID)
 	return scanInstallDownloadSingle(row)
 }
 

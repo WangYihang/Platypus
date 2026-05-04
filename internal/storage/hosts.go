@@ -95,6 +95,15 @@ type Host struct {
 	ApprovalDecidedAt *time.Time
 	ApprovalDecidedBy string
 	ApprovalReason    string
+
+	// BaselinePluginIDs is the operator's system-plugin allowlist for
+	// this host. Populated at enroll time from the install token's
+	// baseline_plugin_ids column (see migration 000032). The
+	// agent-link handler reconciles each connect against this list:
+	// missing plugins get pushed from <data_dir>/system-plugins/.
+	// Empty slice = no operator picks; the reconciler still installs
+	// the mandatory core (sys-info).
+	BaselinePluginIDs []string
 }
 
 // HostApprovalStatus is the host-level approval state. See migration
@@ -184,7 +193,8 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        build_version, build_commit, build_date, protocol_version,
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
-       approval_status, approval_decided_at, approval_decided_by, approval_reason`
+       approval_status, approval_decided_at, approval_decided_by, approval_reason,
+       baseline_plugin_ids`
 
 // Upsert merges the given identity into the hosts table. Matching order:
 //
@@ -659,6 +669,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		approvalAt      sql.NullTime
 		approvalBy      sql.NullString
 		approvalReason  sql.NullString
+		baselineCSV     string
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
@@ -672,6 +683,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&machineType, &chassisType, &productVendor, &productName,
 		&biosVendor, &biosVersion, &gpuSummary,
 		&approvalStatus, &approvalAt, &approvalBy, &approvalReason,
+		&baselineCSV,
 	)
 	if err != nil {
 		return nil, err
@@ -781,6 +793,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if approvalReason.Valid {
 		h.ApprovalReason = approvalReason.String
 	}
+	h.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV)
 	return &h, nil
 }
 
@@ -921,4 +934,26 @@ func nullIfUint32(n uint32) any {
 		return nil
 	}
 	return int64(n)
+}
+
+// SetBaselinePluginIDs persists the operator's system-plugin allowlist
+// onto a host row. Called from ConsumeInstallDownload right after the
+// hosts row is upserted, so the link-handler reconciler has something
+// to diff each agent's installed catalog against. Empty slice clears
+// the column to "" — the agent gets reconciled to mandatory-core only.
+func (r *HostRepo) SetBaselinePluginIDs(ctx context.Context, hostID string, ids []string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE hosts SET baseline_plugin_ids = ? WHERE id = ?`,
+		encodeBaselinePluginIDs(ids), hostID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

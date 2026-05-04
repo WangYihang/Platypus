@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -214,6 +215,23 @@ func RegisterV2AgentEnrollRoute(engine *gin.Engine, h *EnrollV2Handler) {
 // we distinguish by the "fp-" prefix so the UI can still show a
 // "fingerprint fallback" badge on opaque hosts.
 func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollment.RedeemResult, req *v2pb.EnrollRequest, initialApproval storage.HostApprovalStatus) error {
+	host, err := upsertHostIdentity(ctx, db, redeemed, req, initialApproval)
+	if err != nil {
+		return err
+	}
+	// Stamp the operator's system-plugin allowlist onto the row so
+	// the link-handler reconciler can diff against it on every
+	// connect. Skip when the PAT was minted directly (no install
+	// flow) — the host gets mandatory-core-only after reconcile.
+	if len(redeemed.BaselinePluginIDs) > 0 {
+		if err := db.Hosts().SetBaselinePluginIDs(ctx, host.ID, redeemed.BaselinePluginIDs); err != nil {
+			return fmt.Errorf("set baseline plugin ids: %w", err)
+		}
+	}
+	return nil
+}
+
+func upsertHostIdentity(ctx context.Context, db *storage.DB, redeemed *enrollment.RedeemResult, req *v2pb.EnrollRequest, initialApproval storage.HostApprovalStatus) (*storage.Host, error) {
 	reported := req.GetMachineId()
 	machineID := reported
 	fingerprint := reported
@@ -266,6 +284,5 @@ func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollm
 		BIOSVersion:     req.GetBiosVersion(),
 		InitialApproval: initialApproval,
 	}
-	_, err := db.Hosts().Upsert(ctx, ident)
-	return err
+	return db.Hosts().Upsert(ctx, ident)
 }
