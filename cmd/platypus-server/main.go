@@ -47,6 +47,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/optoken"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/recording"
+	"github.com/WangYihang/Platypus/internal/server/sysplugins"
 	"github.com/WangYihang/Platypus/internal/settings"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/utils/config"
@@ -403,12 +404,20 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	installH := api.NewInstallTokensHandler(db, enrollSvc, distributorBase)
 	enrollV2H := api.NewEnrollV2Handler(enrollSvc, pkiSvc).WithDB(db).WithApprovalPolicy(settingsReg)
 
+	// systemBundle resolves to <data-dir>/system-plugins/ when the
+	// operator has staged their own override (publisher.pub at the
+	// directory root is the trip-wire), otherwise the server binary's
+	// embedded prebuilt tree. Both reconcile + install_system + the
+	// wizard picker share the same fs.FS so they all see the same
+	// catalog.
+	systemBundle := sysplugins.Resolve(cfg.DataDir)
+
 	// v2 agent link handler (yamux-over-WebSocket, mTLS-auth'd).
 	// agentLinkSvc was constructed upstream because SessionsV2Handler
 	// also depends on it for project-dispatch.
 	agentLinkH := api.NewAgentLinkHandler(agentLinkSvc, api.ProjectsCAPool(db)).
 		WithDB(db).
-		WithSystemBundle(cfg.DataDir)
+		WithSystemBundle(systemBundle)
 	activitiesH := api.NewActivitiesHandler(db)
 	caH := api.NewCAHandler(db, pkiSvc)
 	topologyH := api.NewTopologyHandler(db).WithAgentLinks(agentLinkSvc)
@@ -453,7 +462,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1AccountPATRoutes(rest, accountPATH, rbac)
 	api.RegisterV1AdminRolesRoutes(rest, adminRolesH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
-	api.RegisterV1SystemPluginsRoutes(rest, api.NewSystemPluginsHandler(cfg.DataDir), rbac)
+	api.RegisterV1SystemPluginsRoutes(rest, api.NewSystemPluginsHandler(systemBundle), rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
@@ -509,11 +518,11 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 			api.NewHTTPArtefactFetcher(),
 		).
 		// System bundle: per-host plugin install for the wasm
-		// system plugins staged by the publisher under
-		// <data-dir>/system-plugins/. Without this the install_system
-		// endpoint returns 503; the per-tab "Install" button in the
-		// host UI surfaces that as a clear error.
-		WithSystemBundle(cfg.DataDir)
+		// system plugins. Resolved above to either the operator's
+		// staged tree under <data-dir>/system-plugins/ or the server
+		// binary's prebuilt embed.FS, so this is never nil and the
+		// install_system endpoint is always usable.
+		WithSystemBundle(systemBundle)
 	api.RegisterV1AgentPluginRoutes(rest, pluginsHandler, rbac)
 	api.RegisterV1MarketplaceRoutes(rest, api.NewMarketplaceHandler(pluginCatalog), rbac)
 	if meshNode != nil {

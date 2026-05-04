@@ -62,7 +62,7 @@ func newSystemPluginsTestRouter(t *testing.T, dataDir string) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := api.NewSystemPluginsHandler(dataDir)
+	h := api.NewSystemPluginsHandler(os.DirFS(filepath.Join(dataDir, "system-plugins")))
 	r.GET("/api/v1/system-plugins", h.List)
 	return r
 }

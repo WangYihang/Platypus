@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"strings"
@@ -44,10 +45,10 @@ type AgentLinkHandler struct {
 	// after each successful link connect. Kept optional so tests
 	// that exercise the auth / ws plumbing don't need a DB.
 	db *storage.DB
-	// systemBundleDir, when non-empty, lets the handler reconcile the
+	// systemBundle, when non-nil, lets the handler reconcile the
 	// agent's installed system plugins against the host's
-	// baseline_plugin_ids on every connect. Empty disables sync.
-	systemBundleDir string
+	// baseline_plugin_ids on every connect. Nil disables sync.
+	systemBundle fs.FS
 }
 
 func NewAgentLinkHandler(svc *core.AgentLinkService, caPoolFn CertPoolFunc) *AgentLinkHandler {
@@ -62,13 +63,14 @@ func (h *AgentLinkHandler) WithDB(db *storage.DB) *AgentLinkHandler {
 	return h
 }
 
-// WithSystemBundle wires the data-dir holding the server's system
-// plugin catalog (publisher.pub + <id>/<v>/{plugin.yaml,wasm,sig}).
-// On every successful agent connect the handler spawns a
-// reconciliation goroutine that pushes any plugins missing from the
-// agent's runtime catalog. Empty dir = sync disabled.
-func (h *AgentLinkHandler) WithSystemBundle(dataDir string) *AgentLinkHandler {
-	h.systemBundleDir = dataDir
+// WithSystemBundle wires the system-plugin bundle resolved at server
+// boot — the operator's <data-dir>/system-plugins/ override, or the
+// server binary's prebuilt embed.FS when the override is absent. On
+// every successful agent connect the handler spawns a reconciliation
+// goroutine that pushes any plugins missing from the agent's runtime
+// catalog. nil = sync disabled.
+func (h *AgentLinkHandler) WithSystemBundle(bundle fs.FS) *AgentLinkHandler {
+	h.systemBundle = bundle
 	return h
 }
 
@@ -240,7 +242,7 @@ func (h *AgentLinkHandler) Handle(c *gin.Context) {
 		// plugin gets pushed via PluginMgmt:install, sourced from the
 		// configured system bundle dir. Idempotent: on a steady-state
 		// reconnect this is a single PluginMgmt:list and nothing else.
-		if h.systemBundleDir != "" {
+		if h.systemBundle != nil {
 			go h.reconcilePlugins(agentID, sess)
 		}
 		// Long-lived heartbeat: bump hosts.last_seen_at on a tick so
@@ -521,7 +523,7 @@ func (h *AgentLinkHandler) reconcilePlugins(agentID string, sess *link.Session) 
 		// next reconnect will catch up.
 		return
 	}
-	if err := reconcileSystemPlugins(ctx, sess, agentID, host.BaselinePluginIDs, h.systemBundleDir); err != nil {
+	if err := reconcileSystemPlugins(ctx, sess, agentID, host.BaselinePluginIDs, h.systemBundle); err != nil {
 		log.L.Warn("plugin sync: reconcile",
 			"agent_id", agentID,
 			"error", err.Error(),

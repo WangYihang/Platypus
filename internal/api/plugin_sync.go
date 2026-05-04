@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -38,18 +37,24 @@ const pluginSyncTimeout = 2 * time.Minute
 // re-run when every plugin is already installed is a single
 // PluginMgmt:list and zero installs.
 //
-// systemBundleDir/<systemPluginsDirName>/{publisher.pub,<id>/<v>/...}
-// is the source of truth; missing entries here are logged and skipped
-// (the agent will respond with plugin_not_installed when an RPC tries
-// to use them, surfaced by the frontend's humanizeError).
+// systemBundle is rooted such that "publisher.pub" + each
+// "<plugin_id>/<version>/{plugin.yaml,*.wasm,*.minisig}" path
+// resolves with fs.ReadFile. The internal/server/sysplugins
+// resolver picks between an operator's <data-dir>/system-plugins/
+// override and the server binary's prebuilt embed.FS; this function
+// can't tell which.
+//
+// nil bundle → returns nil (reconciliation disabled). Missing
+// entries in the bundle are logged and skipped; the agent surfaces
+// plugin_not_installed when an RPC actually tries to use them.
 func reconcileSystemPlugins(
 	ctx context.Context,
 	sess pluginSyncSession,
 	agentID string,
 	hostBaseline []string,
-	systemBundleDir string,
+	systemBundle fs.FS,
 ) error {
-	if systemBundleDir == "" {
+	if systemBundle == nil {
 		return nil
 	}
 
@@ -73,12 +78,11 @@ func reconcileSystemPlugins(
 		haveVersion[p.GetId()] = p.GetVersion()
 	}
 
-	root := filepath.Join(systemBundleDir, systemPluginsDirName)
-	pubkeyBytes, err := os.ReadFile(filepath.Join(root, "publisher.pub"))
+	pubkeyBytes, err := fs.ReadFile(systemBundle, "publisher.pub")
 	if err != nil {
 		return fmt.Errorf("read publisher.pub: %w", err)
 	}
-	catalog, err := enumerateSystemPlugins(root)
+	catalog, err := enumerateSystemPlugins(systemBundle)
 	if err != nil {
 		return fmt.Errorf("enumerate system plugins: %w", err)
 	}
@@ -92,7 +96,7 @@ func reconcileSystemPlugins(
 	for _, id := range desired {
 		info, ok := latestByID[id]
 		if !ok {
-			log.Warn("plugin sync: %s not staged in <data_dir>/system-plugins/; agent will return plugin_not_installed", id)
+			log.Warn("plugin sync: %s not in system bundle; agent will return plugin_not_installed", id)
 			continue
 		}
 		if cur, present := haveVersion[id]; present && cur == info.Version {
@@ -102,7 +106,7 @@ func reconcileSystemPlugins(
 		if cur, present := haveVersion[id]; present && cur != info.Version {
 			action = "upgraded from " + cur + " to"
 		}
-		if err := installOneViaMgmt(ctx, sess, agentID, info, pubkeyBytes, root); err != nil {
+		if err := installOneViaMgmt(ctx, sess, agentID, info, pubkeyBytes, systemBundle); err != nil {
 			log.Warn("plugin sync: install %s@%s on %s: %v", id, info.Version, agentID, err)
 			continue
 		}
@@ -145,9 +149,9 @@ func installOneViaMgmt(
 	agentID string,
 	info systemPluginInfo,
 	pubkeyBytes []byte,
-	root string,
+	systemBundle fs.FS,
 ) error {
-	manifestBytes, wasmBytes, sigBytes, err := readSystemBundle(root, info.ID, info.Version)
+	manifestBytes, wasmBytes, sigBytes, err := readSystemBundle(systemBundle, info.ID, info.Version)
 	if err != nil {
 		return fmt.Errorf("read bundle: %w", err)
 	}

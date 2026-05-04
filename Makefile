@@ -15,6 +15,7 @@ AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.Sig
 
 .PHONY: all build build-bundled proto test lint fmt vet tidy clean release snapshot help swag \
         hooks pre-commit data data-v6 \
+        example-plugins stage-system-plugins \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
         web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots
 
@@ -25,6 +26,7 @@ help:
 	@echo "  build           Build both binaries to ./$(BUILD_DIR)/"
 	@echo "  build-bundled   Build the web UI and embed it into platypus-server"
 	@echo "  proto           Regenerate protobuf code"
+	@echo "  stage-system-plugins  (Re)build + sign + stage system plugins under internal/server/sysplugins/embedded/"
 	@echo "  test            Run tests with race detector"
 	@echo "  lint            Run golangci-lint"
 	@echo "  fmt             Format Go source"
@@ -132,32 +134,28 @@ example-plugins:
 	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_PUBLISHER_KEY --wasm $$wasm || exit 1; \
 	done
 
-# sign-system-plugins re-signs every bundle currently staged under
-# internal/agent/plugin/system/embedded/ with the system signing key
-# at PLATYPUS_SYSTEM_KEY. Run this when:
-#   - you've rotated the system signing key (new pubkey replaces
-#     internal/agent/plugin/system/embedded/publisher.pub)
-#   - you've added a new system plugin and need its .minisig staged
-#   - you've rebuilt a system plugin's .wasm and want a fresh signature
+# stage-system-plugins (re)builds + signs every plugin under
+# example/plugins/system/, then copies plugin.yaml + .wasm + .minisig
+# under internal/server/sysplugins/embedded/system-plugins/<id>/<v>/
+# so go:embed can pick them up. Run this when:
+#   - you've changed a rust source file under example/plugins/system/,
+#   - you've rotated the system signing key (delete
+#     hack/.system-signing.secret to mint a fresh one),
+#   - you've added a new system plugin to example/plugins/system/.
 #
-# The signed bundle (manifest + .wasm + .minisig) under each
-# <id>/<version>/ is what ships in the agent binary; this target
-# updates them in place. Bumping the wasm content REQUIRES re-signing
-# or the agent's at-load verify step will quarantine the plugin.
-sign-system-plugins:
-	@if [ -z "$$PLATYPUS_SYSTEM_KEY" ]; then \
-	  echo "PLATYPUS_SYSTEM_KEY=path/to/system-secret.platypus is required"; exit 1; \
-	fi
-	@if [ ! -x $(BUILD_DIR)/platypus-cli ]; then \
-	  echo "$(BUILD_DIR)/platypus-cli missing — run \`make build\` first"; exit 1; \
-	fi
-	@for d in internal/agent/plugin/system/embedded/*/*/plugin.yaml; do \
-	  dir=$$(dirname $$d); \
-	  entry=$$(grep '^  entry:' $$d | awk '{print $$2}'); \
-	  wasm=$$dir/$$entry; \
-	  echo "→ $$dir ($$entry)"; \
-	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_SYSTEM_KEY --wasm $$wasm || exit 1; \
+# The staged tree IS the source of truth the server binary ships with;
+# operators can override per-host by dropping their own tree under
+# <data-dir>/system-plugins/. See internal/server/sysplugins/embed.go.
+#
+# Requires the rust wasm32 target:
+#   rustup target add wasm32-unknown-unknown
+stage-system-plugins:
+	@for d in example/plugins/system/*/Cargo.toml; do \
+	  dir=$$(dirname $$d); name=$$(basename $$dir); \
+	  echo "→ $$name"; \
+	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done
+	$(GO) run ./hack/stage_system_plugins
 
 hooks:
 	pre-commit install

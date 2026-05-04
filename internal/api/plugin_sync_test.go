@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/WangYihang/Platypus/internal/link"
+	"github.com/WangYihang/Platypus/internal/server/sysplugins"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -178,7 +179,7 @@ func TestReconcileSystemPlugins_MandatoryCoreOnly(t *testing.T) {
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
 	sess := &fakeSession{installedVersions: nil}
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, dataDir); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// Expect: 1 list call + 1 install call for sys-info.
@@ -203,7 +204,7 @@ func TestReconcileSystemPlugins_BaselinePicksPlusCore(t *testing.T) {
 
 	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read", "com.platypus.sys-process"}
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, dataDir); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list + 3 installs (baseline 2 + mandatory 1).
@@ -241,7 +242,7 @@ func TestReconcileSystemPlugins_AlreadyInstalledIsNoOp(t *testing.T) {
 
 	sess := &fakeSession{installedVersions: map[string]string{"com.platypus.sys-info": "2.0.0"}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, dataDir); err != nil {
+		[]string{"com.platypus.sys-info"}, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list only; nothing missing.
@@ -261,7 +262,7 @@ func TestReconcileSystemPlugins_VersionMismatchTriggersUpgrade(t *testing.T) {
 		"com.platypus.sys-info": "1.0.0",
 	}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, dataDir); err != nil {
+		[]string{"com.platypus.sys-info"}, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list + install (the upgrade).
@@ -282,7 +283,7 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 
 	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read"} // not staged
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, dataDir); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile should not error on missing bundle entry: %v", err)
 	}
 	// list + sys-info install only; missing baseline entry is skipped.
@@ -294,14 +295,39 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 	}
 }
 
+// TestReconcileSystemPlugins_PrebuiltEmbed exercises the actual
+// internal/server/sysplugins.PrebuiltFS() against the reconciler.
+// This is the end-to-end proof that the binary's embedded tree is
+// usable: a fresh server install (no <data-dir>/system-plugins/
+// override) goes through this exact path on every agent connect.
+//
+// Asserts the mandatory sys-info gets installed and no install
+// errors propagate. We don't care about the other 7 plugins for
+// this test — they ride along when an operator's baseline asks for
+// them and are exercised by their own integration tests.
+func TestReconcileSystemPlugins_PrebuiltEmbed(t *testing.T) {
+	bundle := sysplugins.PrebuiltFS()
+	sess := &fakeSession{installedVersions: nil}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, bundle); err != nil {
+		t.Fatalf("reconcile against PrebuiltFS: %v", err)
+	}
+	// 1 list + 1 install (sys-info, the mandatory entry).
+	if len(sess.calls) != 2 {
+		t.Fatalf("calls = %d (%+v); want list + install of sys-info", len(sess.calls), sess.calls)
+	}
+	if sess.calls[1].op != "install" || sess.calls[1].pluginID != "com.platypus.sys-info" {
+		t.Errorf("install call = %+v; want sys-info", sess.calls[1])
+	}
+}
+
 func TestReconcileSystemPlugins_NoBundleDirShortCircuits(t *testing.T) {
 	sess := &fakeSession{}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, ""); err != nil {
-		t.Fatalf("reconcile with empty bundle dir: %v", err)
+		[]string{"com.platypus.sys-info"}, nil); err != nil {
+		t.Fatalf("reconcile with nil bundle: %v", err)
 	}
 	if len(sess.calls) != 0 {
-		t.Errorf("calls should be empty when systemBundleDir is empty, got %+v", sess.calls)
+		t.Errorf("calls should be empty when systemBundle is nil, got %+v", sess.calls)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -28,10 +29,10 @@ import (
 //   handler_plugins_readonly.go  GET    .../plugins, GET .../logs (single-frame replies)
 //   handler_plugins_mutate.go    DELETE / PATCH .../plugins/:plugin_id
 type AgentPluginsHandler struct {
-	svc             *core.AgentLinkService
-	catalog         MarketplaceCatalog // optional; when nil install_marketplace returns 503
-	fetcher         ArtefactFetcher    // optional; defaults to net/http when nil
-	systemBundleDir string             // optional; when "" install_system returns 503
+	svc          *core.AgentLinkService
+	catalog      MarketplaceCatalog // optional; when nil install_marketplace returns 503
+	fetcher      ArtefactFetcher    // optional; defaults to net/http when nil
+	systemBundle fs.FS              // optional; when nil install_system returns 503
 }
 
 // MarketplaceCatalog is the catalog interface install_marketplace

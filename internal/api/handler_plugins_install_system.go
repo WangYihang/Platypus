@@ -2,10 +2,9 @@ package api
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
-	"time"
+	"path"
 
 	"github.com/gin-gonic/gin"
 
@@ -39,11 +38,12 @@ type installSystemRequest struct {
 	GrantedCapabilities []string `json:"granted_capabilities"`
 }
 
-// WithSystemBundle decorates the handler with the data-dir that
-// holds the server's system-plugin catalog. Without this the
-// install_system endpoint returns 503.
-func (h *AgentPluginsHandler) WithSystemBundle(dataDir string) *AgentPluginsHandler {
-	h.systemBundleDir = dataDir
+// WithSystemBundle decorates the handler with the active system-plugins
+// fs.FS (operator-staged disk override or the server binary's
+// prebuilt embed). Without this the install_system endpoint returns
+// 503.
+func (h *AgentPluginsHandler) WithSystemBundle(bundle fs.FS) *AgentPluginsHandler {
+	h.systemBundle = bundle
 	return h
 }
 
@@ -51,14 +51,14 @@ func (h *AgentPluginsHandler) WithSystemBundle(dataDir string) *AgentPluginsHand
 // POST /api/v1/projects/:pid/agents/:agent_id/plugins/install_system.
 //
 // Reads the three artefacts (plugin.yaml + .wasm + .minisig) and
-// the publisher pubkey from <data-dir>/system-plugins/, then
+// the publisher pubkey from the active system-plugins bundle, then
 // streams them into the same agent install path the marketplace +
 // inline endpoints use. The agent re-verifies sha256 + minisign,
-// so a corrupt on-disk artefact still surfaces as the expected
-// PHASE_FAILED inside the install progress stream rather than a
-// silent partial install.
+// so a corrupt artefact still surfaces as the expected PHASE_FAILED
+// inside the install progress stream rather than a silent partial
+// install.
 func (h *AgentPluginsHandler) InstallFromSystem(c *gin.Context) {
-	if h.systemBundleDir == "" {
+	if h.systemBundle == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "system plugin bundle not configured on this server",
 		})
@@ -72,23 +72,19 @@ func (h *AgentPluginsHandler) InstallFromSystem(c *gin.Context) {
 		return
 	}
 
-	// Read the three artefacts off disk. Each read is bounded by the
-	// surrounding pluginInstallTimeout via the agent stream; the disk
-	// reads themselves are local and fast (a few MB of wasm).
-	root := filepath.Join(h.systemBundleDir, systemPluginsDirName)
-	pubkeyBytes, err := os.ReadFile(filepath.Join(root, "publisher.pub"))
+	pubkeyBytes, err := fs.ReadFile(h.systemBundle, "publisher.pub")
 	if err != nil {
 		// publisher.pub at the catalog root is the trust anchor for
 		// every bundle inside. Without it the agent would refuse
 		// every install with signature_mismatch — bail early with a
 		// clearer error.
 		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "system bundle missing publisher.pub at " + root + " — re-run the publisher",
+			"error": "system bundle missing publisher.pub — re-run the publisher",
 		})
 		return
 	}
 
-	manifestBytes, wasmBytes, sigBytes, err := readSystemBundle(root, body.PluginID, body.Version)
+	manifestBytes, wasmBytes, sigBytes, err := readSystemBundle(h.systemBundle, body.PluginID, body.Version)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": fmt.Sprintf("system plugin %s@%s not staged on this server: %s",
@@ -150,14 +146,14 @@ func (h *AgentPluginsHandler) InstallFromSystem(c *gin.Context) {
 }
 
 // readSystemBundle pulls plugin.yaml + the wasm + the minisig off
-// the system catalog at <root>/<plugin_id>/<version>/. The wasm
-// filename comes from the manifest's runtime.entry — we parse the
-// manifest first to learn it. Errors carry enough context for the
-// operator to find the gap (missing dir vs. bad manifest vs.
-// missing artefact).
-func readSystemBundle(root, pluginID, version string) (manifest, wasm, sig []byte, err error) {
-	dir := filepath.Join(root, pluginID, version)
-	manifest, err = os.ReadFile(filepath.Join(dir, "plugin.yaml"))
+// the system bundle at <plugin_id>/<version>/. The wasm filename
+// comes from the manifest's runtime.entry — we parse the manifest
+// first to learn it. Errors carry enough context for the operator
+// to find the gap (missing entry vs. bad manifest vs. missing
+// artefact). Works against any fs.FS — disk override or embed.
+func readSystemBundle(fsys fs.FS, pluginID, version string) (manifest, wasm, sig []byte, err error) {
+	dir := path.Join(pluginID, version)
+	manifest, err = fs.ReadFile(fsys, path.Join(dir, "plugin.yaml"))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read manifest: %w", err)
 	}
@@ -165,14 +161,13 @@ func readSystemBundle(root, pluginID, version string) (manifest, wasm, sig []byt
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("parse manifest: %w", err)
 	}
-	wasm, err = os.ReadFile(filepath.Join(dir, m.Runtime.Entry))
+	wasm, err = fs.ReadFile(fsys, path.Join(dir, m.Runtime.Entry))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read wasm: %w", err)
 	}
-	sig, err = os.ReadFile(filepath.Join(dir, m.Runtime.Entry+".minisig"))
+	sig, err = fs.ReadFile(fsys, path.Join(dir, m.Runtime.Entry+".minisig"))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read sig: %w", err)
 	}
-	_ = time.Now() // reserved if we ever want to log the staging mtime
 	return manifest, wasm, sig, nil
 }

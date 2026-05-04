@@ -2,9 +2,9 @@ package api
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"sort"
 
 	"github.com/gin-gonic/gin"
@@ -14,15 +14,16 @@ import (
 
 // systemPluginsDirName is the basename inside the server's data dir
 // that the dev publisher (scripts/dev-publish-entrypoint.sh) drops
-// signed system-plugin bundles into. The server is the single source
-// of truth — agents pull from here on every connect via the
-// reconciliation goroutine in handler_agent_link_v2.go.
+// signed system-plugin bundles into when it wants to override the
+// server binary's embedded set. The reconciler in
+// handler_agent_link_v2.go pulls from this directory (or the embedded
+// fallback when it's empty) on every agent connect.
 const systemPluginsDirName = "system-plugins"
 
 // SystemPluginsHandler exposes the catalogue of system-eligible
-// plugins to the admin / enroll wizard. Source of truth is
-// <DataDir>/system-plugins/, the same directory the publisher
-// stages and the agent's data-dir override resolver picks from.
+// plugins to the admin / enroll wizard. systemBundle is the fs.FS
+// the resolver picked at boot (operator-staged disk override or the
+// server binary's prebuilt tree); the handler can't tell which.
 //
 // Two reasons to keep this distinct from the marketplace handler:
 //
@@ -35,11 +36,11 @@ const systemPluginsDirName = "system-plugins"
 //     ALWAYS post-enroll opt-in. The semantics differ enough that
 //     conflating the two would lead to surprising operator decisions.
 type SystemPluginsHandler struct {
-	dataDir string
+	systemBundle fs.FS
 }
 
-func NewSystemPluginsHandler(dataDir string) *SystemPluginsHandler {
-	return &SystemPluginsHandler{dataDir: dataDir}
+func NewSystemPluginsHandler(bundle fs.FS) *SystemPluginsHandler {
+	return &SystemPluginsHandler{systemBundle: bundle}
 }
 
 // systemPluginInfo is the wire shape — small enough to be obvious
@@ -71,8 +72,7 @@ type systemPluginsResponse struct {
 // docs. We intentionally don't 503 on "no system plugins available"
 // since the request itself is well-formed.
 func (h *SystemPluginsHandler) List(c *gin.Context) {
-	root := filepath.Join(h.dataDir, systemPluginsDirName)
-	entries, err := enumerateSystemPlugins(root)
+	entries, err := enumerateSystemPlugins(h.systemBundle)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list system plugins: " + err.Error()})
 		return
@@ -80,40 +80,35 @@ func (h *SystemPluginsHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, systemPluginsResponse{Plugins: entries})
 }
 
-// enumerateSystemPlugins walks root/<plugin_id>/<version>/ for
-// plugin.yaml entries and parses each. Returns a sorted slice (id
-// asc, then version asc) so the wizard ordering is stable.
+// enumerateSystemPlugins walks <plugin_id>/<version>/ for plugin.yaml
+// entries on the supplied fs.FS and parses each. Returns a sorted
+// slice (id asc, then version asc) so the wizard ordering is stable.
 //
-// Missing root → returns ([], nil). The picker treats that as an
-// empty state, not an error.
+// nil fs.FS → returns ([], nil). The picker treats that as an empty
+// state, not an error.
 //
-// Per-bundle parse failures are logged on stderr (best-effort) and
-// excluded from the result; one corrupt manifest doesn't blank the
-// whole picker.
-func enumerateSystemPlugins(root string) ([]systemPluginInfo, error) {
-	st, err := os.Stat(root)
+// Per-bundle parse failures are dropped silently; one corrupt
+// manifest doesn't blank the whole picker.
+func enumerateSystemPlugins(fsys fs.FS) ([]systemPluginInfo, error) {
+	if fsys == nil {
+		return []systemPluginInfo{}, nil
+	}
+	pluginDirs, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		// A truly absent root (e.g. an os.DirFS pointed at a missing
+		// path) returns fs.ErrNotExist via the Open call inside
+		// ReadDir. The picker treats that the same as "no bundles".
+		if errors.Is(err, fs.ErrNotExist) {
 			return []systemPluginInfo{}, nil
 		}
 		return nil, err
 	}
-	if !st.IsDir() {
-		// Someone put a file at /system-plugins. Treat as no bundles.
-		return []systemPluginInfo{}, nil
-	}
-
 	out := []systemPluginInfo{}
-	pluginDirs, err := os.ReadDir(root)
-	if err != nil {
-		return nil, err
-	}
 	for _, pd := range pluginDirs {
 		if !pd.IsDir() {
 			continue
 		}
-		pluginRoot := filepath.Join(root, pd.Name())
-		versions, err := os.ReadDir(pluginRoot)
+		versions, err := fs.ReadDir(fsys, pd.Name())
 		if err != nil {
 			continue
 		}
@@ -121,8 +116,7 @@ func enumerateSystemPlugins(root string) ([]systemPluginInfo, error) {
 			if !v.IsDir() {
 				continue
 			}
-			manifestPath := filepath.Join(pluginRoot, v.Name(), "plugin.yaml")
-			data, err := os.ReadFile(manifestPath)
+			data, err := fs.ReadFile(fsys, path.Join(pd.Name(), v.Name(), "plugin.yaml"))
 			if err != nil {
 				continue
 			}

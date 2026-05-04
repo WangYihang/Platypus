@@ -1,0 +1,53 @@
+api_version: 1
+id: com.platypus.sys-config-audit
+name: Config audit (system)
+version: 2.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  System plugin — replaces the agent's built-in ConfigAudit +
+  ListConfigAuditors RPCs. v2 reads /home + /root + /etc directly
+  via host_fs_read; the agent-side gitleaks-backed registry is no
+  longer in the path.
+
+  Coverage in v2 (subset of legacy):
+    - shell.history     scan ~/.bash_history + ~/.zsh_history for
+                        AWS keys, GitHub tokens, Bearer headers
+    - cloud.aws         flag presence of ~/.aws/credentials with
+                        non-empty key fields
+    - ssh.private_keys  list ~/.ssh/id_* and flag those without
+                        ENCRYPTED marker (no passphrase)
+
+  v3 will port the broader gitleaks ruleset (50+ patterns) + the
+  per-process env scanner.
+
+runtime:
+  type: wasm
+  entry: sys_config_audit.wasm
+  abi: extism/1
+
+rpc:
+  - name: config_audit
+    request:  { proto: ConfigAuditRequest }
+    response: { proto: ConfigAuditResponse }
+  - name: list_config_auditors
+    request:  { proto: ListConfigAuditorsRequest }
+    response: { proto: ListConfigAuditorsResponse }
+
+# fs.read of /home + /root + /etc lets the plugin inspect shell
+# history + cloud-credential dotfiles directly, without delegating
+# to a host fn that wraps the gitleaks ruleset in Go.
+capabilities:
+  fs.read:
+    paths: ["/home", "/root", "/etc"]
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_config_audit.wasm.minisig

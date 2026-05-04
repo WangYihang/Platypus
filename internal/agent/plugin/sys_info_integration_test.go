@@ -13,16 +13,21 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// installSysInfo wires the freshly-built sys-info wasm into a fresh
+// installSysInfo wires the staged sys-info wasm into a fresh
 // registry. The plugin needs sysinfo + fs.read (it parses /proc).
+//
+// Source of truth is internal/server/sysplugins/embedded/ — the same
+// tree the server binary ships. A missing artefact here means
+// hack/stage_system_plugins didn't run after a rust source change
+// (or a fresh clone never produced one); fail loud instead of
+// silently skipping.
 func installSysInfo(t *testing.T) *plugin.Registry {
 	t.Helper()
 	wasm, err := os.ReadFile(sysInfoWasmPath())
 	if err != nil {
-		t.Skipf("sys_info_plugin.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-info/", err)
+		t.Fatalf("sys_info_plugin.wasm missing under internal/server/sysplugins/embedded/ (%v) — run `go run ./hack/stage_system_plugins` from the repo root", err)
 	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-info", "plugin.yaml"))
+	manifestBytes, err := os.ReadFile(sysInfoManifestPath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,12 +45,14 @@ func installSysInfo(t *testing.T) *plugin.Registry {
 		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// sys-info's manifest hardcodes the publisher key_id; for tests we
-	// don't care because the agent verifies against the supplied
-	// PublisherPubkey (manifest key_id is purely informational, see
-	// manifest_validate.go).
-	manifestStr := strings.Replace(string(manifestBytes),
-		"5C9C41AD529D87AC", plugin.HumanKeyID(pk), 1)
+	// The staged manifest's key_id field is a hex literal that
+	// rotates with every `go run ./hack/stage_system_plugins` run.
+	// For tests we don't care about its value — the agent verifies
+	// signatures against the supplied PublisherPubkey (manifest
+	// key_id is purely informational, see manifest_validate.go) —
+	// so swap whatever's there for this test's freshly-minted key
+	// to keep the manifest internally consistent.
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_info_plugin.wasm"))
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +122,35 @@ func TestSysInfo_PlatformReportsLinux(t *testing.T) {
 }
 
 func sysInfoWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-info",
-		"target", "wasm32-unknown-unknown", "release", "sys_info_plugin.wasm")
+	return filepath.Join("..", "..", "..", "internal", "server", "sysplugins",
+		"embedded", "system-plugins", "com.platypus.sys-info", "2.0.0",
+		"sys_info_plugin.wasm")
+}
+
+func sysInfoManifestPath() string {
+	return filepath.Join("..", "..", "..", "internal", "server", "sysplugins",
+		"embedded", "system-plugins", "com.platypus.sys-info", "2.0.0",
+		"plugin.yaml")
+}
+
+// rewriteManifestKeyID swaps the manifest's signature.key_id field
+// for the supplied hex string, preserving comments and surrounding
+// formatting. The integration tests sign with a fresh per-test
+// keypair; the staged manifest's key_id is whatever
+// hack/stage_system_plugins minted at build time, which doesn't
+// match.
+func rewriteManifestKeyID(src, keyID string) string {
+	const marker = "key_id:"
+	idx := strings.Index(src, marker)
+	if idx < 0 {
+		return src
+	}
+	// Replace the value (single token) after key_id: up to the
+	// next newline. A simple split keeps this self-contained.
+	tail := src[idx+len(marker):]
+	nl := strings.IndexByte(tail, '\n')
+	if nl < 0 {
+		return src // unterminated manifest? leave as-is
+	}
+	return src[:idx+len(marker)] + " " + keyID + tail[nl:]
 }
