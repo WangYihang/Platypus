@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -17,15 +18,22 @@ const configAuditPluginID = "com.platypus.sys-config-audit"
 
 // ConfigAudit is the plugin-backed replacement for
 // agent.HandleConfigAudit.
+//
+// Wall-clock metadata (started_at_unix, elapsed_ms) is filled in by
+// the bridge. Same rationale as bridge.SecurityScan: wasm has no
+// host_clock host fn, and forcing every auditor author to thread time
+// through the boundary is the wrong layer.
 func ConfigAudit(reg *plugin.Registry) func(ctx context.Context, req *v2pb.ConfigAuditRequest) *v2pb.ConfigAuditResponse {
 	return func(ctx context.Context, req *v2pb.ConfigAuditRequest) *v2pb.ConfigAuditResponse {
 		body, err := protojson.Marshal(req)
 		if err != nil {
 			return &v2pb.ConfigAuditResponse{Error: "bridge: marshal request: " + err.Error()}
 		}
+		started := time.Now()
 		r := reg.Invoke(ctx, &v2pb.PluginCallRequest{
 			PluginId: configAuditPluginID, Method: "config_audit", Payload: body,
 		})
+		elapsed := time.Since(started)
 		if r.GetError() != "" {
 			return &v2pb.ConfigAuditResponse{Error: r.GetError()}
 		}
@@ -34,6 +42,12 @@ func ConfigAudit(reg *plugin.Registry) func(ctx context.Context, req *v2pb.Confi
 			return &v2pb.ConfigAuditResponse{
 				Error: fmt.Sprintf("bridge: unmarshal protojson: %v", err),
 			}
+		}
+		if out.StartedAtUnix == 0 {
+			out.StartedAtUnix = started.Unix()
+		}
+		if out.ElapsedMs == 0 {
+			out.ElapsedMs = uint64(elapsed.Milliseconds())
 		}
 		return &out
 	}
