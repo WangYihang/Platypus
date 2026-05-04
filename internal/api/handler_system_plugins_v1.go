@@ -14,8 +14,9 @@ import (
 
 // systemPluginsDirName is the basename inside the server's data dir
 // that the dev publisher (scripts/dev-publish-entrypoint.sh) drops
-// signed system-plugin bundles into. Matches the agent-side override
-// dir name in internal/agent/plugin/system/embed.go (OverrideSubdir).
+// signed system-plugin bundles into. The server is the single source
+// of truth — agents pull from here on every connect via the
+// reconciliation goroutine in handler_agent_link_v2.go.
 const systemPluginsDirName = "system-plugins"
 
 // SystemPluginsHandler exposes the catalogue of system-eligible

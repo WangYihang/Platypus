@@ -7,23 +7,16 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// listDirPluginIDs is the preference chain the bridge consults.
-// The merged sys-files-read (post-merge) wins where the publisher
-// has staged it (dev override-FS, future embed FS rebuilds);
-// sys-listdir is the legacy fallback for production agents still
-// running off the read-only embed FS that hasn't been re-signed
-// with the merged-plugin wasm yet. Both ids implement list_dir +
-// stat with byte-for-byte identical wire shapes; the bridge picks
-// whichever is installed.
-var listDirPluginIDs = []string{
-	"com.platypus.sys-files-read",
-	"com.platypus.sys-listdir",
-}
+// listDirPluginID is the merged sys-files-read plugin: it owns
+// list_dir + stat (this file) plus the file_read / file_scan /
+// file_archive streams. One id, one wasm, one operator-grant
+// boundary for the whole fs.read capability family.
+const listDirPluginID = "com.platypus.sys-files-read"
 
 // ListDir is the plugin-backed replacement for the agent's
 // agent.HandleListDir built-in. Drop-in compatible: same proto
 // signature, same dispatch slot in AgentRPCHandlers.ListDir; the body
-// just delegates to the sys-listdir plugin instead of doing the
+// just delegates to the sys-files-read plugin instead of doing the
 // directory walk in Go.
 //
 // On any plugin-level failure (capability denied, plugin not
@@ -34,7 +27,7 @@ var listDirPluginIDs = []string{
 func ListDir(reg *plugin.Registry) func(ctx context.Context, req *v2pb.ListDirRequest) *v2pb.ListDirResponse {
 	return func(ctx context.Context, req *v2pb.ListDirRequest) *v2pb.ListDirResponse {
 		var jsonResp listDirJSONResponse
-		pluginErr, err := invokeJSONFallback(ctx, reg, listDirPluginIDs, "list_dir",
+		pluginErr, err := invokeJSON(ctx, reg, listDirPluginID, "list_dir",
 			listDirJSONRequest{Path: req.GetPath()}, &jsonResp)
 		if err != nil {
 			return &v2pb.ListDirResponse{Error: "bridge: " + err.Error()}

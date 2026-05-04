@@ -314,11 +314,10 @@ func serveInstallScript(c *gin.Context) {
 
 	if c.Query("format") == "bundle" {
 		bundle, err := installbundle.Encode(installbundle.Bundle{
-			Server:            res.ServerEndpoint,
-			PAT:               res.PATPlaintext,
-			CACertPEM:         res.ProjectCAPEM,
-			ProjectID:         res.ProjectID,
-			BaselinePluginIDs: res.BaselinePluginIDs,
+			Server:    res.ServerEndpoint,
+			PAT:       res.PATPlaintext,
+			CACertPEM: res.ProjectCAPEM,
+			ProjectID: res.ProjectID,
 		})
 		if err != nil {
 			log.Error("distributor: encode install bundle: %s", err)
@@ -381,11 +380,6 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string, fo
 		"AGENT_HOST=" + shellQuote(host),
 		"AGENT_PORT=" + shellQuote(port),
 		"AGENT_TOKEN=" + shellQuote(r.PATPlaintext),
-		// Comma-separated list rendered into --baseline-plugins below.
-		// Empty string is the safe default: the agent boots with only
-		// its mandatory core plugin (sys-info) and operators add
-		// other capabilities later via the per-agent plugin REST.
-		"AGENT_BASELINE_PLUGINS=" + shellQuote(strings.Join(r.BaselinePluginIDs, ",")),
 	}
 	if r.ProjectCAPEM != "" {
 		// base64 so the PEM's literal newlines survive the shell
@@ -478,10 +472,7 @@ func renderInstallScript(r *enrollment.ConsumeResult, distributorHost string, fo
 		"download_with_fallback "+base+"/v1/artifacts/\"$OS\"/\"$ARCH\"/latest \"$BIN\"",
 		"chmod +x \"$BIN\"",
 		// Single --server flag carries host:port, token stays positional.
-		// --baseline-plugins is always rendered (even when empty) so
-		// the agent's first-boot logs show the operator decision
-		// explicitly rather than relying on the absence of a flag.
-		"exec \"$BIN\" --server \"$AGENT_HOST:$AGENT_PORT\" --baseline-plugins \"$AGENT_BASELINE_PLUGINS\" \"$AGENT_TOKEN\"",
+		"exec \"$BIN\" --server \"$AGENT_HOST:$AGENT_PORT\" \"$AGENT_TOKEN\"",
 	)
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -520,7 +511,6 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string,
 		"$AgentHost = " + psQuote(host),
 		"$AgentPort = " + psQuote(port),
 		"$AgentToken = " + psQuote(r.PATPlaintext),
-		"$AgentBaselinePlugins = " + psQuote(strings.Join(r.BaselinePluginIDs, ",")),
 		"$DistBase  = " + psQuote(base),
 	}
 	if forceInsecureDownload {
@@ -608,9 +598,7 @@ func renderInstallScriptPS1(r *enrollment.ConsumeResult, distributorHost string,
 		"}",
 		"if (-not $DownloadOk) { Write-Error 'platypus: no working downloader on this Windows host'; exit 1 }",
 		// Single --server flag carries host:port, token stays positional.
-		// --baseline-plugins is always rendered so the operator-chosen
-		// system-plugin allowlist is part of the audited command line.
-		"& $Bin --server \"${AgentHost}:${AgentPort}\" --baseline-plugins $AgentBaselinePlugins $AgentToken",
+		"& $Bin --server \"${AgentHost}:${AgentPort}\" $AgentToken",
 	)
 	return strings.Join(lines, "\r\n") + "\r\n"
 }

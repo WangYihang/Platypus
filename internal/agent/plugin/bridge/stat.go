@@ -17,7 +17,7 @@ import (
 func Stat(reg *plugin.Registry) func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse {
 	return func(ctx context.Context, req *v2pb.StatRequest) *v2pb.StatResponse {
 		var jsonResp statJSONResponse
-		pluginErr, err := invokeJSONFallback(ctx, reg, listDirPluginIDs, "stat",
+		pluginErr, err := invokeJSON(ctx, reg, listDirPluginID, "stat",
 			statJSONRequest{Path: req.GetPath()}, &jsonResp)
 		if err != nil {
 			return &v2pb.StatResponse{Error: "bridge: " + err.Error()}

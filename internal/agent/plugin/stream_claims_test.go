@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
-	"github.com/WangYihang/Platypus/internal/agent/plugin/system"
 	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -75,26 +74,16 @@ func TestStream_PluginStreamRoutesToWasmDispatcher(t *testing.T) {
 	}
 }
 
-// freshRegistryWithSysPlugins is the local shared fixture mirroring
-// bridge_test.go's helper (kept independent because the bridge tests
-// live in a different package). System bundles install with their
-// embedded set; nothing in the embed FS post-Phase-B claims a
-// per-stream type any more, so DispatchStream returns (false, nil)
-// for every legacy stream type. The two tests above use
-// AGENT_UPGRADE / PLUGIN_STREAM to exercise the surviving codepaths.
+// freshRegistryWithSysPlugins is the local shared fixture: an empty
+// Registry rooted at a temp dir. Both tests above only exercise the
+// dispatcher's claim-table / type-routing logic, which doesn't need
+// any plugins installed — the registry just has to exist.
 func freshRegistryWithSysPlugins(t *testing.T) *plugin.Registry {
 	t.Helper()
 	root := t.TempDir()
 	reg, err := plugin.New(plugin.Options{Paths: plugin.NewPaths(root)})
 	if err != nil {
 		t.Fatalf("registry: %v", err)
-	}
-	embFS, err := system.EmbeddedFS()
-	if err != nil {
-		t.Fatalf("EmbeddedFS: %v", err)
-	}
-	if r := system.EnsureInstalled(context.Background(), reg, embFS, system.EnsureOptions{AllowAll: true}); len(r.Failed) > 0 {
-		t.Fatalf("system bootstrap failures: %+v", r.Failed)
 	}
 	return reg
 }

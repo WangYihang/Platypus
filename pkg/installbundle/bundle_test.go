@@ -81,54 +81,6 @@ func TestDecode_ForwardCompatGuard(t *testing.T) {
 	}
 }
 
-// TestDecode_AcceptsV1Bundles: encoder is now v=2 but the decoder
-// must still accept v=1 bundles produced by older servers — the
-// schema bump is purely additive (BaselinePluginIDs default-nil).
-func TestDecode_AcceptsV1Bundles(t *testing.T) {
-	wire := "pinst_" + base64Encode(`{"v":1,"server":"h:1","pat":"plt_x.y","ca_pem":"---","project_id":"p1"}`)
-	got, err := installbundle.Decode(wire)
-	if err != nil {
-		t.Fatalf("Decode v1: %v", err)
-	}
-	if got.Schema != 1 {
-		t.Fatalf("Schema = %d; want 1", got.Schema)
-	}
-	if got.BaselinePluginIDs != nil {
-		t.Fatalf("v1 BaselinePluginIDs should be nil, got %v", got.BaselinePluginIDs)
-	}
-	if got.Server != "h:1" || got.PAT != "plt_x.y" {
-		t.Fatalf("v1 round-trip mismatch: %+v", *got)
-	}
-}
-
-// TestRoundTrip_BaselinePluginIDs: schema-v2 bundles preserve the
-// allowlist. The list flows from server-side install token through
-// the encoded bundle into the agent's first-boot path; any drop
-// here would silently re-enable the unrestricted boot mode.
-func TestRoundTrip_BaselinePluginIDs(t *testing.T) {
-	want := installbundle.Bundle{
-		Server:            "h:1",
-		PAT:               "plt_a.b",
-		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
-	}
-	wire, err := installbundle.Encode(want)
-	if err != nil {
-		t.Fatalf("Encode: %v", err)
-	}
-	got, err := installbundle.Decode(wire)
-	if err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-	if got.Schema != installbundle.CurrentSchema {
-		t.Fatalf("Schema = %d; want %d", got.Schema, installbundle.CurrentSchema)
-	}
-	if len(got.BaselinePluginIDs) != 2 ||
-		got.BaselinePluginIDs[0] != "com.platypus.sys-info" ||
-		got.BaselinePluginIDs[1] != "com.platypus.sys-listdir" {
-		t.Fatalf("BaselinePluginIDs = %v", got.BaselinePluginIDs)
-	}
-}
-
 // TestLooks: prefix-only check.
 func TestLooks(t *testing.T) {
 	if !installbundle.Looks("pinst_abc") {
