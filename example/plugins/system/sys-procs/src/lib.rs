@@ -30,6 +30,7 @@ use std::collections::HashMap;
 const PROC_LIST_CAP: u32 = 500;
 const PAGE_SIZE: u64 = 4096; // x86_64 / arm64 default; 16KiB hosts will under-report
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_fs_read(path: String) -> Json<Envelope>;
@@ -93,6 +94,7 @@ struct ProcessListResponse {
     error: String,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn process_list(req: Json<ProcessListRequest>) -> FnResult<String> {
     let pids = list_pids();
@@ -132,6 +134,7 @@ pub fn process_list(req: Json<ProcessListRequest>) -> FnResult<String> {
 
 // list_pids walks /proc and returns each numeric subdir name as u32.
 // Sorted ascending so the post-sort step has a stable input order.
+#[cfg(target_arch = "wasm32")]
 fn list_pids() -> Vec<u32> {
     let env: Envelope = match unsafe { host_fs_listdir("/proc".to_string()) } {
         Ok(j) => j.0,
@@ -153,6 +156,7 @@ fn list_pids() -> Vec<u32> {
 // read_one_process pulls /proc/<pid>/stat + /status + /cmdline in
 // one shot. None when the process disappeared between listdir and
 // the per-pid reads (the common race that all /proc walkers hit).
+#[cfg(target_arch = "wasm32")]
 fn read_one_process(pid: u32, user_map: &HashMap<u32, String>) -> Option<ProcessInfo> {
     // /proc/<pid>/stat: space-delimited fields, but field 2 (the
     // command name) is wrapped in parens and can itself contain
@@ -230,6 +234,7 @@ fn read_one_process(pid: u32, user_map: &HashMap<u32, String>) -> Option<Process
 // inner read_one_process loop). Best-effort — a missing /etc/passwd
 // (containers without a real userdb) leaves user fields as numeric
 // uid strings.
+#[cfg(target_arch = "wasm32")]
 fn read_passwd_map() -> HashMap<u32, String> {
     let mut out = HashMap::new();
     let s = match read_string("/etc/passwd") {
@@ -248,10 +253,187 @@ fn read_passwd_map() -> HashMap<u32, String> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 fn read_string(path: &str) -> Option<String> {
     let env: Envelope = unsafe { host_fs_read(path.to_string()).ok()?.0 };
     if !env.ok {
         return None;
     }
     env.data.as_str().map(|s| s.to_string())
+}
+
+// ============================================================
+// Pure /proc parsers (testable on host)
+// ============================================================
+
+// ProcStat carries the four fields we actually use from /proc/<pid>/stat:
+// the pid (which proc(5) repeats so we can validate), the command name
+// (extracted from between the matched parens — may contain spaces +
+// embedded parens), the state character, and the ppid.
+#[derive(Default, Debug, PartialEq, Eq)]
+pub(crate) struct ProcStat {
+    pub pid: u32,
+    pub comm: String,
+    pub state: String,
+    pub ppid: u32,
+}
+
+// parse_proc_stat splits a /proc/<pid>/stat content string. The format
+// is documented in proc(5):
+//
+//   <pid> (<comm>) <state> <ppid> <pgrp> <session> ...
+//
+// `<comm>` is enclosed in literal parens AND can itself contain
+// parens or spaces (e.g. "(my (cool) proc)"), so we anchor on the
+// FIRST '(' and the LAST ')' to extract it cleanly.
+//
+// Returns None when the format isn't recognisable. A return of None
+// means "fall through to the missing-process path" — never panic.
+pub(crate) fn parse_proc_stat(content: &str) -> Option<ProcStat> {
+    let lparen = content.find('(')?;
+    let rparen = content.rfind(')')?;
+    if rparen < lparen {
+        return None;
+    }
+    let pid = content[..lparen].trim().parse::<u32>().ok()?;
+    let comm = content[lparen + 1..rparen].to_string();
+    let after = content[rparen + 1..].trim();
+    let mut parts = after.split_whitespace();
+    let state = parts.next().unwrap_or("?").to_string();
+    let ppid = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    Some(ProcStat { pid, comm, state, ppid })
+}
+
+// parse_proc_status pulls Threads: + the real Uid out of
+// /proc/<pid>/status. The "Uid:" line is "<real> <eff> <saved> <fs>";
+// we only use the first (real) uid. Missing fields fall through to
+// (0, None).
+pub(crate) fn parse_proc_status(content: &str) -> (u32, Option<u32>) {
+    let mut threads: u32 = 0;
+    let mut uid: Option<u32> = None;
+    for line in content.lines() {
+        if let Some(rest) = line.strip_prefix("Threads:") {
+            threads = rest.trim().parse().unwrap_or(0);
+        } else if let Some(rest) = line.strip_prefix("Uid:") {
+            uid = rest.split_whitespace().next().and_then(|s| s.parse().ok());
+        }
+    }
+    (threads, uid)
+}
+
+// parse_passwd_line returns (uid, username) for a single /etc/passwd
+// row. Lines look like "<name>:<x>:<uid>:<gid>:..."; missing or
+// malformed numeric uid → None.
+pub(crate) fn parse_passwd_line(line: &str) -> Option<(u32, String)> {
+    let mut parts = line.split(':');
+    let name = parts.next()?.to_string();
+    let _x = parts.next()?;
+    let uid_str = parts.next()?;
+    let uid = uid_str.parse::<u32>().ok()?;
+    Some((uid, name))
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_proc_stat -------------------------------------
+
+    #[test]
+    fn parse_proc_stat_basic() {
+        let line = "1234 (bash) S 1000 1234 1234 0 -1 4194304 ...";
+        let got = parse_proc_stat(line).unwrap();
+        assert_eq!(got.pid, 1234);
+        assert_eq!(got.comm, "bash");
+        assert_eq!(got.state, "S");
+        assert_eq!(got.ppid, 1000);
+    }
+
+    #[test]
+    fn parse_proc_stat_comm_with_parens_and_spaces() {
+        // proc(5) allows the command to contain parens/spaces.
+        let line = "42 (my (weird) proc) R 1 ...";
+        let got = parse_proc_stat(line).unwrap();
+        assert_eq!(got.pid, 42);
+        // Anchored on first '(' + last ')', so the inner parens stay.
+        assert_eq!(got.comm, "my (weird) proc");
+        assert_eq!(got.state, "R");
+        assert_eq!(got.ppid, 1);
+    }
+
+    #[test]
+    fn parse_proc_stat_malformed_returns_none() {
+        assert!(parse_proc_stat("no parens here").is_none());
+        // pid not numeric → None
+        assert!(parse_proc_stat("abc (bash) S 1").is_none());
+    }
+
+    #[test]
+    fn parse_proc_stat_missing_after_paren_defaults() {
+        let got = parse_proc_stat("1 (init)").unwrap();
+        assert_eq!(got.state, "?");
+        assert_eq!(got.ppid, 0);
+    }
+
+    // ---- parse_proc_status -----------------------------------
+
+    #[test]
+    fn parse_proc_status_threads_and_uid() {
+        let s = "\
+Name:   bash
+Uid:    1000    1000    1000    1000
+Gid:    1000    1000    1000    1000
+Threads:        4
+";
+        let (threads, uid) = parse_proc_status(s);
+        assert_eq!(threads, 4);
+        assert_eq!(uid, Some(1000));
+    }
+
+    #[test]
+    fn parse_proc_status_missing_threads() {
+        let s = "Uid: 0 0 0 0\n";
+        let (threads, uid) = parse_proc_status(s);
+        assert_eq!(threads, 0);
+        assert_eq!(uid, Some(0));
+    }
+
+    #[test]
+    fn parse_proc_status_missing_uid_returns_none() {
+        let s = "Name: foo\nThreads: 1\n";
+        let (threads, uid) = parse_proc_status(s);
+        assert_eq!(threads, 1);
+        assert_eq!(uid, None);
+    }
+
+    // ---- parse_passwd_line -----------------------------------
+
+    #[test]
+    fn parse_passwd_line_typical() {
+        let line = "alice:x:1000:1000:Alice,,,:/home/alice:/bin/bash";
+        let (uid, name) = parse_passwd_line(line).unwrap();
+        assert_eq!(uid, 1000);
+        assert_eq!(name, "alice");
+    }
+
+    #[test]
+    fn parse_passwd_line_root() {
+        let (uid, name) = parse_passwd_line("root:x:0:0:root:/root:/bin/bash").unwrap();
+        assert_eq!(uid, 0);
+        assert_eq!(name, "root");
+    }
+
+    #[test]
+    fn parse_passwd_line_too_few_fields() {
+        assert!(parse_passwd_line("alice:x").is_none());
+    }
+
+    #[test]
+    fn parse_passwd_line_non_numeric_uid() {
+        assert!(parse_passwd_line("alice:x:notanumber:1000::/home/alice:/bin/bash").is_none());
+    }
 }
