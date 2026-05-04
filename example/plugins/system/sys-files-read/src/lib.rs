@@ -33,7 +33,11 @@ use std::io::Write;
 //
 // Single block declaring every host fn any of the five plugin
 // methods consults. Per-method modules call into the same set, so
-// this stays in lib.rs scope.
+// this stays in lib.rs scope. Gated to wasm32 so `cargo test` on the
+// host can still compile the pure helpers below (varint, tar, proto
+// encoding) and exercise them in #[cfg(test)] units — the host has
+// no `extism:host/env` to link against.
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_fs_listdir(path: String) -> Json<Envelope>;
@@ -86,6 +90,7 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
     Err(Error::msg("truncated varint"))
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_frame(body: &[u8]) -> Result<(), Error> {
     let env: Envelope = unsafe { host_link_write_frame(body.to_vec())?.0 };
     if !env.ok {
@@ -152,6 +157,7 @@ struct ReadRangeResp {
     mode: u32,
 }
 
+#[cfg(target_arch = "wasm32")]
 fn call_stat_full(path: &str) -> Option<StatRespFull> {
     let env: Envelope = unsafe { host_fs_stat(path.to_string()).ok()?.0 };
     if !env.ok {
@@ -160,6 +166,7 @@ fn call_stat_full(path: &str) -> Option<StatRespFull> {
     serde_json::from_value(env.data).ok()
 }
 
+#[cfg(target_arch = "wasm32")]
 fn call_listdir_full(path: &str) -> Option<Vec<ListEntryFull>> {
     let env: Envelope = unsafe { host_fs_listdir(path.to_string()).ok()?.0 };
     if !env.ok {
@@ -168,6 +175,7 @@ fn call_listdir_full(path: &str) -> Option<Vec<ListEntryFull>> {
     serde_json::from_value(env.data).ok()
 }
 
+#[cfg(target_arch = "wasm32")]
 fn call_read_range(path: &str, offset: i64, length: i64) -> Envelope {
     let args = ReadRangeArgs {
         path: path.to_string(),
@@ -239,6 +247,7 @@ pub struct StatResponse {
     pub error: String,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn list_dir(req: Json<ListDirRequest>) -> FnResult<Json<ListDirResponse>> {
     let env: Envelope = unsafe { host_fs_listdir(req.0.path.clone())?.0 };
@@ -276,6 +285,7 @@ pub fn list_dir(req: Json<ListDirRequest>) -> FnResult<Json<ListDirResponse>> {
     }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn stat(req: Json<StatRequest>) -> FnResult<Json<StatResponse>> {
     let env: Envelope = unsafe { host_fs_stat(req.0.path.clone())?.0 };
@@ -316,6 +326,7 @@ pub fn stat(req: Json<StatRequest>) -> FnResult<Json<StatResponse>> {
 
 const FILE_CHUNK_SIZE: i64 = 256 * 1024;
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn read(input: Vec<u8>) -> FnResult<()> {
     let req = match parse_file_read_request(&input) {
@@ -428,6 +439,7 @@ fn parse_file_read_request(buf: &[u8]) -> Result<FileReadRequestParsed, Error> {
     Ok(req)
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_read_header(size: i64, mode: u32, error: &str) -> Result<(), Error> {
     let mut buf = Vec::with_capacity(32);
     if size != 0 {
@@ -449,6 +461,7 @@ fn write_read_header(size: i64, mode: u32, error: &str) -> Result<(), Error> {
 // FileChunk frame writer shared between `read` and `archive`. The
 // proto schema is identical (data=1:bytes, eof=2:bool, error=3:string,
 // source_bytes_so_far=4:int64).
+#[cfg(target_arch = "wasm32")]
 fn write_file_chunk(data: &[u8], eof: bool, error: &str, source_bytes_so_far: i64) -> Result<(), Error> {
     let mut buf = Vec::with_capacity(data.len() + 32);
     if !data.is_empty() {
@@ -494,6 +507,7 @@ struct ScanRequest {
     follow_symlinks: bool,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn scan(input: Vec<u8>) -> FnResult<()> {
     let req = parse_scan_request(&input);
@@ -527,6 +541,7 @@ pub fn scan(input: Vec<u8>) -> FnResult<()> {
 // no stack-overflow protection beyond the linear memory cap, so a
 // recursive impl on an adversarially-deep tree could OOM. Iterative
 // + a Vec<String> queue stays safe.
+#[cfg(target_arch = "wasm32")]
 fn scan_walk(root: &str, counts: &mut ScanCounts) {
     let mut stack: Vec<String> = vec![root.to_string()];
     while let Some(dir) = stack.pop() {
@@ -605,6 +620,7 @@ fn parse_scan_request(buf: &[u8]) -> ScanRequest {
     req
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_scan_response(file_count: i64, dir_count: i64, total_bytes: i64, error: &str) -> Result<(), Error> {
     let mut buf = Vec::with_capacity(48);
     if file_count != 0 {
@@ -652,6 +668,7 @@ struct FrameBuffer {
     failed: Option<String>,
 }
 
+#[cfg(target_arch = "wasm32")]
 impl FrameBuffer {
     fn new() -> Self {
         Self {
@@ -682,6 +699,7 @@ impl FrameBuffer {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl Write for FrameBuffer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self.push_bytes(buf) {
@@ -694,6 +712,7 @@ impl Write for FrameBuffer {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn archive(input: Vec<u8>) -> FnResult<()> {
     let req = parse_archive_request(&input);
@@ -767,6 +786,7 @@ fn clamp_gz_level(req_level: i32) -> u32 {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_tar<W: Write>(paths: &[String], out: &mut W) -> Result<(), Error> {
     for root in paths {
         let stat = match call_stat_full(root) {
@@ -787,6 +807,7 @@ fn write_tar<W: Write>(paths: &[String], out: &mut W) -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn walk_tar_dir<W: Write>(out: &mut W, abs_dir: &str, name_prefix: &str) -> Result<(), Error> {
     let mut stack: Vec<(String, String)> = vec![(abs_dir.to_string(), name_prefix.to_string())];
     while let Some((cur_abs, cur_prefix)) = stack.pop() {
@@ -844,6 +865,7 @@ fn emit_tar_dir<W: Write>(out: &mut W, name: &str, stat: &StatRespFull) -> Resul
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn emit_tar_file<W: Write>(out: &mut W, abs_path: &str, name: &str, stat: &StatRespFull) -> Result<(), Error> {
     let mut hdr = TarHeader::default();
     hdr.set_name(name);
@@ -1026,6 +1048,7 @@ fn parse_archive_request(buf: &[u8]) -> ArchiveRequest {
     req
 }
 
+#[cfg(target_arch = "wasm32")]
 fn write_archive_header(error: &str) -> Result<(), Error> {
     let mut buf = Vec::with_capacity(error.len() + 8);
     if !error.is_empty() {
@@ -1034,4 +1057,262 @@ fn write_archive_header(error: &str) -> Result<(), Error> {
         buf.extend_from_slice(error.as_bytes());
     }
     write_frame(&buf)
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// These exercise the proto-wire helpers, tar header encoder, path
+// utilities, and request parsers — every function whose behaviour
+// can be observed without crossing the wasm boundary. The wasm-only
+// glue (host_fn declarations, plugin_fn entries, frame writers) is
+// covered end-to-end by internal/agent/plugin/files_read_integration_test.go.
+//
+// Run with `cargo test --lib` from this crate's directory. Tests are
+// compiled for the host triple, so the #[cfg(target_arch="wasm32")]
+// glue above is excluded automatically.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- varint encode / decode round-trip --------------------
+
+    #[test]
+    fn varint_zero_one_byte() {
+        let mut buf = Vec::new();
+        write_varint(&mut buf, 0);
+        assert_eq!(buf, vec![0x00]);
+        let (v, n) = read_varint(&buf).unwrap();
+        assert_eq!((v, n), (0, 1));
+    }
+
+    #[test]
+    fn varint_127_one_byte_boundary() {
+        let mut buf = Vec::new();
+        write_varint(&mut buf, 127);
+        assert_eq!(buf, vec![0x7f]);
+    }
+
+    #[test]
+    fn varint_128_two_bytes() {
+        let mut buf = Vec::new();
+        write_varint(&mut buf, 128);
+        // 128 = 0b1000_0000 → low 7 bits = 0, continuation = 1
+        // upper 7 bits = 1
+        assert_eq!(buf, vec![0x80, 0x01]);
+        let (v, n) = read_varint(&buf).unwrap();
+        assert_eq!((v, n), (128, 2));
+    }
+
+    #[test]
+    fn varint_round_trip_powers_of_two() {
+        for shift in 0..63 {
+            let n: u64 = 1 << shift;
+            let mut buf = Vec::new();
+            write_varint(&mut buf, n);
+            let (got, _) = read_varint(&buf).unwrap();
+            assert_eq!(got, n, "round-trip 1<<{} failed", shift);
+        }
+    }
+
+    #[test]
+    fn read_varint_truncated_returns_err() {
+        // 0xFF has the continuation bit set but no follow-up byte.
+        assert!(read_varint(&[0xFF]).is_err());
+    }
+
+    #[test]
+    fn read_varint_overflow_after_64_bits() {
+        // Ten consecutive 0x80 bytes is the worst case — varints are
+        // capped at 10 bytes (9 * 7 + 1 = 64 bits). The 10th byte's
+        // continuation bit pushes shift past 64 and must error.
+        let bad = vec![0xFF; 11];
+        assert!(read_varint(&bad).is_err());
+    }
+
+    // ---- write_tag composes (field<<3)|wire_type --------------
+
+    #[test]
+    fn write_tag_packs_field_and_wire_type() {
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN); // (1<<3)|2 = 10 = 0x0a
+        assert_eq!(buf, vec![0x0a]);
+        buf.clear();
+        write_tag(&mut buf, 4, WIRE_VARINT); // (4<<3)|0 = 32 = 0x20
+        assert_eq!(buf, vec![0x20]);
+    }
+
+    // ---- parse_file_read_request ------------------------------
+
+    #[test]
+    fn parse_file_read_request_path_only() {
+        // {path: "/tmp/x"} encoded by hand: tag(1, LEN) varint(6) bytes
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 6);
+        buf.extend_from_slice(b"/tmp/x");
+        let req = parse_file_read_request(&buf).unwrap();
+        assert_eq!(req.path, "/tmp/x");
+        assert_eq!(req.offset, 0);
+        assert_eq!(req.length, 0);
+    }
+
+    #[test]
+    fn parse_file_read_request_path_offset_length() {
+        // {path: "f", offset: 100, length: 50}
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 1);
+        buf.push(b'f');
+        write_tag(&mut buf, 2, WIRE_VARINT);
+        write_varint(&mut buf, 100);
+        write_tag(&mut buf, 3, WIRE_VARINT);
+        write_varint(&mut buf, 50);
+        let req = parse_file_read_request(&buf).unwrap();
+        assert_eq!(req.path, "f");
+        assert_eq!(req.offset, 100);
+        assert_eq!(req.length, 50);
+    }
+
+    #[test]
+    fn parse_file_read_request_skips_unknown_fields() {
+        // unknown varint field (99) + path
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 99, WIRE_VARINT);
+        write_varint(&mut buf, 42);
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 1);
+        buf.push(b'g');
+        let req = parse_file_read_request(&buf).unwrap();
+        assert_eq!(req.path, "g");
+    }
+
+    #[test]
+    fn parse_file_read_request_truncated_string_errors() {
+        // Tag(1,LEN) + len(10) but only 3 bytes follow.
+        let mut buf = Vec::new();
+        write_tag(&mut buf, 1, WIRE_LEN);
+        write_varint(&mut buf, 10);
+        buf.extend_from_slice(b"abc");
+        assert!(parse_file_read_request(&buf).is_err());
+    }
+
+    // ---- parse_archive_request --------------------------------
+
+    #[test]
+    fn parse_archive_request_paths_and_format() {
+        // ArchiveRequest{paths: ["/a","/b"], format: 2 (TAR_GZ)}
+        let mut buf = Vec::new();
+        for p in ["/a", "/b"] {
+            write_tag(&mut buf, 1, WIRE_LEN);
+            write_varint(&mut buf, p.len() as u64);
+            buf.extend_from_slice(p.as_bytes());
+        }
+        write_tag(&mut buf, 2, WIRE_VARINT);
+        write_varint(&mut buf, ARCHIVE_FORMAT_TAR_GZ as u64);
+        let req = parse_archive_request(&buf);
+        assert_eq!(req.paths, vec!["/a".to_string(), "/b".to_string()]);
+        assert_eq!(req.format, ARCHIVE_FORMAT_TAR_GZ);
+    }
+
+    // ---- TarHeader.encode ------------------------------------
+
+    #[test]
+    fn tar_header_basic_file() {
+        let mut hdr = TarHeader::default();
+        hdr.set_name("hello.txt");
+        hdr.size = 11;
+        hdr.mode = 0o644;
+        hdr.mtime = 1700000000;
+        hdr.typeflag = b'0';
+        let block = hdr.encode();
+        assert_eq!(block.len(), 512);
+        // Name in the first 100 bytes.
+        assert_eq!(&block[..9], b"hello.txt");
+        assert_eq!(block[9], 0u8); // null terminator
+        // ustar magic at 257..263.
+        assert_eq!(&block[257..263], b"ustar\0");
+        assert_eq!(&block[263..265], b"00");
+        // Typeflag at 156.
+        assert_eq!(block[156], b'0');
+    }
+
+    #[test]
+    fn tar_header_directory_typeflag() {
+        let mut hdr = TarHeader::default();
+        hdr.set_name("dir/");
+        hdr.typeflag = b'5';
+        let block = hdr.encode();
+        assert_eq!(block[156], b'5');
+    }
+
+    #[test]
+    fn tar_header_truncates_long_name() {
+        let mut hdr = TarHeader::default();
+        let long_name: String = "x".repeat(150);
+        hdr.set_name(&long_name);
+        // set_name caps to 100 chars; encode's write_tar_field writes
+        // only dst.len() - 1 = 99 bytes into the 100-byte slot,
+        // leaving byte 99 as a null terminator.
+        let block = hdr.encode();
+        for (i, b) in block[..99].iter().enumerate() {
+            assert_eq!(*b, b'x', "byte {} = {}", i, b);
+        }
+        assert_eq!(block[99], 0u8, "byte 99 must be null terminator");
+    }
+
+    #[test]
+    fn tar_header_checksum_is_octal_string() {
+        let mut hdr = TarHeader::default();
+        hdr.set_name("f");
+        hdr.size = 5;
+        hdr.mode = 0o644;
+        hdr.typeflag = b'0';
+        let block = hdr.encode();
+        let chk = &block[148..156];
+        // Format: "NNNNNN\0 " — six octal digits, a NUL, a space.
+        assert_eq!(chk[6], 0u8);
+        assert_eq!(chk[7], b' ');
+        for b in &chk[..6] {
+            assert!(b.is_ascii_digit() && *b < b'8',
+                "checksum digit out of octal range: {}", b);
+        }
+    }
+
+    // ---- path_basename ---------------------------------------
+
+    #[test]
+    fn basename_drops_trailing_slash() {
+        assert_eq!(path_basename("/var/log/"), "log");
+        assert_eq!(path_basename("/var/log"), "log");
+        assert_eq!(path_basename("foo"), "foo");
+    }
+
+    #[test]
+    fn basename_root_returns_empty() {
+        // p = "/" → trim_end_matches('/') → "" → rsplit('/').next() → ""
+        assert_eq!(path_basename("/"), "");
+    }
+
+    // ---- clamp_gz_level --------------------------------------
+
+    #[test]
+    fn clamp_gz_level_default_when_zero() {
+        assert_eq!(clamp_gz_level(0), 6);
+        assert_eq!(clamp_gz_level(-3), 6);
+    }
+
+    #[test]
+    fn clamp_gz_level_caps_at_nine() {
+        assert_eq!(clamp_gz_level(9), 9);
+        assert_eq!(clamp_gz_level(50), 9);
+    }
+
+    #[test]
+    fn clamp_gz_level_passes_in_range() {
+        for level in 1..=8 {
+            assert_eq!(clamp_gz_level(level), level as u32);
+        }
+    }
 }

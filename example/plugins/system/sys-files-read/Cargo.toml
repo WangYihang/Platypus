@@ -16,7 +16,12 @@ publish = false
 
 [lib]
 name = "sys_files_read"
-crate-type = ["cdylib"]
+# cdylib for the wasm32 build (production); rlib so `cargo test` on
+# the host (linux/x86_64 etc.) compiles the pure modules + their
+# #[cfg(test)] blocks. The wasm-only entries (#[plugin_fn] /
+# extern "ExtismHost" blocks) are gated by cfg(target_arch="wasm32")
+# so the host build skips them.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 extism-pdk = "1.4"
