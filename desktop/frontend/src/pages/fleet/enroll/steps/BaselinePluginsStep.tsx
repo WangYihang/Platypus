@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import EmptyState from "../../../../components/EmptyState";
 import { palette, radius, space } from "../../../../layout/theme";
 import { capabilityMeta, sortCapabilities } from "../../../../lib/capabilities";
-import { searchPlugins } from "../../../../lib/api/marketplace";
+import { listSystemPlugins } from "../../../../lib/api/system_plugins";
 import { humanizeError } from "../../../../lib/humanizeError";
 
 interface Props {
@@ -18,22 +18,25 @@ interface Props {
 }
 
 // BaselinePluginsStep is the wizard's per-enrollment plugin picker.
-// Source of truth is the marketplace catalog, so an operator who
-// hasn't synced the catalog will see the empty state — that's the
-// honest UX, since installing without a catalog isn't possible.
+// Source of truth is the server's system-plugin catalog
+// (<data-dir>/system-plugins/), populated by the agent-publisher in
+// dev mode and seeded manually in production. We deliberately don't
+// fall back to the marketplace catalog: marketplace plugins are
+// signed by a different publisher key and run in the post-enroll
+// flow, never the install bundle.
 //
 // Contract:
 //   - Defaults to nothing selected. The requirements thread asked
 //     for "minimal default + operator opts in", so we never
-//     pre-select anything.
-//   - Selection is just a list of plugin IDs; capability authorisation
-//     happens on first install at the agent (the install URL carries
-//     the IDs forward, the agent applies the operator-confirmed
-//     granted_capabilities at first boot).
+//     pre-select anything (the agent's mandatory-core merge in
+//     cmd/platypus-agent picks up sys-info regardless).
+//   - Selection is just a list of plugin IDs; the install bundle
+//     carries them forward and the agent's allowlist filter applies
+//     at first boot.
 export default function BaselinePluginsStep({ selected, onChange }: Props) {
     const plugins = useQuery({
-        queryKey: ["enroll", "baseline-plugins-pool"],
-        queryFn: () => searchPlugins(""),
+        queryKey: ["enroll", "system-plugins-pool"],
+        queryFn: () => listSystemPlugins(),
         refetchOnWindowFocus: false,
     });
 
@@ -59,7 +62,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
         return (
             <div data-testid="enroll-wizard-baseline-plugins">
                 <EmptyState
-                    title="Couldn't load marketplace"
+                    title="Couldn't load system plugins"
                     description={humanizeError(plugins.error)}
                 />
             </div>
@@ -71,8 +74,8 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
         return (
             <div data-testid="enroll-wizard-baseline-plugins">
                 <EmptyState
-                    title="Marketplace catalog is empty"
-                    description="Sync the marketplace from /marketplace first to pick baseline plugins. The agent will boot with no plugins until you install some on the host page."
+                    title="No system plugins available"
+                    description="The server hasn't been seeded with system plugins yet. In dev, the agent-publisher sidecar populates this on the first `docker compose up`. In production, your operator needs to stage signed bundles under <data-dir>/system-plugins/."
                 />
             </div>
         );
@@ -111,7 +114,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                     }}
                 >
                     {list.map((p) => {
-                        const isSel = selected.includes(p.plugin_id);
+                        const isSel = selected.includes(p.id);
                         const caps = sortCapabilities(
                             p.capabilities.map((f) => ({ family: f })),
                         );
@@ -120,7 +123,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                         );
                         return (
                             <li
-                                key={p.plugin_id}
+                                key={p.id}
                                 style={{
                                     display: "flex",
                                     gap: space[2],
@@ -132,10 +135,10 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                                 }}
                             >
                                 <Checkbox
-                                    id={`baseline-${p.plugin_id}`}
+                                    id={`baseline-${p.id}`}
                                     aria-label={p.name}
                                     checked={isSel}
-                                    onCheckedChange={() => toggle(p.plugin_id)}
+                                    onCheckedChange={() => toggle(p.id)}
                                     className="mt-1"
                                 />
                                 <div
@@ -148,7 +151,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                                     }}
                                 >
                                     <Label
-                                        htmlFor={`baseline-${p.plugin_id}`}
+                                        htmlFor={`baseline-${p.id}`}
                                         className="text-sm font-medium cursor-pointer"
                                     >
                                         <span style={{ display: "flex", gap: space[2], alignItems: "center" }}>
@@ -175,7 +178,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                                             fontFamily: "monospace",
                                         }}
                                     >
-                                        {p.plugin_id}
+                                        {p.id}
                                     </span>
                                     {p.description && (
                                         <span

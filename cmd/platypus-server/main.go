@@ -451,6 +451,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1AccountPATRoutes(rest, accountPATH, rbac)
 	api.RegisterV1AdminRolesRoutes(rest, adminRolesH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
+	api.RegisterV1SystemPluginsRoutes(rest, api.NewSystemPluginsHandler(cfg.DataDir), rbac)
 	api.RegisterV2AgentEnrollRoute(rest, enrollV2H)
 	api.RegisterV2AgentLinkRoute(rest, agentLinkH)
 	api.RegisterV1AgentUpgradeRoutes(rest, api.NewAgentUpgradeHandler(agentLinkSvc), rbac)
