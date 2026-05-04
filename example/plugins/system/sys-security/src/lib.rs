@@ -20,6 +20,7 @@
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_fs_read(path: String) -> Json<Envelope>;
@@ -115,7 +116,11 @@ fn is_zero_i64(x: &i64) -> bool { *x == 0 }
 // Each check is a (id, category, title, description, runner). The
 // runner returns (findings_for_this_check, applicable). Applicable
 // = false skips the check (UI shows it dimmed); the response's
-// CheckResult status reflects this.
+// CheckResult status reflects this. Gated to wasm32 because the
+// runners (check_kernel_version, check_ssh_config) read /proc + /etc
+// via host_fs_read; the host build only compiles the pure
+// {kernel,sshd_config}_findings layer.
+#[cfg(target_arch = "wasm32")]
 struct Check {
     id: &'static str,
     category: &'static str,
@@ -124,6 +129,7 @@ struct Check {
     run: fn() -> (Vec<SecurityFinding>, bool),
 }
 
+#[cfg(target_arch = "wasm32")]
 const CHECKS: &[Check] = &[
     Check {
         id: "kernel.version",
@@ -143,6 +149,7 @@ const CHECKS: &[Check] = &[
 
 // ---- entry points -----------------------------------------------
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn list_security_checks(_: ()) -> FnResult<String> {
     let checks: Vec<AvailableCheck> = CHECKS
@@ -162,6 +169,7 @@ pub fn list_security_checks(_: ()) -> FnResult<String> {
     })?)
 }
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn security_scan(req: Json<ScanRequest>) -> FnResult<String> {
     let want = &req.0.check_ids;
@@ -199,31 +207,37 @@ pub fn security_scan(req: Json<ScanRequest>) -> FnResult<String> {
 
 // ---- check implementations --------------------------------------
 
+#[cfg(target_arch = "wasm32")]
 fn check_kernel_version() -> (Vec<SecurityFinding>, bool) {
     let raw = match read_string("/proc/sys/kernel/osrelease") {
         Some(s) => s.trim().to_string(),
         None => return (Vec::new(), false), // not on linux
     };
-    // Parse "5.15.0-1024-generic" → (5, 15)
-    let (major, minor) = parse_kernel_major_minor(&raw);
+    (kernel_findings(&raw), true)
+}
+
+// kernel_findings is the pure decision layer behind
+// check_kernel_version. Parses an osrelease string, decides whether
+// it predates the 5.10 LTS line, and emits a SecurityFinding when it
+// does. Extracted from check_kernel_version so it's testable on the
+// host without host_fs_read.
+fn kernel_findings(osrelease: &str) -> Vec<SecurityFinding> {
+    let (major, minor) = parse_kernel_major_minor(osrelease);
     let outdated = (major, minor) < (5, 10);
-    if outdated {
-        return (
-            vec![SecurityFinding {
-                id: "kernel.version.outdated".to_string(),
-                check_id: "kernel.version".to_string(),
-                category: "kernel".to_string(),
-                severity: "medium".to_string(),
-                title: format!("Kernel {} is older than 5.10", raw),
-                description: "Long-term-support kernel lines start at 5.10 (Mar 2021). Hosts on older kernels miss several years of CVE fixes.".to_string(),
-                evidence: format!("/proc/sys/kernel/osrelease = {}", raw),
-                remediation: "Upgrade to a distribution release that ships a 5.10+ kernel; reboot.".to_string(),
-                references: Vec::new(),
-            }],
-            true,
-        );
+    if !outdated {
+        return Vec::new();
     }
-    (Vec::new(), true)
+    vec![SecurityFinding {
+        id: "kernel.version.outdated".to_string(),
+        check_id: "kernel.version".to_string(),
+        category: "kernel".to_string(),
+        severity: "medium".to_string(),
+        title: format!("Kernel {} is older than 5.10", osrelease),
+        description: "Long-term-support kernel lines start at 5.10 (Mar 2021). Hosts on older kernels miss several years of CVE fixes.".to_string(),
+        evidence: format!("/proc/sys/kernel/osrelease = {}", osrelease),
+        remediation: "Upgrade to a distribution release that ships a 5.10+ kernel; reboot.".to_string(),
+        references: Vec::new(),
+    }]
 }
 
 fn parse_kernel_major_minor(s: &str) -> (u32, u32) {
@@ -233,11 +247,21 @@ fn parse_kernel_major_minor(s: &str) -> (u32, u32) {
     (major, minor)
 }
 
+#[cfg(target_arch = "wasm32")]
 fn check_ssh_config() -> (Vec<SecurityFinding>, bool) {
     let raw = match read_string("/etc/ssh/sshd_config") {
         Some(s) => s,
         None => return (Vec::new(), false), // sshd not installed / unreadable
     };
+    (sshd_config_findings(&raw), true)
+}
+
+// sshd_config_findings is the pure decision layer behind
+// check_ssh_config. Walks the lines of an sshd_config-format string,
+// strips comments + whitespace, and emits a SecurityFinding for each
+// risky directive (today: PermitRootLogin yes, PasswordAuthentication
+// yes). Extracted so it's testable without host_fs_read.
+fn sshd_config_findings(raw: &str) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
     for line in raw.lines() {
         // Strip comments + leading whitespace.
@@ -274,13 +298,156 @@ fn check_ssh_config() -> (Vec<SecurityFinding>, bool) {
             _ => {}
         }
     }
-    (findings, true)
+    findings
 }
 
+#[cfg(target_arch = "wasm32")]
 fn read_string(path: &str) -> Option<String> {
     let env: Envelope = unsafe { host_fs_read(path.to_string()).ok()?.0 };
     if !env.ok {
         return None;
     }
     env.data.as_str().map(|s| s.to_string())
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// `cargo test --lib` runs these on the host triple. The wasm-only
+// glue (host_fn declarations, plugin_fn entries, host_fs_read
+// readers) is excluded by cfg(target_arch="wasm32") gates above;
+// full end-to-end coverage of the wasm side lives in
+// internal/agent/plugin/sys_security_integration_test.go.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_kernel_major_minor ----------------------------
+
+    #[test]
+    fn parse_kernel_typical_distro_release() {
+        assert_eq!(parse_kernel_major_minor("5.15.0-1024-generic"), (5, 15));
+        assert_eq!(parse_kernel_major_minor("6.1.0-13-amd64"), (6, 1));
+        assert_eq!(parse_kernel_major_minor("4.19.0-25-cloud-amd64"), (4, 19));
+    }
+
+    #[test]
+    fn parse_kernel_bare_semver() {
+        assert_eq!(parse_kernel_major_minor("5.10.0"), (5, 10));
+    }
+
+    #[test]
+    fn parse_kernel_only_major_minor() {
+        assert_eq!(parse_kernel_major_minor("5.15"), (5, 15));
+    }
+
+    #[test]
+    fn parse_kernel_garbage_returns_zero() {
+        assert_eq!(parse_kernel_major_minor("not-a-version"), (0, 0));
+        assert_eq!(parse_kernel_major_minor(""), (0, 0));
+    }
+
+    // ---- kernel_findings -------------------------------------
+
+    #[test]
+    fn kernel_findings_modern_no_finding() {
+        // 5.10 is the boundary; 5.10+ is fine, 5.9 / 4.x are flagged.
+        assert!(kernel_findings("5.10.0").is_empty());
+        assert!(kernel_findings("5.15.0-1024-generic").is_empty());
+        assert!(kernel_findings("6.1.0").is_empty());
+    }
+
+    #[test]
+    fn kernel_findings_outdated_emits_one() {
+        let findings = kernel_findings("4.19.0-25-cloud-amd64");
+        assert_eq!(findings.len(), 1);
+        let f = &findings[0];
+        assert_eq!(f.id, "kernel.version.outdated");
+        assert_eq!(f.check_id, "kernel.version");
+        assert_eq!(f.severity, "medium");
+        assert!(f.evidence.contains("4.19.0"));
+    }
+
+    #[test]
+    fn kernel_findings_below_5_10() {
+        // 5.9 is below 5.10, also flagged.
+        let findings = kernel_findings("5.9.0-foo");
+        assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn kernel_findings_unparsable_treated_as_outdated() {
+        // Garbage parses to (0, 0), which is < (5, 10). The check
+        // chooses the safer "looks outdated" stance — false positive
+        // beats silently passing an unparsable kernel string.
+        assert_eq!(kernel_findings("garbage").len(), 1);
+    }
+
+    // ---- sshd_config_findings --------------------------------
+
+    #[test]
+    fn sshd_findings_clean_config_no_findings() {
+        let raw = "\
+# default config
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+";
+        assert!(sshd_config_findings(raw).is_empty());
+    }
+
+    #[test]
+    fn sshd_findings_permit_root_yes_high_severity() {
+        let raw = "PermitRootLogin yes\n";
+        let findings = sshd_config_findings(raw);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].id, "ssh.permit_root_login");
+        assert_eq!(findings[0].severity, "high");
+    }
+
+    #[test]
+    fn sshd_findings_password_auth_yes_medium_severity() {
+        let raw = "PasswordAuthentication yes\n";
+        let findings = sshd_config_findings(raw);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].id, "ssh.password_authentication");
+        assert_eq!(findings[0].severity, "medium");
+    }
+
+    #[test]
+    fn sshd_findings_both_risky_directives() {
+        let raw = "\
+PermitRootLogin yes
+PasswordAuthentication yes
+";
+        let findings = sshd_config_findings(raw);
+        assert_eq!(findings.len(), 2);
+    }
+
+    #[test]
+    fn sshd_findings_skips_comments_and_blanks() {
+        let raw = "\
+# this would be risky if uncommented:
+#PermitRootLogin yes
+
+  # indented comment with no risk
+
+PermitRootLogin no  # but this is fine
+";
+        // The trailing-comment line: split('#').next() → 'PermitRootLogin no  ',
+        // .trim() → 'PermitRootLogin no'. Key=PermitRootLogin val=no — no finding.
+        assert!(sshd_config_findings(raw).is_empty());
+    }
+
+    #[test]
+    fn sshd_findings_case_sensitive_match() {
+        // sshd treats keys case-insensitively, but our parser is
+        // case-sensitive on purpose: it only knows about the exact
+        // "PermitRootLogin" / "PasswordAuthentication" spellings the
+        // distros ship in the default config. A lowercase variant
+        // skips the finding — same posture as the legacy Go check.
+        let raw = "permitrootlogin yes\n";
+        assert!(sshd_config_findings(raw).is_empty());
+    }
 }
