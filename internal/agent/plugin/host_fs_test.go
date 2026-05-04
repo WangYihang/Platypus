@@ -91,3 +91,57 @@ func TestCheckFSReadPath(t *testing.T) {
 		t.Errorf("expected capability_denied, got %v", err)
 	}
 }
+
+// TestCheckFSReadPath_Glob covers the new path-glob support added in
+// D3. Mixed allowlists (some literal, some glob) work together.
+func TestCheckFSReadPath_Glob(t *testing.T) {
+	root := t.TempDir()
+	logs := filepath.Join(root, "logs")
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(logs, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hit := filepath.Join(logs, "app.log")
+	miss := filepath.Join(logs, "app.txt")
+	deep := filepath.Join(sub, "nested.log")
+	for _, f := range []string{hit, miss, deep} {
+		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name     string
+		patterns []string
+		path     string
+		ok       bool
+	}{
+		{"single-star single-level hit", []string{logs + "/*.log"}, hit, true},
+		{"single-star wrong ext", []string{logs + "/*.log"}, miss, false},
+		{"single-star does NOT cross /", []string{logs + "/*.log"}, deep, false},
+		{"double-star recurses", []string{logs + "/**/*.log"}, deep, true},
+		{"double-star recurses + flat", []string{logs + "/**/*.log"}, hit, true},
+		{"mixed: literal + glob, glob wins", []string{"/never/used", logs + "/*.log"}, hit, true},
+		{"mixed: literal first matches", []string{logs, "/never/*"}, deep, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pctx := &pluginCtx{manifest: &Manifest{
+				Capabilities: ManifestCapabilities{FSRead: &CapFSReadSpec{Paths: c.patterns}},
+			}}
+			_, err := pctx.checkFSReadPath(c.path)
+			if c.ok {
+				if err != nil {
+					t.Errorf("unexpected denial: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected denial, got allow")
+				}
+			}
+		})
+	}
+}

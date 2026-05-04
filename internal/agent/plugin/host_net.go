@@ -85,14 +85,11 @@ func (pctx *pluginCtx) hostNetDial(ctx context.Context, p *extism.CurrentPlugin,
 		returnEnvelope(p, stack, denied("net.dial (no manifest spec)"))
 		return
 	}
-	allowed := false
-	for _, t := range pctx.manifest.Capabilities.NetDial.Targets {
-		if t == "*" || t == req.Target {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
+	// matchAny accepts glob patterns (`*.example.com:22`,
+	// `10.0.0.?:443`) on top of the literal-or-`*` form. pathSep=0
+	// because targets are host:port pairs, not paths — `*` means any
+	// chars including `.` and `:`.
+	if !matchAny(pctx.manifest.Capabilities.NetDial.Targets, req.Target, 0) {
 		returnEnvelope(p, stack, denied("target_not_in_allowlist: "+req.Target))
 		return
 	}

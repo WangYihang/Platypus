@@ -56,14 +56,10 @@ func (pctx *pluginCtx) hostExec(ctx context.Context, p *extism.CurrentPlugin, st
 	// implicitly trusts via the agent build); the install-time
 	// capability dialog should call out a "*" entry prominently for
 	// third-party plugins so it doesn't get rubber-stamped.
-	allowed := false
-	for _, c := range pctx.manifest.Capabilities.Exec.Commands {
-		if c == "*" || c == req.Command {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
+	// matchAny extends the comparison from literal-or-`*` to glob
+	// (`/usr/bin/*`, `/bin/sh?` etc); pathSep='/' stops single `*`
+	// from descending into subdirectories.
+	if !matchAny(pctx.manifest.Capabilities.Exec.Commands, req.Command, '/') {
 		returnEnvelope(p, stack, denied("command_not_in_allowlist: "+req.Command))
 		return
 	}

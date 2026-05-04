@@ -293,6 +293,16 @@ func (pctx *pluginCtx) checkFSReadPath(path string) (string, error) {
 		resolved = clean
 	}
 	for _, allowed := range pctx.manifest.Capabilities.FSRead.Paths {
+		// Glob pattern (`*`, `**`, `?`): match the resolved path
+		// directly. EvalSymlinks doesn't apply (the pattern isn't a
+		// real path). pathSep='/' stops single `*` from crossing
+		// directory boundaries; `**` is the explicit "recurse" form.
+		if hasGlobMeta(allowed) {
+			if matchGlob(allowed, resolved, '/') {
+				return resolved, nil
+			}
+			continue
+		}
 		allowedClean, _ := filepath.EvalSymlinks(allowed)
 		if allowedClean == "" {
 			allowedClean = filepath.Clean(allowed)

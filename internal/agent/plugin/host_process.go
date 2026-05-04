@@ -116,14 +116,10 @@ func (pctx *pluginCtx) hostProcessSpawn(_ context.Context, p *extism.CurrentPlug
 		returnEnvelope(p, stack, denied("process (no manifest spec)"))
 		return
 	}
-	allowed := false
-	for _, c := range pctx.manifest.Capabilities.Process.Commands {
-		if c == "*" || c == req.Command {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
+	// matchAny accepts glob patterns (`/usr/bin/*`, `bash?`) on top of
+	// the literal-or-`*` form; pathSep='/' so `/usr/bin/*` doesn't
+	// reach `/usr/bin/sub/foo`.
+	if !matchAny(pctx.manifest.Capabilities.Process.Commands, req.Command, '/') {
 		returnEnvelope(p, stack, denied("command_not_in_allowlist: "+req.Command))
 		return
 	}
