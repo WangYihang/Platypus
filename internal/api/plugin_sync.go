@@ -63,9 +63,14 @@ func reconcileSystemPlugins(
 	if err != nil {
 		return fmt.Errorf("list installed: %w", err)
 	}
-	have := make(map[string]bool, len(installed))
+	// Track installed version per id so the reconciler upgrades in
+	// place when the staged version is newer than what the agent
+	// has. Same id, different version → re-run install: the agent's
+	// catalog hot-swap handles the in-place replace (see
+	// edge_cases_test.go: UpgradePathReplacesEarlierVersion).
+	haveVersion := make(map[string]string, len(installed))
 	for _, p := range installed {
-		have[p.GetId()] = true
+		haveVersion[p.GetId()] = p.GetVersion()
 	}
 
 	root := filepath.Join(systemBundleDir, systemPluginsDirName)
@@ -85,19 +90,23 @@ func reconcileSystemPlugins(
 	}
 
 	for _, id := range desired {
-		if have[id] {
-			continue
-		}
 		info, ok := latestByID[id]
 		if !ok {
 			log.Warn("plugin sync: %s not staged in <data_dir>/system-plugins/; agent will return plugin_not_installed", id)
 			continue
 		}
+		if cur, present := haveVersion[id]; present && cur == info.Version {
+			continue
+		}
+		action := "installed"
+		if cur, present := haveVersion[id]; present && cur != info.Version {
+			action = "upgraded from " + cur + " to"
+		}
 		if err := installOneViaMgmt(ctx, sess, agentID, info, pubkeyBytes, root); err != nil {
 			log.Warn("plugin sync: install %s@%s on %s: %v", id, info.Version, agentID, err)
 			continue
 		}
-		log.Info("plugin sync: installed %s@%s on %s", id, info.Version, agentID)
+		log.Info("plugin sync: %s %s@%s on %s", action, id, info.Version, agentID)
 	}
 	return nil
 }

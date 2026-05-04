@@ -20,8 +20,9 @@ import (
 // fakeSession captures every Open call and lets the test script the
 // agent-side responses for each. Avoids standing up yamux + WS.
 type fakeSession struct {
-	// installedIDs is the list returned for the first PluginMgmt:list.
-	installedIDs []string
+	// installedVersions is the {id: version} map returned for the
+	// first PluginMgmt:list. Empty version means "not installed".
+	installedVersions map[string]string
 	// installScript maps "plugin_id" → terminal phase to emit on the
 	// install stream. Missing entries default to PHASE_INSTALLED.
 	installScript map[string]v2pb.PluginInstallProgress_Phase
@@ -63,9 +64,9 @@ func (f *fakeSession) Open(t v2pb.StreamType, metadata []byte, correlationID str
 // reads from the server side via the returned ReadWriteCloser.
 func (f *fakeSession) serveList() io.ReadWriteCloser {
 	a, b := net.Pipe()
-	infos := make([]*v2pb.PluginInfo, 0, len(f.installedIDs))
-	for _, id := range f.installedIDs {
-		infos = append(infos, &v2pb.PluginInfo{Id: id, Enabled: true})
+	infos := make([]*v2pb.PluginInfo, 0, len(f.installedVersions))
+	for id, ver := range f.installedVersions {
+		infos = append(infos, &v2pb.PluginInfo{Id: id, Version: ver, Enabled: true})
 	}
 	resp := &v2pb.PluginMgmtResponse{
 		Result: &v2pb.PluginMgmtResponse_List{List: &v2pb.PluginListResponse{Plugins: infos}},
@@ -176,7 +177,7 @@ func TestReconcileSystemPlugins_MandatoryCoreOnly(t *testing.T) {
 	stagePublisherKey(t, root)
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
-	sess := &fakeSession{installedIDs: nil}
+	sess := &fakeSession{installedVersions: nil}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, dataDir); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestReconcileSystemPlugins_BaselinePicksPlusCore(t *testing.T) {
 	stageBundle(t, root, "com.platypus.sys-files-read", "1.0.0", []string{"fs.read"})
 	stageBundle(t, root, "com.platypus.sys-process", "1.0.0", []string{"exec", "process"})
 
-	sess := &fakeSession{installedIDs: nil}
+	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read", "com.platypus.sys-process"}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, dataDir); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -238,7 +239,7 @@ func TestReconcileSystemPlugins_AlreadyInstalledIsNoOp(t *testing.T) {
 	stagePublisherKey(t, root)
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
-	sess := &fakeSession{installedIDs: []string{"com.platypus.sys-info"}}
+	sess := &fakeSession{installedVersions: map[string]string{"com.platypus.sys-info": "2.0.0"}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
 		[]string{"com.platypus.sys-info"}, dataDir); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -249,6 +250,29 @@ func TestReconcileSystemPlugins_AlreadyInstalledIsNoOp(t *testing.T) {
 	}
 }
 
+func TestReconcileSystemPlugins_VersionMismatchTriggersUpgrade(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	// Stage v1.0.1 as the latest; agent claims to have v1.0.0.
+	stageBundle(t, root, "com.platypus.sys-info", "1.0.1", []string{"sysinfo"})
+
+	sess := &fakeSession{installedVersions: map[string]string{
+		"com.platypus.sys-info": "1.0.0",
+	}}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
+		[]string{"com.platypus.sys-info"}, dataDir); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	// list + install (the upgrade).
+	if len(sess.calls) != 2 {
+		t.Fatalf("calls = %+v; want list + install", sess.calls)
+	}
+	if sess.calls[1].op != "install" || sess.calls[1].pluginID != "com.platypus.sys-info" {
+		t.Errorf("second call = %+v; want install of sys-info", sess.calls[1])
+	}
+}
+
 func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) {
 	dataDir := t.TempDir()
 	root := filepath.Join(dataDir, "system-plugins")
@@ -256,7 +280,7 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 	// Stage only sys-info; baseline asks for one we don't have.
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
-	sess := &fakeSession{installedIDs: nil}
+	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read"} // not staged
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, dataDir); err != nil {
 		t.Fatalf("reconcile should not error on missing bundle entry: %v", err)

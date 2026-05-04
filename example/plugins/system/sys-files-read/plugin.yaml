@@ -1,7 +1,7 @@
 api_version: 1
 id: com.platypus.sys-files-read
 name: Filesystem read (system)
-version: 1.0.0
+version: 1.0.1
 author:
   name: Platypus
   email: dev@example.com
@@ -49,7 +49,15 @@ capabilities:
     paths: ["/"]
 
 resources:
-  max_memory_mb: 32
+  # Restored from the pre-merge sys-file-archive's 64 MB plus margin
+  # for the merge's wider working set (read + scan + archive share
+  # one wasm instance now). 32 MB was hitting OOM mid-stream on
+  # files / directories larger than ~4 MB because Rust's wasm
+  # allocator never returns pages — peak memory accumulates across
+  # the read-range loop's serde_json round-trips.
+  max_memory_mb: 128
+  # 10-minute cap matches the pre-merge sys-file-archive (an archive
+  # of a deep tree on a slow disk legitimately takes minutes).
   max_invocation_ms: 600000
 
 signature:
