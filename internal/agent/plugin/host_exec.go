@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os/exec"
@@ -82,11 +83,20 @@ func (pctx *pluginCtx) hostExec(ctx context.Context, p *extism.CurrentPlugin, st
 		}
 		cmd.Env = env
 	}
-	stdout, err := cmd.Output()
-	resp := execResponse{Stdout: string(stdout)}
+	// Capture stdout + stderr into separate buffers. The previous
+	// cmd.Output() form lost stderr on exit_code=0 because *only*
+	// ExitError carries the .Stderr fallback; a successful run with
+	// stderr writes (e.g. progress messages) silently dropped them.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	resp := execResponse{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+	}
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		resp.ExitCode = exitErr.ExitCode()
-		resp.Stderr = string(exitErr.Stderr)
 	} else if err != nil {
 		returnEnvelope(p, stack, failed("exec: "+err.Error()))
 		return
