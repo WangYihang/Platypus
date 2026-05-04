@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, HashMap};
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_exec(req: String) -> Json<Envelope>;
-    fn host_link_write_frame(bytes: Vec<u8>) -> Json<Envelope>;
+    fn host_stream_write(bytes: Vec<u8>) -> Json<Envelope>;
     fn host_process_spawn(spec: String) -> Json<Envelope>;
     fn host_process_relay(handle: String) -> Json<Envelope>;
     fn host_process_kill(handle: String) -> Json<Envelope>;
@@ -129,7 +129,7 @@ pub fn exec(req: Json<ExecRequest>) -> FnResult<Json<ExecResponse>> {
 // Flow:
 //   1. parse ProcessOpenRequest from input bytes
 //   2. host_process_spawn(spec_json) → {handle, pid}
-//   3. write ProcessOpenResponse via host_link_write_frame (or an
+//   3. write ProcessOpenResponse via host_stream_write (or an
 //      error response if the spawn fails)
 //   4. host_process_relay(handle) → blocks until the child exits;
 //      during the call the host pumps wire ↔ child PTY/pipes
@@ -209,9 +209,9 @@ fn write_open_response(pid: i64, error: &str) -> Result<(), Error> {
         write_varint(&mut buf, error.len() as u64);
         buf.extend_from_slice(error.as_bytes());
     }
-    let env: Envelope = unsafe { host_link_write_frame(buf)?.0 };
+    let env: Envelope = unsafe { host_stream_write(buf)?.0 };
     if !env.ok {
-        return Err(Error::msg(format!("host_link_write_frame: {}", env.error)));
+        return Err(Error::msg(format!("host_stream_write: {}", env.error)));
     }
     Ok(())
 }
