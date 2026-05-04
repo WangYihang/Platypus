@@ -9,22 +9,25 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// TestBundled_SysHostnameInstallsAndInvokes is the integration test
+// TestBundled_SysInfoInstallsAndInvokes is the integration test
 // that proves the production system-plugin bootstrap pipeline works
 // end-to-end against the real artefacts shipped in
 // internal/agent/plugin/system/embedded/.
 //
 // Specifically:
 //   - the embedded `publisher.pub` parses as a minisign pubkey
-//   - the bundled sys-hostname plugin's signature verifies against it
+//   - the bundled sys-info plugin's signature verifies against it
 //   - the auto-install path persists + hot-loads the plugin
-//   - calling the wasm export round-trips through host_sysinfo to
-//     return the host's hostname
+//   - calling the wasm export round-trips through host_uname /
+//     host_fs_read to return a populated SysInfoResponse (which
+//     covers what sys-hostname used to expose as a separate plugin)
 //
 // This is the closest thing in the test suite to "boot a real agent
 // and watch its system plugins come online" — short of spawning a
-// real agent process.
-func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
+// real agent process. We picked sys-info as the canary because it's
+// the mandatory-core plugin every agent installs regardless of the
+// operator's baseline allowlist.
+func TestBundled_SysInfoInstallsAndInvokes(t *testing.T) {
 	embFS, err := EmbeddedFS()
 	if err != nil {
 		t.Fatalf("EmbeddedFS: %v", err)
@@ -41,10 +44,7 @@ func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
 	if res.SetupError != nil {
 		t.Fatalf("setup err: %v", res.SetupError)
 	}
-	// At least one bundle must install (the sys-hostname one). Future
-	// iterations may add more system plugins; this assertion stays
-	// stable as long as sys-hostname is among them.
-	wantID := "com.platypus.sys-hostname"
+	wantID := "com.platypus.sys-info"
 	found := false
 	for _, b := range res.Installed {
 		if b.ID == wantID {
@@ -60,26 +60,20 @@ func TestBundled_SysHostnameInstallsAndInvokes(t *testing.T) {
 		t.Fatalf("expected %s v2.0.0 in catalog", wantID)
 	}
 
-	// Invoke. v2 returns {"hostname":"...","source":"/etc/hostname"}
-	// (or "/proc/sys/kernel/hostname" fallback). The source field
-	// records which filesystem path produced the value — useful in
-	// audit trails distinguishing canonical vs fallback reads.
+	// Invoke. SysInfoResponse carries the hostname field that
+	// sys-hostname used to surface as a standalone plugin —
+	// merging the two means hostname is now read in the same call
+	// that fetches kernel / mem / cpu / load / uptime.
 	resp := reg.Invoke(context.Background(), &v2pb.PluginCallRequest{
 		PluginId: wantID,
-		Method:   "hostname",
+		Method:   "sys_info",
 	})
 	if resp.GetError() != "" {
 		t.Fatalf("invoke err: %s", resp.GetError())
 	}
 	body := string(resp.GetPayload())
 	if !strings.Contains(body, `"hostname"`) {
-		t.Errorf("payload missing hostname field: %s", body)
+		t.Errorf("payload missing hostname field (sys-info should fold in what sys-hostname used to expose): %s", body)
 	}
-	// Source must reference one of the two filesystem paths the v2
-	// plugin tries; "host_sysinfo" (the v1 marker) means we're
-	// running an old bundle.
-	if !strings.Contains(body, `"source":"/`) {
-		t.Errorf("payload missing /-prefixed source field (v2 sources are filesystem paths): %s", body)
-	}
-	t.Logf("sys-hostname returned: %s", body)
+	t.Logf("sys-info returned: %s", body)
 }

@@ -39,7 +39,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Browse files, see processes, read system info. No mutations, no shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-hostname",
             "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
             "com.platypus.sys-file-read",
@@ -53,7 +52,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Everything in Read-only plus create / rename / delete files and tar+gz archives. No shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-hostname",
             "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
             "com.platypus.sys-file-read",
@@ -70,7 +68,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "File management + interactive shell sessions. Use for hosts you actively administer.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-hostname",
             "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
             "com.platypus.sys-file-read",
@@ -89,7 +86,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Read-only host inspection + the security scan + config audit plugins. Use for compliance / forensics roles.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-hostname",
             "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
             "com.platypus.sys-file-read",
@@ -105,7 +101,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Every system plugin the catalog ships. Equivalent to every checkbox below ticked. Higher trust surface — pick a tighter preset when the role allows it.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-hostname",
             "com.platypus.sys-listdir",
             "com.platypus.sys-procs",
             "com.platypus.sys-file-read",

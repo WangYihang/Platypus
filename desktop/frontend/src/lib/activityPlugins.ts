@@ -25,9 +25,10 @@ import type { Activity } from "../pages/host/ActivityBar";
 //     preview / download; sys-fs-write for create / rename / delete.
 //     We list all three because partial install produces a confusing
 //     state (e.g. browse but can't preview).
-//   · Info / Hardware — sys-info paints the overview cards; sys-hostname
-//     fills the alias. We don't list sys-info as required because
-//     mandatoryCorePluginIDs guarantees it; sys-hostname is opt-in.
+//   · Info / Hardware — sys-info paints the overview cards
+//     (including hostname; sys-hostname was folded into sys-info).
+//     We don't list sys-info as required here because
+//     mandatoryCorePluginIDs guarantees it on every boot.
 //   · Sessions — terminal sessions need sys-process-open.
 //   · Processes — needs sys-procs (the RPC catalogue) AND
 //     sys-process-open (open a shell from a process row).
