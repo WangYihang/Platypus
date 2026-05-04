@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 // ---------- host fn bindings ----------
 
+#[cfg(target_arch = "wasm32")]
 #[host_fn("platypus")]
 extern "ExtismHost" {
     fn host_uname() -> Json<Envelope>;
@@ -137,6 +138,7 @@ fn is_zero_f64(x: &f64) -> bool { *x == 0.0 }
 
 // ---------- entry point ----------
 
+#[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn sys_info(_: ()) -> FnResult<String> {
     let mut resp = SysInfoResponse::default();
@@ -180,20 +182,7 @@ pub fn sys_info(_: ()) -> FnResult<String> {
 
     // /etc/os-release: KEY=value lines, possibly quoted.
     if let Some(s) = read_string("/etc/os-release") {
-        let mut id = String::new();
-        let mut id_like = String::new();
-        let mut version_id = String::new();
-        for line in s.lines() {
-            if let Some((k, v)) = line.split_once('=') {
-                let v = v.trim_matches('"').to_string();
-                match k {
-                    "ID" => id = v,
-                    "ID_LIKE" => id_like = v,
-                    "VERSION_ID" => version_id = v,
-                    _ => {}
-                }
-            }
-        }
+        let (id, id_like, version_id) = parse_os_release(&s);
         resp.platform = id;
         resp.platform_family = id_like;
         resp.platform_version = version_id;
@@ -239,22 +228,15 @@ pub fn sys_info(_: ()) -> FnResult<String> {
 
     // /proc/uptime: "<uptime> <idle>" — both as float seconds.
     if let Some(s) = read_string("/proc/uptime") {
-        let uptime: f64 = s.split_whitespace().next()
-            .and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        resp.uptime_seconds = uptime as u64;
-        if uptime > 0.0 {
-            // boot_time_unix needs current time. We don't have a
-            // host_now function yet, so leave at 0; the server can
-            // compute now() - uptime if needed.
-        }
+        resp.uptime_seconds = parse_uptime(&s);
     }
 
     // /proc/loadavg: "1.0 1.0 1.0 ..."
     if let Some(s) = read_string("/proc/loadavg") {
-        let mut parts = s.split_whitespace();
-        resp.load1 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        resp.load5 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        resp.load15 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        let (l1, l5, l15) = parse_loadavg(&s);
+        resp.load1 = l1;
+        resp.load5 = l5;
+        resp.load15 = l15;
     }
 
     // /proc/cpuinfo: count "processor" occurrences (logical cores)
@@ -296,6 +278,7 @@ pub fn sys_info(_: ()) -> FnResult<String> {
 
 // ---------- /proc helpers ----------
 
+#[cfg(target_arch = "wasm32")]
 fn read_string(path: &str) -> Option<String> {
     let env: Envelope = unsafe { host_fs_read(path.to_string()).ok()?.0 };
     if !env.ok {
@@ -306,10 +289,12 @@ fn read_string(path: &str) -> Option<String> {
     env.data.as_str().map(|s| s.to_string())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn read_trim(path: &str) -> Option<String> {
     read_string(path).map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn list_dir(path: &str) -> Option<Vec<DirEntryJSON>> {
     let env: Envelope = unsafe { host_fs_listdir(path.to_string()).ok()?.0 };
     if !env.ok {
@@ -331,4 +316,160 @@ fn scan_kib(content: &str, key: &str) -> Option<u64> {
         }
     }
     None
+}
+
+// parse_os_release extracts (ID, ID_LIKE, VERSION_ID) from /etc/os-release
+// content. Lines look like `KEY=value` or `KEY="value"`. Missing keys
+// come back as empty strings — every distro uses a different subset.
+fn parse_os_release(content: &str) -> (String, String, String) {
+    let mut id = String::new();
+    let mut id_like = String::new();
+    let mut version_id = String::new();
+    for line in content.lines() {
+        if let Some((k, v)) = line.split_once('=') {
+            let v = v.trim_matches('"').to_string();
+            match k {
+                "ID" => id = v,
+                "ID_LIKE" => id_like = v,
+                "VERSION_ID" => version_id = v,
+                _ => {}
+            }
+        }
+    }
+    (id, id_like, version_id)
+}
+
+// parse_uptime returns the integer-second count from /proc/uptime
+// content ("<float-seconds> <idle-float-seconds>\n"). Malformed
+// input or empty file yields 0.
+fn parse_uptime(content: &str) -> u64 {
+    let secs: f64 = content
+        .split_whitespace()
+        .next()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.0);
+    if secs > 0.0 { secs as u64 } else { 0 }
+}
+
+// parse_loadavg returns (load1, load5, load15) from /proc/loadavg
+// content ("1.00 1.50 2.00 ...\n"). Missing or unparsable fields
+// fall through to 0.0.
+fn parse_loadavg(content: &str) -> (f64, f64, f64) {
+    let mut parts = content.split_whitespace();
+    let l1 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let l5 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let l15 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    (l1, l5, l15)
+}
+
+// ============================================================
+// Pure-function unit tests (host build, not wasm)
+// ============================================================
+//
+// /proc parsers can run on host fixtures — no host_fn needed. The
+// wasm-only top-level sys_info entry is exercised end-to-end by
+// internal/agent/plugin/sys_info_integration_test.go.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- scan_kib --------------------------------------------
+
+    #[test]
+    fn scan_kib_finds_key_and_converts_to_bytes() {
+        let meminfo = "MemTotal:       16336872 kB\nMemFree:         1048576 kB\n";
+        assert_eq!(scan_kib(meminfo, "MemTotal:"), Some(16336872 * 1024));
+        assert_eq!(scan_kib(meminfo, "MemFree:"), Some(1048576 * 1024));
+    }
+
+    #[test]
+    fn scan_kib_missing_key_returns_none() {
+        assert_eq!(scan_kib("MemTotal: 100 kB\n", "Missing:"), None);
+    }
+
+    #[test]
+    fn scan_kib_malformed_value_returns_none() {
+        assert_eq!(scan_kib("Key: notanumber kB\n", "Key:"), None);
+    }
+
+    // ---- parse_os_release ------------------------------------
+
+    #[test]
+    fn parse_os_release_ubuntu() {
+        let s = r#"NAME="Ubuntu"
+VERSION="22.04.3 LTS (Jammy Jellyfish)"
+ID=ubuntu
+ID_LIKE=debian
+PRETTY_NAME="Ubuntu 22.04.3 LTS"
+VERSION_ID="22.04"
+"#;
+        let (id, id_like, version_id) = parse_os_release(s);
+        assert_eq!(id, "ubuntu");
+        assert_eq!(id_like, "debian");
+        assert_eq!(version_id, "22.04");
+    }
+
+    #[test]
+    fn parse_os_release_alpine_no_id_like() {
+        let s = "NAME=\"Alpine Linux\"\nID=alpine\nVERSION_ID=3.18.4\n";
+        let (id, id_like, version_id) = parse_os_release(s);
+        assert_eq!(id, "alpine");
+        assert_eq!(id_like, ""); // Alpine doesn't ship ID_LIKE
+        assert_eq!(version_id, "3.18.4");
+    }
+
+    #[test]
+    fn parse_os_release_handles_unquoted_values() {
+        // Some distros emit ID without quotes; trim_matches('"') is a no-op then.
+        let s = "ID=arch\n";
+        let (id, _, _) = parse_os_release(s);
+        assert_eq!(id, "arch");
+    }
+
+    #[test]
+    fn parse_os_release_empty_input() {
+        let (id, id_like, version_id) = parse_os_release("");
+        assert_eq!(id, "");
+        assert_eq!(id_like, "");
+        assert_eq!(version_id, "");
+    }
+
+    // ---- parse_uptime ----------------------------------------
+
+    #[test]
+    fn parse_uptime_typical_format() {
+        assert_eq!(parse_uptime("3600.42 1234.56\n"), 3600);
+    }
+
+    #[test]
+    fn parse_uptime_empty_or_malformed() {
+        assert_eq!(parse_uptime(""), 0);
+        assert_eq!(parse_uptime("notanumber\n"), 0);
+    }
+
+    // ---- parse_loadavg ---------------------------------------
+
+    #[test]
+    fn parse_loadavg_three_values() {
+        let (l1, l5, l15) = parse_loadavg("0.20 0.30 0.40 1/123 4567\n");
+        assert!((l1 - 0.20).abs() < 0.001);
+        assert!((l5 - 0.30).abs() < 0.001);
+        assert!((l15 - 0.40).abs() < 0.001);
+    }
+
+    #[test]
+    fn parse_loadavg_missing_fields_default_zero() {
+        let (l1, l5, l15) = parse_loadavg("1.5\n");
+        assert!((l1 - 1.5).abs() < 0.001);
+        assert_eq!(l5, 0.0);
+        assert_eq!(l15, 0.0);
+    }
+
+    #[test]
+    fn parse_loadavg_empty_input() {
+        let (l1, l5, l15) = parse_loadavg("");
+        assert_eq!(l1, 0.0);
+        assert_eq!(l5, 0.0);
+        assert_eq!(l15, 0.0);
+    }
 }
