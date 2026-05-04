@@ -1,17 +1,17 @@
-package plugin
+package plugin_test
 
 import (
 	"context"
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -21,16 +21,8 @@ import (
 //   - TunnelPullResponse carries the resolved peer address
 //   - bytes pushed to the wire reach the echo server and bounce back
 func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
-	wasmPath := tunnelPullWasmPath()
-	wasm, err := os.ReadFile(wasmPath)
-	if err != nil {
-		t.Skipf("sys_tunnel_pull.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/sys-tunnel-pull/", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-tunnel-pull", "plugin.yaml"))
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0", "sys_tunnel_pull.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0")
 
 	// Spin up a tiny echo server on a free local port.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -49,38 +41,37 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 	}()
 
 	pluginRoot := t.TempDir()
-	paths := NewPaths(pluginRoot)
-	sk, pk, err := GenerateKeyPair()
+	paths := plugin.NewPaths(pluginRoot)
+	sk, pk, err := plugin.GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.PublishersDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.PublisherKeyFile(HumanKeyID(pk)),
-		[]byte(EncodePublicKey(pk, "")), 0o600); err != nil {
+	if err := os.WriteFile(paths.PublisherKeyFile(plugin.HumanKeyID(pk)),
+		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", HumanKeyID(pk), 1)
-	sig, err := Sign(sk, wasm, DefaultTrustedComment("sys_tunnel_pull.wasm"))
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_pull.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	reg, err := New(Options{Paths: paths})
+	reg, err := plugin.New(plugin.Options{Paths: paths})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg.Close(context.Background())
 
-	if err := reg.InstallFromBytes(context.Background(), InstallParams{
+	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
 		PluginID:            "com.platypus.sys-tunnel-pull",
 		Version:             "1.0.0",
-		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
+		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
 		Wasm:                wasm,
-		Signature:           []byte(EncodeSignature(sig)),
+		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
 		GrantedCapabilities: []string{"net.dial"},
 	}, nil); err != nil {
@@ -151,53 +142,44 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 // TestTunnelPull_DeniesUnlistedTarget exercises the policy boundary:
 // a manifest narrowed to a specific target must reject any other dial.
 func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
-	wasmPath := tunnelPullWasmPath()
-	wasm, err := os.ReadFile(wasmPath)
-	if err != nil {
-		t.Skipf("sys_tunnel_pull.wasm not built (%v)", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-tunnel-pull", "plugin.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0", "sys_tunnel_pull.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0")
 
 	pluginRoot := t.TempDir()
-	paths := NewPaths(pluginRoot)
-	sk, pk, err := GenerateKeyPair()
+	paths := plugin.NewPaths(pluginRoot)
+	sk, pk, err := plugin.GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.PublishersDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.PublisherKeyFile(HumanKeyID(pk)),
-		[]byte(EncodePublicKey(pk, "")), 0o600); err != nil {
+	if err := os.WriteFile(paths.PublisherKeyFile(plugin.HumanKeyID(pk)),
+		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", HumanKeyID(pk), 1)
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	// Narrow the wildcard to a specific allowed target.
 	manifestStr = strings.Replace(manifestStr, `targets: ["*"]`,
 		`targets: ["10.255.255.1:9999"]`, 1)
-	sig, err := Sign(sk, wasm, DefaultTrustedComment("sys_tunnel_pull.wasm"))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_pull.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	reg, err := New(Options{Paths: paths})
+	reg, err := plugin.New(plugin.Options{Paths: paths})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg.Close(context.Background())
 
-	if err := reg.InstallFromBytes(context.Background(), InstallParams{
+	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
 		PluginID:            "com.platypus.sys-tunnel-pull",
 		Version:             "1.0.0",
-		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
+		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
 		Wasm:                wasm,
-		Signature:           []byte(EncodeSignature(sig)),
+		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
 		GrantedCapabilities: []string{"net.dial"},
 	}, nil); err != nil {
@@ -237,7 +219,3 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 	}
 }
 
-func tunnelPullWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-tunnel-pull",
-		"target", "wasm32-unknown-unknown", "release", "sys_tunnel_pull.wasm")
-}

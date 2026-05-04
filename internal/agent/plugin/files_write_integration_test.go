@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,15 +23,8 @@ import (
 // pattern as installSysFilesRead.
 func installSysFilesWrite(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm, err := os.ReadFile(sysFilesWriteWasmPath())
-	if err != nil {
-		t.Skipf("sys_files_write.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-files-write/", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-files-write", "plugin.yaml"))
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-files-write", "1.0.0", "sys_files_write.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-files-write", "1.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -47,8 +39,7 @@ func installSysFilesWrite(t *testing.T) *plugin.Registry {
 		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", plugin.HumanKeyID(pk), 1)
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_files_write.wasm"))
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +296,3 @@ func TestFilesWrite_Write_StreamRoundTrip(t *testing.T) {
 	}
 }
 
-func sysFilesWriteWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-files-write",
-		"target", "wasm32-unknown-unknown", "release", "sys_files_write.wasm")
-}

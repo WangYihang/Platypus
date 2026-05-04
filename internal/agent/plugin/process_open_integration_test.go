@@ -1,10 +1,9 @@
-package plugin
+package plugin_test
 
 import (
 	"context"
 	"net"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -31,50 +31,41 @@ func TestProcessOpen_RustPluginNonPty(t *testing.T) {
 		t.Skipf("/bin/echo not present: %v", err)
 	}
 
-	wasmPath := processOpenWasmPath()
-	wasm, err := os.ReadFile(wasmPath)
-	if err != nil {
-		t.Skipf("sys_process.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-process/", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-process", "plugin.yaml"))
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-process", "1.0.0", "sys_process.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-process", "1.0.0")
 
 	pluginRoot := t.TempDir()
-	paths := NewPaths(pluginRoot)
-	sk, pk, err := GenerateKeyPair()
+	paths := plugin.NewPaths(pluginRoot)
+	sk, pk, err := plugin.GenerateKeyPair()
 	if err != nil {
 		t.Fatalf("keygen: %v", err)
 	}
 	if err := os.MkdirAll(paths.PublishersDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.PublisherKeyFile(HumanKeyID(pk)),
-		[]byte(EncodePublicKey(pk, "")), 0o600); err != nil {
+	if err := os.WriteFile(paths.PublisherKeyFile(plugin.HumanKeyID(pk)),
+		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", HumanKeyID(pk), 1)
-	sig, err := Sign(sk, wasm, DefaultTrustedComment("sys_process_open.wasm"))
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_process_open.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	reg, err := New(Options{Paths: paths})
+	reg, err := plugin.New(plugin.Options{Paths: paths})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg.Close(context.Background())
 
-	if err := reg.InstallFromBytes(context.Background(), InstallParams{
+	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
 		PluginID:            "com.platypus.sys-process",
 		Version:             "1.0.0",
-		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
+		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
 		Wasm:                wasm,
-		Signature:           []byte(EncodeSignature(sig)),
+		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
 		GrantedCapabilities: []string{"process"},
 	}, nil); err != nil {
@@ -161,32 +152,23 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("/bin/false not available on windows")
 	}
-	wasmPath := processOpenWasmPath()
-	wasm, err := os.ReadFile(wasmPath)
-	if err != nil {
-		t.Skipf("sys_process.wasm not built (%v)", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-process", "plugin.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-process", "1.0.0", "sys_process.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-process", "1.0.0")
 
 	pluginRoot := t.TempDir()
-	paths := NewPaths(pluginRoot)
-	sk, pk, err := GenerateKeyPair()
+	paths := plugin.NewPaths(pluginRoot)
+	sk, pk, err := plugin.GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.PublishersDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.PublisherKeyFile(HumanKeyID(pk)),
-		[]byte(EncodePublicKey(pk, "")), 0o600); err != nil {
+	if err := os.WriteFile(paths.PublisherKeyFile(plugin.HumanKeyID(pk)),
+		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", HumanKeyID(pk), 1)
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	// Narrow BOTH wildcards (sys-process declares exec + process
 	// capability families post-merge; this test exercises the
 	// `process` family via STREAM_TYPE_PROCESS_OPEN, so leaving the
@@ -195,24 +177,24 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	// command_not_in_allowlist.
 	manifestStr = strings.ReplaceAll(manifestStr, `commands: ["*"]`,
 		`commands: ["/bin/true"]`)
-	sig, err := Sign(sk, wasm, DefaultTrustedComment("sys_process_open.wasm"))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_process_open.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	reg, err := New(Options{Paths: paths})
+	reg, err := plugin.New(plugin.Options{Paths: paths})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg.Close(context.Background())
 
-	if err := reg.InstallFromBytes(context.Background(), InstallParams{
+	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
 		PluginID:            "com.platypus.sys-process",
 		Version:             "1.0.0",
-		PublisherPubkey:     []byte(EncodePublicKey(pk, "")),
+		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
 		Wasm:                wasm,
-		Signature:           []byte(EncodeSignature(sig)),
+		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
 		GrantedCapabilities: []string{"process"},
 	}, nil); err != nil {
@@ -253,7 +235,3 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 	}
 }
 
-func processOpenWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-process",
-		"target", "wasm32-unknown-unknown", "release", "sys_process.wasm")
-}

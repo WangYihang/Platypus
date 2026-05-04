@@ -3,9 +3,7 @@ package plugin_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
@@ -23,14 +21,8 @@ import (
 // silently skipping.
 func installSysInfo(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm, err := os.ReadFile(sysInfoWasmPath())
-	if err != nil {
-		t.Fatalf("sys_info_plugin.wasm missing under internal/server/sysplugins/embedded/ (%v) — run `go run ./hack/stage_system_plugins` from the repo root", err)
-	}
-	manifestBytes, err := os.ReadFile(sysInfoManifestPath())
-	if err != nil {
-		t.Fatal(err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-info", "2.0.0", "sys_info_plugin.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-info", "2.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -121,36 +113,3 @@ func TestSysInfo_PlatformReportsLinux(t *testing.T) {
 	}
 }
 
-func sysInfoWasmPath() string {
-	return filepath.Join("..", "..", "..", "internal", "server", "sysplugins",
-		"embedded", "system-plugins", "com.platypus.sys-info", "2.0.0",
-		"sys_info_plugin.wasm")
-}
-
-func sysInfoManifestPath() string {
-	return filepath.Join("..", "..", "..", "internal", "server", "sysplugins",
-		"embedded", "system-plugins", "com.platypus.sys-info", "2.0.0",
-		"plugin.yaml")
-}
-
-// rewriteManifestKeyID swaps the manifest's signature.key_id field
-// for the supplied hex string, preserving comments and surrounding
-// formatting. The integration tests sign with a fresh per-test
-// keypair; the staged manifest's key_id is whatever
-// hack/stage_system_plugins minted at build time, which doesn't
-// match.
-func rewriteManifestKeyID(src, keyID string) string {
-	const marker = "key_id:"
-	idx := strings.Index(src, marker)
-	if idx < 0 {
-		return src
-	}
-	// Replace the value (single token) after key_id: up to the
-	// next newline. A simple split keeps this self-contained.
-	tail := src[idx+len(marker):]
-	nl := strings.IndexByte(tail, '\n')
-	if nl < 0 {
-		return src // unterminated manifest? leave as-is
-	}
-	return src[:idx+len(marker)] + " " + keyID + tail[nl:]
-}

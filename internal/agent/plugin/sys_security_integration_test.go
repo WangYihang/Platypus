@@ -3,9 +3,7 @@ package plugin_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
@@ -15,15 +13,8 @@ import (
 
 func installSysSecurity(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm, err := os.ReadFile(sysSecurityWasmPath())
-	if err != nil {
-		t.Skipf("sys_security.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-security/", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-security", "plugin.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-security", "2.0.0", "sys_security.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-security", "2.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -38,8 +29,7 @@ func installSysSecurity(t *testing.T) *plugin.Registry {
 		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"5C9C41AD529D87AC", plugin.HumanKeyID(pk), 1)
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_security.wasm"))
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +148,3 @@ func checkIDs(checks []*v2pb.AvailableSecurityCheck) []string {
 	return out
 }
 
-func sysSecurityWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-security",
-		"target", "wasm32-unknown-unknown", "release", "sys_security.wasm")
-}

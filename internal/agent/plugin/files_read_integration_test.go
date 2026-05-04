@@ -32,15 +32,8 @@ import (
 // dispatch + host-fn path the production agent uses.
 func installSysFilesRead(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm, err := os.ReadFile(sysFilesReadWasmPath())
-	if err != nil {
-		t.Skipf("sys_files_read.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-files-read/", err)
-	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"example", "plugins", "system", "sys-files-read", "plugin.yaml"))
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
+	wasm := stagedWasmBytes(t, "com.platypus.sys-files-read", "1.0.1", "sys_files_read.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-files-read", "1.0.1")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -55,8 +48,7 @@ func installSysFilesRead(t *testing.T) *plugin.Registry {
 		[]byte(plugin.EncodePublicKey(pk, "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifestStr := strings.Replace(string(manifestBytes),
-		"REPLACE_WITH_YOUR_KEY_ID", plugin.HumanKeyID(pk), 1)
+	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
 	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_files_read.wasm"))
 	if err != nil {
 		t.Fatal(err)
@@ -506,11 +498,6 @@ func drainArchive(t *testing.T, reg *plugin.Registry, req *v2pb.FileArchiveReque
 	}
 	t.Fatal("never saw eof chunk")
 	return nil
-}
-
-func sysFilesReadWasmPath() string {
-	return filepath.Join("..", "..", "..", "example", "plugins", "system", "sys-files-read",
-		"target", "wasm32-unknown-unknown", "release", "sys_files_read.wasm")
 }
 
 func mustWrite(t *testing.T, path string, data []byte) {
