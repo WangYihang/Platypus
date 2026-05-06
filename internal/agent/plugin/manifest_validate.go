@@ -122,6 +122,36 @@ func (m *Manifest) Validate() error {
 	return errors.Join(errs...)
 }
 
+// isAbsCrossPlatform accepts paths absolute under either POSIX OR
+// Windows conventions, regardless of the host OS doing validation.
+// stdlib's filepath.IsAbs is host-native (linux server can't validate
+// "C:\\..." manifests); we need explicit cross-platform recognition
+// since the same staged manifest tree is consumed by linux + darwin
+// + windows agents from a single server build.
+//
+// Accepted forms:
+//   - "/abs/posix/path"
+//   - "C:\\Windows\\..." or "C:/Windows/..." (any drive letter)
+//   - "\\\\server\\share\\..." (UNC)
+func isAbsCrossPlatform(p string) bool {
+	if filepath.IsAbs(p) {
+		return true
+	}
+	// Windows drive letter (X:\ or X:/).
+	if len(p) >= 3 {
+		c := p[0]
+		isLetter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		if isLetter && p[1] == ':' && (p[2] == '\\' || p[2] == '/') {
+			return true
+		}
+	}
+	// UNC.
+	if strings.HasPrefix(p, `\\`) {
+		return true
+	}
+	return false
+}
+
 func (c ManifestCapabilities) validate() error {
 	var errs []error
 	if c.Exec != nil {
@@ -137,7 +167,7 @@ func (c ManifestCapabilities) validate() error {
 				// "*" entry prominently for third-party plugins.
 				continue
 			}
-			if !filepath.IsAbs(cmd) {
+			if !isAbsCrossPlatform(cmd) {
 				errs = append(errs, fmt.Errorf(
 					"capabilities.exec.commands[%d]=%q must be an absolute path or \"*\"", i, cmd))
 			}
@@ -148,7 +178,7 @@ func (c ManifestCapabilities) validate() error {
 			errs = append(errs, errors.New("capabilities.fs.read set without any paths"))
 		}
 		for i, p := range c.FSRead.Paths {
-			if !filepath.IsAbs(p) {
+			if !isAbsCrossPlatform(p) {
 				errs = append(errs, fmt.Errorf(
 					"capabilities.fs.read.paths[%d]=%q must be an absolute path", i, p))
 			}
@@ -159,7 +189,7 @@ func (c ManifestCapabilities) validate() error {
 			errs = append(errs, errors.New("capabilities.fs.write set without any paths"))
 		}
 		for i, p := range c.FSWrite.Paths {
-			if !filepath.IsAbs(p) {
+			if !isAbsCrossPlatform(p) {
 				errs = append(errs, fmt.Errorf(
 					"capabilities.fs.write.paths[%d]=%q must be an absolute path", i, p))
 			}
@@ -188,7 +218,7 @@ func (c ManifestCapabilities) validate() error {
 				// access via the agent's process group.
 				continue
 			}
-			if !filepath.IsAbs(cmd) {
+			if !isAbsCrossPlatform(cmd) {
 				errs = append(errs, fmt.Errorf(
 					"capabilities.process.commands[%d]=%q must be an absolute path or \"*\"", i, cmd))
 			}

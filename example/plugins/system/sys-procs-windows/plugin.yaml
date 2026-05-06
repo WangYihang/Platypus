@@ -1,0 +1,53 @@
+api_version: 1
+id: com.platypus.sys-procs-windows
+name: Process list (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows process list plugin. Shells out to `powershell.exe`
+  with a Get-CimInstance Win32_Process query that yields JSON;
+  parses straight into the same protojson v2pb.ProcessListResponse
+  shape sys-procs-linux / sys-procs-darwin emit.
+
+  Coverage: pid (ProcessId), ppid (ParentProcessId), name,
+  cmdline, rss_bytes (WorkingSetSize). user / cpu_percent /
+  mem_percent left at default (0/empty) — deriving them needs
+  GetOwner() per row + a second CIM sample, both expensive to do
+  on every call. Operators on windows fleets can extend in v2.
+
+  Output encoding: the plugin invokes powershell with
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+  before the pipeline so stdout is UTF-8 (default Windows
+  PowerShell 5.x writes UTF-16-LE which corrupts the JSON parse).
+
+runtime:
+  type: wasm
+  entry: sys_procs_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: process_list
+    request:  { proto: ProcessListRequest }
+    response: { proto: ProcessListResponse }
+
+# Windows PowerShell 5 (shipped on every supported Windows since Win 7)
+# is the canonical interpreter. PowerShell 7 (pwsh.exe) is operator-
+# installed and lives elsewhere; not in v1's allowlist.
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_procs_windows.wasm.minisig

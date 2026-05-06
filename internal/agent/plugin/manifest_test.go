@@ -128,3 +128,41 @@ func TestValidateGranted(t *testing.T) {
 func strReplace(old, new string) func(string) string {
 	return func(in string) string { return strings.Replace(in, old, new, 1) }
 }
+
+// TestIsAbsCrossPlatform covers the manifest validator's
+// platform-agnostic absolute-path check. Linux servers must accept
+// `C:\\Windows\\...` paths in cross-platform plugin manifests
+// (e.g. sys-procs-windows's allowlisted powershell.exe), so the
+// validator can't lean on stdlib's filepath.IsAbs which is
+// host-native.
+func TestIsAbsCrossPlatform(t *testing.T) {
+	cases := []struct {
+		p    string
+		want bool
+	}{
+		{"/usr/bin/df", true},
+		{"/", true},
+		{"/proc", true},
+		// Windows drive letter forms.
+		{`C:\Windows\System32\powershell.exe`, true},
+		{`c:\path\to\thing`, true},
+		{"D:/forward/slash/works/too", true},
+		// UNC.
+		{`\\server\share\file.exe`, true},
+		// Non-absolute / relative forms must reject.
+		{"powershell.exe", false},
+		{"../etc/passwd", false},
+		{"./foo", false},
+		{"", false},
+		{"C:", false},        // missing root separator
+		{"C:foo", false},     // drive-relative path, not absolute
+		{`\single-back`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.p, func(t *testing.T) {
+			if got := isAbsCrossPlatform(tc.p); got != tc.want {
+				t.Errorf("isAbsCrossPlatform(%q) = %v, want %v", tc.p, got, tc.want)
+			}
+		})
+	}
+}
