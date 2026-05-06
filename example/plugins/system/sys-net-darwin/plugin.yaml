@@ -1,0 +1,52 @@
+api_version: 1
+id: com.platypus.sys-net-darwin
+name: Network connections (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS network connection enumeration via netstat(1). Two RPCs
+  matching sys-net-linux's wire shape:
+    - list_listeners(): TCP sockets in LISTEN state
+    - list_connections(state?): all TCP sockets, optional filter
+
+  Backed by `host_exec /usr/sbin/netstat -anv -p tcp` — a single
+  command emits both listeners (LISTEN rows) and connections
+  (every other state). The `-p tcp` flag restricts to TCP; -v adds
+  the State column so the parser doesn't need to derive it from
+  the address columns.
+
+  pid / comm not populated: BSD netstat doesn't include process
+  attribution by default and `lsof -nP -iTCP` is slow on macOS
+  (touches every fd of every process). Same wire shape as the
+  linux variant for consistency.
+
+runtime:
+  type: wasm
+  entry: sys_net_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_listeners
+    request:  { proto: NetListListenersRequest }
+    response: { proto: NetListListenersResponse }
+  - name: list_connections
+    request:  { proto: NetListConnectionsRequest }
+    response: { proto: NetListConnectionsResponse }
+
+capabilities:
+  exec:
+    commands: ["/usr/sbin/netstat"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_net_darwin.wasm.minisig
