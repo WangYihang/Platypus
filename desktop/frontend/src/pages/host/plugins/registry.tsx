@@ -21,13 +21,17 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
     Cog,
+    File,
     HardDrive,
+    Info,
     Network as NetworkIcon,
     Package as PackageIcon,
     ScrollText,
     Wrench,
 } from "lucide-react";
 
+import FilesActivity from "./builtin-files/FilesActivity";
+import InfoActivity from "./builtin-info/InfoActivity";
 import { SystemdServices } from "./sys-systemd-linux/Services";
 import { Filesystems } from "./sys-disk/Filesystems";
 import { Network as NetworkTab } from "./sys-net/Network";
@@ -150,6 +154,37 @@ function withPluginID<TExtraProps extends { pluginID: string }>(
 }
 
 export const PLUGIN_UI_REGISTRY: ReadonlyArray<PluginUIEntry> = [
+    // ---- Built-in tabs migrated from FIRST_PARTY_ACTIVITIES (Q2). ----
+    // These keep their stable URL slugs ("files", "info") via the
+    // entry.activityKey override so existing bookmarks / docs keep
+    // resolving. alwaysVisible: true mirrors the legacy "icon always
+    // present" UX; clicking when a required plugin is missing routes
+    // through <RequiresPlugins> to the install guide.
+    {
+        pluginID: "com.platypus.sys-files-read",
+        activityKey: "files",
+        requiredPluginIDs: [
+            "com.platypus.sys-files-read",
+            "com.platypus.sys-files-write",
+        ],
+        alwaysVisible: true,
+        title: "Files",
+        icon: File,
+        component: FilesActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-info",
+        activityKey: "info",
+        // sys-info is mandatory core (always installed), but list it
+        // here so the entryReady check stays meaningful if an operator
+        // ever uninstalls it manually.
+        requiredPluginIDs: ["com.platypus.sys-info"],
+        alwaysVisible: true,
+        title: "Info",
+        icon: Info,
+        component: InfoActivity,
+    },
+
     // ---- Services (per-OS init system) ----
     {
         pluginID: "com.platypus.sys-systemd-linux",

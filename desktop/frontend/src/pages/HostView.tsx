@@ -10,7 +10,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, TerminalSquare } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import EmptyState from "../components/EmptyState";
 import RefreshButton from "../components/RefreshButton";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { palette, space } from "../layout/theme";
@@ -30,14 +29,14 @@ import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
 import ActivityBar, { ACTIVITIES, Activity } from "./host/ActivityBar";
 import {
+    entryActivityKey,
     parsePluginActivity,
     visiblePluginEntries,
     type PluginUIEntry,
 } from "./host/plugins/registry";
 import BottomPanel, { BottomTab } from "./host/BottomPanel";
-import FilesTab from "./host/FilesTab";
 import HostHeaderBar from "./host/HostHeaderBar";
-import InfoTab from "./host/InfoTab";
+import { HostContextProvider } from "./host/HostContext";
 import ProcessesTab from "./host/ProcessesTab";
 import RequiresPlugins from "./host/RequiresPlugins";
 
@@ -144,16 +143,13 @@ export default function HostView({ projectID, hostID }: Props) {
     const navigate = useNavigate();
     const { shells, openShell } = useGlobalTerminal();
     const { tab: tabParam } = useParams<{ tab?: string }>();
-    // Activity = either a hardcoded first-party slug OR a plugin
-    // activity key of the form `plugin:<plugin_id>`. Validate against
-    // both before defaulting to "files".
+    // Activity = either a hardcoded first-party slug OR a registry
+    // entry's activityKey (which is usually `plugin:<plugin_id>` but
+    // can be a stable override like "files" for tabs migrated out of
+    // the first-party set in Q2).
     const tabIsKnown =
         (ACTIVITIES as readonly string[]).includes(tabParam ?? "") ||
-        (() => {
-            const parsed = parsePluginActivity(tabParam ?? "");
-            if (!parsed) return false;
-            return pluginEntries.some((e) => e.pluginID === parsed.pluginID);
-        })();
+        pluginEntries.some((e) => entryActivityKey(e) === (tabParam ?? ""));
     const activeActivity: Activity = tabIsKnown
         ? (tabParam as Activity)
         : "files";
@@ -339,6 +335,17 @@ export default function HostView({ projectID, hostID }: Props) {
                     newPluginIDs={newPluginIDs}
                     installedPluginIDs={installedPlugins.ids ?? undefined}
                 />
+                <HostContextProvider
+                    value={{
+                        host,
+                        sessions,
+                        pickedSessionID,
+                        sysInfo,
+                        sysInfoError,
+                        sysInfoLoading,
+                        refreshSysInfo,
+                    }}
+                >
                 <div
                     style={{
                         flex: 1,
@@ -367,46 +374,12 @@ export default function HostView({ projectID, hostID }: Props) {
                         {/* Each activity stays mounted (display:none on
                             the inactive ones) so expensive children (file
                             tree, processes poller, …) keep their state on
-                            switch. */}
-                        <div
-                            style={{
-                                display: activeActivity === "files" ? "flex" : "none",
-                                flexDirection: "column",
-                                flex: 1,
-                                minHeight: 0,
-                                padding: space[3],
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="files"
-                            >
-                                {pickedSessionID ? (
-                                    <FilesTab
-                                        projectID={projectID}
-                                        sessionHash={pickedSessionID}
-                                        host={host}
-                                    />
-                                ) : (
-                                    <NoLiveSessionNote />
-                                )}
-                            </RequiresPlugins>
-                        </div>
-                        <div
-                            style={{
-                                display: activeActivity === "info" ? "block" : "none",
-                                padding: space[4],
-                            }}
-                        >
-                            <InfoTab
-                                host={host}
-                                sysInfo={sysInfo}
-                                sysInfoError={sysInfoError}
-                                sysInfoLoading={sysInfoLoading}
-                                onRefreshSysInfo={refreshSysInfo}
-                            />
-                        </div>
+                            switch.
+                            Files / Info live in PLUGIN_UI_REGISTRY now (Q2);
+                            they're rendered by the pluginEntries.map block
+                            below, with the FilesActivity / InfoActivity
+                            adapters reading host / sysInfo from
+                            HostContextProvider above. */}
                         <div
                             style={{
                                 display: activeActivity === "sessions" ? "block" : "none",
@@ -511,17 +484,39 @@ export default function HostView({ projectID, hostID }: Props) {
                             sibling plugin tabs. */}
                         {pluginEntries.map((entry) => {
                             const isActive =
-                                parsePluginActivity(activeActivity)?.pluginID ===
-                                entry.pluginID;
+                                activeActivity === entryActivityKey(entry);
                             const Component = entry.component;
+                            // The Files tab needs special padding +
+                            // flex sizing (the file browser is full-
+                            // bleed); other tabs are card stacks that
+                            // get the standard space[4] gutter. The
+                            // Q2 migration kept this special-case so
+                            // FilesActivity-as-plugin-entry visually
+                            // matches the legacy hardcoded path.
+                            const isFilesEntry =
+                                entryActivityKey(entry) === "files";
                             return (
                                 <div
                                     key={entry.pluginID}
                                     data-testid={`host-tab-body-${entry.pluginID}`}
-                                    style={{
-                                        display: isActive ? "block" : "none",
-                                        padding: space[4],
-                                    }}
+                                    style={
+                                        isFilesEntry
+                                            ? {
+                                                  display: isActive
+                                                      ? "flex"
+                                                      : "none",
+                                                  flexDirection: "column",
+                                                  flex: 1,
+                                                  minHeight: 0,
+                                                  padding: space[3],
+                                              }
+                                            : {
+                                                  display: isActive
+                                                      ? "block"
+                                                      : "none",
+                                                  padding: space[4],
+                                              }
+                                    }
                                 >
                                     <Component
                                         projectID={projectID}
@@ -558,16 +553,8 @@ export default function HostView({ projectID, hostID }: Props) {
                         )}
                     </BottomPanel>
                 </div>
+                </HostContextProvider>
             </div>
         </div>
-    );
-}
-
-function NoLiveSessionNote() {
-    return (
-        <EmptyState
-            title="No live session"
-            description="Start or reconnect an agent to use this tab."
-        />
     );
 }

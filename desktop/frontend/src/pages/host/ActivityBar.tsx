@@ -2,8 +2,6 @@ import { ReactNode } from "react";
 import {
     AppWindow,
     Cable,
-    File,
-    Info,
     KeyRound,
     Plug,
     Puzzle,
@@ -20,9 +18,12 @@ import {
 
 // First-party (hardcoded) activities.  Plugin-shipped activities
 // are passed in as props and rendered after a divider.
+//
+// "files" and "info" lived here historically; Q2 migrated them to the
+// PLUGIN_UI_REGISTRY (with activityKey overrides preserving the URL
+// slug) so a host running a minimal agent can see / install them via
+// the same install-guide path used for other system plugins.
 export const FIRST_PARTY_ACTIVITIES = [
-    "files",
-    "info",
     "sessions",
     "processes",
     "security",
@@ -52,8 +53,6 @@ interface ActivitySpec {
 const ICON_SIZE = "size-4";
 
 export const ACTIVITY_SPECS: ActivitySpec[] = [
-    { key: "files", label: "Files", icon: <File className={ICON_SIZE} /> },
-    { key: "info", label: "Info", icon: <Info className={ICON_SIZE} /> },
     { key: "sessions", label: "Sessions", icon: <Plug className={ICON_SIZE} /> },
     { key: "processes", label: "Processes", icon: <AppWindow className={ICON_SIZE} /> },
     { key: "security", label: "Security", icon: <ShieldCheck className={ICON_SIZE} /> },

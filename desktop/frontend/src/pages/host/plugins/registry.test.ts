@@ -306,12 +306,44 @@ describe("registry helpers", () => {
             );
         });
 
-        it("returns [] when nothing in installed set matches the registry", () => {
+        it("returns only alwaysVisible entries when nothing in installed set matches install-gated entries", () => {
             const got = visiblePluginEntries(
                 new Set(["com.example.fictional"]),
                 "linux",
             );
-            expect(got).toEqual([]);
+            // Q2: Files + Info are alwaysVisible: true so they appear
+            // even with no install matches; install-gated entries
+            // (sys-systemd-linux etc.) are absent.
+            expect(got.every((e) => e.alwaysVisible === true)).toBe(true);
+            expect(got.map((e) => e.pluginID)).toEqual(
+                expect.arrayContaining([
+                    "com.platypus.sys-files-read",
+                    "com.platypus.sys-info",
+                ]),
+            );
+            expect(got.map((e) => e.pluginID)).not.toContain(
+                "com.platypus.sys-systemd-linux",
+            );
+        });
+
+        it("Files + Info entries declare stable activityKey URL slugs", () => {
+            // The Q2 migration moved Files / Info into the registry,
+            // but their URL slugs ("files" / "info") must stay stable
+            // so existing bookmarks and docs keep resolving.
+            const filesEntry = PLUGIN_UI_REGISTRY.find(
+                (e) => e.pluginID === "com.platypus.sys-files-read",
+            );
+            const infoEntry = PLUGIN_UI_REGISTRY.find(
+                (e) => e.pluginID === "com.platypus.sys-info",
+            );
+            expect(filesEntry?.activityKey).toBe("files");
+            expect(filesEntry?.alwaysVisible).toBe(true);
+            expect(filesEntry?.requiredPluginIDs).toEqual([
+                "com.platypus.sys-files-read",
+                "com.platypus.sys-files-write",
+            ]);
+            expect(infoEntry?.activityKey).toBe("info");
+            expect(infoEntry?.alwaysVisible).toBe(true);
         });
     });
 
