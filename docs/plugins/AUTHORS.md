@@ -236,6 +236,12 @@ reconnect.
 
 - [USERS.md](USERS.md) — installing + managing plugins as an operator
 - [SECURITY.md](SECURITY.md) — the trust model + sandbox guarantees
+- [CROSS_PLATFORM.md](CROSS_PLATFORM.md) — per-OS plugin matrix +
+  exemplar references for multi-backend dispatch (M5a `sys-pkg-linux`),
+  shell-out + column parsing (M4a `sys-services-darwin`),
+  `host_fs_read` + structured-text parsing (M3a `sys-net-linux`),
+  and PowerShell injection-safe string builders (M4b `sys-services-windows`)
+- [GO_PLUGINS.md](GO_PLUGINS.md) — TinyGo SDK + Rust ↔ Go parity matrix
 - `example/plugins/echo/` — minimal complete reference
 - [Extism docs](https://extism.org/docs/) — PDK references for every
   supported language
