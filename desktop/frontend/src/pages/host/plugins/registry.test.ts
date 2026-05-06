@@ -9,6 +9,7 @@ import { Cog } from "lucide-react";
 
 import {
     PLUGIN_ACTIVITY_PREFIX,
+    PLUGIN_UI_REGISTRY,
     parsePluginActivity,
     pluginActivityKey,
     visiblePluginEntries,
@@ -161,6 +162,62 @@ describe("registry helpers", () => {
                 "linux",
             );
             expect(got).toEqual([]);
+        });
+    });
+
+    // ---- N3 sanity: every M-phase system plugin has a registry entry ----
+    describe("registry contents (N3 bulk migration)", () => {
+        const expectedIDs = [
+            // Services
+            "com.platypus.sys-systemd-linux",
+            "com.platypus.sys-services-darwin",
+            "com.platypus.sys-services-windows",
+            // Disks
+            "com.platypus.sys-disk-linux",
+            "com.platypus.sys-disk-darwin",
+            "com.platypus.sys-disk-windows",
+            // Network
+            "com.platypus.sys-net-linux",
+            "com.platypus.sys-net-darwin",
+            "com.platypus.sys-net-windows",
+            // Packages
+            "com.platypus.sys-pkg-linux",
+            "com.platypus.sys-pkg-darwin",
+            "com.platypus.sys-pkg-windows",
+            // Logs
+            "com.platypus.sys-journald-linux",
+        ];
+
+        it("contains every expected M-phase plugin id", () => {
+            const ids = new Set(PLUGIN_UI_REGISTRY.map((e) => e.pluginID));
+            for (const id of expectedIDs) {
+                expect(ids.has(id), `missing registry entry for ${id}`).toBe(true);
+            }
+        });
+
+        it("every entry has a non-empty title and component", () => {
+            for (const entry of PLUGIN_UI_REGISTRY) {
+                expect(entry.title.length, `${entry.pluginID} title`).toBeGreaterThan(0);
+                expect(entry.component, `${entry.pluginID} component`).toBeDefined();
+            }
+        });
+
+        it("OS-suffixed plugin ids declare matching osTargets", () => {
+            for (const entry of PLUGIN_UI_REGISTRY) {
+                if (entry.pluginID.endsWith("-linux")) {
+                    expect(entry.osTargets).toEqual(["linux"]);
+                } else if (entry.pluginID.endsWith("-darwin")) {
+                    expect(entry.osTargets).toEqual(["darwin"]);
+                } else if (entry.pluginID.endsWith("-windows")) {
+                    expect(entry.osTargets).toEqual(["windows"]);
+                }
+            }
+        });
+
+        it("plugin ids are unique within the registry", () => {
+            const ids = PLUGIN_UI_REGISTRY.map((e) => e.pluginID);
+            const set = new Set(ids);
+            expect(set.size).toBe(ids.length);
         });
     });
 });

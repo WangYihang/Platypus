@@ -161,7 +161,14 @@ export interface RPCTableProps<TResponse, TRow> {
     /** Extract the row array from the RPC response. */
     rowsFrom: (resp: TResponse) => TRow[];
     /** Stable per-row identity (React key + action targeting). */
-    rowKey: (row: TRow) => string;
+    /**
+     * Stable per-row identity (React key + action targeting). The
+     * second argument is the row's index in the resolved list —
+     * useful as a tie-breaker when natural keys can collide
+     * (journal entries with the same microsecond timestamp, etc.).
+     * Most callers ignore it.
+     */
+    rowKey: (row: TRow, index?: number) => string;
     columns: ReadonlyArray<Column<TRow>>;
     actions?: ReadonlyArray<RowAction<TRow>>;
     /** Auto-refetch interval. 0 / undefined = no polling. */
@@ -351,8 +358,8 @@ export default function RPCTable<TResponse, TRow>(
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {rows.map((row) => {
-                            const id = rowKey(row);
+                        {rows.map((row, idx) => {
+                            const id = rowKey(row, idx);
                             return (
                                 <TableRow key={id}>
                                     {columns.map((c) => (
