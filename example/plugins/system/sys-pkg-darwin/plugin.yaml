@@ -1,0 +1,58 @@
+api_version: 1
+id: com.platypus.sys-pkg-darwin
+name: Package management (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS package management via Homebrew. Two RPCs (parity with
+  sys-pkg-linux's read-only set):
+
+  - list_installed(query?, max_results?): every formula + cask
+    via `brew list --versions`. Output is one package per line:
+    "<name> <version>" (formulae) or "<name>@<channel> <version>"
+    (taps). Wire shape strips the @<channel> for the unified
+    `name` field; channel goes into `arch`-equivalent metadata
+    (kept as `arch` for parity with the linux plugin).
+  - list_upgradable(): outdated packages via
+    `brew outdated --json=v2`.
+
+  Brew binary auto-detected at runtime: probes
+  /opt/homebrew/bin/brew (Apple Silicon default, M1+) then
+  /usr/local/bin/brew (Intel x86_64). Both paths in the manifest
+  allowlist; the plugin picks whichever exists.
+
+  Read-only: `brew install / uninstall / upgrade` deferred to a
+  v2 with explicit operator-confirmed CapPkgMutate.
+
+runtime:
+  type: wasm
+  entry: sys_pkg_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_installed
+    request:  { proto: PkgListInstalledRequest }
+    response: { proto: PkgListInstalledResponse }
+  - name: list_upgradable
+    request:  { proto: PkgListUpgradableRequest }
+    response: { proto: PkgListUpgradableResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/opt/homebrew/bin/brew"
+      - "/usr/local/bin/brew"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_pkg_darwin.wasm.minisig
