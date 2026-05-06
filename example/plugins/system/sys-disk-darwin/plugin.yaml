@@ -1,0 +1,45 @@
+api_version: 1
+id: com.platypus.sys-disk-darwin
+name: Disk usage (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS-only filesystem usage snapshot. RPC-equivalent to
+  sys-disk-linux: list_filesystems(skip_pseudo, only_mountpoints,
+  min_size_bytes) → {filesystems: [{source, fstype, mountpoint,
+  size_bytes, used_bytes, available_bytes, percent_used}]}.
+
+  Backed by `/bin/df -k -P -T none`. macOS df doesn't accept the
+  GNU `-B1` flag (would error); we pass `-k` (1024-byte blocks) and
+  multiply parsed numbers by 1024 to recover bytes. The `-T none`
+  argument-form filters out the noise pseudo types (devfs, autofs,
+  map *) at the df layer; an additional skip_pseudo flag in the
+  request applies a wider denylist post-parse.
+
+runtime:
+  type: wasm
+  entry: sys_disk_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_filesystems
+    request:  { proto: DiskListFilesystemsRequest }
+    response: { proto: DiskListFilesystemsResponse }
+
+capabilities:
+  exec:
+    commands: ["/bin/df"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_disk_darwin.wasm.minisig
