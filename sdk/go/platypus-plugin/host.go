@@ -1,6 +1,9 @@
 package platypus
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/extism/go-pdk"
 )
 
@@ -549,6 +552,118 @@ func HostFSListDir(path string) ([]FSListEntry, error) {
 		}
 		return entries, nil
 	}
+}
+
+// ---- host_fs_write family (cap: fs.write) --------------------------
+
+//go:wasmimport platypus host_fs_mkdir
+func _hostFSMkdir(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_fs_chmod
+func _hostFSChmod(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_fs_delete
+func _hostFSDelete(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_fs_rename
+func _hostFSRename(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_fs_write_range
+func _hostFSWriteRange(reqPtr uint64) uint64
+
+// HostFSMkdir creates a directory. Mode is the unix permission bits;
+// 0 falls back to 0o755 host-side. mkdirs controls parent-creation.
+func HostFSMkdir(path string, mode uint32, mkdirs bool) error {
+	body := buildFSWriteJSON(path, mode, mkdirs, false)
+	in := pdk.AllocateString(body)
+	return decodeOkEnvelope(_hostFSMkdir(in.Offset()))
+}
+
+// HostFSChmod sets the unix permission bits on path.
+func HostFSChmod(path string, mode uint32) error {
+	body := buildFSWriteJSON(path, mode, false, false)
+	in := pdk.AllocateString(body)
+	return decodeOkEnvelope(_hostFSChmod(in.Offset()))
+}
+
+// HostFSDelete unlinks path. recursive=true rm -rf's directories.
+func HostFSDelete(path string, recursive bool) error {
+	body := buildFSWriteJSON(path, 0, false, recursive)
+	in := pdk.AllocateString(body)
+	return decodeOkEnvelope(_hostFSDelete(in.Offset()))
+}
+
+// HostFSRename moves a file or directory.
+func HostFSRename(from, to string) error {
+	body := `{"from":` + EncodeJSONString(from) + `,"to":` + EncodeJSONString(to) + `}`
+	in := pdk.AllocateString(body)
+	return decodeOkEnvelope(_hostFSRename(in.Offset()))
+}
+
+// HostFSWriteRange writes a chunk of bytes at a specific offset.
+// Used by streaming-style file-write plugins. truncate=true on the
+// first call truncates the destination; subsequent calls extend.
+// mkdirs creates parent directories if missing on first call.
+func HostFSWriteRange(path string, offset int64, data []byte, mode uint32, mkdirs, truncate bool) error {
+	var b strings.Builder
+	b.WriteByte('{')
+	b.WriteString(`"path":`)
+	b.WriteString(EncodeJSONString(path))
+	b.WriteString(`,"offset":`)
+	b.WriteString(strconv.FormatInt(offset, 10))
+	b.WriteString(`,"data":`)
+	b.WriteString(EncodeJSONString(encodeBase64(data)))
+	if mode != 0 {
+		b.WriteString(`,"mode":`)
+		b.WriteString(strconvUint32(mode))
+	}
+	if mkdirs {
+		b.WriteString(`,"mkdirs":true`)
+	}
+	if truncate {
+		b.WriteString(`,"truncate":true`)
+	}
+	b.WriteByte('}')
+	in := pdk.AllocateString(b.String())
+	return decodeOkEnvelope(_hostFSWriteRange(in.Offset()))
+}
+
+// buildFSWriteJSON emits the JSON request body shared by mkdir /
+// chmod / delete (the host-side fsWriteRequest struct).  Hand-rolled
+// for the same TinyGo-no-encoding/json reason as the rest of the
+// SDK.
+func buildFSWriteJSON(path string, mode uint32, mkdirs, recursive bool) string {
+	var b strings.Builder
+	b.WriteByte('{')
+	b.WriteString(`"path":`)
+	b.WriteString(EncodeJSONString(path))
+	if mode != 0 {
+		b.WriteString(`,"mode":`)
+		b.WriteString(strconvUint32(mode))
+	}
+	if mkdirs {
+		b.WriteString(`,"mkdirs":true`)
+	}
+	if recursive {
+		b.WriteString(`,"recursive":true`)
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
+// decodeOkEnvelope decodes the standard {ok,error} envelope at a
+// memory offset. Used by every fs.write fn since they share the
+// same ack-only response shape.
+func decodeOkEnvelope(out uint64) error {
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
 }
 
 // ---- host_kv (cap: kv) ---------------------------------------------
