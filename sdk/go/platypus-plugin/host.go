@@ -554,6 +554,128 @@ func HostFSListDir(path string) ([]FSListEntry, error) {
 	}
 }
 
+//go:wasmimport platypus host_fs_stat
+func _hostFSStat(pathPtr uint64) uint64
+
+// HostFSStat returns metadata for a single entry. Same allowlist
+// semantics as HostFSRead. Wraps host_fs_stat.
+func HostFSStat(path string) (FSListEntry, error) {
+	in := pdk.AllocateString(path)
+	out := _hostFSStat(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return FSListEntry{}, err
+	}
+	if !env.Ok {
+		return FSListEntry{}, errString(env.Error)
+	}
+	var e FSListEntry
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"name", func(p *jsonParser) error {
+			s, err := p.readString()
+			e.Name = s
+			return err
+		}},
+		{"is_dir", func(p *jsonParser) error {
+			b, err := p.readBool()
+			e.IsDir = b
+			return err
+		}},
+		{"size", func(p *jsonParser) error {
+			v, err := p.readInt64()
+			e.Size = v
+			return err
+		}},
+		{"mtime_unix", func(p *jsonParser) error {
+			v, err := p.readInt64()
+			e.MTimeUnix = v
+			return err
+		}},
+		{"mode", func(p *jsonParser) error {
+			v, err := p.readUint64()
+			e.Mode = uint32(v)
+			return err
+		}},
+	})
+	if err != nil {
+		return FSListEntry{}, err
+	}
+	return e, nil
+}
+
+//go:wasmimport platypus host_fs_read_range
+func _hostFSReadRange(reqPtr uint64) uint64
+
+// FSReadRangeResult is what HostFSReadRange returns. EOF is set
+// when offset+len(data) reached the end of the file.
+type FSReadRangeResult struct {
+	Data []byte
+	EOF  bool
+	// Size + Mode are reported on every call (handy for callers
+	// that probe with length=0 to learn the file's metadata before
+	// streaming).
+	Size int64
+	Mode uint32
+}
+
+// HostFSReadRange reads a [offset, offset+length) slice of `path`.
+// length=0 means "report metadata only; no data" — a cheap probe
+// for size+mode before streaming. Plugin manifest must declare
+// `capabilities.fs.read.paths` covering the file.
+func HostFSReadRange(path string, offset, length int64) (FSReadRangeResult, error) {
+	body := `{"path":` + EncodeJSONString(path) +
+		`,"offset":` + strconv.FormatInt(offset, 10) +
+		`,"length":` + strconv.FormatInt(length, 10) + `}`
+	in := pdk.AllocateString(body)
+	out := _hostFSReadRange(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return FSReadRangeResult{}, err
+	}
+	if !env.Ok {
+		return FSReadRangeResult{}, errString(env.Error)
+	}
+	var r FSReadRangeResult
+	var dataB64 string
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"data", func(p *jsonParser) error {
+			s, err := p.readString()
+			dataB64 = s
+			return err
+		}},
+		{"eof", func(p *jsonParser) error {
+			b, err := p.readBool()
+			r.EOF = b
+			return err
+		}},
+		{"size", func(p *jsonParser) error {
+			v, err := p.readInt64()
+			r.Size = v
+			return err
+		}},
+		{"mode", func(p *jsonParser) error {
+			v, err := p.readUint64()
+			r.Mode = uint32(v)
+			return err
+		}},
+	})
+	if err != nil {
+		return FSReadRangeResult{}, err
+	}
+	if dataB64 != "" {
+		decoded, err := decodeBase64(dataB64)
+		if err != nil {
+			return FSReadRangeResult{}, err
+		}
+		r.Data = decoded
+	}
+	return r, nil
+}
+
 // ---- host_fs_write family (cap: fs.write) --------------------------
 
 //go:wasmimport platypus host_fs_mkdir

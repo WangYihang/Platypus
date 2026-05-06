@@ -1,0 +1,50 @@
+api_version: 1
+id: com.platypus.sys-files-read-go
+name: Filesystem read (system, Go)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  TinyGo port of com.platypus.sys-files-read.  Same five entry
+  points (list_dir + stat RPCs + read / scan / archive streams),
+  same wire formats. Different plugin id (-go suffix).
+
+runtime:
+  type: wasm
+  entry: sys_files_read.wasm
+  abi: extism/1
+  lang: go
+
+rpc:
+  - name: list_dir
+    request:  { proto: ListDirRequest }
+    response: { proto: ListDirResponse }
+  - name: stat
+    request:  { proto: StatRequest }
+    response: { proto: StatResponse }
+
+streams:
+  - name: read
+    stream_type: STREAM_TYPE_FILE_READ
+    host_handler: wasm:read
+  - name: scan
+    stream_type: STREAM_TYPE_FILE_SCAN
+    host_handler: wasm:scan
+  - name: archive
+    stream_type: STREAM_TYPE_FILE_ARCHIVE
+    host_handler: wasm:archive
+
+capabilities:
+  fs.read:
+    paths: ["/"]
+
+resources:
+  max_memory_mb: 128
+  max_invocation_ms: 600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_files_read.wasm.minisig
