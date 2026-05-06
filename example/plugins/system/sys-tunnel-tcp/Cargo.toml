@@ -1,13 +1,11 @@
 [package]
-name = "sys-tunnel-pull"
+name = "sys-tunnel-tcp"
 version = "1.0.0"
 edition = "2021"
 publish = false
 
 [lib]
-name = "sys_tunnel_pull"
-# cdylib for the wasm32 build (production); rlib so `cargo test` on
-# the host compiles the pure parsers + their #[cfg(test)] blocks.
+name = "sys_tunnel_tcp"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

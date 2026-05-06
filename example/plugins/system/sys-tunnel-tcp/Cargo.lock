@@ -320,7 +320,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sys-tunnel-pull"
+name = "sys-tunnel-tcp"
 version = "1.0.0"
 dependencies = [
  "extism-pdk",

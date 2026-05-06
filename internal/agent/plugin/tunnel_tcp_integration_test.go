@@ -16,13 +16,17 @@ import (
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
-// TestTunnelPull_RustPluginRoundTrip drives sys-tunnel-pull through
-// the legacy-wasm bridge against a localhost echo server. Asserts:
+// TestTunnelTCP_RustPluginRoundTrip drives sys-tunnel-tcp through the
+// legacy-wasm bridge against a localhost echo server. Asserts:
 //   - TunnelPullResponse carries the resolved peer address
 //   - bytes pushed to the wire reach the echo server and bounce back
-func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
-	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0", "sys_tunnel_pull.wasm")
-	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0")
+//
+// The plugin replaces the prior sys-tunnel-pull (deleted in I3a)
+// with a cleaner manifest naming + headroom for case 2 / SOCKS5 in
+// later versions.
+func TestTunnelTCP_RustPluginRoundTrip(t *testing.T) {
+	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-tcp", "1.0.0", "sys_tunnel_tcp.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-tcp", "1.0.0")
 
 	// Spin up a tiny echo server on a free local port.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -54,7 +58,7 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
-	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_pull.wasm"))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_tcp.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +70,7 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 	defer reg.Close(context.Background())
 
 	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
-		PluginID:            "com.platypus.sys-tunnel-pull",
+		PluginID:            "com.platypus.sys-tunnel-tcp",
 		Version:             "1.0.0",
 		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
@@ -139,11 +143,11 @@ func TestTunnelPull_RustPluginRoundTrip(t *testing.T) {
 	}
 }
 
-// TestTunnelPull_DeniesUnlistedTarget exercises the policy boundary:
+// TestTunnelTCP_DeniesUnlistedTarget exercises the policy boundary:
 // a manifest narrowed to a specific target must reject any other dial.
-func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
-	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0", "sys_tunnel_pull.wasm")
-	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-pull", "1.0.0")
+func TestTunnelTCP_DeniesUnlistedTarget(t *testing.T) {
+	wasm := stagedWasmBytes(t, "com.platypus.sys-tunnel-tcp", "1.0.0", "sys_tunnel_tcp.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-tunnel-tcp", "1.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -162,7 +166,7 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 	// Narrow the wildcard to a specific allowed target.
 	manifestStr = strings.Replace(manifestStr, `targets: ["*"]`,
 		`targets: ["10.255.255.1:9999"]`, 1)
-	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_pull.wasm"))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_tunnel_tcp.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +178,7 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 	defer reg.Close(context.Background())
 
 	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
-		PluginID:            "com.platypus.sys-tunnel-pull",
+		PluginID:            "com.platypus.sys-tunnel-tcp",
 		Version:             "1.0.0",
 		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
@@ -218,4 +222,3 @@ func TestTunnelPull_DeniesUnlistedTarget(t *testing.T) {
 		t.Fatal("DispatchStream did not return")
 	}
 }
-

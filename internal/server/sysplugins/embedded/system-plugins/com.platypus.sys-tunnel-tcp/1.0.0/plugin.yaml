@@ -1,0 +1,57 @@
+api_version: 1
+id: com.platypus.sys-tunnel-tcp
+name: TCP Tunnel (system)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  TCP forwarding plugin. Replaces the legacy sys-tunnel-pull with
+  cleaner naming + room to grow into the reverse-port-forward (case
+  2) and SOCKS5 cases under the same plugin id.
+
+  v1 covers case 1 only — local-to-remote forwarding (operator's
+  local port → agent → remote target). The plugin owns
+  STREAM_TYPE_TUNNEL_PULL: parses the wire request, applies dial
+  policy via the capability allowlist, hands off to host_net_dial +
+  host_net_relay for the bidirectional byte splice.
+
+  Case 2 (reverse port forward, agent listens & accepts → server
+  pulls) requires server-side STREAM_TYPE_TUNNEL_PUSH wiring that's
+  proto'd but not implemented yet. Tracked separately; the plugin's
+  manifest reserves the future net.listen capability so an upgrade
+  doesn't change the operator-confirmed capability set.
+
+  Policy authority is in the wasm: an operator-supplied replacement
+  could narrow the allowed target set, audit-log dials, refuse
+  certain ports, etc. The host's responsibility ends at "splice
+  bytes faithfully + close on either-side EOF".
+
+runtime:
+  type: wasm
+  entry: sys_tunnel_tcp.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux, darwin, windows]
+
+streams:
+  - name: pull
+    stream_type: STREAM_TYPE_TUNNEL_PULL
+    host_handler: wasm:pull
+
+capabilities:
+  net.dial:
+    targets: ["*"]
+
+resources:
+  max_memory_mb: 16
+  # Tunnel sessions can run for hours (long-lived TCP forwarders,
+  # SSH tunnels, etc.). 1-hour ceiling keeps a wedged session from
+  # running forever; in practice the wire close terminates first.
+  max_invocation_ms: 3600000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_tunnel_tcp.wasm.minisig

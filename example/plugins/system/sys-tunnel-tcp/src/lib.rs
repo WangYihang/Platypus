@@ -1,16 +1,23 @@
-// sys-tunnel-pull replaces HandleTunnelPullStream. The wasm side is
+// sys-tunnel-tcp owns STREAM_TYPE_TUNNEL_PULL (and, in v2,
+// STREAM_TYPE_TUNNEL_PUSH for the reverse case). The wasm side is
 // thin: parse TunnelPullRequest, apply dial policy via the
 // capability allowlist, hand off to the host's host_net_dial +
 // host_net_relay. The host owns the bidirectional byte splice
 // between the operator's wire and the dialed TCP conn.
 //
-// Flow:
+// Flow (case 1: forward TCP):
 //   1. parse TunnelPullRequest from input bytes (target, timeout)
 //   2. host_net_dial(spec_json) → {handle, resolved_addr} or error
 //   3. write TunnelPullResponse via host_stream_write
 //   4. host_net_relay(handle) → blocks until either side closes;
 //      during the call the host pumps wire ↔ TCP raw bytes
 //   5. return — the host already closed the dialed conn
+//
+// Case 2 (reverse port forward, agent listens) is not in v1 — the
+// server-side STREAM_TYPE_TUNNEL_PUSH plumbing is proto'd but not
+// implemented. When it lands the plugin will gain a `push` stream
+// handler that uses host_net_listen + host_net_accept (already
+// available agent-side via the H2 work).
 
 use extism_pdk::*;
 use serde::{Deserialize, Serialize};
@@ -212,7 +219,7 @@ fn read_varint(buf: &[u8]) -> Result<(u64, usize), Error> {
 // glue (host_fn declarations, plugin_fn entries, write_pull_response
 // frame writer) is excluded by cfg(target_arch="wasm32") above; full
 // end-to-end coverage of the wasm side lives in
-// internal/agent/plugin/tunnel_pull_integration_test.go.
+// internal/agent/plugin/tunnel_tcp_integration_test.go.
 #[cfg(test)]
 mod tests {
     use super::*;

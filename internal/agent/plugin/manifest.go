@@ -200,9 +200,9 @@ type CapProcessSpec struct {
 // outbound TCP dial. Each entry is a literal target ("10.0.0.5:22",
 // "internal-svc:8080") or "*" for unrestricted. The legacy
 // STREAM_TYPE_TUNNEL_PULL handler had implicit any-target authority,
-// so the system bundle's sys-tunnel-pull replacement uses "*"; a
-// third-party replacement should narrow to a literal list and the
-// install dialog flags "*" prominently.
+// so the system bundle's sys-tunnel-tcp uses "*"; a third-party
+// replacement should narrow to a literal list and the install
+// dialog flags "*" prominently.
 type CapNetDialSpec struct {
 	Targets []string `yaml:"targets"`
 }
