@@ -157,6 +157,14 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetRelay),
 		newHostFunc("host_net_close", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetClose),
+
+		// Inbound TCP listen — case 2 (reverse port forward) + the
+		// SOCKS5 server modes. Gated by CapNetListen + manifest's
+		// net.listen.binds allowlist (glob-matched).
+		newHostFunc("host_net_listen", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetListen),
+		newHostFunc("host_net_accept", []api.ValueType{api.ValueTypeI64},
+			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetAccept),
 	}
 }
 

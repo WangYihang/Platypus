@@ -34,12 +34,19 @@ const (
 	// agent's network — effectively SSRF capability if granted to
 	// "*". The install dialog flags this prominently.
 	CapNetDial CapabilityID = "net.dial"
+	// CapNetListen gates inbound TCP listen — host_net_listen /
+	// _accept. Distinct from CapNetDial because listening on a port
+	// is a different threat model (anyone on the network can connect
+	// to a bound port; operator should authorize binds explicitly).
+	// Used by the new sys-tunnel-tcp / sys-tunnel-socks5 plugin
+	// family for case 2 (reverse port forward) + case 3-4 (SOCKS).
+	CapNetListen CapabilityID = "net.listen"
 )
 
 // allCapabilities is the set the agent is willing to grant. Used by
 // validation to reject manifests that ask for unknown capabilities.
 var allCapabilities = map[CapabilityID]struct{}{
-	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {}, CapNetDial: {},
+	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {}, CapNetDial: {}, CapNetListen: {},
 }
 
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the
@@ -140,14 +147,15 @@ type ManifestSchema struct {
 }
 
 type ManifestCapabilities struct {
-	Exec    *CapExecSpec    `yaml:"exec,omitempty"`
-	FSRead  *CapFSReadSpec  `yaml:"fs.read,omitempty"`
-	FSWrite *CapFSWriteSpec `yaml:"fs.write,omitempty"`
-	NetHTTP *CapNetHTTPSpec `yaml:"net.http,omitempty"`
-	Process *CapProcessSpec `yaml:"process,omitempty"`
-	NetDial *CapNetDialSpec `yaml:"net.dial,omitempty"`
-	KV      bool            `yaml:"kv,omitempty"`
-	SysInfo bool            `yaml:"sysinfo,omitempty"`
+	Exec      *CapExecSpec      `yaml:"exec,omitempty"`
+	FSRead    *CapFSReadSpec    `yaml:"fs.read,omitempty"`
+	FSWrite   *CapFSWriteSpec   `yaml:"fs.write,omitempty"`
+	NetHTTP   *CapNetHTTPSpec   `yaml:"net.http,omitempty"`
+	Process   *CapProcessSpec   `yaml:"process,omitempty"`
+	NetDial   *CapNetDialSpec   `yaml:"net.dial,omitempty"`
+	NetListen *CapNetListenSpec `yaml:"net.listen,omitempty"`
+	KV        bool              `yaml:"kv,omitempty"`
+	SysInfo   bool              `yaml:"sysinfo,omitempty"`
 }
 
 // CapExecSpec.Commands is the exact-path allowlist of executables the
@@ -197,6 +205,20 @@ type CapProcessSpec struct {
 // install dialog flags "*" prominently.
 type CapNetDialSpec struct {
 	Targets []string `yaml:"targets"`
+}
+
+// CapNetListenSpec.Binds is the allowlist of bind addresses
+// host_net_listen will accept. Each entry is a literal "host:port"
+// or a glob (`127.0.0.1:1080`, `0.0.0.0:8080`, `*:1080`,
+// `127.0.0.1:1024-65535` is NOT supported — use repeat entries or
+// a glob like `127.0.0.1:*` and trust the operator's review).
+//
+// The implicit unrestricted entry is "*:*" — operators should think
+// twice before granting it because a plugin with this allowance can
+// bind privileged ports (1-1023) if the agent runs as root and use
+// them as covert exfil endpoints.
+type CapNetListenSpec struct {
+	Binds []string `yaml:"binds"`
 }
 
 type ManifestResources struct {

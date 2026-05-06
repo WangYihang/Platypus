@@ -47,13 +47,20 @@ type netDialSpawnResponse struct {
 	ResolvedAddr string `json:"resolved_addr"`
 }
 
-// netHandle is the per-dial state. Holds the live net.Conn until
-// host_net_relay drains both directions and closes; closed handles
-// are removed from the table.
+// netHandle is the per-dial / per-accepted-conn state. Holds the
+// live net.Conn until host_net_relay drains both directions and
+// closes; closed handles are removed from the table. The same table
+// also stores listener handles via netListener (kind="listener");
+// host_net_close handles either kind.
 type netHandle struct {
 	id      uint32
 	conn    net.Conn
 	relayed atomic.Bool
+
+	// listener is non-nil for entries created by host_net_listen.
+	// Mutually exclusive with conn — a single handle is either an
+	// accepted/dialed conn OR a listener, never both.
+	listener net.Listener
 }
 
 func (pctx *pluginCtx) nextNetHandleID() uint32 {
@@ -191,10 +198,16 @@ func (pctx *pluginCtx) hostNetRelay(_ context.Context, p *extism.CurrentPlugin, 
 
 // hostNetClose best-effort closes a handle. Mostly defensive — relay
 // is the normal happy-path exit; close is for the wasm wanting an
-// early termination.
+// early termination. Handles either dial-style net.Conn handles
+// or listen-style net.Listener handles (the wasm doesn't have to
+// remember which kind a given id was; close is symmetric).
+//
+// Capability check accepts CapNetDial OR CapNetListen — close is
+// trust-symmetric (the plugin is just disposing of a resource it
+// already created legitimately).
 func (pctx *pluginCtx) hostNetClose(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
-	if !pctx.granted[CapNetDial] {
-		returnEnvelope(p, stack, denied("net.dial"))
+	if !pctx.granted[CapNetDial] && !pctx.granted[CapNetListen] {
+		returnEnvelope(p, stack, denied("net.dial or net.listen"))
 		return
 	}
 	id, err := readUint32Arg(p, stack[0])
@@ -213,12 +226,150 @@ func (pctx *pluginCtx) hostNetClose(_ context.Context, p *extism.CurrentPlugin, 
 	if h.conn != nil {
 		_ = h.conn.Close()
 	}
+	if h.listener != nil {
+		_ = h.listener.Close()
+	}
 	returnEnvelope(p, stack, envelope{Ok: true})
 }
 
-// reapNetHandles iterates any orphaned conns and closes them. Called
-// by loaded.close so a plugin that crashed mid-relay doesn't leak a
-// long-lived TCP conn.
+// netListenRequest is the JSON arg for host_net_listen. The bind
+// addr is matched against capabilities.net.listen.binds via the
+// same matchAny glob the dial allowlist uses.
+type netListenRequest struct {
+	Bind string `json:"bind"`
+}
+
+type netListenResponse struct {
+	Handle    uint32 `json:"handle"`
+	BoundAddr string `json:"bound_addr"`
+}
+
+// hostNetListen binds a TCP listener on the requested address. The
+// returned handle is the input to host_net_accept; subsequent
+// host_net_close releases the listener.
+//
+// "0.0.0.0:0" / "127.0.0.1:0" idioms work: the kernel picks a free
+// port, BoundAddr in the response carries the actual port. Plugins
+// that want to publish their bound address back to the operator
+// (e.g. a SOCKS5 server announcing where to connect) read this.
+func (pctx *pluginCtx) hostNetListen(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	if !pctx.granted[CapNetListen] {
+		returnEnvelope(p, stack, denied("net.listen"))
+		return
+	}
+	raw, err := readStringArg(p, stack[0])
+	if err != nil {
+		returnEnvelope(p, stack, failed("read_arg: "+err.Error()))
+		return
+	}
+	var req netListenRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		returnEnvelope(p, stack, failed("decode_request: "+err.Error()))
+		return
+	}
+	if req.Bind == "" {
+		returnEnvelope(p, stack, failed("empty_bind"))
+		return
+	}
+	if pctx.manifest.Capabilities.NetListen == nil {
+		returnEnvelope(p, stack, denied("net.listen (no manifest spec)"))
+		return
+	}
+	if !matchAny(pctx.manifest.Capabilities.NetListen.Binds, req.Bind, 0) {
+		returnEnvelope(p, stack, denied("bind_not_in_allowlist: "+req.Bind))
+		return
+	}
+
+	ln, err := net.Listen("tcp", req.Bind)
+	if err != nil {
+		returnEnvelope(p, stack, failed("listen: "+err.Error()))
+		return
+	}
+
+	pctx.netMu.Lock()
+	if pctx.netHandles == nil {
+		pctx.netHandles = make(map[uint32]*netHandle)
+	}
+	h := &netHandle{
+		id:       pctx.nextNetHandleID(),
+		listener: ln,
+	}
+	pctx.netHandles[h.id] = h
+	pctx.netMu.Unlock()
+
+	returnEnvelope(p, stack, okData(netListenResponse{
+		Handle:    h.id,
+		BoundAddr: ln.Addr().String(),
+	}))
+}
+
+type netAcceptResponse struct {
+	ConnHandle uint32 `json:"conn_handle"`
+	PeerAddr   string `json:"peer_addr"`
+}
+
+// hostNetAccept blocks on the listener identified by `handle` until
+// the next inbound connection arrives, then registers a fresh
+// netHandle for the accepted conn. The plugin then drives the conn
+// via host_net_relay (existing).
+//
+// The accept blocks indefinitely — extism's per-plugin call
+// serialisation means no other host fn can run on the same plugin
+// concurrently. A plugin wanting to "accept loop while doing other
+// work" needs to architect around this (close the listener from
+// another invocation context, or use multiple plugin instances).
+//
+// Per-conn deadline / closing: not implemented in v1. Plugin can
+// host_net_close the listener to break the accept (which returns
+// "use of closed network connection" up through the wasm side).
+//
+// Argument shape mirrors host_net_relay / host_net_close: a bare
+// uint32 handle as a JSON number string (not an envelope). Keeps
+// the SDK's shape uniform across the net family.
+func (pctx *pluginCtx) hostNetAccept(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
+	if !pctx.granted[CapNetListen] {
+		returnEnvelope(p, stack, denied("net.listen"))
+		return
+	}
+	id, err := readUint32Arg(p, stack[0])
+	if err != nil {
+		returnEnvelope(p, stack, failed("read_arg: "+err.Error()))
+		return
+	}
+	pctx.netMu.Lock()
+	h := pctx.netHandles[id]
+	pctx.netMu.Unlock()
+	if h == nil || h.listener == nil {
+		returnEnvelope(p, stack, failed("unknown_listener_handle"))
+		return
+	}
+
+	conn, err := h.listener.Accept()
+	if err != nil {
+		// listener.Close() returns "use of closed network
+		// connection"; let the wasm see the underlying error so it
+		// can decide whether to retry / unwind.
+		returnEnvelope(p, stack, failed("accept: "+err.Error()))
+		return
+	}
+
+	pctx.netMu.Lock()
+	connHandle := &netHandle{
+		id:   pctx.nextNetHandleID(),
+		conn: conn,
+	}
+	pctx.netHandles[connHandle.id] = connHandle
+	pctx.netMu.Unlock()
+
+	returnEnvelope(p, stack, okData(netAcceptResponse{
+		ConnHandle: connHandle.id,
+		PeerAddr:   conn.RemoteAddr().String(),
+	}))
+}
+
+// reapNetHandles iterates any orphaned conns + listeners and closes
+// them. Called by loaded.close so a plugin that crashed mid-relay
+// doesn't leak a long-lived TCP conn or a bound port.
 func (pctx *pluginCtx) reapNetHandles() {
 	pctx.netMu.Lock()
 	handles := pctx.netHandles
@@ -227,6 +378,9 @@ func (pctx *pluginCtx) reapNetHandles() {
 	for _, h := range handles {
 		if h.conn != nil {
 			_ = h.conn.Close()
+		}
+		if h.listener != nil {
+			_ = h.listener.Close()
 		}
 	}
 }

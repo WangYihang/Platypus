@@ -216,6 +216,29 @@ func (c ManifestCapabilities) validate() error {
 			}
 		}
 	}
+	if c.NetListen != nil {
+		if len(c.NetListen.Binds) == 0 {
+			errs = append(errs, errors.New("capabilities.net.listen set without any binds"))
+		}
+		for i, b := range c.NetListen.Binds {
+			// "*:*" — fully unrestricted bind authority. Same posture
+			// as net.dial "*": only sane for system-bundle plugins
+			// the operator deliberately authorizes; the install dialog
+			// flags it.
+			if b == "*:*" {
+				continue
+			}
+			if b == "" || strings.ContainsAny(b, " \t/") {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.net.listen.binds[%d]=%q must be host:port or \"*:*\"", i, b))
+				continue
+			}
+			if !strings.Contains(b, ":") {
+				errs = append(errs, fmt.Errorf(
+					"capabilities.net.listen.binds[%d]=%q missing :port", i, b))
+			}
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -249,6 +272,9 @@ func (m *Manifest) DeclaredCapabilities() []CapabilityID {
 	}
 	if m.Capabilities.NetDial != nil {
 		out = append(out, CapNetDial)
+	}
+	if m.Capabilities.NetListen != nil {
+		out = append(out, CapNetListen)
 	}
 	return out
 }
