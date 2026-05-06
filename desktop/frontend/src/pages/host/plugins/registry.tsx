@@ -51,8 +51,45 @@ export interface PluginUIProps {
 }
 
 export interface PluginUIEntry {
-    /** Reverse-DNS plugin id matching `installed_plugin.id`. */
+    /**
+     * Reverse-DNS plugin id this entry's "primary" association.
+     * Drives the "newly installed" dot indicator and the default
+     * activity URL slug.
+     */
     pluginID: string;
+    /**
+     * URL activity slug. Optional; defaults to
+     * `pluginActivityKey(pluginID)`. Set explicitly when migrating a
+     * legacy hardcoded tab so the URL stays stable
+     * (e.g. "files" rather than "plugin:com.platypus.sys-files-read"
+     * — old bookmarks keep working).
+     */
+    activityKey?: string;
+    /**
+     * Plugin ids that must ALL be installed for this view to
+     * function. Defaults to [pluginID]. Use cases:
+     *   - Files needs sys-files-read AND sys-files-write
+     *   - Processes needs sys-procs-linux AND sys-process
+     * Used by the activity-bar's dimming logic + the install-guide
+     * the entry surfaces when not all required plugins are present.
+     */
+    requiredPluginIDs?: ReadonlyArray<string>;
+    /**
+     * When true, the icon stays in the sidebar even when required
+     * plugins aren't installed; clicking shows an install guide
+     * instead of the component (so the operator can discover the
+     * capability without browsing the Plugins tab first).
+     *
+     * Default false ≡ "only-after-install" — the icon doesn't
+     * appear until the plugin is installed. Recommended for niche
+     * plugins (sys-pkg, sys-journald) where always showing a
+     * dimmed icon would clutter the bar.
+     *
+     * High-baseline plugins (Files, Info, Sessions, Processes,
+     * Security, Config, Tunnels) opt in with alwaysVisible: true
+     * so a fresh-install agent still shows the discoverable set.
+     */
+    alwaysVisible?: boolean;
     /** Human-readable label for the sidebar tooltip. */
     title: string;
     /** Lucide icon component (rendered inline in the activity bar). */
@@ -64,6 +101,37 @@ export interface PluginUIEntry {
      */
     osTargets?: ReadonlyArray<string>;
     component: ComponentType<PluginUIProps>;
+}
+
+/** Resolves the required-plugin list, using the pluginID default. */
+export function entryRequiredPluginIDs(
+    entry: PluginUIEntry,
+): ReadonlyArray<string> {
+    return entry.requiredPluginIDs ?? [entry.pluginID];
+}
+
+/** Resolves the URL activity slug for an entry. */
+export function entryActivityKey(entry: PluginUIEntry): string {
+    return entry.activityKey ?? pluginActivityKey(entry.pluginID);
+}
+
+/** All required plugins installed? */
+export function entryReady(
+    entry: PluginUIEntry,
+    installed: ReadonlySet<string>,
+): boolean {
+    for (const id of entryRequiredPluginIDs(entry)) {
+        if (!installed.has(id)) return false;
+    }
+    return true;
+}
+
+/** Required plugin ids that haven't been installed yet. */
+export function entryMissingPluginIDs(
+    entry: PluginUIEntry,
+    installed: ReadonlySet<string>,
+): string[] {
+    return entryRequiredPluginIDs(entry).filter((id) => !installed.has(id));
 }
 
 // Per-family components are shared across per-OS plugin variants
@@ -193,19 +261,42 @@ export const _RESERVED_ICONS = { Wrench };
 
 /**
  * visiblePluginEntries returns the registry entries that should
- * appear in the activity bar for the given host: installed AND
- * OS-matched. Empty installed (loading / no plugins yet) → empty.
+ * appear in the activity bar for the given host. The rule has two
+ * layers:
+ *
+ *   - OS gate: an entry whose os_targets is non-empty AND doesn't
+ *     include host.os is hidden (regardless of alwaysVisible).
+ *     A linux-only icon never shows up on a darwin host.
+ *
+ *   - Install gate (only when entry.alwaysVisible is NOT true):
+ *     entry.pluginID must be in `installed`. alwaysVisible: true
+ *     entries skip this gate so the operator sees the icon (dimmed,
+ *     with an install-guide on click) even before the plugin is
+ *     installed — the discovery affordance for high-baseline plugins.
+ *
+ * Empty installed (loading / no plugins yet) is still respected as
+ * "the install set isn't known yet" — alwaysVisible entries appear,
+ * install-gated entries don't.
  */
 export function visiblePluginEntries(
     installed: ReadonlySet<string> | null | undefined,
     hostOS: string,
 ): PluginUIEntry[] {
-    if (!installed) return [];
     return PLUGIN_UI_REGISTRY.filter((entry) => {
-        if (!installed.has(entry.pluginID)) return false;
-        if (!entry.osTargets || entry.osTargets.length === 0) return true;
-        if (hostOS === "") return true; // unknown OS → don't filter
-        return entry.osTargets.includes(hostOS);
+        // OS gate.
+        if (entry.osTargets && entry.osTargets.length > 0) {
+            // Empty hostOS ≡ "OS unknown" → don't filter (better
+            // visible-too-much than silently hidden for a freshly-
+            // enrolled agent that hasn't reported sysinfo yet).
+            if (hostOS !== "" && !entry.osTargets.includes(hostOS)) {
+                return false;
+            }
+        }
+        // Install gate (only-after-install entries).
+        if (!entry.alwaysVisible) {
+            if (!installed || !installed.has(entry.pluginID)) return false;
+        }
+        return true;
     });
 }
 

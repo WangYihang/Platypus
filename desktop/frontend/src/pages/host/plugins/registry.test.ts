@@ -10,6 +10,10 @@ import { Cog } from "lucide-react";
 import {
     PLUGIN_ACTIVITY_PREFIX,
     PLUGIN_UI_REGISTRY,
+    entryActivityKey,
+    entryMissingPluginIDs,
+    entryReady,
+    entryRequiredPluginIDs,
     parsePluginActivity,
     pluginActivityKey,
     visiblePluginEntries,
@@ -50,12 +54,18 @@ function filter(
     installed: ReadonlySet<string> | null,
     hostOS: string,
 ): PluginUIEntry[] {
-    if (!installed) return [];
     return entries.filter((entry) => {
-        if (!installed.has(entry.pluginID)) return false;
-        if (!entry.osTargets || entry.osTargets.length === 0) return true;
-        if (hostOS === "") return true;
-        return entry.osTargets.includes(hostOS);
+        // OS gate.
+        if (entry.osTargets && entry.osTargets.length > 0) {
+            if (hostOS !== "" && !entry.osTargets.includes(hostOS)) {
+                return false;
+            }
+        }
+        // Install gate (skip when alwaysVisible).
+        if (!entry.alwaysVisible) {
+            if (!installed || !installed.has(entry.pluginID)) return false;
+        }
+        return true;
     });
 }
 
@@ -89,7 +99,7 @@ describe("registry helpers", () => {
         });
     });
 
-    describe("visiblePluginEntries (filter logic)", () => {
+    describe("visiblePluginEntries (filter logic, install-gated default)", () => {
         it("returns [] when installed set is null (loading)", () => {
             expect(filter(FIXTURES, null, "linux")).toEqual([]);
         });
@@ -132,6 +142,146 @@ describe("registry helpers", () => {
             expect(got.map((e) => e.pluginID).sort()).toEqual([
                 "com.example.darwin-only",
                 "com.example.linux-only",
+            ]);
+        });
+    });
+
+    describe("alwaysVisible — entries skip the install gate", () => {
+        const ENTRIES_AV: PluginUIEntry[] = [
+            {
+                pluginID: "com.example.always-visible",
+                title: "Always Visible",
+                icon: Cog,
+                alwaysVisible: true,
+                component: NoopComponent,
+            },
+            {
+                pluginID: "com.example.install-only",
+                title: "Install Only",
+                icon: Cog,
+                component: NoopComponent,
+            },
+        ];
+
+        it("alwaysVisible entry appears even with empty installed set", () => {
+            const got = filter(ENTRIES_AV, null, "linux");
+            expect(got.map((e) => e.pluginID)).toEqual([
+                "com.example.always-visible",
+            ]);
+        });
+
+        it("alwaysVisible entry appears regardless of install status", () => {
+            // Neither installed.
+            expect(filter(ENTRIES_AV, new Set(), "linux").map((e) => e.pluginID))
+                .toEqual(["com.example.always-visible"]);
+            // Both installed.
+            expect(
+                filter(
+                    ENTRIES_AV,
+                    new Set([
+                        "com.example.always-visible",
+                        "com.example.install-only",
+                    ]),
+                    "linux",
+                ).map((e) => e.pluginID),
+            ).toEqual([
+                "com.example.always-visible",
+                "com.example.install-only",
+            ]);
+        });
+
+        it("OS gate still applies to alwaysVisible entries", () => {
+            const ENTRIES = [
+                {
+                    pluginID: "com.example.av-linux",
+                    title: "AV Linux",
+                    icon: Cog,
+                    alwaysVisible: true,
+                    osTargets: ["linux"],
+                    component: NoopComponent,
+                } satisfies PluginUIEntry,
+            ];
+            // On darwin: hidden even though alwaysVisible.
+            expect(filter(ENTRIES, null, "darwin")).toEqual([]);
+            // On linux: visible.
+            expect(filter(ENTRIES, null, "linux")).toHaveLength(1);
+        });
+    });
+
+    describe("entry helpers", () => {
+        it("entryRequiredPluginIDs defaults to [pluginID]", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.example.x",
+                title: "X",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryRequiredPluginIDs(e)).toEqual(["com.example.x"]);
+        });
+
+        it("entryRequiredPluginIDs returns the explicit list when set", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.example.files",
+                requiredPluginIDs: [
+                    "com.example.files-read",
+                    "com.example.files-write",
+                ],
+                title: "Files",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryRequiredPluginIDs(e)).toEqual([
+                "com.example.files-read",
+                "com.example.files-write",
+            ]);
+        });
+
+        it("entryActivityKey defaults to pluginActivityKey(pluginID)", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.platypus.sys-pkg-linux",
+                title: "Pkg",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryActivityKey(e)).toBe(
+                "plugin:com.platypus.sys-pkg-linux",
+            );
+        });
+
+        it("entryActivityKey honours an explicit override", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.platypus.sys-files-read",
+                activityKey: "files",
+                title: "Files",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryActivityKey(e)).toBe("files");
+        });
+
+        it("entryReady requires every requiredPluginID to be installed", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.example.files",
+                requiredPluginIDs: ["a", "b"],
+                title: "Files",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryReady(e, new Set(["a"]))).toBe(false);
+            expect(entryReady(e, new Set(["a", "b"]))).toBe(true);
+        });
+
+        it("entryMissingPluginIDs lists the unmet requirements", () => {
+            const e: PluginUIEntry = {
+                pluginID: "com.example.files",
+                requiredPluginIDs: ["a", "b", "c"],
+                title: "Files",
+                icon: Cog,
+                component: NoopComponent,
+            };
+            expect(entryMissingPluginIDs(e, new Set(["a"]))).toEqual([
+                "b",
+                "c",
             ]);
         });
     });

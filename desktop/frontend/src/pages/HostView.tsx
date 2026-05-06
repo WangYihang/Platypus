@@ -337,6 +337,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     needsInstall={needsInstall}
                     pluginEntries={pluginEntries}
                     newPluginIDs={newPluginIDs}
+                    installedPluginIDs={installedPlugins.ids ?? undefined}
                 />
                 <div
                     style={{

@@ -157,4 +157,98 @@ describe("<ActivityBar pluginEntries>", () => {
             screen.queryByTestId(/host-activity-new-/),
         ).toBeNull();
     });
+
+    // ---------------- alwaysVisible dimming (Q1) ----------------
+
+    it("alwaysVisible entry with required plugin missing renders dimmed + needs-install dot", () => {
+        const ENTRY_WITH_REQ: PluginUIEntry = {
+            pluginID: "com.platypus.sys-files-read",
+            requiredPluginIDs: [
+                "com.platypus.sys-files-read",
+                "com.platypus.sys-files-write",
+            ],
+            alwaysVisible: true,
+            title: "Files",
+            icon: Cog,
+            component: NoopComp,
+        };
+        render(
+            <ActivityBar
+                active="files"
+                onSelect={() => {}}
+                pluginEntries={[ENTRY_WITH_REQ]}
+                installedPluginIDs={new Set(["com.platypus.sys-files-read"])}
+            />,
+        );
+        const btn = screen.getByTestId(
+            "host-activity-plugin:com.platypus.sys-files-read",
+        );
+        expect(btn.getAttribute("data-needs-install")).toBe("true");
+        expect(btn.getAttribute("title")).toMatch(/needs plugin/);
+        expect(
+            screen.getByTestId(
+                "host-activity-needs-install-com.platypus.sys-files-read",
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it("alwaysVisible entry with all required plugins installed: no dimming, no needs-install dot", () => {
+        const ENTRY_WITH_REQ: PluginUIEntry = {
+            pluginID: "com.platypus.sys-files-read",
+            requiredPluginIDs: [
+                "com.platypus.sys-files-read",
+                "com.platypus.sys-files-write",
+            ],
+            alwaysVisible: true,
+            title: "Files",
+            icon: Cog,
+            component: NoopComp,
+        };
+        render(
+            <ActivityBar
+                active="files"
+                onSelect={() => {}}
+                pluginEntries={[ENTRY_WITH_REQ]}
+                installedPluginIDs={
+                    new Set([
+                        "com.platypus.sys-files-read",
+                        "com.platypus.sys-files-write",
+                    ])
+                }
+            />,
+        );
+        const btn = screen.getByTestId(
+            "host-activity-plugin:com.platypus.sys-files-read",
+        );
+        expect(btn.getAttribute("data-needs-install")).toBeNull();
+    });
+
+    it("entry.activityKey overrides the default plugin: prefix in URL routing", () => {
+        // Use a custom slug that doesn't collide with the hardcoded
+        // ACTIVITIES (the migration to one-uniform-registry happens
+        // in a follow-up commit). The point of the test is the
+        // override mechanism, not the specific slug value.
+        const ENTRY_LEGACY: PluginUIEntry = {
+            pluginID: "com.example.legacy",
+            activityKey: "legacy-custom-slug",
+            alwaysVisible: true,
+            title: "Legacy",
+            icon: Cog,
+            component: NoopComp,
+        };
+        render(
+            <ActivityBar
+                active="legacy-custom-slug"
+                onSelect={() => {}}
+                pluginEntries={[ENTRY_LEGACY]}
+            />,
+        );
+        // URL slug uses the override, not plugin:<id>.
+        expect(
+            screen.getByTestId("host-activity-legacy-custom-slug"),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByTestId("host-activity-plugin:com.example.legacy"),
+        ).toBeNull();
+    });
 });

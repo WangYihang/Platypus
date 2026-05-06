@@ -13,7 +13,8 @@ import {
 
 import { palette } from "../../layout/theme";
 import {
-    PLUGIN_ACTIVITY_PREFIX,
+    entryActivityKey,
+    entryReady,
     type PluginUIEntry,
 } from "./plugins/registry";
 
@@ -75,9 +76,10 @@ interface Props {
     needsInstall?: Partial<Record<FirstPartyActivity, boolean>>;
     /**
      * Plugin-shipped activity entries (PLUGIN_UI_REGISTRY filtered
-     * by `installed plugins ∩ host.os`). Rendered after a horizontal
-     * divider. Each one's activity key follows the
-     * `plugin/<plugin_id>` convention defined in registry.ts.
+     * by `installed plugins ∩ host.os` + alwaysVisible). Rendered
+     * after a horizontal divider. Each one's activity key follows
+     * the `plugin:<plugin_id>` convention defined in registry.ts
+     * (overridable per-entry via entry.activityKey).
      */
     pluginEntries?: ReadonlyArray<PluginUIEntry>;
     /**
@@ -87,6 +89,14 @@ interface Props {
      * call `markSeen(pluginID)` to clear the dot on click.
      */
     newPluginIDs?: ReadonlySet<string>;
+    /**
+     * Set of installed plugin ids (the "agent's installed plugins"
+     * cache). Used to dim alwaysVisible plugin entries whose
+     * required plugins aren't all present, matching the existing
+     * hardcoded-tab dimming pattern (orange dot indicator on the
+     * icon corner). Optional; when undefined, no dimming.
+     */
+    installedPluginIDs?: ReadonlySet<string>;
 }
 
 // ActivityBar is the 44 px vertical strip on the left of HostView,
@@ -107,6 +117,7 @@ export default function ActivityBar({
     needsInstall,
     pluginEntries,
     newPluginIDs,
+    installedPluginIDs,
 }: Props) {
     return (
         <nav
@@ -221,17 +232,25 @@ export default function ActivityBar({
                             background: palette.border,
                         }}
                     />
-                    {pluginEntries.map((entry) => (
-                        <PluginActivityButton
-                            key={entry.pluginID}
-                            entry={entry}
-                            isActive={
-                                active === `${PLUGIN_ACTIVITY_PREFIX}${entry.pluginID}`
-                            }
-                            isNew={newPluginIDs?.has(entry.pluginID) ?? false}
-                            onSelect={onSelect}
-                        />
-                    ))}
+                    {pluginEntries.map((entry) => {
+                        const key = entryActivityKey(entry);
+                        const ready = installedPluginIDs
+                            ? entryReady(entry, installedPluginIDs)
+                            : true;
+                        return (
+                            <PluginActivityButton
+                                key={entry.pluginID}
+                                entry={entry}
+                                activityKey={key}
+                                isActive={active === key}
+                                isNew={
+                                    newPluginIDs?.has(entry.pluginID) ?? false
+                                }
+                                isDimmed={!ready}
+                                onSelect={onSelect}
+                            />
+                        );
+                    })}
                 </>
             )}
         </nav>
@@ -240,17 +259,30 @@ export default function ActivityBar({
 
 function PluginActivityButton({
     entry,
+    activityKey,
     isActive,
     isNew,
+    isDimmed,
     onSelect,
 }: {
     entry: PluginUIEntry;
+    activityKey: string;
     isActive: boolean;
     isNew: boolean;
+    /**
+     * True when not all of entry.requiredPluginIDs are installed.
+     * For alwaysVisible: true entries this means the icon shows
+     * dimmed with an orange dot at the bottom-right (matching the
+     * legacy hardcoded-tab missing-plugin affordance); clicking
+     * still works — the activity body shows the install guide.
+     */
+    isDimmed: boolean;
     onSelect: (a: Activity) => void;
 }) {
     const Icon = entry.icon as React.ComponentType<LucideProps>;
-    const activityKey: Activity = `${PLUGIN_ACTIVITY_PREFIX}${entry.pluginID}`;
+    const tooltipParts: string[] = [entry.title];
+    if (isDimmed) tooltipParts.push("(needs plugin)");
+    if (isNew) tooltipParts.push("(new)");
     return (
         <button
             type="button"
@@ -259,8 +291,9 @@ function PluginActivityButton({
             data-plugin-activity={entry.pluginID}
             data-active={isActive || undefined}
             data-new={isNew || undefined}
+            data-needs-install={isDimmed || undefined}
             aria-current={isActive ? "true" : undefined}
-            title={isNew ? `${entry.title} (new)` : entry.title}
+            title={tooltipParts.join(" ")}
             style={{
                 position: "relative",
                 width: BAR_WIDTH,
@@ -272,10 +305,27 @@ function PluginActivityButton({
                 border: "none",
                 cursor: "pointer",
                 color: isActive ? palette.textPrimary : palette.textMuted,
+                opacity: isDimmed && !isActive ? 0.45 : 1,
                 boxShadow: isActive ? `inset 2px 0 0 0 ${palette.accent}` : undefined,
             }}
         >
             <Icon className={ICON_SIZE} />
+            {isDimmed && (
+                <span
+                    aria-hidden
+                    title=""
+                    data-testid={`host-activity-needs-install-${entry.pluginID}`}
+                    style={{
+                        position: "absolute",
+                        bottom: 6,
+                        right: 8,
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: palette.warning,
+                    }}
+                />
+            )}
             {isNew && (
                 <span
                     aria-label="new"
