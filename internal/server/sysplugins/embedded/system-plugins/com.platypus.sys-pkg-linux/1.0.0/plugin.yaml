@@ -1,0 +1,69 @@
+api_version: 1
+id: com.platypus.sys-pkg-linux
+name: Package management (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux package manager queries. Auto-detects the host's installed
+  package manager at request time (priority: apt → dnf → yum →
+  zypper → pacman) and shells the canonical query for each.
+
+  Two RPCs:
+    - list_installed(query?, max_results?): every installed package
+      with name + version + (best-effort) architecture. The optional
+      `query` substring filter is applied post-parse so all backends
+      behave identically to the operator.
+    - list_upgradable(): packages that have a newer version
+      available in the configured repos. Each row carries
+      current_version + available_version.
+
+  Every response includes the detected backend in the JSON ("apt",
+  "dnf", "pacman", …) so the operator UI can show "this fleet is
+  mostly Debian" at a glance.
+
+  All backends are READ-ONLY in v1. install / remove / upgrade are
+  operationally riskier and need their own capability + audit
+  treatment; v2 may add a separate `pkg_action` RPC behind a
+  CapPkgMutate flag.
+
+runtime:
+  type: wasm
+  entry: sys_pkg_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_installed
+    request:  { proto: PkgListInstalledRequest }
+    response: { proto: PkgListInstalledResponse }
+  - name: list_upgradable
+    request:  { proto: PkgListUpgradableRequest }
+    response: { proto: PkgListUpgradableResponse }
+
+# /bin/sh is invoked with `-c "command -v <bin>"` to probe which
+# package manager exists. The five backend binaries cover Debian/
+# Ubuntu (apt, dpkg-query), RHEL/Fedora (dnf, yum), openSUSE
+# (zypper), Arch (pacman).
+capabilities:
+  exec:
+    commands:
+      - "/bin/sh"
+      - "/usr/bin/dpkg-query"
+      - "/usr/bin/apt"
+      - "/usr/bin/dnf"
+      - "/usr/bin/yum"
+      - "/usr/bin/zypper"
+      - "/usr/bin/pacman"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_pkg_linux.wasm.minisig
