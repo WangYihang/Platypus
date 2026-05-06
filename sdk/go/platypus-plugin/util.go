@@ -19,6 +19,14 @@ func errString(s string) error {
 // to ferry binary blobs through JSON envelopes (see
 // internal/agent/plugin/host_kv.go,host_fs.go).
 func encodeBase64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+// strconvUint32 formats a uint32 as a base-10 ASCII number.
+// Wrapper around strconv.FormatUint; exists so callers in host.go
+// don't have to import strconv (keeps the host-fn file's import
+// set small).
+func strconvUint32(v uint32) string {
+	return strconv.FormatUint(uint64(v), 10)
+}
 func decodeBase64(s string) ([]byte, error) {
 	if s == "" {
 		return nil, nil

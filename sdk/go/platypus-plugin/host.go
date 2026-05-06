@@ -41,6 +41,166 @@ func LogWarnf(format string, args ...any)  { HostLog(LogWarn, sprintf(format, ar
 func LogErrorf(format string, args ...any) { HostLog(LogError, sprintf(format, args...)) }
 func LogDebugf(format string, args ...any) { HostLog(LogDebug, sprintf(format, args...)) }
 
+// ---- host_stream_* — streaming plugin primitives -------------------
+//
+// In raw-wire mode (DispatchLegacyWasmStream — typed stream types
+// like FILE_READ/WRITE/PROCESS_OPEN/TUNNEL_PULL) host_stream_write
+// emits one length-prefixed frame straight to the wire and
+// host_stream_read pulls the next length-prefixed frame off the wire.
+//
+// In pump mode (DispatchPluginStream) the same fns enqueue/dequeue
+// against the dispatcher's PluginStreamFrame envelope pumps; the
+// SDK call sites are identical.
+
+//go:wasmimport platypus host_stream_write
+func _hostStreamWrite(bytesPtr uint64) uint64
+
+//go:wasmimport platypus host_stream_read
+func _hostStreamRead() uint64
+
+//go:wasmimport platypus host_stream_close
+func _hostStreamClose() uint64
+
+// HostStreamWrite emits one frame of bytes on the active stream.
+// Returns nil on success, error on transport / write_closed /
+// stream_not_active.
+func HostStreamWrite(body []byte) error {
+	in := pdk.AllocateBytes(body)
+	out := _hostStreamWrite(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
+// HostStreamRead reads one frame from the active stream. Returns
+// (nil, nil) on EOF (the wire's clean close); (data, nil) on a
+// non-empty frame; (nil, error) on transport failure.
+func HostStreamRead() ([]byte, error) {
+	out := _hostStreamRead()
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return nil, err
+	}
+	if !env.Ok {
+		return nil, errString(env.Error)
+	}
+	if len(env.Data) == 0 {
+		return nil, nil
+	}
+	// envelope.Data carries a base64-encoded JSON string.
+	var b64 string
+	if err := json.Unmarshal(env.Data, &b64); err != nil {
+		return nil, err
+	}
+	return decodeBase64(b64)
+}
+
+// HostStreamClose marks the outbound side EOF. Idempotent;
+// subsequent writes return write_closed.
+func HostStreamClose() error {
+	out := _hostStreamClose()
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
+// ---- host_net (cap: net.dial) --------------------------------------
+
+//go:wasmimport platypus host_net_dial
+func _hostNetDial(specPtr uint64) uint64
+
+//go:wasmimport platypus host_net_relay
+func _hostNetRelay(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_net_close
+func _hostNetClose(reqPtr uint64) uint64
+
+// NetDialResult mirrors the JSON returned inside the envelope.
+type NetDialResult struct {
+	Handle       uint32 `json:"handle"`
+	ResolvedAddr string `json:"resolved_addr"`
+}
+
+// NetDial opens a TCP connection to `target` (host:port). Plugin
+// manifest must declare `capabilities.net.dial.targets` covering
+// the destination. dialTimeoutMs=0 falls back to the host default.
+func NetDial(target string, dialTimeoutMs uint32) (NetDialResult, error) {
+	body, err := json.Marshal(struct {
+		Target        string `json:"target"`
+		DialTimeoutMs uint32 `json:"dial_timeout_ms"`
+	}{Target: target, DialTimeoutMs: dialTimeoutMs})
+	if err != nil {
+		return NetDialResult{}, err
+	}
+	in := pdk.AllocateString(string(body))
+	out := _hostNetDial(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return NetDialResult{}, err
+	}
+	if !env.Ok {
+		return NetDialResult{}, errString(env.Error)
+	}
+	var r NetDialResult
+	if err := json.Unmarshal(env.Data, &r); err != nil {
+		return NetDialResult{}, err
+	}
+	return r, nil
+}
+
+// NetRelay hands the dialed conn off to the host's bidirectional
+// pump and blocks until either side closes. The host pumps wire ↔
+// TCP raw bytes; plugins typically invoke this immediately after
+// the response header has been emitted via HostStreamWrite.
+func NetRelay(handle uint32) error {
+	// Rust crate calls host_net_relay with the handle as a bare JSON
+	// number (not an object); mirror that for wire compat.
+	body := strconvUint32(handle)
+	in := pdk.AllocateString(body)
+	out := _hostNetRelay(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
+// NetClose tears down a dialed conn. Best-effort; failures are
+// usually because the conn was already torn down by NetRelay's
+// terminating side.
+func NetClose(handle uint32) error {
+	body := strconvUint32(handle)
+	in := pdk.AllocateString(body)
+	out := _hostNetClose(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
 // ---- host_uname (cap: sysinfo) -------------------------------------
 
 //go:wasmimport platypus host_uname
