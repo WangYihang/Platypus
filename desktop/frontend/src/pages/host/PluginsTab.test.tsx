@@ -4,6 +4,8 @@
 //   - empty state vs populated list
 //   - row controls call the API client (toggle / uninstall / logs)
 //   - uninstall is gated behind an explicit confirmation
+//   - Available section: shows un-installed system plugins, filtered
+//     by host OS, with Install action wired to installFromSystem
 // We don't test the offline (404) error path here — it's handled
 // upstream by the shared error boundary; reproducing it would require
 // faking the auth wrapper.
@@ -29,6 +31,11 @@ vi.mock("../../lib/api/agents/plugins", () => ({
     enablePlugin: vi.fn(),
     uninstallPlugin: vi.fn(),
     pluginLogs: vi.fn(),
+    installFromSystem: vi.fn(),
+}));
+
+vi.mock("../../lib/api/system_plugins", () => ({
+    listSystemPlugins: vi.fn(),
 }));
 
 import {
@@ -36,7 +43,9 @@ import {
     enablePlugin,
     uninstallPlugin,
     pluginLogs,
+    installFromSystem,
 } from "../../lib/api/agents/plugins";
+import { listSystemPlugins } from "../../lib/api/system_plugins";
 import PluginsTab from "./PluginsTab";
 
 function makeClient(): QueryClient {
@@ -48,7 +57,7 @@ function makeClient(): QueryClient {
     });
 }
 
-function renderTab(active = true) {
+function renderTab(active = true, hostOS = "linux") {
     const client = makeClient();
     function Wrapper({ children }: { children: ReactNode }) {
         return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -58,6 +67,7 @@ function renderTab(active = true) {
             projectID="proj1"
             hostID="agent-a1"
             agentID="agent-a1"
+            hostOS={hostOS}
             active={active}
         />,
         { wrapper: Wrapper },
@@ -69,6 +79,8 @@ const mocked = {
     enablePlugin: vi.mocked(enablePlugin),
     uninstallPlugin: vi.mocked(uninstallPlugin),
     pluginLogs: vi.mocked(pluginLogs),
+    installFromSystem: vi.mocked(installFromSystem),
+    listSystemPlugins: vi.mocked(listSystemPlugins),
 };
 
 beforeEach(() => {
@@ -79,6 +91,11 @@ beforeEach(() => {
     mocked.enablePlugin.mockReset();
     mocked.uninstallPlugin.mockReset();
     mocked.pluginLogs.mockReset();
+    mocked.installFromSystem.mockReset();
+    mocked.listSystemPlugins.mockReset();
+    // Default: empty system catalog so the legacy specs don't have
+    // to think about Available section state.
+    mocked.listSystemPlugins.mockResolvedValue([]);
 });
 
 describe("<PluginsTab>", () => {
@@ -210,5 +227,168 @@ describe("<PluginsTab>", () => {
         mocked.listPlugins.mockResolvedValue([]);
         renderTab(false);
         expect(mocked.listPlugins).not.toHaveBeenCalled();
+    });
+
+    // ---------------- Available section (M-phase follow-up) ----------------
+
+    it("renders an Available section with un-installed system plugins", async () => {
+        mocked.listPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-info",
+                name: "System Info",
+                version: "2.0.0",
+                author: "Platypus",
+                enabled: true,
+                granted_capabilities: ["log", "fs.read"],
+                install_unix: 0,
+                publisher_key_id: "k",
+            },
+        ]);
+        mocked.listSystemPlugins.mockResolvedValueOnce([
+            {
+                // already installed → must NOT appear in Available
+                id: "com.platypus.sys-info",
+                name: "System Info",
+                version: "2.0.0",
+                capabilities: ["log", "fs.read"],
+            },
+            {
+                id: "com.platypus.sys-procs-linux",
+                name: "Process list (linux)",
+                version: "2.0.0",
+                capabilities: ["log", "fs.read"],
+            },
+            {
+                id: "com.platypus.sys-disk-linux",
+                name: "Disk usage (linux)",
+                version: "1.0.0",
+                capabilities: ["log", "exec"],
+            },
+        ]);
+
+        renderTab();
+        await waitFor(() => screen.getByRole("heading", { name: /available/i }));
+
+        // sys-info is installed → only in Installed section, not Available.
+        expect(screen.getByText(/Process list \(linux\)/)).toBeInTheDocument();
+        expect(screen.getByText(/Disk usage \(linux\)/)).toBeInTheDocument();
+
+        // Each Available row has an Install button.
+        const installButtons = screen.getAllByRole("button", { name: /^install$/i });
+        expect(installButtons.length).toBe(2);
+    });
+
+    it("filters Available by host OS via os_targets", async () => {
+        mocked.listPlugins.mockResolvedValueOnce([]);
+        mocked.listSystemPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-procs-linux",
+                name: "Process list (linux)",
+                version: "2.0.0",
+                capabilities: ["fs.read"],
+                os_targets: ["linux"],
+            },
+            {
+                id: "com.platypus.sys-procs-darwin",
+                name: "Process list (darwin)",
+                version: "1.0.0",
+                capabilities: ["exec"],
+                os_targets: ["darwin"],
+            },
+            {
+                id: "com.platypus.sys-info",
+                name: "System Info (multi)",
+                version: "2.0.0",
+                capabilities: ["log"],
+                // No os_targets → applies everywhere
+            },
+        ]);
+
+        renderTab(true, "linux");
+        await waitFor(() => screen.getByText(/Process list \(linux\)/));
+
+        // darwin variant must be hidden on a linux host.
+        expect(screen.queryByText(/Process list \(darwin\)/)).toBeNull();
+        // No-os_targets entry shows up.
+        expect(screen.getByText(/System Info \(multi\)/)).toBeInTheDocument();
+    });
+
+    it("clicking Install on an Available row calls installFromSystem", async () => {
+        mocked.listPlugins.mockResolvedValueOnce([]);
+        mocked.listSystemPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-procs-linux",
+                name: "Process list (linux)",
+                version: "2.0.0",
+                capabilities: ["log", "fs.read"],
+            },
+        ]);
+        mocked.installFromSystem.mockResolvedValueOnce({
+            // The InstallResult shape carries more fields; the
+            // PluginsTab only consumes "ok"-vs-error and refetches
+            // installed plugins on success.
+            plugin_id: "com.platypus.sys-procs-linux",
+            version: "2.0.0",
+            progress: [],
+        } as unknown as Awaited<ReturnType<typeof installFromSystem>>);
+        // Refetch returns the now-installed plugin.
+        mocked.listPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-procs-linux",
+                name: "Process list (linux)",
+                version: "2.0.0",
+                author: "Platypus",
+                enabled: true,
+                granted_capabilities: ["log", "fs.read"],
+                install_unix: 0,
+                publisher_key_id: "k",
+            },
+        ]);
+
+        const user = userEvent.setup();
+        renderTab();
+        await waitFor(() => screen.getByText(/Process list \(linux\)/));
+
+        await user.click(screen.getByRole("button", { name: /^install$/i }));
+
+        await waitFor(() => {
+            expect(mocked.installFromSystem).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                expect.objectContaining({
+                    pluginID: "com.platypus.sys-procs-linux",
+                    version: "2.0.0",
+                    grantedCapabilities: ["log", "fs.read"],
+                }),
+            );
+        });
+    });
+
+    it("hides the Available section when every system plugin is already installed", async () => {
+        mocked.listPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-info",
+                name: "System Info",
+                version: "2.0.0",
+                author: "Platypus",
+                enabled: true,
+                granted_capabilities: ["log"],
+                install_unix: 0,
+                publisher_key_id: "k",
+            },
+        ]);
+        mocked.listSystemPlugins.mockResolvedValueOnce([
+            {
+                id: "com.platypus.sys-info",
+                name: "System Info",
+                version: "2.0.0",
+                capabilities: ["log"],
+            },
+        ]);
+
+        renderTab();
+        await waitFor(() => screen.getByText(/System Info/));
+
+        expect(screen.queryByRole("heading", { name: /available/i })).toBeNull();
     });
 });

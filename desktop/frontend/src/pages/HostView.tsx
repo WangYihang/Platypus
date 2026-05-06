@@ -79,6 +79,7 @@ export default function HostView({ projectID, hostID }: Props) {
 
     const host: Host | null = hostQuery.data ?? null;
     const agentID = host?.agent_id ?? "";
+    const hostOS = host?.os ?? "";
     // Per-tab plugin gating. Reads the agent's installed-plugins list
     // once, drives both the dimmed-icon visual on ActivityBar and the
     // RequiresPlugins guard inside each tab body. Same query-key as
@@ -453,6 +454,7 @@ export default function HostView({ projectID, hostID }: Props) {
                                 projectID={projectID}
                                 hostID={hostID}
                                 agentID={agentID}
+                                hostOS={hostOS}
                                 active={activeActivity === "plugins"}
                             />
                         </div>

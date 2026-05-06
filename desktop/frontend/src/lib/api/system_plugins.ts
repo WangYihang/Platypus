@@ -25,6 +25,15 @@ export interface SystemPlugin {
     capabilities: string[];
     /** v2pb.StreamType strings claimed by this plugin (e.g. STREAM_TYPE_FILE_READ). */
     streams?: string[];
+    /**
+     * Allowed agent OS list (Go's runtime.GOOS strings: "linux",
+     * "darwin", "windows"). Empty / undefined ≡ "applies everywhere".
+     * Surfaced by GET /api/v1/system-plugins so the per-host
+     * PluginsTab can hide plugins that don't apply to the agent's OS.
+     */
+    os_targets?: string[];
+    /** Same shape as os_targets, but for runtime.GOARCH. */
+    arch_targets?: string[];
 }
 
 interface ListResponse {
