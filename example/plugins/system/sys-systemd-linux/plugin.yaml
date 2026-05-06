@@ -1,0 +1,54 @@
+api_version: 1
+id: com.platypus.sys-systemd-linux
+name: Systemd (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux-only systemd integration. Three RPCs:
+    - list_units: enumerate units with optional state/type/pattern
+      filters (defaults to active service units).
+    - show_unit: full Key=Value property dump of a single unit.
+    - unit_action: start / stop / restart / reload / enable / disable
+      / status. Operator-issued lifecycle actions captured in audit
+      log via the agent's exec capture.
+  All three shell out to `systemctl(1)` via host_exec — the binary is
+  the canonical interface, parsing its output is well-trodden ground,
+  and we sidestep hand-rolling a D-Bus client. CapExec (allowlist:
+  /usr/bin/systemctl + /bin/systemctl) is the only privilege required.
+
+runtime:
+  type: wasm
+  entry: sys_systemd_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_units
+    request:  { proto: SystemdListUnitsRequest }
+    response: { proto: SystemdListUnitsResponse }
+  - name: show_unit
+    request:  { proto: SystemdShowUnitRequest }
+    response: { proto: SystemdShowUnitResponse }
+  - name: unit_action
+    request:  { proto: SystemdUnitActionRequest }
+    response: { proto: SystemdUnitActionResponse }
+
+# Two paths because distros split on this — Debian/Ubuntu canonicalise
+# /usr/bin/systemctl, RHEL keeps the historical /bin/systemctl shim.
+# Both are absolute and exact; matchAny treats them as literals.
+capabilities:
+  exec:
+    commands: ["/usr/bin/systemctl", "/bin/systemctl"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_systemd_linux.wasm.minisig
