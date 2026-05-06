@@ -1,0 +1,44 @@
+api_version: 1
+id: com.platypus.sys-procs-darwin
+name: Process list (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS process list plugin. Shells out to `/bin/ps` (BSD ps with
+  the `-axwwo` flag) and parses fixed-column output into the same
+  protojson v2pb.ProcessListResponse shape sys-procs-linux emits.
+
+  Coverage: pid, ppid, user, name (=COMM), cmdline (=ARGS), status
+  (=STAT), cpu_percent (=%CPU), mem_percent (=%MEM), rss_bytes
+  (RSS multiplied by 1024 — BSD ps reports kilobytes).
+  num_threads + created_at_unix deferred (would need `ps -M` and
+  Mach API; not worth host_exec churn for v1).
+
+runtime:
+  type: wasm
+  entry: sys_procs_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: process_list
+    request:  { proto: ProcessListRequest }
+    response: { proto: ProcessListResponse }
+
+# /bin/ps is the only canonical path on macOS.
+capabilities:
+  exec:
+    commands: ["/bin/ps"]
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_procs_darwin.wasm.minisig

@@ -23,8 +23,8 @@ import (
 // marshals v2pb.ProcessListResponse straight through), so the
 // bridge only does protojson.Unmarshal — no intermediate JSON struct.
 var procsPluginIDByOS = map[string]string{
-	"linux": "com.platypus.sys-procs-linux",
-	// "darwin":  "com.platypus.sys-procs-darwin",  // M1a
+	"linux":  "com.platypus.sys-procs-linux",
+	"darwin": "com.platypus.sys-procs-darwin",
 	// "windows": "com.platypus.sys-procs-windows", // M1b
 }
 
