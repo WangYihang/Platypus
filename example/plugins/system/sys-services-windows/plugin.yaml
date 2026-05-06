@@ -1,0 +1,56 @@
+api_version: 1
+id: com.platypus.sys-services-windows
+name: Service control (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows service control. Two RPCs (parity with
+  sys-services-darwin's smaller-than-systemd shape):
+
+  - list_units(filter?): list services via Get-Service
+    PowerShell cmdlet → JSON. Each row carries Name, DisplayName,
+    Status (1=Stopped, 2=StartPending, 3=StopPending, 4=Running,
+    5=ContinuePending, 6=PausePending, 7=Paused), StartType
+    (0=Boot, 1=System, 2=Automatic, 3=Manual, 4=Disabled).
+  - unit_action(name, action): start, stop, restart, pause,
+    continue. Backed by Start-Service / Stop-Service / Restart-
+    Service / Suspend-Service / Resume-Service so the action runs
+    via the same SCM RPC the operator's GUI uses (no sc.exe
+    privilege weirdness).
+
+  Get-Service rather than sc.exe because sc.exe's "query" output
+  is verbose multi-line text that's painful to parse robustly
+  across Windows versions; Get-Service emits structured objects
+  natively.
+
+runtime:
+  type: wasm
+  entry: sys_services_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_units
+    request:  { proto: ServicesListUnitsRequest }
+    response: { proto: ServicesListUnitsResponse }
+  - name: unit_action
+    request:  { proto: ServicesUnitActionRequest }
+    response: { proto: ServicesUnitActionResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_services_windows.wasm.minisig
