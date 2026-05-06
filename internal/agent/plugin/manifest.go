@@ -111,6 +111,21 @@ type ManifestRuntime struct {
 	// this honestly so the operator-facing tooling can surface it;
 	// it's not a security boundary.
 	Lang string `yaml:"lang,omitempty"`
+
+	// OSTargets / ArchTargets restrict which agents the server's
+	// reconciler will push this plugin to. Values are Go's
+	// runtime.GOOS / runtime.GOARCH strings ("linux", "darwin",
+	// "windows" / "amd64", "arm64", ...). Empty slice = match all,
+	// which preserves backward compatibility with manifests written
+	// before these fields existed.
+	//
+	// The check is enforced server-side in reconcileSystemPlugins;
+	// the agent itself doesn't validate OSTargets at install time
+	// (an operator who manually pushes a linux-only plugin to a
+	// darwin agent will simply see the wasm fail to do anything
+	// useful — the host_fs_read of /proc returns "not found").
+	OSTargets   []string `yaml:"os_targets,omitempty"`
+	ArchTargets []string `yaml:"arch_targets,omitempty"`
 }
 
 type ManifestRPC struct {

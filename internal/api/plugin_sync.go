@@ -44,6 +44,13 @@ const pluginSyncTimeout = 2 * time.Minute
 // override and the server binary's prebuilt embed.FS; this function
 // can't tell which.
 //
+// agentOS / agentArch are the agent's reported runtime.GOOS /
+// runtime.GOARCH (e.g. "linux"/"amd64"). The reconciler skips any
+// plugin whose manifest declares non-empty os_targets/arch_targets
+// that don't include the agent's pair. Empty / "" input is treated
+// as "no filter" — preserves backward compat for fixtures that
+// don't populate the host record yet.
+//
 // nil bundle → returns nil (reconciliation disabled). Missing
 // entries in the bundle are logged and skipped; the agent surfaces
 // plugin_not_installed when an RPC actually tries to use them.
@@ -52,6 +59,7 @@ func reconcileSystemPlugins(
 	sess pluginSyncSession,
 	agentID string,
 	hostBaseline []string,
+	agentOS, agentArch string,
 	systemBundle fs.FS,
 ) error {
 	if systemBundle == nil {
@@ -99,6 +107,16 @@ func reconcileSystemPlugins(
 			log.Warn("plugin sync: %s not in system bundle; agent will return plugin_not_installed", id)
 			continue
 		}
+		if !platformMatches(info.OSTargets, agentOS) {
+			log.Info("plugin sync: skip %s for %s — os_targets=%v doesn't include %q",
+				id, agentID, info.OSTargets, agentOS)
+			continue
+		}
+		if !platformMatches(info.ArchTargets, agentArch) {
+			log.Info("plugin sync: skip %s for %s — arch_targets=%v doesn't include %q",
+				id, agentID, info.ArchTargets, agentArch)
+			continue
+		}
 		if cur, present := haveVersion[id]; present && cur == info.Version {
 			continue
 		}
@@ -113,6 +131,23 @@ func reconcileSystemPlugins(
 		log.Info("plugin sync: %s %s@%s on %s", action, id, info.Version, agentID)
 	}
 	return nil
+}
+
+// platformMatches reports whether `value` is allowed by `targets`.
+// Empty `targets` means "no restriction" → always true. Empty
+// `value` (agent didn't report os/arch yet — fresh enrol race)
+// also returns true: better to push and let the wasm fail gracefully
+// than to silently skip every plugin.
+func platformMatches(targets []string, value string) bool {
+	if len(targets) == 0 || value == "" {
+		return true
+	}
+	for _, t := range targets {
+		if t == value {
+			return true
+		}
+	}
+	return false
 }
 
 // pluginSyncSession is the minimal contract the reconciler needs from

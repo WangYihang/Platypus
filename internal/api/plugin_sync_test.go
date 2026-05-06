@@ -158,6 +158,71 @@ signature:
 	}
 }
 
+// stageBundlePlatformed is the os_targets/arch_targets-aware sibling
+// of stageBundle. Used by the OS-filter tests to check the
+// reconciler skips plugins whose manifest's runtime.os_targets
+// doesn't match the agent's reported runtime.GOOS.
+func stageBundlePlatformed(t *testing.T, root, pluginID, version string, osTargets, archTargets []string) {
+	t.Helper()
+	dir := filepath.Join(root, pluginID, version)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	osLine, archLine := "", ""
+	if len(osTargets) > 0 {
+		osLine = "  os_targets: [" + joinQuoted(osTargets) + "]\n"
+	}
+	if len(archTargets) > 0 {
+		archLine = "  arch_targets: [" + joinQuoted(archTargets) + "]\n"
+	}
+	manifest := `api_version: 1
+id: ` + pluginID + `
+name: ` + pluginID + `
+version: ` + version + `
+author:
+  name: test
+license: MIT
+runtime:
+  type: wasm
+  entry: plugin.wasm
+  abi: extism/1
+` + osLine + archLine + `rpc:
+  - name: ping
+capabilities:
+  sysinfo: true
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 1000
+signature:
+  algo: minisign-ed25519
+  key_id: TESTKEY
+  sig_file: plugin.wasm.minisig
+`
+	if err := os.WriteFile(filepath.Join(dir, "plugin.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	wasm := make([]byte, 16)
+	_, _ = rand.Read(wasm)
+	if err := os.WriteFile(filepath.Join(dir, "plugin.wasm"), wasm, 0o644); err != nil {
+		t.Fatalf("write wasm: %v", err)
+	}
+	sig := []byte("untrusted comment: fake\n" + base64.StdEncoding.EncodeToString(wasm) + "\n")
+	if err := os.WriteFile(filepath.Join(dir, "plugin.wasm.minisig"), sig, 0o644); err != nil {
+		t.Fatalf("write sig: %v", err)
+	}
+}
+
+func joinQuoted(xs []string) string {
+	out := ""
+	for i, s := range xs {
+		if i > 0 {
+			out += ", "
+		}
+		out += `"` + s + `"`
+	}
+	return out
+}
+
 // stagePublisherKey writes a non-empty publisher.pub at root. The
 // fake session doesn't validate it; this is just so the reconciler's
 // "trust anchor present" check passes.
@@ -179,7 +244,7 @@ func TestReconcileSystemPlugins_MandatoryCoreOnly(t *testing.T) {
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
 	sess := &fakeSession{installedVersions: nil}
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// Expect: 1 list call + 1 install call for sys-info.
@@ -204,7 +269,7 @@ func TestReconcileSystemPlugins_BaselinePicksPlusCore(t *testing.T) {
 
 	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read", "com.platypus.sys-process"}
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list + 3 installs (baseline 2 + mandatory 1).
@@ -242,7 +307,7 @@ func TestReconcileSystemPlugins_AlreadyInstalledIsNoOp(t *testing.T) {
 
 	sess := &fakeSession{installedVersions: map[string]string{"com.platypus.sys-info": "2.0.0"}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+		[]string{"com.platypus.sys-info"}, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list only; nothing missing.
@@ -262,7 +327,7 @@ func TestReconcileSystemPlugins_VersionMismatchTriggersUpgrade(t *testing.T) {
 		"com.platypus.sys-info": "1.0.0",
 	}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+		[]string{"com.platypus.sys-info"}, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list + install (the upgrade).
@@ -283,7 +348,7 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 
 	sess := &fakeSession{installedVersions: nil}
 	baseline := []string{"com.platypus.sys-files-read"} // not staged
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile should not error on missing bundle entry: %v", err)
 	}
 	// list + sys-info install only; missing baseline entry is skipped.
@@ -308,7 +373,7 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 func TestReconcileSystemPlugins_PrebuiltEmbed(t *testing.T) {
 	bundle := sysplugins.PrebuiltFS()
 	sess := &fakeSession{installedVersions: nil}
-	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, bundle); err != nil {
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", nil, "linux", "amd64", bundle); err != nil {
 		t.Fatalf("reconcile against PrebuiltFS: %v", err)
 	}
 	// 1 list + 1 install (sys-info, the mandatory entry).
@@ -323,7 +388,7 @@ func TestReconcileSystemPlugins_PrebuiltEmbed(t *testing.T) {
 func TestReconcileSystemPlugins_NoBundleDirShortCircuits(t *testing.T) {
 	sess := &fakeSession{}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, nil); err != nil {
+		[]string{"com.platypus.sys-info"}, "linux", "amd64", nil); err != nil {
 		t.Fatalf("reconcile with nil bundle: %v", err)
 	}
 	if len(sess.calls) != 0 {
@@ -355,6 +420,120 @@ func TestDedupeAppend(t *testing.T) {
 				if got[i] != tc.want[i] {
 					t.Fatalf("got %v; want %v", got, tc.want)
 				}
+			}
+		})
+	}
+}
+
+// TestReconcileSystemPlugins_SkipsByOSTarget asserts a plugin whose
+// manifest declares os_targets=[linux] is NOT pushed to a darwin
+// agent, even though it's in the baseline.
+func TestReconcileSystemPlugins_SkipsByOSTarget(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundlePlatformed(t, root, "com.platypus.sys-info", "2.0.0", nil, nil) // mandatory, all platforms
+	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
+
+	sess := &fakeSession{installedVersions: nil}
+	baseline := []string{"com.platypus.sys-systemd-linux"}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
+		baseline, "darwin", "amd64", os.DirFS(root)); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	// Expect: list + 1 install (only sys-info; systemd-linux skipped on darwin).
+	if len(sess.calls) != 2 {
+		t.Fatalf("calls = %d (%+v); want 2", len(sess.calls), sess.calls)
+	}
+	if sess.calls[1].pluginID != "com.platypus.sys-info" {
+		t.Errorf("install = %q; want sys-info only (linux plugin should skip)", sess.calls[1].pluginID)
+	}
+}
+
+// TestReconcileSystemPlugins_PushesMatchingOSTarget is the positive
+// counterpart: same plugin gets installed on a linux agent.
+func TestReconcileSystemPlugins_PushesMatchingOSTarget(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundlePlatformed(t, root, "com.platypus.sys-info", "2.0.0", nil, nil)
+	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
+
+	sess := &fakeSession{installedVersions: nil}
+	baseline := []string{"com.platypus.sys-systemd-linux"}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
+		baseline, "linux", "amd64", os.DirFS(root)); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	// list + 2 installs (sys-info + systemd-linux).
+	if len(sess.calls) != 3 {
+		t.Fatalf("calls = %d (%+v); want 3", len(sess.calls), sess.calls)
+	}
+}
+
+// TestReconcileSystemPlugins_SkipsByArchTarget asserts arch filtering
+// is independent of OS filtering.
+func TestReconcileSystemPlugins_SkipsByArchTarget(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundlePlatformed(t, root, "com.platypus.sys-info", "2.0.0", nil, nil)
+	stageBundlePlatformed(t, root, "com.platypus.amd64-only", "1.0.0", nil, []string{"amd64"})
+
+	sess := &fakeSession{installedVersions: nil}
+	baseline := []string{"com.platypus.amd64-only"}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
+		baseline, "linux", "arm64", os.DirFS(root)); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	// Only sys-info installs on the arm64 agent.
+	if len(sess.calls) != 2 {
+		t.Fatalf("calls = %d (%+v); want 2 (list + sys-info)", len(sess.calls), sess.calls)
+	}
+	if sess.calls[1].pluginID != "com.platypus.sys-info" {
+		t.Errorf("install = %q; want sys-info only", sess.calls[1].pluginID)
+	}
+}
+
+// TestReconcileSystemPlugins_EmptyAgentOSAllowsAll covers the
+// "agent didn't report yet" race: empty agentOS means we can't
+// filter, so we push everything (better than installing nothing
+// during the fresh-enrol gap).
+func TestReconcileSystemPlugins_EmptyAgentOSAllowsAll(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundlePlatformed(t, root, "com.platypus.sys-info", "2.0.0", nil, nil)
+	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
+
+	sess := &fakeSession{installedVersions: nil}
+	baseline := []string{"com.platypus.sys-systemd-linux"}
+	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
+		baseline, "" /*agentOS unknown*/, "" /*agentArch unknown*/, os.DirFS(root)); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(sess.calls) != 3 {
+		t.Fatalf("calls = %d (%+v); want 3 — empty agent OS should not filter", len(sess.calls), sess.calls)
+	}
+}
+
+func TestPlatformMatches(t *testing.T) {
+	cases := []struct {
+		name    string
+		targets []string
+		value   string
+		want    bool
+	}{
+		{"empty targets matches anything", nil, "linux", true},
+		{"empty value matches anything", []string{"linux"}, "", true},
+		{"hit", []string{"linux", "darwin"}, "linux", true},
+		{"miss", []string{"linux"}, "darwin", false},
+		{"single match", []string{"darwin"}, "darwin", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := platformMatches(c.targets, c.value); got != c.want {
+				t.Errorf("got %v; want %v", got, c.want)
 			}
 		})
 	}

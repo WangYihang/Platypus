@@ -59,6 +59,13 @@ type systemPluginInfo struct {
 	// file_read" without needing the wizard to know the manifest
 	// shape.
 	Streams []string `json:"streams,omitempty"`
+	// OSTargets / ArchTargets mirror manifest.runtime.os_targets /
+	// arch_targets. Empty slice = all platforms. Surfaced to the
+	// wizard so the picker can grey-out plugins that don't apply
+	// to the host being enrolled, and consumed by the reconciler
+	// to skip incompatible plugins for an already-enrolled agent.
+	OSTargets   []string `json:"os_targets,omitempty"`
+	ArchTargets []string `json:"arch_targets,omitempty"`
 }
 
 type systemPluginsResponse struct {
@@ -144,6 +151,8 @@ func enumerateSystemPlugins(fsys fs.FS) ([]systemPluginInfo, error) {
 				License:      m.License,
 				Capabilities: capStrs,
 				Streams:      streams,
+				OSTargets:    append([]string(nil), m.Runtime.OSTargets...),
+				ArchTargets:  append([]string(nil), m.Runtime.ArchTargets...),
 			})
 		}
 	}
