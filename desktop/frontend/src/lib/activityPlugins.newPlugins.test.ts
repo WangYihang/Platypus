@@ -1,4 +1,4 @@
-// Spec for useNewPluginActivities + activitiesNeedingInstall.
+// Spec for useNewPluginActivities (localStorage-backed "new dot").
 //
 // useNewPluginActivities is the localStorage-backed "which plugin
 // icons should show a 'new' dot?" hook. Coverage:

@@ -1,43 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import {
-    REQUIRED_PLUGINS,
-    activitiesNeedingInstall,
-    missingFor,
-} from "./activityPlugins";
+import { missingFor } from "./activityPlugins";
 
-// activityPlugins is the small-but-load-bearing mapping that drives
-// the per-tab plugin gating in HostView. The tests pin three things:
-//   1. `missingFor` is honest about its inputs — null installed set
-//      means "still loading", which renders no install guide.
-//   2. `activitiesNeedingInstall` reflects exactly the activities
-//      whose required plugins aren't all installed.
-//   3. The mapping itself only references plugins that actually
-//      exist in the system catalog (sanity check against typos in
-//      REQUIRED_PLUGINS).
+// missingFor is the small-but-load-bearing helper that drives per-
+// tab plugin gating. Q5 rewired it from a hardcoded REQUIRED_PLUGINS
+// map to the PLUGIN_UI_REGISTRY's per-entry requiredPluginIDs, so
+// the tests pin two things:
+//   1. Honesty about inputs — null installed = "still loading", no
+//      install guide; missing required ids surface verbatim.
+//   2. OS-aware lookup — Processes ships per-OS variants
+//      (sys-procs-{linux,darwin,windows}); the right one is picked
+//      by hostOS so a darwin host doesn't get told to install the
+//      Linux variant.
 
 describe("missingFor", () => {
-    it("returns [] for activities with no required plugins", () => {
-        // info has no entry; same with the activity-bar-only "plugins" tab.
-        expect(missingFor("info", new Set())).toEqual([]);
-        expect(missingFor("plugins", new Set())).toEqual([]);
-    });
-
     it("returns [] when the installed set is null (still loading)", () => {
-        // Loading state: tab body's own loader paints during this
-        // window. The install guide must not flash spuriously.
-        expect(missingFor("files", null)).toEqual([]);
+        expect(missingFor("files", null, "linux")).toEqual([]);
     });
 
-    it("returns the required plugins minus the installed ones", () => {
+    it("returns [] for activities not in the registry", () => {
+        // The hardcoded "plugins" tab has no registry entry; gating
+        // doesn't apply.
+        expect(missingFor("plugins", new Set(), "linux")).toEqual([]);
+        expect(missingFor("nonsense-key", new Set(), "linux")).toEqual([]);
+    });
+
+    it("returns required minus installed for Files (alwaysVisible entry)", () => {
+        // Files declares requiredPluginIDs = [sys-files-read, sys-files-write].
         const got = missingFor(
             "files",
             new Set(["com.platypus.sys-files-read"]),
+            "linux",
         );
-        // sys-files-read installed; sys-files-write still missing.
-        expect(got).toEqual([
-            "com.platypus.sys-files-write",
-        ]);
+        expect(got).toEqual(["com.platypus.sys-files-write"]);
     });
 
     it("returns [] when every required plugin is installed", () => {
@@ -45,70 +40,20 @@ describe("missingFor", () => {
             "com.platypus.sys-files-read",
             "com.platypus.sys-files-write",
         ]);
-        expect(missingFor("files", installed)).toEqual([]);
-    });
-});
-
-describe("activitiesNeedingInstall", () => {
-    it("returns empty when nothing is registered yet (loading)", () => {
-        expect(activitiesNeedingInstall(null)).toEqual({});
+        expect(missingFor("files", installed, "linux")).toEqual([]);
     });
 
-    it("flags activities whose required plugins aren't installed", () => {
-        // Only sys-procs-linux installed → processes still missing
-        // sys-process; sessions also needs sys-process; every other
-        // gated activity has all plugins missing.
-        const got = activitiesNeedingInstall(
-            new Set(["com.platypus.sys-procs-linux"]),
-        );
-        expect(got.files).toBe(true);
-        expect(got.sessions).toBe(true);
-        expect(got.processes).toBe(true);
-        expect(got.security).toBe(true);
-        expect(got.config).toBe(true);
-        expect(got.tunnels).toBe(true);
-        // info / plugins are intentionally not in REQUIRED_PLUGINS,
-        // so they never appear here.
-        expect(got.info).toBeUndefined();
-        expect(got.plugins).toBeUndefined();
-    });
-
-    it("returns empty object when every required plugin is installed", () => {
-        const installed = new Set<string>();
-        for (const list of Object.values(REQUIRED_PLUGINS)) {
-            for (const id of list ?? []) installed.add(id);
-        }
-        expect(activitiesNeedingInstall(installed)).toEqual({});
-    });
-});
-
-describe("REQUIRED_PLUGINS", () => {
-    it("keys are subset of declared activity names", () => {
-        // Cheap typo guard — REQUIRED_PLUGINS uses Activity as its
-        // index type, so a bad key would be a TypeScript error
-        // already, but the test makes the contract explicit.
-        const validActivities = new Set([
-            "files",
-            "info",
-            "sessions",
-            "processes",
-            "security",
-            "config",
-            "tunnels",
-            "plugins",
+    it("Processes lookup is OS-aware — darwin doesn't get sys-procs-linux", () => {
+        // On darwin, the matching Processes entry requires
+        // sys-procs-darwin + sys-process. Linux's sys-procs-linux is
+        // irrelevant.
+        const installed = new Set(["com.platypus.sys-procs-darwin"]);
+        expect(missingFor("processes", installed, "darwin")).toEqual([
+            "com.platypus.sys-process",
         ]);
-        for (const k of Object.keys(REQUIRED_PLUGINS)) {
-            expect(validActivities.has(k)).toBe(true);
-        }
-    });
-
-    it("every required id matches the system catalog naming convention", () => {
-        // Sanity check: avoid "sys-files-read" vs "com.platypus.sys-files-read"
-        // typos that would silently break the gate.
-        for (const list of Object.values(REQUIRED_PLUGINS)) {
-            for (const id of list ?? []) {
-                expect(id).toMatch(/^com\.platypus\.sys-/);
-            }
-        }
+        expect(missingFor("processes", installed, "linux")).toEqual([
+            "com.platypus.sys-procs-linux",
+            "com.platypus.sys-process",
+        ]);
     });
 });

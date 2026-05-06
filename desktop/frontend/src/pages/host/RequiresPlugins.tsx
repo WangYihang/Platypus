@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Activity } from "./ActivityBar";
 import { missingFor, useInstalledPluginIDs } from "../../lib/activityPlugins";
+import { useHostContext } from "./HostContext";
 
 interface Props {
     projectID: string;
@@ -54,7 +55,8 @@ export default function RequiresPlugins({
     children,
 }: Props) {
     const installed = useInstalledPluginIDs(projectID, agentID);
-    const missing = missingFor(activity, installed.ids);
+    const { host } = useHostContext();
+    const missing = missingFor(activity, installed.ids, host.os ?? "");
 
     if (installed.isError) {
         return (

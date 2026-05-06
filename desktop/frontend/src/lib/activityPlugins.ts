@@ -1,70 +1,23 @@
-// Per-activity plugin requirements + the helper hook + wrapper that
-// enforces them. The mapping is the single source of truth for
-// "which capability lives in which plugin": one place to look at
-// when an activity tab is added or a plugin id changes.
+// Per-host install-status hooks + the missingFor helper that drives
+// per-tab plugin gating in HostView.
 //
 // Wire shape: every tab body wraps in <RequiresPlugins activity={...}>.
 // The component reads the host's installed plugin list (cached),
-// compares against REQUIRED_PLUGINS[activity], and either renders
-// children (all installed) or an InstallGuide that points the
-// operator at the Plugins tab to add the missing pieces.
+// looks up the activity's PLUGIN_UI_REGISTRY entry to learn its
+// requiredPluginIDs (per-OS-aware), and either renders children
+// (all installed) or an InstallGuide that points the operator at
+// the Plugins tab to add the missing pieces.
 //
-// The activity icon greying lives on top of the same hook in
-// ActivityBar — we expose missingPlugins() so the bar can dim
-// icons whose tab would land on the install guide.
+// Q5 deleted the standalone REQUIRED_PLUGINS map — the registry's
+// per-entry requiredPluginIDs is the single source of truth now.
 
 import { useQuery } from "@tanstack/react-query";
 
 import { listPlugins } from "./api/agents/plugins";
-
-import type { Activity } from "../pages/host/ActivityBar";
-
-// REQUIRED_PLUGINS lists the system-plugin ids each activity tab
-// needs to be useful. "Useful" = the primary affordance works:
-//   · Files — needs sys-files-read (list_dir + stat + read +
-//     scan + archive) AND sys-files-write (mkdir / chmod / delete /
-//     rename + write stream). The two were 6 separate plugins
-//     before the merge; collapsing fs.read and fs.write each into
-//     one plugin halves the operator's "Install" buttons here.
-//   · Info / Hardware — sys-info paints the overview cards
-//     (including hostname; sys-hostname was folded into sys-info).
-//     We don't list sys-info as required here because
-//     mandatoryCorePluginIDs guarantees it on every boot.
-//   · Sessions — terminal sessions need sys-process (was
-//     sys-process-open before merging with sys-exec).
-//   · Processes — needs sys-procs-linux (per-OS process list
-//     plugin; M1a/M1b will add sys-procs-darwin / -windows) AND
-//     sys-process (open a shell from a process row).
-//   · Security — sys-security drives the security scan UI.
-//   · Config — sys-config-audit drives the config audit UI.
-//   · Tunnels — sys-tunnel-tcp is the agent-side stream owner
-//     (renamed from sys-tunnel-pull in Sprint 1's I3a).
-//   · Plugins — meta tab; needs nothing.
-//
-// Plugins outside the operator's allowlist surface as "Install"
-// prompts; once installed, the tab activates without any further
-// state plumbing because the per-tab queries get their normal
-// 200 from the agent.
-export const REQUIRED_PLUGINS: Partial<Record<Activity, readonly string[]>> = {
-    files: [
-        "com.platypus.sys-files-read",
-        "com.platypus.sys-files-write",
-    ],
-    sessions: ["com.platypus.sys-process"],
-    processes: [
-        // TODO: when M1a/M1b ship sys-procs-darwin / -windows, swap
-        // this hardcoded ID for an OS-aware lookup so non-linux
-        // agents don't flash an "install sys-procs-linux" prompt.
-        "com.platypus.sys-procs-linux",
-        "com.platypus.sys-process",
-    ],
-    security: ["com.platypus.sys-security"],
-    config: ["com.platypus.sys-config-audit"],
-    tunnels: ["com.platypus.sys-tunnel-tcp"],
-    // info + plugins intentionally absent — info needs only
-    // sys-info (mandatory core, always present); plugins is the
-    // catalogue tab and would create a recursive prompt.
-};
+import {
+    entryForActivity,
+    entryMissingPluginIDs,
+} from "../pages/host/plugins/registry";
 
 // useInstalledPluginIDs returns the set of installed plugin ids on
 // the agent. Single shared query-key so every tab reads the same
@@ -97,32 +50,29 @@ export function useInstalledPluginIDs(
     };
 }
 
-// missingFor returns the subset of REQUIRED_PLUGINS[activity] that
-// the operator hasn't installed (or has installed but disabled).
-// Empty list = activity ready to render. installed=null surfaces
-// as "all OK, render children" — the loading state gets a neutral
-// flash from the children's own loaders rather than a spurious
-// install guide.
-export function missingFor(activity: Activity, installed: Set<string> | null): string[] {
-    const required = REQUIRED_PLUGINS[activity];
-    if (!required || required.length === 0) return [];
+/**
+ * missingFor returns the subset of an activity's required plugins
+ * that the operator hasn't installed (or has installed but
+ * disabled). Empty list = activity ready to render.
+ *
+ * `installed === null` surfaces as "all OK, render children" — the
+ * loading state gets a neutral flash from the children's own
+ * loaders rather than a spurious install guide.
+ *
+ * Multi-entry activities (Processes ships per-OS variants) are
+ * disambiguated via `hostOS`. An empty hostOS picks the first
+ * matching entry, which keeps the install guide informative even
+ * on hosts that haven't reported sysinfo yet.
+ */
+export function missingFor(
+    activityKey: string,
+    installed: Set<string> | null,
+    hostOS: string,
+): string[] {
     if (installed === null) return [];
-    return required.filter((id) => !installed.has(id));
-}
-
-// activitiesNeedingInstall returns a map { activity: true } for
-// every activity whose required plugins aren't all installed.
-// Used by ActivityBar to dim icons + paint the "needs plugin" dot
-// without each tab needing to compute it separately.
-export function activitiesNeedingInstall(installed: Set<string> | null): Partial<Record<Activity, boolean>> {
-    if (installed === null) return {};
-    const out: Partial<Record<Activity, boolean>> = {};
-    for (const activity of Object.keys(REQUIRED_PLUGINS) as Activity[]) {
-        if (missingFor(activity, installed).length > 0) {
-            out[activity] = true;
-        }
-    }
-    return out;
+    const entry = entryForActivity(activityKey, hostOS);
+    if (!entry) return [];
+    return entryMissingPluginIDs(entry, installed);
 }
 
 // ---------------------------------------------------------------------------

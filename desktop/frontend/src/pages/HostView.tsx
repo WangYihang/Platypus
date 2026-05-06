@@ -41,7 +41,6 @@ import ProcessesTab from "./host/ProcessesTab";
 import RequiresPlugins from "./host/RequiresPlugins";
 
 import {
-    activitiesNeedingInstall,
     useInstalledPluginIDs,
     useNewPluginActivities,
 } from "../lib/activityPlugins";
@@ -87,12 +86,11 @@ export default function HostView({ projectID, hostID }: Props) {
     const agentID = host?.agent_id ?? "";
     const hostOS = host?.os ?? "";
     // Per-tab plugin gating. Reads the agent's installed-plugins list
-    // once, drives both the dimmed-icon visual on ActivityBar and the
-    // RequiresPlugins guard inside each tab body. Same query-key as
-    // PluginsTab so an install there refreshes here without an
-    // explicit refetch.
+    // once; ActivityBar's PluginActivityButton handles dimming via
+    // entryReady, and RequiresPlugins inside each tab body uses the
+    // same cache for the install guide. Same query-key as PluginsTab
+    // so an install there refreshes here without an explicit refetch.
     const installedPlugins = useInstalledPluginIDs(projectID, agentID);
-    const needsInstall = activitiesNeedingInstall(installedPlugins.ids);
 
     // Plugin-shipped activity entries from PLUGIN_UI_REGISTRY,
     // filtered by what's installed AND the host's runtime.GOOS.
@@ -327,7 +325,6 @@ export default function HostView({ projectID, hostID }: Props) {
                     active={activeActivity}
                     onSelect={setActiveActivity}
                     badges={{ sessions: sessions.length || undefined }}
-                    needsInstall={needsInstall}
                     pluginEntries={pluginEntries}
                     newPluginIDs={newPluginIDs}
                     installedPluginIDs={installedPlugins.ids ?? undefined}

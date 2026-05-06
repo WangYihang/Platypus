@@ -55,14 +55,6 @@ interface Props {
      */
     badges?: Record<string, number | undefined>;
     /**
-     * Activities whose required plugins aren't installed yet. The
-     * bar dims those icons + appends "(needs plugin)" to the
-     * tooltip so the operator sees up front which tabs are gated.
-     * Selecting a dimmed icon still works — the tab body shows a
-     * RequiresPlugins install guide.
-     */
-    needsInstall?: Partial<Record<FirstPartyActivity, boolean>>;
-    /**
      * Plugin-shipped activity entries (PLUGIN_UI_REGISTRY filtered
      * by `installed plugins ∩ host.os` + alwaysVisible). Rendered
      * after a horizontal divider. Each one's activity key follows
@@ -102,7 +94,6 @@ export default function ActivityBar({
     active,
     onSelect,
     badges,
-    needsInstall,
     pluginEntries,
     newPluginIDs,
     installedPluginIDs,
@@ -125,12 +116,6 @@ export default function ActivityBar({
             {ACTIVITY_SPECS.map((spec) => {
                 const isActive = active === spec.key;
                 const badge = badges?.[spec.key];
-                const dimmed = !!needsInstall?.[spec.key];
-                // Dimmed icons stay clickable — the tab body shows
-                // the install guide. The visual cue is colour, not
-                // pointer-events: blocking the click would hide
-                // the install affordance behind a tooltip.
-                const tooltip = dimmed ? `${spec.label} (needs plugin)` : spec.label;
                 return (
                     <button
                         key={spec.key}
@@ -138,9 +123,8 @@ export default function ActivityBar({
                         onClick={() => onSelect(spec.key)}
                         data-testid={`host-activity-${spec.key}`}
                         data-active={isActive || undefined}
-                        data-needs-install={dimmed || undefined}
                         aria-current={isActive ? "true" : undefined}
-                        title={tooltip}
+                        title={spec.label}
                         style={{
                             position: "relative",
                             width: BAR_WIDTH,
@@ -151,12 +135,7 @@ export default function ActivityBar({
                             background: "transparent",
                             border: "none",
                             cursor: "pointer",
-                            // Active wins over dimmed (showing a
-                            // non-installed tab the operator clicked
-                            // through to is the default — the badge
-                            // dot communicates "still needs install").
                             color: isActive ? palette.textPrimary : palette.textMuted,
-                            opacity: dimmed && !isActive ? 0.45 : 1,
                             // Left bar marks the active activity in VSCode
                             // fashion — a 2px accent stripe flush against
                             // the inner edge of the bar.
@@ -166,21 +145,6 @@ export default function ActivityBar({
                         }}
                     >
                         {spec.icon}
-                        {dimmed && (
-                            <span
-                                aria-hidden
-                                title=""
-                                style={{
-                                    position: "absolute",
-                                    bottom: 6,
-                                    right: 8,
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: 999,
-                                    background: palette.warning,
-                                }}
-                            />
-                        )}
                         {typeof badge === "number" && badge > 0 && (
                             <span
                                 aria-label={`${badge} ${spec.label}`}

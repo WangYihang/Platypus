@@ -391,6 +391,38 @@ export const PLUGIN_UI_REGISTRY: ReadonlyArray<PluginUIEntry> = [
 export const _RESERVED_ICONS = { Wrench };
 
 /**
+ * Resolves the registry entry that owns an activity slug for the
+ * given host OS. Used by RequiresPlugins to derive the install gate
+ * (entry.requiredPluginIDs) without each call site duplicating the
+ * activity → plugin id mapping. Returns null when the activity slug
+ * isn't registered (e.g. the "plugins" catalogue tab, which is
+ * still hardcoded).
+ *
+ * Multi-entry activities (Processes ships per-OS variants sharing
+ * activityKey="processes") are disambiguated by `hostOS`: the entry
+ * whose osTargets includes hostOS wins. Empty / unknown hostOS
+ * picks the first registered entry — better than returning null,
+ * which would skip the install gate entirely.
+ */
+export function entryForActivity(
+    activityKey: string,
+    hostOS: string,
+): PluginUIEntry | null {
+    const matches = PLUGIN_UI_REGISTRY.filter(
+        (e) => entryActivityKey(e) === activityKey,
+    );
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0]!;
+    if (hostOS !== "") {
+        const osMatch = matches.find(
+            (e) => e.osTargets && e.osTargets.includes(hostOS),
+        );
+        if (osMatch) return osMatch;
+    }
+    return matches[0]!;
+}
+
+/**
  * visiblePluginEntries returns the registry entries that should
  * appear in the activity bar for the given host. The rule has two
  * layers:
