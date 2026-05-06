@@ -1,0 +1,55 @@
+api_version: 1
+id: com.platypus.sys-net-windows
+name: Network connections (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows network connection enumeration via PowerShell's
+  Get-NetTCPConnection cmdlet (NetTCPIP module; ships in
+  Windows 8 / Server 2012 and later).
+
+  Same RPC contract as sys-net-linux / sys-net-darwin:
+    - list_listeners(): TCP sockets in Listen state
+    - list_connections(state?): all TCP sockets, optional filter
+
+  Get-NetTCPConnection emits structured objects directly
+  (LocalAddress / LocalPort / RemoteAddress / RemotePort / State /
+  OwningProcess), so JSON parsing is straightforward — no
+  text-column wrangling like the BSD netstat parser.
+
+  PowerShell's State enum surfaces as integer codes 1..12 in JSON.
+  We map them to the lin/darwin string names so the wire shape is
+  uniform across OSes (Listen=2 → "LISTEN", Established=4 →
+  "ESTABLISHED", etc).
+
+runtime:
+  type: wasm
+  entry: sys_net_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_listeners
+    request:  { proto: NetListListenersRequest }
+    response: { proto: NetListListenersResponse }
+  - name: list_connections
+    request:  { proto: NetListConnectionsRequest }
+    response: { proto: NetListConnectionsResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_net_windows.wasm.minisig
