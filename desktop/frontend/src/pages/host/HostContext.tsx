@@ -18,6 +18,13 @@ import type { Host, HostSysInfo, SessionRow } from "../../lib/api";
 
 export interface HostContextValue {
     host: Host;
+    /**
+     * The host's server-side primary key (UUID). Distinct from
+     * agentID (cert-derived public id used for the wire). Several
+     * server routes key off hostID rather than agentID, so the
+     * first-party-tab adapters need both.
+     */
+    hostID: string;
     sessions: ReadonlyArray<SessionRow>;
     /** Agent_id when there's at least one live session, null otherwise. */
     pickedSessionID: string | null;

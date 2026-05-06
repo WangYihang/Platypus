@@ -1,9 +1,7 @@
 import { ReactNode } from "react";
 import {
-    AppWindow,
     Cable,
     KeyRound,
-    Plug,
     Puzzle,
     ShieldCheck,
     type LucideProps,
@@ -19,13 +17,12 @@ import {
 // First-party (hardcoded) activities.  Plugin-shipped activities
 // are passed in as props and rendered after a divider.
 //
-// "files" and "info" lived here historically; Q2 migrated them to the
-// PLUGIN_UI_REGISTRY (with activityKey overrides preserving the URL
-// slug) so a host running a minimal agent can see / install them via
-// the same install-guide path used for other system plugins.
+// "files" / "info" (Q2) and "sessions" / "processes" (Q3) lived here
+// historically; they're now PLUGIN_UI_REGISTRY entries with stable
+// activityKey overrides preserving their URL slugs. The remaining
+// hardcoded list will continue to shrink in Q4-Q5 until everything
+// flows through the registry.
 export const FIRST_PARTY_ACTIVITIES = [
-    "sessions",
-    "processes",
     "security",
     "config",
     "tunnels",
@@ -53,8 +50,6 @@ interface ActivitySpec {
 const ICON_SIZE = "size-4";
 
 export const ACTIVITY_SPECS: ActivitySpec[] = [
-    { key: "sessions", label: "Sessions", icon: <Plug className={ICON_SIZE} /> },
-    { key: "processes", label: "Processes", icon: <AppWindow className={ICON_SIZE} /> },
     { key: "security", label: "Security", icon: <ShieldCheck className={ICON_SIZE} /> },
     { key: "config", label: "Config", icon: <KeyRound className={ICON_SIZE} /> },
     { key: "tunnels", label: "Tunnels", icon: <Cable className={ICON_SIZE} /> },
@@ -64,7 +59,15 @@ export const ACTIVITY_SPECS: ActivitySpec[] = [
 interface Props {
     active: Activity;
     onSelect: (activity: Activity) => void;
-    badges?: Partial<Record<FirstPartyActivity, number>>;
+    /**
+     * Numeric badges keyed by activityKey (so first-party slugs like
+     * "sessions" + plugin-shipped keys like "plugin:com.platypus.x"
+     * share one map). Rendered as a small red pill in the icon's
+     * top-right corner; values <=0 / undefined → no pill. The pill
+     * caps display at "9+" but accepts the raw number for the
+     * aria-label.
+     */
+    badges?: Record<string, number | undefined>;
     /**
      * Activities whose required plugins aren't installed yet. The
      * bar dims those icons + appends "(needs plugin)" to the
@@ -246,6 +249,7 @@ export default function ActivityBar({
                                     newPluginIDs?.has(entry.pluginID) ?? false
                                 }
                                 isDimmed={!ready}
+                                badge={badges?.[key]}
                                 onSelect={onSelect}
                             />
                         );
@@ -262,6 +266,7 @@ function PluginActivityButton({
     isActive,
     isNew,
     isDimmed,
+    badge,
     onSelect,
 }: {
     entry: PluginUIEntry;
@@ -276,6 +281,8 @@ function PluginActivityButton({
      * still works — the activity body shows the install guide.
      */
     isDimmed: boolean;
+    /** Numeric pill in the icon's top-right corner (e.g. session count). */
+    badge: number | undefined;
     onSelect: (a: Activity) => void;
 }) {
     const Icon = entry.icon as React.ComponentType<LucideProps>;
@@ -340,6 +347,30 @@ function PluginActivityButton({
                         boxShadow: `0 0 0 2px ${palette.rail}`,
                     }}
                 />
+            )}
+            {typeof badge === "number" && badge > 0 && !isNew && (
+                <span
+                    aria-label={`${badge} ${entry.title}`}
+                    style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        minWidth: 14,
+                        height: 14,
+                        padding: "0 3px",
+                        borderRadius: 999,
+                        background: palette.danger,
+                        color: "#fff",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        lineHeight: 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    {badge > 9 ? "9+" : badge}
+                </span>
             )}
         </button>
     );

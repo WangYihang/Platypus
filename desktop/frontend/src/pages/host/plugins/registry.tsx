@@ -20,18 +20,22 @@
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
+    AppWindow,
     Cog,
     File,
     HardDrive,
     Info,
     Network as NetworkIcon,
     Package as PackageIcon,
+    Plug,
     ScrollText,
     Wrench,
 } from "lucide-react";
 
 import FilesActivity from "./builtin-files/FilesActivity";
 import InfoActivity from "./builtin-info/InfoActivity";
+import ProcessesActivity from "./builtin-processes/ProcessesActivity";
+import SessionsActivity from "./builtin-sessions/SessionsActivity";
 import { SystemdServices } from "./sys-systemd-linux/Services";
 import { Filesystems } from "./sys-disk/Filesystems";
 import { Network as NetworkTab } from "./sys-net/Network";
@@ -183,6 +187,61 @@ export const PLUGIN_UI_REGISTRY: ReadonlyArray<PluginUIEntry> = [
         title: "Info",
         icon: Info,
         component: InfoActivity,
+    },
+    // ---- Sessions / Processes migrated from FIRST_PARTY in Q3. ----
+    // Sessions is OS-agnostic (sys-process is one plugin everywhere);
+    // Processes is per-OS because the underlying process-list plugin
+    // is OS-specific (sys-procs-linux / -darwin / -windows). Each
+    // per-OS entry shares the same activityKey ("processes") + the
+    // same React component — osTargets + the install gate ensure
+    // only one is in `pluginEntries` for any given host.
+    {
+        pluginID: "com.platypus.sys-process",
+        activityKey: "sessions",
+        requiredPluginIDs: ["com.platypus.sys-process"],
+        alwaysVisible: true,
+        title: "Sessions",
+        icon: Plug,
+        component: SessionsActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-procs-linux",
+        activityKey: "processes",
+        requiredPluginIDs: [
+            "com.platypus.sys-procs-linux",
+            "com.platypus.sys-process",
+        ],
+        alwaysVisible: true,
+        osTargets: ["linux"],
+        title: "Processes",
+        icon: AppWindow,
+        component: ProcessesActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-procs-darwin",
+        activityKey: "processes",
+        requiredPluginIDs: [
+            "com.platypus.sys-procs-darwin",
+            "com.platypus.sys-process",
+        ],
+        alwaysVisible: true,
+        osTargets: ["darwin"],
+        title: "Processes",
+        icon: AppWindow,
+        component: ProcessesActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-procs-windows",
+        activityKey: "processes",
+        requiredPluginIDs: [
+            "com.platypus.sys-procs-windows",
+            "com.platypus.sys-process",
+        ],
+        alwaysVisible: true,
+        osTargets: ["windows"],
+        title: "Processes",
+        icon: AppWindow,
+        component: ProcessesActivity,
     },
 
     // ---- Services (per-OS init system) ----

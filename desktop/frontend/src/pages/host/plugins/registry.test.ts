@@ -326,6 +326,57 @@ describe("registry helpers", () => {
             );
         });
 
+        it("Sessions has one OS-agnostic entry; Processes has one entry per OS", () => {
+            // Q3: Sessions / Processes joined Files / Info as registry
+            // entries. Sessions is OS-agnostic; Processes splits per
+            // OS so install gating points at the right per-OS plugin.
+            const sessionsEntries = PLUGIN_UI_REGISTRY.filter(
+                (e) => e.activityKey === "sessions",
+            );
+            const processesEntries = PLUGIN_UI_REGISTRY.filter(
+                (e) => e.activityKey === "processes",
+            );
+            expect(sessionsEntries).toHaveLength(1);
+            expect(sessionsEntries[0]?.alwaysVisible).toBe(true);
+            expect(sessionsEntries[0]?.osTargets).toBeUndefined();
+            expect(sessionsEntries[0]?.requiredPluginIDs).toEqual([
+                "com.platypus.sys-process",
+            ]);
+
+            expect(processesEntries).toHaveLength(3);
+            const byOS = new Map(
+                processesEntries.map(
+                    (e) => [e.osTargets?.[0] ?? "?", e] as const,
+                ),
+            );
+            for (const os of ["linux", "darwin", "windows"]) {
+                const entry = byOS.get(os);
+                expect(entry, `missing processes entry for ${os}`).toBeDefined();
+                expect(entry?.alwaysVisible).toBe(true);
+                expect(entry?.requiredPluginIDs).toEqual([
+                    `com.platypus.sys-procs-${os}`,
+                    "com.platypus.sys-process",
+                ]);
+            }
+        });
+
+        it("at most one processes entry is visible per host (osTargets gate)", () => {
+            // visiblePluginEntries' OS gate should expose exactly one
+            // processes entry to a host of a known OS.
+            const installed = new Set([
+                "com.platypus.sys-procs-linux",
+                "com.platypus.sys-procs-darwin",
+                "com.platypus.sys-procs-windows",
+                "com.platypus.sys-process",
+            ]);
+            for (const os of ["linux", "darwin", "windows"]) {
+                const got = visiblePluginEntries(installed, os);
+                const procs = got.filter((e) => e.activityKey === "processes");
+                expect(procs).toHaveLength(1);
+                expect(procs[0]?.osTargets).toEqual([os]);
+            }
+        });
+
         it("Files + Info entries declare stable activityKey URL slugs", () => {
             // The Q2 migration moved Files / Info into the registry,
             // but their URL slugs ("files" / "info") must stay stable

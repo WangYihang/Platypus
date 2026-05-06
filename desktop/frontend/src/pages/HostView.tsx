@@ -47,7 +47,6 @@ import {
 } from "../lib/activityPlugins";
 import SecurityTab from "./host/SecurityTab";
 import ConfigTab from "./host/ConfigTab";
-import SessionsTab from "./host/SessionsTab";
 import TunnelsTab from "./host/TunnelsTab";
 import PluginsTab from "./host/PluginsTab";
 
@@ -338,6 +337,7 @@ export default function HostView({ projectID, hostID }: Props) {
                 <HostContextProvider
                     value={{
                         host,
+                        hostID,
                         sessions,
                         pickedSessionID,
                         sysInfo,
@@ -375,43 +375,11 @@ export default function HostView({ projectID, hostID }: Props) {
                             the inactive ones) so expensive children (file
                             tree, processes poller, …) keep their state on
                             switch.
-                            Files / Info live in PLUGIN_UI_REGISTRY now (Q2);
-                            they're rendered by the pluginEntries.map block
-                            below, with the FilesActivity / InfoActivity
-                            adapters reading host / sysInfo from
-                            HostContextProvider above. */}
-                        <div
-                            style={{
-                                display: activeActivity === "sessions" ? "block" : "none",
-                                padding: space[4],
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="sessions"
-                            >
-                                <SessionsTab sessions={sessions} />
-                            </RequiresPlugins>
-                        </div>
-                        <div
-                            style={{
-                                display: activeActivity === "processes" ? "block" : "none",
-                                padding: space[4],
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="processes"
-                            >
-                                <ProcessesTab
-                                    projectID={projectID}
-                                    hostID={hostID}
-                                    active={activeActivity === "processes"}
-                                />
-                            </RequiresPlugins>
-                        </div>
+                            Files / Info (Q2) and Sessions / Processes (Q3)
+                            live in PLUGIN_UI_REGISTRY now; their bodies
+                            are rendered by the pluginEntries.map block
+                            below, with adapters reading host / sysInfo /
+                            sessions from HostContextProvider above. */}
                         <div
                             style={{
                                 display: activeActivity === "security" ? "block" : "none",
