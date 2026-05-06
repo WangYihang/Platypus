@@ -377,6 +377,36 @@ describe("registry helpers", () => {
             }
         });
 
+        it("Security / Config / Tunnels migrated entries (Q4) point at the right plugin ids", () => {
+            // Q4: The last hardcoded tabs (besides the Plugins
+            // catalogue itself) moved into the registry. Verify the
+            // plugin ids — Tunnels in particular needs sys-tunnel-tcp
+            // (renamed from sys-tunnel-pull in Sprint 1's I3a; the
+            // pre-Q4 REQUIRED_PLUGINS map was still pointing at the
+            // legacy id).
+            const security = PLUGIN_UI_REGISTRY.find(
+                (e) => e.activityKey === "security",
+            );
+            const config = PLUGIN_UI_REGISTRY.find(
+                (e) => e.activityKey === "config",
+            );
+            const tunnels = PLUGIN_UI_REGISTRY.find(
+                (e) => e.activityKey === "tunnels",
+            );
+            expect(security?.requiredPluginIDs).toEqual([
+                "com.platypus.sys-security",
+            ]);
+            expect(config?.requiredPluginIDs).toEqual([
+                "com.platypus.sys-config-audit",
+            ]);
+            expect(tunnels?.requiredPluginIDs).toEqual([
+                "com.platypus.sys-tunnel-tcp",
+            ]);
+            for (const e of [security, config, tunnels]) {
+                expect(e?.alwaysVisible).toBe(true);
+            }
+        });
+
         it("Files + Info entries declare stable activityKey URL slugs", () => {
             // The Q2 migration moved Files / Info into the registry,
             // but their URL slugs ("files" / "info") must stay stable

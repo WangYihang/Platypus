@@ -45,8 +45,6 @@ import {
     useInstalledPluginIDs,
     useNewPluginActivities,
 } from "../lib/activityPlugins";
-import SecurityTab from "./host/SecurityTab";
-import ConfigTab from "./host/ConfigTab";
 import TunnelsTab from "./host/TunnelsTab";
 import PluginsTab from "./host/PluginsTab";
 
@@ -371,66 +369,14 @@ export default function HostView({ projectID, hostID }: Props) {
                             flexDirection: "column",
                         }}
                     >
-                        {/* Each activity stays mounted (display:none on
-                            the inactive ones) so expensive children (file
-                            tree, processes poller, …) keep their state on
-                            switch.
-                            Files / Info (Q2) and Sessions / Processes (Q3)
-                            live in PLUGIN_UI_REGISTRY now; their bodies
-                            are rendered by the pluginEntries.map block
-                            below, with adapters reading host / sysInfo /
-                            sessions from HostContextProvider above. */}
-                        <div
-                            style={{
-                                display: activeActivity === "security" ? "block" : "none",
-                                padding: space[4],
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="security"
-                            >
-                                <SecurityTab
-                                    projectID={projectID}
-                                    hostID={hostID}
-                                    active={activeActivity === "security"}
-                                />
-                            </RequiresPlugins>
-                        </div>
-                        <div
-                            style={{
-                                display: activeActivity === "config" ? "block" : "none",
-                                padding: space[4],
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="config"
-                            >
-                                <ConfigTab
-                                    projectID={projectID}
-                                    hostID={hostID}
-                                    active={activeActivity === "config"}
-                                />
-                            </RequiresPlugins>
-                        </div>
-                        <div
-                            style={{
-                                display: activeActivity === "tunnels" ? "block" : "none",
-                                padding: space[4],
-                                height: "100%",
-                            }}
-                        >
-                            <RequiresPlugins
-                                projectID={projectID}
-                                agentID={agentID}
-                                activity="tunnels"
-                            >
-                                <TunnelsTab projectID={projectID} hostID={hostID} />
-                            </RequiresPlugins>
-                        </div>
+                        {/* Q2-Q4 moved Files / Info / Sessions /
+                            Processes / Security / Config / Tunnels into
+                            PLUGIN_UI_REGISTRY. The pluginEntries.map
+                            block below renders them via activityKey
+                            lookup, with adapters reading host / sysInfo
+                            / sessions / hostID from HostContextProvider.
+                            Only the Plugins catalogue tab stays hardcoded
+                            — it's the registry's manager itself. */}
                         <div
                             style={{
                                 display: activeActivity === "plugins" ? "block" : "none",

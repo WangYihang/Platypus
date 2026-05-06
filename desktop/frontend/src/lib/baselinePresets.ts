@@ -29,7 +29,7 @@
 //                           (declares both `exec` and `process` caps)
 //   · sys-security        — security scan RPCs
 //   · sys-config-audit    — config-audit RPCs
-//   · sys-tunnel-pull     — outbound TCP relay stream
+//   · sys-tunnel-tcp     — outbound TCP relay stream
 
 export interface BaselinePreset {
     id: string;
@@ -108,7 +108,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "com.platypus.sys-process",
             "com.platypus.sys-security",
             "com.platypus.sys-config-audit",
-            "com.platypus.sys-tunnel-pull",
+            "com.platypus.sys-tunnel-tcp",
         ],
     },
 ];

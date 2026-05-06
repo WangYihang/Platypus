@@ -21,21 +21,27 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
     AppWindow,
+    Cable,
     Cog,
     File,
     HardDrive,
     Info,
+    KeyRound,
     Network as NetworkIcon,
     Package as PackageIcon,
     Plug,
     ScrollText,
+    ShieldCheck,
     Wrench,
 } from "lucide-react";
 
+import ConfigActivity from "./builtin-config/ConfigActivity";
 import FilesActivity from "./builtin-files/FilesActivity";
 import InfoActivity from "./builtin-info/InfoActivity";
 import ProcessesActivity from "./builtin-processes/ProcessesActivity";
+import SecurityActivity from "./builtin-security/SecurityActivity";
 import SessionsActivity from "./builtin-sessions/SessionsActivity";
+import TunnelsActivity from "./builtin-tunnels/TunnelsActivity";
 import { SystemdServices } from "./sys-systemd-linux/Services";
 import { Filesystems } from "./sys-disk/Filesystems";
 import { Network as NetworkTab } from "./sys-net/Network";
@@ -242,6 +248,37 @@ export const PLUGIN_UI_REGISTRY: ReadonlyArray<PluginUIEntry> = [
         title: "Processes",
         icon: AppWindow,
         component: ProcessesActivity,
+    },
+    // ---- Security / Config / Tunnels migrated from FIRST_PARTY (Q4). ----
+    {
+        pluginID: "com.platypus.sys-security",
+        activityKey: "security",
+        requiredPluginIDs: ["com.platypus.sys-security"],
+        alwaysVisible: true,
+        title: "Security",
+        icon: ShieldCheck,
+        component: SecurityActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-config-audit",
+        activityKey: "config",
+        requiredPluginIDs: ["com.platypus.sys-config-audit"],
+        alwaysVisible: true,
+        title: "Config",
+        icon: KeyRound,
+        component: ConfigActivity,
+    },
+    {
+        pluginID: "com.platypus.sys-tunnel-tcp",
+        activityKey: "tunnels",
+        // Sprint 1's I3a renamed sys-tunnel-pull → sys-tunnel-tcp.
+        // The legacy id was still in REQUIRED_PLUGINS / baselinePresets;
+        // Q4 fixes those references at the same time as the migration.
+        requiredPluginIDs: ["com.platypus.sys-tunnel-tcp"],
+        alwaysVisible: true,
+        title: "Tunnels",
+        icon: Cable,
+        component: TunnelsActivity,
     },
 
     // ---- Services (per-OS init system) ----

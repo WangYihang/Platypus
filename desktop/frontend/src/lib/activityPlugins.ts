@@ -37,7 +37,8 @@ import type { Activity } from "../pages/host/ActivityBar";
 //     sys-process (open a shell from a process row).
 //   · Security — sys-security drives the security scan UI.
 //   · Config — sys-config-audit drives the config audit UI.
-//   · Tunnels — sys-tunnel-pull is the agent-side stream owner.
+//   · Tunnels — sys-tunnel-tcp is the agent-side stream owner
+//     (renamed from sys-tunnel-pull in Sprint 1's I3a).
 //   · Plugins — meta tab; needs nothing.
 //
 // Plugins outside the operator's allowlist surface as "Install"
@@ -59,7 +60,7 @@ export const REQUIRED_PLUGINS: Partial<Record<Activity, readonly string[]>> = {
     ],
     security: ["com.platypus.sys-security"],
     config: ["com.platypus.sys-config-audit"],
-    tunnels: ["com.platypus.sys-tunnel-pull"],
+    tunnels: ["com.platypus.sys-tunnel-tcp"],
     // info + plugins intentionally absent — info needs only
     // sys-info (mandatory core, always present); plugins is the
     // catalogue tab and would create a recursive prompt.

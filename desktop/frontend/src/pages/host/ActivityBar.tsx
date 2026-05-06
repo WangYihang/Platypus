@@ -1,11 +1,5 @@
 import { ReactNode } from "react";
-import {
-    Cable,
-    KeyRound,
-    Puzzle,
-    ShieldCheck,
-    type LucideProps,
-} from "lucide-react";
+import { Puzzle, type LucideProps } from "lucide-react";
 
 import { palette } from "../../layout/theme";
 import {
@@ -17,17 +11,12 @@ import {
 // First-party (hardcoded) activities.  Plugin-shipped activities
 // are passed in as props and rendered after a divider.
 //
-// "files" / "info" (Q2) and "sessions" / "processes" (Q3) lived here
-// historically; they're now PLUGIN_UI_REGISTRY entries with stable
-// activityKey overrides preserving their URL slugs. The remaining
-// hardcoded list will continue to shrink in Q4-Q5 until everything
-// flows through the registry.
-export const FIRST_PARTY_ACTIVITIES = [
-    "security",
-    "config",
-    "tunnels",
-    "plugins",
-] as const;
+// Q2-Q4 migrated Files / Info / Sessions / Processes / Security /
+// Config / Tunnels into the PLUGIN_UI_REGISTRY (with stable
+// activityKey overrides preserving their URL slugs). Plugins is the
+// last hardcoded entry — it's the catalogue tab itself, not a thing
+// a plugin would ever own.
+export const FIRST_PARTY_ACTIVITIES = ["plugins"] as const;
 export type FirstPartyActivity = (typeof FIRST_PARTY_ACTIVITIES)[number];
 
 /**
@@ -50,9 +39,6 @@ interface ActivitySpec {
 const ICON_SIZE = "size-4";
 
 export const ACTIVITY_SPECS: ActivitySpec[] = [
-    { key: "security", label: "Security", icon: <ShieldCheck className={ICON_SIZE} /> },
-    { key: "config", label: "Config", icon: <KeyRound className={ICON_SIZE} /> },
-    { key: "tunnels", label: "Tunnels", icon: <Cable className={ICON_SIZE} /> },
     { key: "plugins", label: "Plugins", icon: <Puzzle className={ICON_SIZE} /> },
 ];
 
