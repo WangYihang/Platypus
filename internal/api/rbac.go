@@ -470,3 +470,41 @@ func (r *RBAC) agentInProjectCheck(c *gin.Context, projectParam, agentParam stri
 	}
 	return true
 }
+
+// checkAgentsInProject is the bulk variant of agentInProjectCheck.
+// Verifies every supplied agent_id has a host row in the project at
+// :pid; on first mismatch writes a 403 and returns false. Used by
+// the multi-agent endpoints (POST .../bulk/plugin_call etc.) where
+// gin middleware can't iterate a request-body list.
+func (r *RBAC) checkAgentsInProject(c *gin.Context, agentIDs []string) bool {
+	if r.storage == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError,
+			gin.H{"error": "RBAC missing storage — constructed without it"})
+		return false
+	}
+	pid := c.Param("pid")
+	for _, id := range agentIDs {
+		if id == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest,
+				gin.H{"error": "agent_ids contains empty entry"})
+			return false
+		}
+		host, err := r.storage.Hosts().GetByAgentID(c.Request.Context(), id)
+		if errors.Is(err, storage.ErrNotFound) {
+			c.AbortWithStatusJSON(http.StatusForbidden,
+				gin.H{"error": "agent " + id + " not in project " + pid})
+			return false
+		}
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError,
+				gin.H{"error": "agent lookup"})
+			return false
+		}
+		if host.ProjectID != pid {
+			c.AbortWithStatusJSON(http.StatusForbidden,
+				gin.H{"error": "agent " + id + " not in project " + pid})
+			return false
+		}
+	}
+	return true
+}

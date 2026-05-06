@@ -605,6 +605,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 		Cancels: transferCancels,
 	})
 	api.RegisterV2AgentRPCRoutes(rest, agentLinkSvc, rbac)
+	api.RegisterV2BulkRPCRoutes(rest, agentLinkSvc, rbac)
 	api.RegisterV1ActivitiesRoutes(rest, activitiesH, rbac)
 	api.RegisterV1CARoutes(rest, caH, rbac)
 	api.RegisterV1TopologyRoutes(rest, topologyH, rbac)
