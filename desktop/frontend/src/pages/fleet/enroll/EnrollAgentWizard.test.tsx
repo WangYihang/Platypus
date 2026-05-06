@@ -39,11 +39,26 @@ vi.mock("../../../layout/ProjectShell", () => ({
 const issueInstallArtifact = vi.fn();
 const listInstallPlatforms = vi.fn();
 const getServerInfo = vi.fn();
+const listEnrollmentPresets = vi.fn();
+const seedEnrollmentPresets = vi.fn();
+const createEnrollmentPreset = vi.fn();
+const updateEnrollmentPreset = vi.fn();
+const deleteEnrollmentPreset = vi.fn();
 
 vi.mock("../../../lib/api", () => ({
     issueInstallArtifact: (...args: unknown[]) => issueInstallArtifact(...args),
     listInstallPlatforms: () => listInstallPlatforms(),
     getServerInfo: () => getServerInfo(),
+    listEnrollmentPresets: (...args: unknown[]) =>
+        listEnrollmentPresets(...args),
+    seedEnrollmentPresets: (...args: unknown[]) =>
+        seedEnrollmentPresets(...args),
+    createEnrollmentPreset: (...args: unknown[]) =>
+        createEnrollmentPreset(...args),
+    updateEnrollmentPreset: (...args: unknown[]) =>
+        updateEnrollmentPreset(...args),
+    deleteEnrollmentPreset: (...args: unknown[]) =>
+        deleteEnrollmentPreset(...args),
 }));
 
 // The new baseline-plugins step uses the marketplace catalog as its
@@ -68,6 +83,11 @@ beforeEach(() => {
     issueInstallArtifact.mockReset();
     listInstallPlatforms.mockReset();
     getServerInfo.mockReset();
+    listEnrollmentPresets.mockReset();
+    seedEnrollmentPresets.mockReset();
+    createEnrollmentPreset.mockReset();
+    updateEnrollmentPreset.mockReset();
+    deleteEnrollmentPreset.mockReset();
     listInstallPlatforms.mockResolvedValue({
         channel: "stable",
         platforms: [
@@ -76,6 +96,13 @@ beforeEach(() => {
         ],
     });
     getServerInfo.mockResolvedValue({ public_addr: "203.0.113.5:13337" });
+    // Default: project starts with no presets so the wizard's
+    // pick_preset step shows the empty-state. Tests that exercise the
+    // populated picker override this. Seed is a no-op for now (the
+    // seed step only fires on empty list and tests don't care about
+    // the seeded rows themselves unless they assert on them).
+    listEnrollmentPresets.mockResolvedValue([]);
+    seedEnrollmentPresets.mockResolvedValue([]);
 });
 
 describe("<EnrollAgentWizard>", () => {
@@ -84,12 +111,12 @@ describe("<EnrollAgentWizard>", () => {
         expect(screen.queryByTestId("enroll-wizard")).not.toBeInTheDocument();
     });
 
-    it("opens with ?enroll=1 and lands on the Server step", async () => {
+    it("opens with ?enroll=1 and lands on the pick-preset step", async () => {
         render("/projects/test-project/hosts?enroll=1");
         expect(await screen.findByTestId("enroll-wizard")).toBeInTheDocument();
-        // Step indicator marks `server` as the active step.
+        // Step indicator marks `pick_preset` as the active step now.
         const indicator = await screen.findByTestId("enroll-wizard-steps");
-        const active = indicator.querySelector('[data-step="server"]');
+        const active = indicator.querySelector('[data-step="pick_preset"]');
         expect(active?.getAttribute("data-active")).toBe("true");
     });
 
@@ -104,6 +131,11 @@ describe("<EnrollAgentWizard>", () => {
         });
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
+
+        // Skip past the pick-preset landing screen to land on the
+        // legacy step-1 (Server endpoint).
+        await screen.findByTestId("enroll-wizard-pick-preset");
+        await user.click(await screen.findByTestId("enroll-wizard-start-blank"));
 
         const server = await screen.findByTestId("enroll-wizard-server");
         const endpoint = server.querySelector(
@@ -170,6 +202,8 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
+        await screen.findByTestId("enroll-wizard-pick-preset");
+        await user.click(await screen.findByTestId("enroll-wizard-start-blank"));
         await screen.findByTestId("enroll-wizard-server");
         for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
@@ -221,6 +255,8 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
+        await screen.findByTestId("enroll-wizard-pick-preset");
+        await user.click(await screen.findByTestId("enroll-wizard-start-blank"));
         await screen.findByTestId("enroll-wizard-server");
         for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
@@ -275,6 +311,8 @@ describe("<EnrollAgentWizard>", () => {
         const user = userEvent.setup();
         render("/projects/test-project/hosts?enroll=1");
 
+        await screen.findByTestId("enroll-wizard-pick-preset");
+        await user.click(await screen.findByTestId("enroll-wizard-start-blank"));
         await screen.findByTestId("enroll-wizard-server");
         for (let i = 0; i < 9; i++) await user.click(screen.getByTestId("enroll-wizard-next"));
         await screen.findByTestId("enroll-wizard-review");
@@ -296,5 +334,139 @@ describe("<EnrollAgentWizard>", () => {
         await waitFor(() =>
             expect(screen.getByText("curl-bundle-strict")).toBeInTheDocument(),
         );
+    });
+
+    // Picking a saved preset on the landing screen should jump
+    // straight to Review with the preset's values applied. This is
+    // the "repeat operator" speedup: one click of "Use" replaces the
+    // 11-step walk-through.
+    it("applies a preset's values and jumps to review", async () => {
+        const preset = {
+            preset_id: "epr_linux",
+            project_id: "p1",
+            name: "linux-prod",
+            target_os: "linux",
+            target_arch: "amd64",
+            ttl_seconds: 600,
+            pat_max_uses: 1,
+            auto_approve: false,
+            skip_tls_verification: true,
+            baseline_plugin_ids: ["sys-info"],
+            pat_description: "Linux fleet",
+            is_seed: false,
+            created_at: "2026-05-01T00:00:00Z",
+            updated_at: "2026-05-01T00:00:00Z",
+        };
+        listEnrollmentPresets.mockResolvedValueOnce([preset]);
+        issueInstallArtifact.mockResolvedValue({
+            download_id: "dl_p",
+            download_token: "dl_p.secret",
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+            server_endpoint: "203.0.113.5:13337",
+            install_command: "curl-from-preset",
+            bundle_url: "https://example.test/install/dl_p",
+        });
+
+        const user = userEvent.setup();
+        render("/projects/test-project/hosts?enroll=1");
+
+        await screen.findByTestId("enroll-wizard-preset-list");
+        await user.click(
+            screen.getByTestId("enroll-wizard-preset-pick-epr_linux"),
+        );
+
+        await screen.findByTestId("enroll-wizard-review");
+        await user.click(screen.getByTestId("enroll-wizard-generate"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("enroll-wizard-run")).toBeInTheDocument(),
+        );
+        // The issued payload should reflect the preset, not the
+        // wizard's blank defaults.
+        const [, body] = issueInstallArtifact.mock.calls[0];
+        expect(body.target_os).toBe("linux");
+        expect(body.target_arch).toBe("amd64");
+        expect(body.ttl_seconds).toBe(600);
+        expect(body.pat_max_uses).toBe(1);
+        expect(body.baseline_plugin_ids).toEqual(["sys-info"]);
+        expect(body.pat_description).toBe("Linux fleet");
+        expect(body.auto_approve).toBe(false);
+    });
+
+    // Empty list on first open triggers the seed call. The picker
+    // then renders whatever the server returns from /seed (which
+    // INSERT-OR-IGNOREs the three system defaults).
+    it("seeds system presets when the project list is empty", async () => {
+        listEnrollmentPresets.mockResolvedValueOnce([]);
+        seedEnrollmentPresets.mockResolvedValueOnce([
+            {
+                preset_id: "epr_linux_seed",
+                project_id: "p1",
+                name: "Linux x86_64",
+                target_os: "linux",
+                target_arch: "amd64",
+                auto_approve: false,
+                skip_tls_verification: true,
+                is_seed: true,
+                created_at: "2026-05-01T00:00:00Z",
+                updated_at: "2026-05-01T00:00:00Z",
+            },
+        ]);
+
+        render("/projects/test-project/hosts?enroll=1");
+
+        await waitFor(() => {
+            expect(seedEnrollmentPresets).toHaveBeenCalledTimes(1);
+        });
+        await screen.findByTestId(
+            "enroll-wizard-preset-pick-epr_linux_seed",
+        );
+    });
+
+    // Save-as-preset on the Review step calls createEnrollmentPreset
+    // with the current wizard snapshot so operators can converge on
+    // their own defaults without leaving the wizard.
+    it("saves the current wizard state as a new preset", async () => {
+        createEnrollmentPreset.mockResolvedValue({
+            preset_id: "epr_new",
+            project_id: "p1",
+            name: "blank-default",
+            auto_approve: false,
+            skip_tls_verification: true,
+            is_seed: false,
+            created_at: "2026-05-01T00:00:00Z",
+            updated_at: "2026-05-01T00:00:00Z",
+        });
+
+        const user = userEvent.setup();
+        render("/projects/test-project/hosts?enroll=1");
+
+        await screen.findByTestId("enroll-wizard-pick-preset");
+        await user.click(screen.getByTestId("enroll-wizard-start-blank"));
+        await screen.findByTestId("enroll-wizard-server");
+        for (let i = 0; i < 9; i++)
+            await user.click(screen.getByTestId("enroll-wizard-next"));
+        await screen.findByTestId("enroll-wizard-review");
+
+        await user.click(screen.getByTestId("enroll-wizard-save-preset"));
+        const nameInput = await screen.findByTestId(
+            "enroll-wizard-preset-name",
+        );
+        await user.type(nameInput, "blank-default");
+        await user.click(
+            screen.getByTestId("enroll-wizard-preset-save-confirm"),
+        );
+
+        await waitFor(() =>
+            expect(createEnrollmentPreset).toHaveBeenCalledTimes(1),
+        );
+        const [pid, body] = createEnrollmentPreset.mock.calls[0];
+        expect(pid).toBe("p1");
+        expect(body.name).toBe("blank-default");
+        expect(body.skip_tls_verification).toBe(true);
+        // The wizard left the defaults blank (server endpoint
+        // pre-fills from getServerInfo, so it's the only non-blank
+        // field that round-trips).
+        expect(body.server_endpoint).toBe("203.0.113.5:13337");
     });
 });

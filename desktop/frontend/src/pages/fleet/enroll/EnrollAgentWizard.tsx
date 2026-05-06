@@ -3,10 +3,13 @@ import { toast } from "sonner";
 
 import { useCurrentProject } from "../../../layout/ProjectShell";
 import {
+    EnrollmentPreset,
     IssueInstallResponse,
     getServerInfo,
     issueInstallArtifact,
+    listEnrollmentPresets,
     listInstallPlatforms,
+    seedEnrollmentPresets,
 } from "../../../lib/api";
 import { humanizeError } from "../../../lib/humanizeError";
 import {
@@ -27,6 +30,7 @@ import {
 import StepIndicator from "./StepIndicator";
 import WizardFooter from "./WizardFooter";
 import OSStep from "./steps/OSStep";
+import PickPresetStep, { PresetsState } from "./steps/PickPresetStep";
 import ArchStep from "./steps/ArchStep";
 import ServerEndpointStep from "./steps/ServerEndpointStep";
 import DownloadTLSStep from "./steps/DownloadTLSStep";
@@ -44,11 +48,12 @@ export default function EnrollAgentWizard() {
     const project = useCurrentProject();
     const { open, setOpen } = useEnrollWizardOpen();
 
-    const [step, setStep] = useState<Step>("server");
+    const [step, setStep] = useState<Step>("pick_preset");
     const [skipTLSVerification, setSkipTLSVerification] = useState(true);
     const [targetOS, setTargetOS] = useState("");
     const [targetArch, setTargetArch] = useState("");
     const [serverEndpoint, setServerEndpoint] = useState("");
+    const [liveServerEndpoint, setLiveServerEndpoint] = useState("");
     const [ttlSeconds, setTtlSeconds] = useState<number | undefined>(undefined);
     const [patMaxUses, setPatMaxUses] = useState<number | undefined>(undefined);
     const [autoApprove, setAutoApprove] = useState(false);
@@ -57,13 +62,20 @@ export default function EnrollAgentWizard() {
     const [submitting, setSubmitting] = useState(false);
     const [issued, setIssued] = useState<IssueInstallResponse | null>(null);
     const [platforms, setPlatforms] = useState<PlatformsState>({ status: "loading" });
+    const [presets, setPresets] = useState<PresetsState>({ status: "loading" });
+    // Tracks which preset (if any) the operator is currently editing.
+    // Set when the user clicks "Edit" on a preset card and used by the
+    // Save-as-preset action on Review to PUT instead of POST.
+    const [editingPresetID, setEditingPresetID] = useState<string | null>(
+        null,
+    );
 
     // Reset on every open transition. Remounting on close-then-open
     // would flash the platforms-loading skeleton each time, so we
     // keep the wizard mounted and snap state back instead.
     useEffect(() => {
         if (!open) return;
-        setStep("server");
+        setStep("pick_preset");
         setTargetOS("");
         setTargetArch("");
         setTtlSeconds(undefined);
@@ -74,12 +86,16 @@ export default function EnrollAgentWizard() {
         setSkipTLSVerification(true);
         setIssued(null);
         setSubmitting(false);
+        setEditingPresetID(null);
 
         // Best-effort prefill. Failures fall through to a blank input
         // — the operator just types it in step 3.
         getServerInfo()
             .then((info) => {
-                if (info.public_addr) setServerEndpoint(info.public_addr);
+                if (info.public_addr) {
+                    setServerEndpoint(info.public_addr);
+                    setLiveServerEndpoint(info.public_addr);
+                }
             })
             .catch(() => {
                 /* leave blank */
@@ -101,7 +117,35 @@ export default function EnrollAgentWizard() {
             .catch((e) => {
                 setPlatforms({ status: "error", message: humanizeError(e) });
             });
-    }, [open]);
+
+        setPresets({ status: "loading" });
+        listEnrollmentPresets(project.id)
+            .then(async (rows) => {
+                // First open of a fresh project: the list comes back
+                // empty, so seed three system defaults from the live
+                // install manifest. Idempotent on the server (INSERT
+                // OR IGNORE keyed on (project_id, name)) so this stays
+                // safe even if a second client races us.
+                if (rows.length === 0) {
+                    try {
+                        const seeded = await seedEnrollmentPresets(project.id);
+                        setPresets({ status: "ready", presets: seeded });
+                        return;
+                    } catch {
+                        // Seeding is opportunistic. If the BE refuses
+                        // (no manifest, distributor disabled, …) we
+                        // still want the picker to render its empty
+                        // state instead of blocking on the seed step.
+                        setPresets({ status: "ready", presets: [] });
+                        return;
+                    }
+                }
+                setPresets({ status: "ready", presets: rows });
+            })
+            .catch((e) => {
+                setPresets({ status: "error", message: humanizeError(e) });
+            });
+    }, [open, project.id]);
 
     // Index the flat platform list by OS so step 2 can show only
     // architectures the active channel actually publishes for the OS
@@ -156,6 +200,44 @@ export default function EnrollAgentWizard() {
         setOpen(false, { key: "await", value: "enroll" });
     }
 
+    // applyPreset snaps every wizard field to the preset's saved
+    // values and jumps the operator straight to Review. Server
+    // endpoint falls back to the live server when the preset doesn't
+    // carry one (older presets, or a deliberate "use whatever the
+    // server is right now" choice). The picker shows a stale-server
+    // warning if the saved endpoint diverges from the live one — by
+    // the time we apply, the operator has already acknowledged it.
+    function applyPreset(p: EnrollmentPreset) {
+        setServerEndpoint(p.server_endpoint || liveServerEndpoint || "");
+        setTargetOS(p.target_os || "");
+        setTargetArch(p.target_arch || "");
+        setTtlSeconds(p.ttl_seconds);
+        setPatMaxUses(p.pat_max_uses);
+        setAutoApprove(p.auto_approve);
+        setSkipTLSVerification(p.skip_tls_verification);
+        setBaselinePluginIDs(p.baseline_plugin_ids ?? []);
+        setDescription(p.pat_description ?? "");
+        setEditingPresetID(null);
+        setStep("review");
+    }
+
+    // editPreset prefills wizard state from a preset and starts the
+    // operator at the Server step. The Review step's "Save as preset"
+    // PUTs (rather than POSTs) while editingPresetID is non-null.
+    function editPreset(p: EnrollmentPreset) {
+        setServerEndpoint(p.server_endpoint || liveServerEndpoint || "");
+        setTargetOS(p.target_os || "");
+        setTargetArch(p.target_arch || "");
+        setTtlSeconds(p.ttl_seconds);
+        setPatMaxUses(p.pat_max_uses);
+        setAutoApprove(p.auto_approve);
+        setSkipTLSVerification(p.skip_tls_verification);
+        setBaselinePluginIDs(p.baseline_plugin_ids ?? []);
+        setDescription(p.pat_description ?? "");
+        setEditingPresetID(p.preset_id);
+        setStep("server");
+    }
+
     const currentIdx = STEPS.indexOf(step);
     const isFirst = currentIdx <= 0;
     const isLastBeforeRun = step === "review";
@@ -170,6 +252,11 @@ export default function EnrollAgentWizard() {
 
     function goNext() {
         if (!canNext || isLastBeforeRun) return;
+        // pick_preset doesn't have a Next — the picker carries its
+        // own "Use" / "Start blank" affordances. Defensive guard so
+        // the keyboard / external Next path can't silently advance
+        // past it.
+        if (step === "pick_preset") return;
         const next = STEPS[currentIdx + 1];
         if (next && next !== "run") setStep(next);
     }
@@ -247,6 +334,28 @@ export default function EnrollAgentWizard() {
 
                 <StepIndicator current={step} />
 
+                {step === "pick_preset" && (
+                    <PickPresetStep
+                        projectID={project.id}
+                        state={presets}
+                        liveServerEndpoint={liveServerEndpoint}
+                        onPick={applyPreset}
+                        onStartBlank={() => {
+                            setEditingPresetID(null);
+                            setStep("server");
+                        }}
+                        onEdit={editPreset}
+                        onDeleted={(id) => {
+                            if (presets.status !== "ready") return;
+                            setPresets({
+                                status: "ready",
+                                presets: presets.presets.filter(
+                                    (p) => p.preset_id !== id,
+                                ),
+                            });
+                        }}
+                    />
+                )}
                 {step === "server" && (
                     <ServerEndpointStep
                         serverEndpoint={serverEndpoint}
@@ -278,15 +387,6 @@ export default function EnrollAgentWizard() {
                             // toggles off on a second click) — stay
                             // put so they can re-pick.
                             if (v) setStep("arch");
-                        }}
-                        onPickPreset={(preset) => {
-                            // Quick-pick: lock both OS and arch and
-                            // skip past the arch step. The operator
-                            // can still go Back if they want a
-                            // different arch.
-                            setTargetOS(preset.os);
-                            setTargetArch(preset.arch);
-                            setStep("ttl");
                         }}
                     />
                 )}
@@ -326,7 +426,50 @@ export default function EnrollAgentWizard() {
                     />
                 )}
                 {step === "review" && (
-                    <ReviewStep summary={reviewSummary} onEdit={setStep} />
+                    <ReviewStep
+                        summary={reviewSummary}
+                        onEdit={setStep}
+                        projectID={project.id}
+                        editingPresetID={editingPresetID}
+                        presetSnapshot={{
+                            // The wizard doesn't carry a "preset name"
+                            // field; the operator types one in the
+                            // Save form. Pass an empty string here so
+                            // the form starts blank.
+                            name: "",
+                            description: undefined,
+                            server_endpoint:
+                                serverEndpoint.trim() || undefined,
+                            target_os: targetOS || undefined,
+                            target_arch: targetArch || undefined,
+                            ttl_seconds: ttlSeconds,
+                            pat_max_uses: patMaxUses,
+                            auto_approve: autoApprove,
+                            skip_tls_verification: skipTLSVerification,
+                            baseline_plugin_ids:
+                                baselinePluginIDs.length > 0
+                                    ? baselinePluginIDs
+                                    : undefined,
+                            pat_description:
+                                description.trim() || undefined,
+                        }}
+                        onSaved={(id) => {
+                            setEditingPresetID(id);
+                            // Refresh the cached list so the next time
+                            // the operator hits Back on the picker
+                            // they see the just-saved row.
+                            listEnrollmentPresets(project.id)
+                                .then((rows) =>
+                                    setPresets({
+                                        status: "ready",
+                                        presets: rows,
+                                    }),
+                                )
+                                .catch(() => {
+                                    /* leave stale; list refreshes on next open */
+                                });
+                        }}
+                    />
                 )}
                 {step === "run" && issued && (
                     <RunStep

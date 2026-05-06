@@ -1,14 +1,9 @@
 import { Loader2 } from "lucide-react";
 
 import { palette } from "../../../../layout/theme";
-import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-import {
-    QuickPreset,
-    availablePresets,
-    osLabel,
-} from "../../../enrollment/platforms";
+import { osLabel } from "../../../enrollment/platforms";
 import { PlatformsState } from "../steps";
 
 interface Props {
@@ -16,60 +11,29 @@ interface Props {
     osList: string[];
     value: string;
     onChange: (next: string) => void;
-    onPickPreset: (preset: QuickPreset) => void;
 }
 
-// OSStep is step 1 of the EnrollAgentWizard. ToggleGroup is `single`
-// so leaving it deselected — by clicking the active item again or by
-// never picking — yields an empty `value`, which the caller maps to
+// OSStep is the manual OS picker. ToggleGroup is `single` so leaving
+// it deselected — by clicking the active item again or by never
+// picking — yields an empty `value`, which the caller maps to
 // "auto-detect at runtime" on the wire. We don't enforce a pick.
 //
-// On top of the manual OS picker we surface a row of "quick start"
-// presets (Linux x86_64, Windows x64, macOS Apple Silicon, …) — one
-// click sets both OS and arch and the wizard jumps straight to the
-// Connect step. Presets are filtered against the live manifest so we
-// never offer a one-click that 404s on download.
+// One-click presets (Linux x86_64, Windows x64, macOS Apple Silicon)
+// used to live here as a "Quick start" row sourced from a static
+// table; they now live in the wizard's first step (PickPresetStep)
+// as persisted, project-scoped presets the operator owns. This step
+// stays focused on the manual override.
 export default function OSStep({
     platforms,
     osList,
     value,
     onChange,
-    onPickPreset,
 }: Props) {
-    const presets =
-        platforms.status === "ready" ? availablePresets(platforms.platforms) : [];
     return (
         <div className="space-y-3">
-            {presets.length > 0 && (
-                <div className="space-y-2">
-                    <div
-                        style={{
-                            fontSize: 12,
-                            color: palette.textMuted,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.4,
-                        }}
-                    >
-                        Quick start
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {presets.map((p) => (
-                            <Button
-                                key={p.id}
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onPickPreset(p)}
-                                data-testid={`enroll-wizard-preset-${p.id}`}
-                            >
-                                {p.label}
-                            </Button>
-                        ))}
-                    </div>
-                </div>
-            )}
             <div style={{ fontSize: 13, color: palette.textSecondary }}>
-                Or pick the target operating system manually. Skip if you'd
-                rather have the install script auto-detect at runtime.
+                Pick the target operating system, or skip to let the install
+                script auto-detect at runtime.
             </div>
             <ToggleGroup
                 type="single"

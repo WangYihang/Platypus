@@ -10,6 +10,7 @@
 export { type PlatformsState } from "../../enrollment/platforms";
 
 export const STEPS = [
+    "pick_preset",
     "server",
     "download_tls",
     "os",
@@ -25,6 +26,7 @@ export const STEPS = [
 export type Step = (typeof STEPS)[number];
 
 export const STEP_LABEL: Record<Step, string> = {
+    pick_preset: "Preset",
     server: "Server",
     download_tls: "TLS",
     os: "OS",

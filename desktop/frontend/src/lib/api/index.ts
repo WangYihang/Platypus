@@ -9,6 +9,7 @@ export * from "./users";
 export * from "./settings";
 export * from "./server";
 export * from "./enrollment";
+export * from "./enrollment_presets";
 export * from "./account";
 export * from "./rbac";
 export * from "./install";

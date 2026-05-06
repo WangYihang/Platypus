@@ -131,43 +131,10 @@ export function preferredOrder(priority: string[]): (a: string, b: string) => nu
     };
 }
 
-// Quick-pick presets for the OS step. Each preset locks both OS and
-// arch in one click — covering the >90% of real installs operators
-// reach for first — and the wizard then jumps straight to the Connect
-// step. The label is OS-aware (e.g. "Apple Silicon" only makes sense
-// on macOS) which is why these live alongside the generic OS/arch
-// label maps rather than reusing them.
-//
-// `match` is the predicate against the live manifest's published
-// (os, arch) pairs: a preset only renders when the channel actually
-// has a binary for it, so we never offer a one-click that 404s.
-export interface QuickPreset {
-    id: string;
-    label: string;
-    os: string;
-    arch: string;
-}
-
-export const QUICK_PRESETS: QuickPreset[] = [
-    { id: "linux-amd64", label: "Linux x86_64", os: "linux", arch: "amd64" },
-    { id: "linux-arm64", label: "Linux ARM64", os: "linux", arch: "arm64" },
-    { id: "windows-amd64", label: "Windows x64", os: "windows", arch: "amd64" },
-    {
-        id: "darwin-arm64",
-        label: "macOS Apple Silicon",
-        os: "darwin",
-        arch: "arm64",
-    },
-    { id: "darwin-amd64", label: "macOS Intel", os: "darwin", arch: "amd64" },
-];
-
-// availablePresets filters QUICK_PRESETS down to the ones the active
-// channel publishes, so we don't tempt the operator with a one-click
-// that resolves to a 404 on download. The supported set is the flat
-// (os, arch) list returned by /api/v1/install/platforms.
-export function availablePresets(
-    platforms: InstallPlatform[],
-): QuickPreset[] {
-    const supported = new Set(platforms.map((p) => `${p.os}/${p.arch}`));
-    return QUICK_PRESETS.filter((p) => supported.has(`${p.os}/${p.arch}`));
-}
+// One-click "Quick start" presets used to live here as a static
+// table. They've moved to project-scoped, persisted EnrollmentPresets
+// (see lib/api/enrollment_presets.ts and the wizard's pick_preset
+// step) so operators own and can edit them. Removing the static
+// definitions also removes the only place in the FE that used to
+// hard-code Linux/Windows/macOS labels — keep that property if you're
+// adding new platform handling here.

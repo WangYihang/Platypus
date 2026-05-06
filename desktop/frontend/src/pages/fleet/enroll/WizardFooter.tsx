@@ -31,6 +31,12 @@ export default function WizardFooter({
     onGenerate,
     onFinish,
 }: Props) {
+    if (step === "pick_preset") {
+        // The picker carries its own "Use" / "Edit" / "Start blank"
+        // affordances per card; rendering Back/Next here would just
+        // be noise. Suppress the footer entirely on this step.
+        return null;
+    }
     if (step === "run") {
         return (
             <div
