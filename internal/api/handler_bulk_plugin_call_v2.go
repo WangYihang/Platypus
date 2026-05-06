@@ -61,6 +61,7 @@ func RegisterV2BulkRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService, rba
 	)
 	base.POST("/plugin_call", v2BulkPluginCall(svc, rbac))
 	base.POST("/exec", v2BulkExec(svc, rbac))
+	base.POST("/sys_info", v2BulkSysInfo(svc, rbac))
 }
 
 // v2BulkPluginCall validates the request, checks every agent is in
