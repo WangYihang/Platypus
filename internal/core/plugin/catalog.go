@@ -90,6 +90,44 @@ func New(db *sql.DB, indexURL string) *Catalog {
 	}
 }
 
+// RefreshLoop runs Refresh on a kick-start tick and then every
+// `interval` until ctx is cancelled. Errors are logged via the
+// recordRefresh status row (`marketplace_refresh_status` table) so
+// the operator UI can surface them via GET /marketplace/status —
+// the loop never propagates an error up that would kill the
+// goroutine. A wedged upstream index doesn't take the worker down.
+//
+// No-op + immediate return when indexURL is empty so callers can
+// `go RefreshLoop(...)` unconditionally without spinning a no-op
+// goroutine for the lifetime of the process.
+//
+// Spawned by main.go alongside the rest of the per-process workers;
+// the operator's manual REST POST /marketplace/refresh path keeps
+// working independently for "I just published, I want it now".
+func (c *Catalog) RefreshLoop(ctx context.Context, interval time.Duration) {
+	if c.indexURL == "" {
+		return
+	}
+	// Kick-start: do one refresh immediately so a fresh server boot
+	// has the catalog populated before the first operator hits the
+	// Marketplace tab. Errors are non-fatal — the loop keeps ticking.
+	_, _ = c.Refresh(ctx)
+
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			// Per-tick errors are recorded via Refresh's
+			// recordRefresh call; nothing to do here besides
+			// continue ticking.
+			_, _ = c.Refresh(ctx)
+		}
+	}
+}
+
 // Refresh fetches indexURL and replaces every cached row. The whole
 // refresh runs in a single transaction so a partial failure leaves
 // the previous catalog intact. Returns the number of plugin-version

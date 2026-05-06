@@ -491,6 +491,26 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	}
 	pluginCatalog := corepluginpkg.New(db.DB, pluginIndexURL)
 
+	// Periodic refresh worker. Pulls indexURL on a tick so the
+	// operator UI's Marketplace tab doesn't sit on stale rows
+	// indefinitely between manual Refresh clicks. Default 15 min
+	// is conservative — most index repos publish hourly at most;
+	// faster than that just spams the upstream. Override via env
+	// for ops who prefer faster discovery (or 0/negative to disable
+	// the loop entirely; manual REST refresh keeps working).
+	pluginIndexRefreshInterval := 15 * time.Minute
+	if v := os.Getenv("PLATYPUS_PLUGIN_INDEX_REFRESH_INTERVAL"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil {
+			log.Warn("PLATYPUS_PLUGIN_INDEX_REFRESH_INTERVAL=%q invalid (%v); using default 15m", v, err)
+		} else {
+			pluginIndexRefreshInterval = parsed
+		}
+	}
+	if pluginIndexRefreshInterval > 0 && pluginIndexURL != "" {
+		go pluginCatalog.RefreshLoop(ctx, pluginIndexRefreshInterval)
+	}
+
 	// install_marketplace endpoint needs the catalog to look up
 	// per-version artefact URLs + the publisher pubkey, plus an HTTP
 	// fetcher for the URLs themselves. WithMarketplace decorates the

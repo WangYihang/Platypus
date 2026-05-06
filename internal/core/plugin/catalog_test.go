@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -180,5 +181,106 @@ func TestCatalog_EmptyIndexURLNoOps(t *testing.T) {
 	n, err := cat.Refresh(context.Background())
 	if err != nil || n != 0 {
 		t.Errorf("empty index URL: n=%d err=%v", n, err)
+	}
+}
+
+// TestCatalog_RefreshLoop_TicksAndExits verifies the periodic refresh
+// worker:
+//   - calls Refresh on first tick (kick-start, not interval-delayed)
+//   - calls Refresh again every `interval`
+//   - exits cleanly when its ctx is cancelled
+//
+// The test uses a tight interval (5 ms) and waits for at least 3
+// successful hits — well within the test's overall 1 s budget.
+func TestCatalog_RefreshLoop_TicksAndExits(t *testing.T) {
+	db := newTestDB(t)
+
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_ = json.NewEncoder(w).Encode(Index{GeneratedAt: 1, Plugins: nil})
+	}))
+	defer srv.Close()
+
+	cat := New(db, srv.URL)
+	cat.now = func() time.Time { return time.Unix(1700000200, 0) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	loopDone := make(chan struct{})
+	go func() {
+		cat.RefreshLoop(ctx, 5*time.Millisecond)
+		close(loopDone)
+	}()
+
+	// Wait for the loop to land at least 3 hits (initial + 2 ticks).
+	deadline := time.Now().Add(time.Second)
+	for hits.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := hits.Load(); got < 3 {
+		cancel()
+		<-loopDone
+		t.Fatalf("hits = %d, want >= 3 within 1 s", got)
+	}
+
+	cancel()
+	select {
+	case <-loopDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("RefreshLoop did not exit after ctx cancel")
+	}
+}
+
+// TestCatalog_RefreshLoop_EmptyURLReturnsImmediately: with no index
+// URL the worker should not spin a goroutine forever — it returns
+// immediately so callers can spawn it unconditionally.
+func TestCatalog_RefreshLoop_EmptyURLReturnsImmediately(t *testing.T) {
+	db := newTestDB(t)
+	cat := New(db, "")
+	done := make(chan struct{})
+	go func() {
+		cat.RefreshLoop(context.Background(), 10*time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatalf("RefreshLoop with empty URL should return immediately")
+	}
+}
+
+// TestCatalog_RefreshLoop_TolerantOfTransientError: the worker must
+// keep ticking even when an upstream refresh fails (HTTP 5xx, parse
+// error, etc.). We start with a server that always 500s, observe
+// multiple failed attempts, then cancel.
+func TestCatalog_RefreshLoop_TolerantOfTransientError(t *testing.T) {
+	db := newTestDB(t)
+
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	cat := New(db, srv.URL)
+	cat.now = func() time.Time { return time.Unix(1700000200, 0) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	loopDone := make(chan struct{})
+	go func() {
+		cat.RefreshLoop(ctx, 5*time.Millisecond)
+		close(loopDone)
+	}()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for hits.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancel()
+	<-loopDone
+
+	if got := hits.Load(); got < 3 {
+		t.Errorf("expected >= 3 hits despite 500s, got %d", got)
 	}
 }
