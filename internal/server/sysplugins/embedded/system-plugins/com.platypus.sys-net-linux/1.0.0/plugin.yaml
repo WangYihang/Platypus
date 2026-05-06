@@ -1,0 +1,53 @@
+api_version: 1
+id: com.platypus.sys-net-linux
+name: Network connections (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux network connection enumeration via /proc/net/tcp +
+  /proc/net/tcp6.  Two RPCs:
+    - list_listeners(): every TCP socket in LISTEN state
+    - list_connections(state?): every TCP socket; filter by
+      state if non-empty (e.g. "ESTABLISHED", "TIME_WAIT")
+
+  Uses host_fs_read instead of shelling to ss/netstat — works on
+  every linux kernel (including container slimmed images that
+  drop the iproute2 binary), no exec capability needed.
+
+  pid + comm are NOT populated in v1: deriving them needs walking
+  /proc/<pid>/fd/* for socket:[inode] symlinks — quadratic in
+  process count.  sys-net-darwin / -windows leave them empty too,
+  keeping the wire shape uniform.  Operators wanting per-pid
+  attribution can install ss / lsof and use `host_exec`-shaped
+  v2 of this plugin.
+
+runtime:
+  type: wasm
+  entry: sys_net_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_listeners
+    request:  { proto: NetListListenersRequest }
+    response: { proto: NetListListenersResponse }
+  - name: list_connections
+    request:  { proto: NetListConnectionsRequest }
+    response: { proto: NetListConnectionsResponse }
+
+capabilities:
+  fs.read:
+    paths: ["/proc/net"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 5000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_net_linux.wasm.minisig
