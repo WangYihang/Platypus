@@ -1,0 +1,50 @@
+api_version: 1
+id: com.platypus.sys-disk-linux
+name: Disk usage (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux-only filesystem usage snapshot. One RPC:
+    - list_filesystems(): enumerate mounted filesystems with size,
+      used, available, percent_used, fstype, mountpoint, and source
+      device. Backed by `df -B1 -T` (POSIX-compatible output mode).
+
+  Uses `host_exec` instead of a dedicated host_fs_statfs host fn —
+  the wasm runtime can shell out cheaply, df is everywhere on Linux,
+  and the parsed output already covers what the operator UI needs.
+  A future v2 may switch to /proc/mounts + statvfs(2) wrappers if
+  the cross-distro df-output-stability becomes a maintenance burden,
+  but the simpler approach wins for now.
+
+  Filter args (skip_pseudo, only_mountpoints, min_size_bytes) keep
+  the wire payload small for fleet-rollup queries: by default the
+  noisy tmpfs/devtmpfs/proc/sysfs entries are skipped.
+
+runtime:
+  type: wasm
+  entry: sys_disk_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_filesystems
+    request:  { proto: DiskListFilesystemsRequest }
+    response: { proto: DiskListFilesystemsResponse }
+
+# /usr/bin/df on Debian/Ubuntu, /bin/df on RHEL/older distros.
+capabilities:
+  exec:
+    commands: ["/usr/bin/df", "/bin/df"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 10000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_disk_linux.wasm.minisig
