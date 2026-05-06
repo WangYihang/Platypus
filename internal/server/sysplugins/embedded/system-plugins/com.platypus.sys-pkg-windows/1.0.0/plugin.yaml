@@ -1,0 +1,57 @@
+api_version: 1
+id: com.platypus.sys-pkg-windows
+name: Package management (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows package management. Two RPCs (parity with sys-pkg-linux's
+  read-only set):
+
+  - list_installed(query?, max_results?): every installed package
+    via Get-Package (PowerShell PackageManagement). Universal —
+    available on every supported Windows since 8.1. Backend
+    reported as "get-package".
+  - list_upgradable(): packages with newer versions via
+    `winget upgrade`. winget is opt-in (App Installer on Win 10,
+    bundled in Win 11); when it's missing the response carries
+    error="winget_not_installed" rather than failing the call.
+    Backend reported as "winget" when the tool is available.
+
+  install / uninstall / upgrade-action are read-only-deferred to
+  v2 (CapPkgMutate); reasoning matches sys-pkg-linux.
+
+  Get-Package's first invocation can be slow (5-10 s while WMI
+  initializes); list_installed has a generous 60 s timeout to
+  avoid spurious failures on cold starts.
+
+runtime:
+  type: wasm
+  entry: sys_pkg_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_installed
+    request:  { proto: PkgListInstalledRequest }
+    response: { proto: PkgListInstalledResponse }
+  - name: list_upgradable
+    request:  { proto: PkgListUpgradableRequest }
+    response: { proto: PkgListUpgradableResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 90000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 0FACCB2BC28AC155
+  sig_file: sys_pkg_windows.wasm.minisig
