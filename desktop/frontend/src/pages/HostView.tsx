@@ -2,6 +2,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
 } from "react";
@@ -28,6 +29,11 @@ import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
 import { decideAutoOpenShell } from "./host/autoOpenShell";
 import { computeScrollSwap } from "./host/scrollPreservation";
 import ActivityBar, { ACTIVITIES, Activity } from "./host/ActivityBar";
+import {
+    parsePluginActivity,
+    visiblePluginEntries,
+    type PluginUIEntry,
+} from "./host/plugins/registry";
 import BottomPanel, { BottomTab } from "./host/BottomPanel";
 import FilesTab from "./host/FilesTab";
 import HostHeaderBar from "./host/HostHeaderBar";
@@ -87,6 +93,15 @@ export default function HostView({ projectID, hostID }: Props) {
     // explicit refetch.
     const installedPlugins = useInstalledPluginIDs(projectID, agentID);
     const needsInstall = activitiesNeedingInstall(installedPlugins.ids);
+
+    // Plugin-shipped activity entries from PLUGIN_UI_REGISTRY,
+    // filtered by what's installed AND the host's runtime.GOOS.
+    // Empty until the installed-plugins query resolves; the
+    // ActivityBar handles `[]` cleanly (no divider, no extra icons).
+    const pluginEntries: ReadonlyArray<PluginUIEntry> = useMemo(
+        () => visiblePluginEntries(installedPlugins.ids ?? null, hostOS),
+        [installedPlugins.ids, hostOS],
+    );
     const sessions: SessionRow[] = sessionsQuery.data ?? [];
     const sysInfo: HostSysInfo | null = sysInfoQuery.data ?? null;
     const sysInfoError: string | null = sysInfoQuery.error
@@ -115,9 +130,17 @@ export default function HostView({ projectID, hostID }: Props) {
     const navigate = useNavigate();
     const { shells, openShell } = useGlobalTerminal();
     const { tab: tabParam } = useParams<{ tab?: string }>();
-    const activeActivity: Activity = (ACTIVITIES as readonly string[]).includes(
-        tabParam ?? "",
-    )
+    // Activity = either a hardcoded first-party slug OR a plugin
+    // activity key of the form `plugin:<plugin_id>`. Validate against
+    // both before defaulting to "files".
+    const tabIsKnown =
+        (ACTIVITIES as readonly string[]).includes(tabParam ?? "") ||
+        (() => {
+            const parsed = parsePluginActivity(tabParam ?? "");
+            if (!parsed) return false;
+            return pluginEntries.some((e) => e.pluginID === parsed.pluginID);
+        })();
+    const activeActivity: Activity = tabIsKnown
         ? (tabParam as Activity)
         : "files";
     const setActiveActivity = (key: Activity) =>
@@ -292,6 +315,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     onSelect={setActiveActivity}
                     badges={{ sessions: sessions.length || undefined }}
                     needsInstall={needsInstall}
+                    pluginEntries={pluginEntries}
                 />
                 <div
                     style={{
@@ -458,6 +482,34 @@ export default function HostView({ projectID, hostID }: Props) {
                                 active={activeActivity === "plugins"}
                             />
                         </div>
+                        {/* Plugin-shipped activity bodies. Each
+                            registry entry gets its own keyed-by-id
+                            container so React preserves component
+                            state when the operator switches between
+                            sibling plugin tabs. */}
+                        {pluginEntries.map((entry) => {
+                            const isActive =
+                                parsePluginActivity(activeActivity)?.pluginID ===
+                                entry.pluginID;
+                            const Component = entry.component;
+                            return (
+                                <div
+                                    key={entry.pluginID}
+                                    data-testid={`host-tab-body-${entry.pluginID}`}
+                                    style={{
+                                        display: isActive ? "block" : "none",
+                                        padding: space[4],
+                                    }}
+                                >
+                                    <Component
+                                        projectID={projectID}
+                                        agentID={agentID}
+                                        hostOS={hostOS}
+                                        active={isActive}
+                                    />
+                                </div>
+                            );
+                        })}
                     </div>
                     <BottomPanel
                         open={bottomOpen}

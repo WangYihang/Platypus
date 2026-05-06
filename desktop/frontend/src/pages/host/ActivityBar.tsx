@@ -1,9 +1,25 @@
 import { ReactNode } from "react";
-import { File, Info, Plug, AppWindow, ShieldCheck, KeyRound, Cable, Puzzle } from "lucide-react";
+import {
+    AppWindow,
+    Cable,
+    File,
+    Info,
+    KeyRound,
+    Plug,
+    Puzzle,
+    ShieldCheck,
+    type LucideProps,
+} from "lucide-react";
 
 import { palette } from "../../layout/theme";
+import {
+    PLUGIN_ACTIVITY_PREFIX,
+    type PluginUIEntry,
+} from "./plugins/registry";
 
-export const ACTIVITIES = [
+// First-party (hardcoded) activities.  Plugin-shipped activities
+// are passed in as props and rendered after a divider.
+export const FIRST_PARTY_ACTIVITIES = [
     "files",
     "info",
     "sessions",
@@ -13,10 +29,21 @@ export const ACTIVITIES = [
     "tunnels",
     "plugins",
 ] as const;
-export type Activity = (typeof ACTIVITIES)[number];
+export type FirstPartyActivity = (typeof FIRST_PARTY_ACTIVITIES)[number];
+
+/**
+ * Activity is either a hardcoded first-party slug ("processes",
+ * "sessions", etc.) or a plugin-shipped key of the form
+ * "plugin/<plugin_id>". Plugin keys are produced by
+ * `pluginActivityKey` from registry.ts.
+ */
+export type Activity = string;
+// Backward-compat alias — older code imports `ACTIVITIES` for the
+// hardcoded list. Keeping the name avoids a sweep through callers.
+export const ACTIVITIES = FIRST_PARTY_ACTIVITIES;
 
 interface ActivitySpec {
-    key: Activity;
+    key: FirstPartyActivity;
     label: string;
     icon: ReactNode;
 }
@@ -37,7 +64,7 @@ export const ACTIVITY_SPECS: ActivitySpec[] = [
 interface Props {
     active: Activity;
     onSelect: (activity: Activity) => void;
-    badges?: Partial<Record<Activity, number>>;
+    badges?: Partial<Record<FirstPartyActivity, number>>;
     /**
      * Activities whose required plugins aren't installed yet. The
      * bar dims those icons + appends "(needs plugin)" to the
@@ -45,7 +72,14 @@ interface Props {
      * Selecting a dimmed icon still works — the tab body shows a
      * RequiresPlugins install guide.
      */
-    needsInstall?: Partial<Record<Activity, boolean>>;
+    needsInstall?: Partial<Record<FirstPartyActivity, boolean>>;
+    /**
+     * Plugin-shipped activity entries (PLUGIN_UI_REGISTRY filtered
+     * by `installed plugins ∩ host.os`). Rendered after a horizontal
+     * divider. Each one's activity key follows the
+     * `plugin/<plugin_id>` convention defined in registry.ts.
+     */
+    pluginEntries?: ReadonlyArray<PluginUIEntry>;
 }
 
 // ActivityBar is the 44 px vertical strip on the left of HostView,
@@ -59,7 +93,13 @@ interface Props {
 // promote them once the registry stabilises.
 const BAR_WIDTH = 44;
 
-export default function ActivityBar({ active, onSelect, badges, needsInstall }: Props) {
+export default function ActivityBar({
+    active,
+    onSelect,
+    badges,
+    needsInstall,
+    pluginEntries,
+}: Props) {
     return (
         <nav
             data-testid="host-activity-bar"
@@ -161,6 +201,69 @@ export default function ActivityBar({ active, onSelect, badges, needsInstall }: 
                     </button>
                 );
             })}
+
+            {pluginEntries && pluginEntries.length > 0 && (
+                <>
+                    <div
+                        aria-hidden
+                        data-testid="host-activity-plugin-divider"
+                        style={{
+                            margin: "8px 8px",
+                            height: 1,
+                            background: palette.border,
+                        }}
+                    />
+                    {pluginEntries.map((entry) => (
+                        <PluginActivityButton
+                            key={entry.pluginID}
+                            entry={entry}
+                            isActive={
+                                active === `${PLUGIN_ACTIVITY_PREFIX}${entry.pluginID}`
+                            }
+                            onSelect={onSelect}
+                        />
+                    ))}
+                </>
+            )}
         </nav>
+    );
+}
+
+function PluginActivityButton({
+    entry,
+    isActive,
+    onSelect,
+}: {
+    entry: PluginUIEntry;
+    isActive: boolean;
+    onSelect: (a: Activity) => void;
+}) {
+    const Icon = entry.icon as React.ComponentType<LucideProps>;
+    const activityKey: Activity = `${PLUGIN_ACTIVITY_PREFIX}${entry.pluginID}`;
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(activityKey)}
+            data-testid={`host-activity-${activityKey}`}
+            data-plugin-activity={entry.pluginID}
+            data-active={isActive || undefined}
+            aria-current={isActive ? "true" : undefined}
+            title={entry.title}
+            style={{
+                position: "relative",
+                width: BAR_WIDTH,
+                height: 40,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: isActive ? palette.textPrimary : palette.textMuted,
+                boxShadow: isActive ? `inset 2px 0 0 0 ${palette.accent}` : undefined,
+            }}
+        >
+            <Icon className={ICON_SIZE} />
+        </button>
     );
 }
