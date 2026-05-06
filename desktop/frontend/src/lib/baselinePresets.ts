@@ -18,7 +18,9 @@
 //
 // Post-merge plugin layout (8 system plugins; was 14):
 //   · sys-info            — host overview RPC + hostname
-//   · sys-procs           — process list RPC
+//   · sys-procs-linux     — process list RPC (linux only; the
+//                           sys-procs-darwin / sys-procs-windows
+//                           variants ship separately)
 //   · sys-files-read      — list_dir + stat + file_read + file_scan
 //                           + file_archive (every fs.read use)
 //   · sys-files-write     — mkdir + chmod + delete + rename +
@@ -51,7 +53,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Browse files, see processes, read system info. No mutations, no shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
             "com.platypus.sys-files-read",
         ],
     },
@@ -62,7 +64,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Everything in Read-only plus create / rename / delete files and tar+gz archives. No shell, no network.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
             "com.platypus.sys-files-read",
             "com.platypus.sys-files-write",
         ],
@@ -74,7 +76,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "File management + interactive shell sessions. Use for hosts you actively administer.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
             "com.platypus.sys-files-read",
             "com.platypus.sys-files-write",
             "com.platypus.sys-process",
@@ -87,7 +89,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Read-only host inspection + the security scan + config audit plugins. Use for compliance / forensics roles.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
             "com.platypus.sys-files-read",
             "com.platypus.sys-security",
             "com.platypus.sys-config-audit",
@@ -100,7 +102,7 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "Every system plugin the catalog ships. Equivalent to every checkbox below ticked. Higher trust surface — pick a tighter preset when the role allows it.",
         pluginIDs: [
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
             "com.platypus.sys-files-read",
             "com.platypus.sys-files-write",
             "com.platypus.sys-process",

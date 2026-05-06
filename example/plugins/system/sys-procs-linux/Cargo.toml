@@ -1,11 +1,11 @@
 [package]
-name = "sys-procs"
+name = "sys-procs-linux"
 version = "2.0.0"
 edition = "2021"
 publish = false
 
 [lib]
-name = "sys_procs"
+name = "sys_procs_linux"
 # cdylib for the wasm32 build (production); rlib so `cargo test` on
 # the host compiles the pure /proc parsers + their #[cfg(test)] blocks.
 crate-type = ["cdylib", "rlib"]

@@ -13,8 +13,8 @@ import (
 
 func installSysProcs(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm := stagedWasmBytes(t, "com.platypus.sys-procs", "2.0.0", "sys_procs.wasm")
-	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-procs", "2.0.0")
+	wasm := stagedWasmBytes(t, "com.platypus.sys-procs-linux", "2.0.0", "sys_procs_linux.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-procs-linux", "2.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -30,7 +30,7 @@ func installSysProcs(t *testing.T) *plugin.Registry {
 		t.Fatal(err)
 	}
 	manifestStr := rewriteManifestKeyID(string(manifestBytes), plugin.HumanKeyID(pk))
-	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_procs.wasm"))
+	sig, err := plugin.Sign(sk, wasm, plugin.DefaultTrustedComment("sys_procs_linux.wasm"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func installSysProcs(t *testing.T) *plugin.Registry {
 	t.Cleanup(func() { reg.Close(context.Background()) })
 
 	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
-		PluginID:            "com.platypus.sys-procs",
+		PluginID:            "com.platypus.sys-procs-linux",
 		Version:             "2.0.0",
 		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),

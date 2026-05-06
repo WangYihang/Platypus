@@ -1,4 +1,4 @@
-module github.com/WangYihang/Platypus/example/plugins/system-go/sys-procs
+module github.com/WangYihang/Platypus/example/plugins/system-go/sys-procs-linux
 
 go 1.24
 

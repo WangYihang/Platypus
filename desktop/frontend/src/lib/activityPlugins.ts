@@ -32,7 +32,8 @@ import type { Activity } from "../pages/host/ActivityBar";
 //     mandatoryCorePluginIDs guarantees it on every boot.
 //   · Sessions — terminal sessions need sys-process (was
 //     sys-process-open before merging with sys-exec).
-//   · Processes — needs sys-procs (the RPC catalogue) AND
+//   · Processes — needs sys-procs-linux (per-OS process list
+//     plugin; M1a/M1b will add sys-procs-darwin / -windows) AND
 //     sys-process (open a shell from a process row).
 //   · Security — sys-security drives the security scan UI.
 //   · Config — sys-config-audit drives the config audit UI.
@@ -50,7 +51,10 @@ export const REQUIRED_PLUGINS: Partial<Record<Activity, readonly string[]>> = {
     ],
     sessions: ["com.platypus.sys-process"],
     processes: [
-        "com.platypus.sys-procs",
+        // TODO: when M1a/M1b ship sys-procs-darwin / -windows, swap
+        // this hardcoded ID for an OS-aware lookup so non-linux
+        // agents don't flash an "install sys-procs-linux" prompt.
+        "com.platypus.sys-procs-linux",
         "com.platypus.sys-process",
     ],
     security: ["com.platypus.sys-security"],

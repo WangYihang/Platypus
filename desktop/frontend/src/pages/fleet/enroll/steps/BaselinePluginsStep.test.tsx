@@ -57,7 +57,7 @@ const fakePlugins = [
         capabilities: ["fs.read", "sysinfo"],
     },
     {
-        id: "com.platypus.sys-procs",
+        id: "com.platypus.sys-procs-linux",
         version: "2.0.0",
         name: "System Procs",
         author: "Platypus",
@@ -136,7 +136,7 @@ describe("<BaselinePluginsStep>", () => {
         );
         expect(onChange).toHaveBeenCalledWith([
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
         ]);
     });
 
@@ -144,7 +144,7 @@ describe("<BaselinePluginsStep>", () => {
         mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
         const { onChange } = renderStep([
             "com.platypus.sys-info",
-            "com.platypus.sys-procs",
+            "com.platypus.sys-procs-linux",
         ]);
         await waitFor(() =>
             screen.getByRole("checkbox", { name: /System Info/i }),

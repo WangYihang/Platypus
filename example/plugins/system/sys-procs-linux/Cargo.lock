@@ -320,7 +320,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sys-procs"
+name = "sys-procs-linux"
 version = "2.0.0"
 dependencies = [
  "extism-pdk",

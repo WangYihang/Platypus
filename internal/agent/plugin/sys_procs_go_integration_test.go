@@ -15,8 +15,8 @@ import (
 
 func installSysProcsGo(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm := stagedWasmBytes(t, "com.platypus.sys-procs-go", "1.0.0", "sys_procs.wasm")
-	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-procs-go", "1.0.0")
+	wasm := stagedWasmBytes(t, "com.platypus.sys-procs-linux-go", "1.0.0", "sys_procs.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-procs-linux-go", "1.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -43,7 +43,7 @@ func installSysProcsGo(t *testing.T) *plugin.Registry {
 	t.Cleanup(func() { reg.Close(context.Background()) })
 
 	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
-		PluginID:            "com.platypus.sys-procs-go",
+		PluginID:            "com.platypus.sys-procs-linux-go",
 		Version:             "1.0.0",
 		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
@@ -72,7 +72,7 @@ func invokeGoProcessList(t *testing.T, reg *plugin.Registry, topN uint32, sortBy
 		t.Fatalf("marshal req: %v", err)
 	}
 	resp := reg.Invoke(context.Background(), &v2pb.PluginCallRequest{
-		PluginId: "com.platypus.sys-procs-go",
+		PluginId: "com.platypus.sys-procs-linux-go",
 		Method:   "process_list",
 		Payload:  body,
 	})

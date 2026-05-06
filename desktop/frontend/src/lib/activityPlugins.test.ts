@@ -55,11 +55,11 @@ describe("activitiesNeedingInstall", () => {
     });
 
     it("flags activities whose required plugins aren't installed", () => {
-        // Only sys-procs installed → processes still missing
+        // Only sys-procs-linux installed → processes still missing
         // sys-process; sessions also needs sys-process; every other
         // gated activity has all plugins missing.
         const got = activitiesNeedingInstall(
-            new Set(["com.platypus.sys-procs"]),
+            new Set(["com.platypus.sys-procs-linux"]),
         );
         expect(got.files).toBe(true);
         expect(got.sessions).toBe(true);

@@ -124,7 +124,7 @@ Pattern from G1 (`sys-info-go`):
    `sdk/go/platypus-plugin/host.go` (one wasmimport + a Go
    wrapper, mirroring the Rust extern block).
 4. Drop a `plugin.yaml` next to `main.go`.  Plugin id is
-   `<original>-go` (e.g. `com.platypus.sys-procs-go`).
+   `<original>-go` (e.g. `com.platypus.sys-procs-linux-go`).
 5. `tinygo build -target wasi -o <entry>.wasm .`
 6. `go run ./hack/stage_system_plugins` from repo root.
 7. Add an integration test under
@@ -136,7 +136,7 @@ Status of the system-plugin port matrix (May 2026):
 | Plugin            | Rust   | Go (G phase) |
 |-------------------|--------|--------------|
 | sys-info          | 2.0.0  | 1.0.0 (G1)   |
-| sys-procs         | 2.0.0  | pending (G2) |
+| sys-procs-linux   | 2.0.0  | 1.0.0 (G2; renamed M0) |
 | sys-security      | 2.0.0  | pending (G3) |
 | sys-config-audit  | 2.0.0  | pending (G4) |
 | sys-tunnel-pull   | 1.0.0  | pending (G5) |
