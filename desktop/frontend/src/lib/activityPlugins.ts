@@ -123,3 +123,134 @@ export function activitiesNeedingInstall(installed: Set<string> | null): Partial
     }
     return out;
 }
+
+// ---------------------------------------------------------------------------
+// useNewPluginActivities — track which plugin-shipped activities the
+// operator hasn't clicked yet, so the activity bar can render a "new"
+// dot on freshly-installed plugin icons.
+// ---------------------------------------------------------------------------
+//
+// Storage model: a per-host Set<plugin_id> in localStorage at
+// `seen-plugin-activities:<projectID>:<agentID>`. Membership = the
+// operator has clicked the icon for that plugin at least once.
+//
+// First-encounter bootstrap: if there's no localStorage key at all
+// for this host, we seed the set with whatever's currently
+// installed. Without this bootstrap every existing plugin would
+// look "new" the first time the operator opened the host detail
+// page after upgrading — wrong, those aren't actually new to them.
+//
+// "new" = (installed AND in the registry — i.e. has a UI tab) AND
+// not in the seen set. That's the predicate the activity bar
+// renders the dot for; clicking the icon calls markSeen which
+// removes the dot.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const SEEN_KEY_PREFIX = "seen-plugin-activities:";
+
+function seenKey(projectID: string, agentID: string): string {
+    return `${SEEN_KEY_PREFIX}${projectID}:${agentID}`;
+}
+
+function readSeen(projectID: string, agentID: string): Set<string> | null {
+    try {
+        const raw = localStorage.getItem(seenKey(projectID, agentID));
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.filter((x): x is string => typeof x === "string"));
+    } catch {
+        return null;
+    }
+}
+
+function writeSeen(projectID: string, agentID: string, seen: Set<string>): void {
+    try {
+        localStorage.setItem(
+            seenKey(projectID, agentID),
+            JSON.stringify(Array.from(seen)),
+        );
+    } catch {
+        // Quota exceeded / private browsing: silently drop. The dot
+        // will reappear on next render but the click→mark-seen flow
+        // still keeps it gone for the current session.
+    }
+}
+
+/**
+ * Returns the set of "new" plugin activities (installed plugin ids
+ * the operator hasn't clicked the sidebar icon for yet) plus a
+ * `markSeen(pluginID)` callback the parent invokes from its onSelect
+ * handler.
+ *
+ * Empty installed (loading) → empty Set; the bar just doesn't draw
+ * any dots until the data arrives. After bootstrap, only plugins
+ * that get installed AFTER the first time the operator visits this
+ * host page get a dot.
+ */
+export function useNewPluginActivities(
+    projectID: string,
+    agentID: string,
+    installedPluginIDs: ReadonlySet<string> | null,
+): {
+    newPluginIDs: ReadonlySet<string>;
+    markSeen: (pluginID: string) => void;
+} {
+    const [seen, setSeen] = useState<Set<string>>(() => new Set());
+    // Track whether we've bootstrapped for this (projectID, agentID)
+    // so the effect below only seeds once per host visit.
+    const bootstrappedRef = useRef<string>("");
+
+    // Bootstrap on first encounter of (projectID, agentID) AFTER
+    // installedPluginIDs is non-null. Bootstrapping seeds the seen
+    // set with whatever's already installed when the localStorage
+    // key didn't exist before — preventing the "every plugin gets
+    // a dot on first visit" surprise.
+    useEffect(() => {
+        if (!projectID || !agentID || !installedPluginIDs) return;
+        const hostKey = `${projectID}:${agentID}`;
+        if (bootstrappedRef.current === hostKey) return;
+
+        const stored = readSeen(projectID, agentID);
+        if (stored !== null) {
+            setSeen(stored);
+            bootstrappedRef.current = hostKey;
+            return;
+        }
+        // No prior entry → seed with the current installed set.
+        const seed = new Set(installedPluginIDs);
+        writeSeen(projectID, agentID, seed);
+        setSeen(seed);
+        bootstrappedRef.current = hostKey;
+    }, [projectID, agentID, installedPluginIDs]);
+
+    const markSeen = useCallback(
+        (pluginID: string) => {
+            if (!projectID || !agentID) return;
+            setSeen((prev) => {
+                if (prev.has(pluginID)) return prev;
+                const next = new Set(prev);
+                next.add(pluginID);
+                writeSeen(projectID, agentID, next);
+                return next;
+            });
+        },
+        [projectID, agentID],
+    );
+
+    const newPluginIDs = useMemo(() => {
+        if (!installedPluginIDs) return new Set<string>();
+        const out = new Set<string>();
+        for (const id of installedPluginIDs) {
+            if (!seen.has(id)) out.add(id);
+        }
+        return out;
+    }, [installedPluginIDs, seen]);
+
+    return { newPluginIDs, markSeen };
+}
+
+// Exposed for tests so they can clear the localStorage layer
+// without poking at the constants directly.
+export const _seenKey = seenKey;

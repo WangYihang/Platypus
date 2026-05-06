@@ -103,4 +103,58 @@ describe("<ActivityBar pluginEntries>", () => {
         expect(active.getAttribute("data-active")).toBe("true");
         expect(inactive.getAttribute("data-active")).toBeNull();
     });
+
+    // ---------------- "new" indicator ----------------
+
+    it("renders a new-dot on plugin entries in newPluginIDs", () => {
+        render(
+            <ActivityBar
+                active="files"
+                onSelect={() => {}}
+                pluginEntries={ENTRIES}
+                newPluginIDs={new Set(["com.platypus.sys-pkg-linux"])}
+            />,
+        );
+        // sys-pkg-linux is new → dot rendered.
+        expect(
+            screen.getByTestId(
+                "host-activity-new-com.platypus.sys-pkg-linux",
+            ),
+        ).toBeInTheDocument();
+        // sys-systemd-linux isn't in the new set → no dot.
+        expect(
+            screen.queryByTestId(
+                "host-activity-new-com.platypus.sys-systemd-linux",
+            ),
+        ).toBeNull();
+    });
+
+    it("data-new attribute marks the button + tooltip says '(new)'", () => {
+        render(
+            <ActivityBar
+                active="files"
+                onSelect={() => {}}
+                pluginEntries={ENTRIES}
+                newPluginIDs={new Set(["com.platypus.sys-pkg-linux"])}
+            />,
+        );
+        const btn = screen.getByTestId(
+            "host-activity-plugin:com.platypus.sys-pkg-linux",
+        );
+        expect(btn.getAttribute("data-new")).toBe("true");
+        expect(btn.getAttribute("title")).toMatch(/\(new\)/);
+    });
+
+    it("no new dots when newPluginIDs is undefined or empty", () => {
+        render(
+            <ActivityBar
+                active="files"
+                onSelect={() => {}}
+                pluginEntries={ENTRIES}
+            />,
+        );
+        expect(
+            screen.queryByTestId(/host-activity-new-/),
+        ).toBeNull();
+    });
 });

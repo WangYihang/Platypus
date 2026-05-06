@@ -80,6 +80,13 @@ interface Props {
      * `plugin/<plugin_id>` convention defined in registry.ts.
      */
     pluginEntries?: ReadonlyArray<PluginUIEntry>;
+    /**
+     * Plugin ids the operator hasn't clicked yet. Each renders a
+     * small "new" dot on its icon — same affordance VS Code uses
+     * for newly-installed extensions. The parent's onSelect should
+     * call `markSeen(pluginID)` to clear the dot on click.
+     */
+    newPluginIDs?: ReadonlySet<string>;
 }
 
 // ActivityBar is the 44 px vertical strip on the left of HostView,
@@ -99,6 +106,7 @@ export default function ActivityBar({
     badges,
     needsInstall,
     pluginEntries,
+    newPluginIDs,
 }: Props) {
     return (
         <nav
@@ -220,6 +228,7 @@ export default function ActivityBar({
                             isActive={
                                 active === `${PLUGIN_ACTIVITY_PREFIX}${entry.pluginID}`
                             }
+                            isNew={newPluginIDs?.has(entry.pluginID) ?? false}
                             onSelect={onSelect}
                         />
                     ))}
@@ -232,10 +241,12 @@ export default function ActivityBar({
 function PluginActivityButton({
     entry,
     isActive,
+    isNew,
     onSelect,
 }: {
     entry: PluginUIEntry;
     isActive: boolean;
+    isNew: boolean;
     onSelect: (a: Activity) => void;
 }) {
     const Icon = entry.icon as React.ComponentType<LucideProps>;
@@ -247,8 +258,9 @@ function PluginActivityButton({
             data-testid={`host-activity-${activityKey}`}
             data-plugin-activity={entry.pluginID}
             data-active={isActive || undefined}
+            data-new={isNew || undefined}
             aria-current={isActive ? "true" : undefined}
-            title={entry.title}
+            title={isNew ? `${entry.title} (new)` : entry.title}
             style={{
                 position: "relative",
                 width: BAR_WIDTH,
@@ -264,6 +276,22 @@ function PluginActivityButton({
             }}
         >
             <Icon className={ICON_SIZE} />
+            {isNew && (
+                <span
+                    aria-label="new"
+                    data-testid={`host-activity-new-${entry.pluginID}`}
+                    style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 8,
+                        width: 8,
+                        height: 8,
+                        borderRadius: 999,
+                        background: palette.accent,
+                        boxShadow: `0 0 0 2px ${palette.rail}`,
+                    }}
+                />
+            )}
         </button>
     );
 }

@@ -89,7 +89,18 @@ export default function PluginsTab({
 }: Props) {
     const queryClient = useQueryClient();
 
-    const queryKey = ["agent-plugins", projectID, hostID] as const;
+    // Cache key is shared with `useInstalledPluginIDs`
+    // (lib/activityPlugins.ts) and `<RequiresPlugins>`. Keying on
+    // agentID (the cert-SAN identifier the API actually uses)
+    // means install / uninstall mutations here invalidate the
+    // activity-bar's "which plugins are installed" view AND the
+    // per-tab install-guard, so a fresh install reactively
+    // surfaces the new sidebar icon without a page refresh.
+    //
+    // Earlier this was keyed on hostID (the host row UUID) which
+    // diverged from the `useInstalledPluginIDs(agentID)` consumer
+    // — installs left the activity bar stale.
+    const queryKey = ["agent-plugins", projectID, agentID] as const;
 
     const plugins = useQuery({
         queryKey,

@@ -41,7 +41,11 @@ import InfoTab from "./host/InfoTab";
 import ProcessesTab from "./host/ProcessesTab";
 import RequiresPlugins from "./host/RequiresPlugins";
 
-import { activitiesNeedingInstall, useInstalledPluginIDs } from "../lib/activityPlugins";
+import {
+    activitiesNeedingInstall,
+    useInstalledPluginIDs,
+    useNewPluginActivities,
+} from "../lib/activityPlugins";
 import SecurityTab from "./host/SecurityTab";
 import ConfigTab from "./host/ConfigTab";
 import SessionsTab from "./host/SessionsTab";
@@ -102,6 +106,16 @@ export default function HostView({ projectID, hostID }: Props) {
         () => visiblePluginEntries(installedPlugins.ids ?? null, hostOS),
         [installedPlugins.ids, hostOS],
     );
+    // "New" indicator state — VS-Code-style dot on freshly-installed
+    // plugin icons until the operator clicks them. Persisted per host
+    // in localStorage; first-encounter bootstrap seeds with whatever
+    // is currently installed so existing plugins don't all show "new"
+    // on first page load after the upgrade.
+    const { newPluginIDs, markSeen } = useNewPluginActivities(
+        projectID,
+        agentID,
+        installedPlugins.ids ?? null,
+    );
     const sessions: SessionRow[] = sessionsQuery.data ?? [];
     const sysInfo: HostSysInfo | null = sysInfoQuery.data ?? null;
     const sysInfoError: string | null = sysInfoQuery.error
@@ -143,8 +157,14 @@ export default function HostView({ projectID, hostID }: Props) {
     const activeActivity: Activity = tabIsKnown
         ? (tabParam as Activity)
         : "files";
-    const setActiveActivity = (key: Activity) =>
+    const setActiveActivity = (key: Activity) => {
+        // Clicking a plugin activity icon clears its "new" dot.
+        // No-op for first-party activities (the parser returns null,
+        // and markSeen is idempotent on unknown ids anyway).
+        const parsed = parsePluginActivity(key);
+        if (parsed) markSeen(parsed.pluginID);
         navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
+    };
 
     // BottomPanel state (open/collapsed, active tab, height) lives
     // here rather than inside BottomPanel because we want it sticky
@@ -316,6 +336,7 @@ export default function HostView({ projectID, hostID }: Props) {
                     badges={{ sessions: sessions.length || undefined }}
                     needsInstall={needsInstall}
                     pluginEntries={pluginEntries}
+                    newPluginIDs={newPluginIDs}
                 />
                 <div
                     style={{
