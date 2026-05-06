@@ -272,6 +272,12 @@ export default function EnrollAgentWizard() {
                             // carry-over, otherwise the cascade can
                             // drift out of sync silently.
                             setTargetArch("");
+                            // Auto-advance to the arch step on a
+                            // confirmed pick. Empty `v` means the
+                            // operator deselected (ToggleGroup single
+                            // toggles off on a second click) — stay
+                            // put so they can re-pick.
+                            if (v) setStep("arch");
                         }}
                         onPickPreset={(preset) => {
                             // Quick-pick: lock both OS and arch and
@@ -338,7 +344,6 @@ export default function EnrollAgentWizard() {
                     onBack={goBack}
                     onNext={goNext}
                     onGenerate={generateCommands}
-                    onCancel={() => setOpen(false)}
                     onFinish={finishToFleet}
                 />
             </DialogContent>

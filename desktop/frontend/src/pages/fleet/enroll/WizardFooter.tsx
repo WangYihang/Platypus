@@ -14,15 +14,12 @@ interface Props {
     onBack: () => void;
     onNext: () => void;
     onGenerate: () => void;
-    onCancel: () => void;
     onFinish: () => void;
 }
 
 // WizardFooter renders the per-step action row at the bottom of the
-// EnrollAgentWizard. The shape varies enough between the linear
-// steps (back / next / cancel) and the terminal "run" step (single
-// "Done" button) that branching here is clearer than papering over
-// the difference with a uniform layout.
+// EnrollAgentWizard. The dialog's own X button already handles
+// dismissal, so the footer carries only the navigation actions.
 export default function WizardFooter({
     step,
     submitting,
@@ -32,7 +29,6 @@ export default function WizardFooter({
     onBack,
     onNext,
     onGenerate,
-    onCancel,
     onFinish,
 }: Props) {
     if (step === "run") {
@@ -71,9 +67,6 @@ export default function WizardFooter({
                 Back
             </Button>
             <div style={{ display: "flex", gap: space[2] }}>
-                <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-                    Cancel
-                </Button>
                 {step === "review" ? (
                     <Button
                         type="button"
