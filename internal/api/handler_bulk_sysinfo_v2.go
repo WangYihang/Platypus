@@ -49,6 +49,25 @@ type BulkSysInfoResponse struct {
 	Results []BulkSysInfoResult `json:"results"`
 }
 
+// v2BulkSysInfo fans the SysInfo RPC across agent_ids and emits the
+// rollup-summary projection. The full SysInfoResponse is available
+// via the singleton GET /sys endpoint per-agent.
+//
+// @Summary     Bulk sysinfo snapshot across N agents
+// @Description Returns hostname / os / arch / kernel / cpu / memory / load /
+// @Description process_count / uptime per agent. Slim projection of the per-agent
+// @Description sys_info RPC; ~5x smaller wire payload than embedding the full
+// @Description SysInfoResponse per row.
+// @Tags        bulk-rpc
+// @Accept      json
+// @Produce     json
+// @Param       pid  path string              true "Project ID"
+// @Param       body body BulkSysInfoRequest  true "Bulk sysinfo request"
+// @Success     200 {object} BulkSysInfoResponse
+// @Failure     400 {string} string "invalid body / agent_ids"
+// @Failure     403 {object} map[string]string "agent not in project"
+// @Security    BearerAuth
+// @Router      /api/v1/projects/{pid}/agents/bulk/sys_info [post]
 func v2BulkSysInfo(svc *core.AgentLinkService, rbac *RBAC) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req BulkSysInfoRequest

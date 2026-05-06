@@ -69,6 +69,23 @@ func RegisterV2BulkRPCRoutes(engine *gin.Engine, svc *core.AgentLinkService, rba
 // via core.FanOutRPC. Per-agent failures are isolated; the HTTP
 // response is 200 even when every result row carries an error —
 // the caller is expected to scan the results table.
+//
+// @Summary     Bulk plugin RPC across N agents
+// @Description Dispatches the same plugin_call to every agent_id in parallel.
+// @Description Per-agent failures (offline / app error) appear in the corresponding
+// @Description result row's `error` field; the HTTP status is 200 unless the request
+// @Description body itself was malformed (400) or one of the listed agents is not in
+// @Description the project (403).
+// @Tags        bulk-rpc
+// @Accept      json
+// @Produce     json
+// @Param       pid  path string                  true "Project ID"
+// @Param       body body BulkPluginCallRequest   true "Bulk plugin call request"
+// @Success     200 {object} BulkPluginCallResponse
+// @Failure     400 {string} string "invalid body / agent_ids / plugin_id / method"
+// @Failure     403 {object} map[string]string "agent not in project"
+// @Security    BearerAuth
+// @Router      /api/v1/projects/{pid}/agents/bulk/plugin_call [post]
 func v2BulkPluginCall(svc *core.AgentLinkService, rbac *RBAC) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req BulkPluginCallRequest

@@ -47,6 +47,23 @@ type BulkExecResponse struct {
 
 // v2BulkExec validates the request body, runs the project-pivot
 // guard, then fans the ExecRequest out across agent_ids.
+//
+// @Summary     Bulk command exec across N agents
+// @Description Runs the same shell command on every agent_id in parallel.
+// @Description ok=true means the agent ran the command and reported back; a
+// @Description non-zero exit_code does NOT flip ok to false (that's a successful
+// @Description round-trip with a structured "command failed" outcome). Use the
+// @Description `error` field to detect transport / agent_offline failures.
+// @Tags        bulk-rpc
+// @Accept      json
+// @Produce     json
+// @Param       pid  path string           true "Project ID"
+// @Param       body body BulkExecRequest  true "Bulk exec request"
+// @Success     200 {object} BulkExecResponse
+// @Failure     400 {string} string "invalid body / agent_ids / command"
+// @Failure     403 {object} map[string]string "agent not in project"
+// @Security    BearerAuth
+// @Router      /api/v1/projects/{pid}/agents/bulk/exec [post]
 func v2BulkExec(svc *core.AgentLinkService, rbac *RBAC) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req BulkExecRequest
