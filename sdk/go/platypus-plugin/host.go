@@ -1,8 +1,6 @@
 package platypus
 
 import (
-	"encoding/json"
-
 	"github.com/extism/go-pdk"
 )
 
@@ -95,8 +93,9 @@ func HostStreamRead() ([]byte, error) {
 		return nil, nil
 	}
 	// envelope.Data carries a base64-encoded JSON string.
-	var b64 string
-	if err := json.Unmarshal(env.Data, &b64); err != nil {
+	p := jsonParser{buf: env.Data}
+	b64, err := p.readString()
+	if err != nil {
 		return nil, err
 	}
 	return decodeBase64(b64)
@@ -138,14 +137,11 @@ type NetDialResult struct {
 // manifest must declare `capabilities.net.dial.targets` covering
 // the destination. dialTimeoutMs=0 falls back to the host default.
 func NetDial(target string, dialTimeoutMs uint32) (NetDialResult, error) {
-	body, err := json.Marshal(struct {
-		Target        string `json:"target"`
-		DialTimeoutMs uint32 `json:"dial_timeout_ms"`
-	}{Target: target, DialTimeoutMs: dialTimeoutMs})
-	if err != nil {
-		return NetDialResult{}, err
-	}
-	in := pdk.AllocateString(string(body))
+	// Hand-build the spec JSON; same TinyGo-no-encoding/json
+	// rationale as the rest of the SDK.
+	body := `{"target":` + EncodeJSONString(target) +
+		`,"dial_timeout_ms":` + strconvUint32(dialTimeoutMs) + `}`
+	in := pdk.AllocateString(body)
 	out := _hostNetDial(in.Offset())
 	mem := pdk.FindMemory(out)
 	env, err := decodeEnvelope(mem.ReadBytes())
@@ -156,7 +152,24 @@ func NetDial(target string, dialTimeoutMs uint32) (NetDialResult, error) {
 		return NetDialResult{}, errString(env.Error)
 	}
 	var r NetDialResult
-	if err := json.Unmarshal(env.Data, &r); err != nil {
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"handle", func(p *jsonParser) error {
+			v, err := p.readUint64()
+			if err == nil {
+				r.Handle = uint32(v)
+			}
+			return err
+		}},
+		{"resolved_addr", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				r.ResolvedAddr = s
+			}
+			return err
+		}},
+	})
+	if err != nil {
 		return NetDialResult{}, err
 	}
 	return r, nil
@@ -201,6 +214,174 @@ func NetClose(handle uint32) error {
 	return nil
 }
 
+// ---- host_exec / host_process_* (caps: exec, process) -------------
+//
+// IMPORTANT TinyGo constraint: the SDK's API for these host fns is
+// raw-bytes only.  TinyGo's `encoding/json` package panics
+// (interfaceTypeAssert in reflect.Type.Implements) when ANY type in
+// the binary contains `map[K]V` and json.{Marshal,Unmarshal} ever
+// runs — even on an unrelated value.  The only way to keep
+// json.Unmarshal usable for response decoding (Envelope, simple
+// struct returns) is to keep maps OUT of the binary's type graph
+// entirely.  So the request side accepts pre-encoded JSON bytes;
+// the plugin author hand-encodes (use the EncodeJSON helpers below).
+
+//go:wasmimport platypus host_exec
+func _hostExec(reqPtr uint64) uint64
+
+type ExecResponse struct {
+	ExitCode int32  `json:"exit_code,omitempty"`
+	Stdout   string `json:"stdout,omitempty"`
+	Stderr   string `json:"stderr,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// HostExecRaw invokes the agent's host_exec with the supplied
+// pre-marshalled JSON request bytes (shape:
+// {"command":"...","args":[...],"env":{...},"cwd":"...","timeout_ms":N}).
+// Use EncodeJSON / NewMapBuilder helpers to compose the env map.
+//
+// The plugin's manifest must declare `capabilities.exec.commands`
+// covering the supplied command.
+func HostExecRaw(rawJSON []byte) (ExecResponse, error) {
+	in := pdk.AllocateBytes(rawJSON)
+	out := _hostExec(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return ExecResponse{}, err
+	}
+	if !env.Ok {
+		return ExecResponse{Error: env.Error}, nil
+	}
+	var resp ExecResponse
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"exit_code", func(p *jsonParser) error {
+			v, err := p.readInt64()
+			if err == nil {
+				resp.ExitCode = int32(v)
+			}
+			return err
+		}},
+		{"stdout", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				resp.Stdout = s
+			}
+			return err
+		}},
+		{"stderr", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				resp.Stderr = s
+			}
+			return err
+		}},
+		{"error", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				resp.Error = s
+			}
+			return err
+		}},
+	})
+	if err != nil {
+		return ExecResponse{}, err
+	}
+	return resp, nil
+}
+
+//go:wasmimport platypus host_process_spawn
+func _hostProcessSpawn(specPtr uint64) uint64
+
+//go:wasmimport platypus host_process_relay
+func _hostProcessRelay(reqPtr uint64) uint64
+
+//go:wasmimport platypus host_process_kill
+func _hostProcessKill(reqPtr uint64) uint64
+
+type ProcessSpawnResult struct {
+	Handle uint32 `json:"handle"`
+	PID    int32  `json:"pid"`
+}
+
+// ProcessSpawnRaw opens a new child process from a pre-marshalled
+// JSON spec (shape:
+// {"command":"...","args":[...],"cwd":"...","env":{...},"pty":bool,
+//  "cols":N,"rows":N}). Returns the host-side handle the relay/kill
+// calls reference. Plugin manifest must declare
+// `capabilities.process.commands` covering the supplied command.
+func ProcessSpawnRaw(rawJSON []byte) (ProcessSpawnResult, error) {
+	in := pdk.AllocateBytes(rawJSON)
+	out := _hostProcessSpawn(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return ProcessSpawnResult{}, err
+	}
+	if !env.Ok {
+		return ProcessSpawnResult{}, errString(env.Error)
+	}
+	var r ProcessSpawnResult
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"handle", func(p *jsonParser) error {
+			v, err := p.readUint64()
+			if err == nil {
+				r.Handle = uint32(v)
+			}
+			return err
+		}},
+		{"pid", func(p *jsonParser) error {
+			v, err := p.readInt64()
+			if err == nil {
+				r.PID = int32(v)
+			}
+			return err
+		}},
+	})
+	if err != nil {
+		return ProcessSpawnResult{}, err
+	}
+	return r, nil
+}
+
+// ProcessRelay hands off the bidirectional pump to the host. Blocks
+// until the child exits OR the wire closes; the host emits the
+// terminal ProcessFrame.exit itself before returning.
+func ProcessRelay(handle uint32) error {
+	body := strconvUint32(handle)
+	in := pdk.AllocateString(body)
+	out := _hostProcessRelay(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
+// ProcessKill tears the spawned child down. Best-effort cleanup
+// path used after a relay error.
+func ProcessKill(handle uint32) error {
+	body := strconvUint32(handle)
+	in := pdk.AllocateString(body)
+	out := _hostProcessKill(in.Offset())
+	mem := pdk.FindMemory(out)
+	env, err := decodeEnvelope(mem.ReadBytes())
+	if err != nil {
+		return err
+	}
+	if !env.Ok {
+		return errString(env.Error)
+	}
+	return nil
+}
+
 // ---- host_uname (cap: sysinfo) -------------------------------------
 
 //go:wasmimport platypus host_uname
@@ -226,7 +407,24 @@ func HostUname() (UnameResult, error) {
 		return UnameResult{}, errString(env.Error)
 	}
 	var u UnameResult
-	if err := json.Unmarshal(env.Data, &u); err != nil {
+	p := jsonParser{buf: env.Data}
+	err = parseObject(&p, []fieldHandler{
+		{"os", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				u.OS = s
+			}
+			return err
+		}},
+		{"arch", func(p *jsonParser) error {
+			s, err := p.readString()
+			if err == nil {
+				u.Arch = s
+			}
+			return err
+		}},
+	})
+	if err != nil {
 		return UnameResult{}, err
 	}
 	return u, nil
@@ -254,8 +452,9 @@ func HostFSRead(path string) ([]byte, error) {
 	if !env.Ok {
 		return nil, errString(env.Error)
 	}
-	var contents string
-	if err := json.Unmarshal(env.Data, &contents); err != nil {
+	p := jsonParser{buf: env.Data}
+	contents, err := p.readString()
+	if err != nil {
 		return nil, err
 	}
 	return []byte(contents), nil
@@ -297,11 +496,59 @@ func HostFSListDir(path string) ([]FSListEntry, error) {
 	if !env.Ok {
 		return nil, errString(env.Error)
 	}
-	var entries []FSListEntry
-	if err := json.Unmarshal(env.Data, &entries); err != nil {
-		return nil, err
+	p := jsonParser{buf: env.Data}
+	p.skipWhitespace()
+	if !p.consume('[') {
+		return nil, parseErr("expect '['", p.pos)
 	}
-	return entries, nil
+	var entries []FSListEntry
+	for {
+		p.skipWhitespace()
+		if p.consume(']') {
+			return entries, nil
+		}
+		var e FSListEntry
+		err := parseObject(&p, []fieldHandler{
+			{"name", func(p *jsonParser) error {
+				s, err := p.readString()
+				e.Name = s
+				return err
+			}},
+			{"is_dir", func(p *jsonParser) error {
+				b, err := p.readBool()
+				e.IsDir = b
+				return err
+			}},
+			{"size", func(p *jsonParser) error {
+				v, err := p.readInt64()
+				e.Size = v
+				return err
+			}},
+			{"mtime_unix", func(p *jsonParser) error {
+				v, err := p.readInt64()
+				e.MTimeUnix = v
+				return err
+			}},
+			{"mode", func(p *jsonParser) error {
+				v, err := p.readUint64()
+				e.Mode = uint32(v)
+				return err
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+		p.skipWhitespace()
+		if p.consume(',') {
+			continue
+		}
+		p.skipWhitespace()
+		if !p.consume(']') {
+			return nil, parseErr("expect ',' or ']'", p.pos)
+		}
+		return entries, nil
+	}
 }
 
 // ---- host_kv (cap: kv) ---------------------------------------------
@@ -335,8 +582,9 @@ func KVGet(key string) ([]byte, bool, error) {
 		}
 		return nil, false, errString(env.Error)
 	}
-	var v string
-	if err := json.Unmarshal(env.Data, &v); err != nil {
+	p := jsonParser{buf: env.Data}
+	v, err := p.readString()
+	if err != nil {
 		return nil, false, err
 	}
 	return []byte(v), true, nil
