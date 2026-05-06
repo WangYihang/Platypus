@@ -1,0 +1,59 @@
+api_version: 1
+id: com.platypus.sys-disk-windows
+name: Disk usage (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows-only filesystem usage snapshot via PowerShell's
+  Get-PSDrive cmdlet over the FileSystem provider. Same RPC contract
+  as sys-disk-linux / sys-disk-darwin: list_filesystems(skip_pseudo,
+  only_mountpoints, min_size_bytes) → flat list of {source, fstype,
+  mountpoint, size_bytes, used_bytes, available_bytes, percent_used}.
+
+  Wire shape mapping for Windows:
+    - source     ← Provider.Name + ':' + Root  ("Microsoft.PowerShell.Core\\FileSystem::C:\\")
+                   normalised to "<drive>:" so the operator UI shows
+                   "C:" rather than the verbose internal qualifier.
+    - mountpoint ← Root  (typically "C:\\", "D:\\")
+    - fstype     ← "ntfs" (Get-PSDrive doesn't expose the underlying
+                   filesystem; defaulting matches the operator's
+                   expectation on the overwhelmingly-common case)
+    - size_bytes ← Used + Free  (Get-PSDrive does not include total)
+    - used_bytes ← Used
+    - available_bytes ← Free
+    - percent_used  ← 100 * Used / (Used + Free)
+
+  Pseudo filter: drives reporting Used + Free == 0 (mapped network
+  drives that are disconnected, A: when no floppy is mounted) are
+  dropped when skip_pseudo=true. Mappable network drives that ARE
+  connected are kept; the Provider name "FileSystem" excludes
+  Registry / Function / Variable PSDrives entirely.
+
+runtime:
+  type: wasm
+  entry: sys_disk_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_filesystems
+    request:  { proto: DiskListFilesystemsRequest }
+    response: { proto: DiskListFilesystemsResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_disk_windows.wasm.minisig
