@@ -1,0 +1,56 @@
+api_version: 1
+id: com.platypus.sys-services-darwin
+name: Service control (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS service control via launchctl(1). Two RPCs intentionally
+  smaller than sys-systemd-linux's set — launchd exposes less
+  per-unit machinery than systemd, so there's no `show_unit`
+  equivalent in v1.
+
+  RPCs:
+    - list_units(filter?): enumerate every loaded launchd job.
+      Backed by `/bin/launchctl list` (tab-delimited: PID, Status,
+      Label). Optional filter substring narrows by label.
+    - unit_action(name, action): start / stop / kickstart /
+      enable / disable. Action allowlist is closed; unit name
+      validator rejects leading "-" so launchctl can't mis-parse
+      the label as a flag.
+
+  Note: launchctl's modern subcommand surface (bootstrap / bootout
+  / kickstart) requires a domain prefix (e.g. "system/<label>" or
+  "gui/<uid>/<label>"). v1 defaults to system/<label>; the
+  operator's UI will add a domain selector in v2 when the use
+  case arrives.
+
+runtime:
+  type: wasm
+  entry: sys_services_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_units
+    request:  { proto: ServicesListUnitsRequest }
+    response: { proto: ServicesListUnitsResponse }
+  - name: unit_action
+    request:  { proto: ServicesUnitActionRequest }
+    response: { proto: ServicesUnitActionResponse }
+
+capabilities:
+  exec:
+    commands: ["/bin/launchctl"]
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_services_darwin.wasm.minisig
