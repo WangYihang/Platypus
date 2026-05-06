@@ -1,0 +1,47 @@
+api_version: 1
+id: com.platypus.sys-journald-linux
+name: Journald (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux-only systemd-journald query interface. One RPC:
+    - query(filters): pulls entries via `journalctl -o json` and
+      returns a flat list of {timestamp, unit, priority, message,
+      pid, hostname, identifier}. Honours unit/priority/since/until/
+      grep/lines filters; line cap defaults to 500 (operator UI
+      pagination), max 10000 (memory safety — each entry is parsed
+      JSON).
+
+  Streaming/follow mode is intentionally NOT in v1 — that's a
+  STREAM_TYPE_PLUGIN_STREAM plugin (host_process_spawn(journalctl -f)
+  + host_process_relay) and lives separately so the simple query
+  case stays a one-shot RPC.
+
+runtime:
+  type: wasm
+  entry: sys_journald_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: query
+    request:  { proto: JournaldQueryRequest }
+    response: { proto: JournaldQueryResponse }
+
+# /usr/bin/journalctl on Debian/Ubuntu, /bin/journalctl on RHEL.
+capabilities:
+  exec:
+    commands: ["/usr/bin/journalctl", "/bin/journalctl"]
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_journald_linux.wasm.minisig
