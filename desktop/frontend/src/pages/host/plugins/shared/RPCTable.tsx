@@ -1,0 +1,611 @@
+// <RPCTable> — shared primitive for system-plugin "list things, take
+// row-actions on a thing" tabs. One generic React component covers
+// ~80% of the per-host plugin UI shape; each plugin's tab is a thin
+// wrapper that passes column / action / request-form configuration
+// as TypeScript values (no DSL, no JSONPath strings, no runtime
+// schema validation).
+//
+// See PLAN /root/.claude/plans/abi-tdd-noble-firefly.md (Sprint 3 /
+// N-phase) for the architectural rationale; the short version is:
+// system plugins are written by us in the same monorepo, so adding
+// a typed React wrapper per plugin is cheaper + safer than designing
+// a YAML DSL.
+
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+
+import EmptyState from "../../../../components/EmptyState";
+import { palette, space } from "../../../../layout/theme";
+import { humanizeError } from "../../../../lib/humanizeError";
+import { invokePluginRPC } from "../../../../lib/api/agents/plugins";
+
+// ---------------------------------------------------------------------------
+// Type surface: props consumed by every plugin's wrapper component.
+// ---------------------------------------------------------------------------
+
+/**
+ * Form input that operators twiddle to refine the RPC request. The
+ * `field` is a string key in the form-state record; `buildRequest`
+ * receives the whole record and assembles whatever the plugin's RPC
+ * expects (parameter names + nesting are plugin-specific).
+ *
+ * v1 input kinds (kept intentionally narrow):
+ *   - "text"   : free-form string (rare; most ops want search instead)
+ *   - "search" : same as text but debounced — fires refetch on idle
+ *   - "number" : integer with optional min/max bounds
+ *   - "select" : dropdown over a closed set of options
+ *   - "toggle" : boolean checkbox
+ */
+export type RequestFormField =
+    | {
+          field: string;
+          kind: "text";
+          label: string;
+          default?: string;
+          debounceMs?: number;
+      }
+    | {
+          field: string;
+          kind: "search";
+          label: string;
+          default?: string;
+          debounceMs?: number;
+          placeholder?: string;
+      }
+    | {
+          field: string;
+          kind: "number";
+          label: string;
+          default?: number;
+          min?: number;
+          max?: number;
+          step?: number;
+      }
+    | {
+          field: string;
+          kind: "select";
+          label: string;
+          options: ReadonlyArray<{ value: string; label: string }>;
+          default?: string;
+      }
+    | {
+          field: string;
+          kind: "toggle";
+          label: string;
+          default?: boolean;
+      };
+
+export interface Column<TRow> {
+    /**
+     * Default text-rendering source. When `render` is supplied, the
+     * field is still used for the React `key` but the rendered
+     * content comes from `render(row)`.
+     */
+    field: keyof TRow & string;
+    label: string;
+    /**
+     * The "name" column — bolder, never truncated. Most tables have
+     * exactly one primary column. v1 doesn't enforce that.
+     */
+    primary?: boolean;
+    /** Truncate long cell text with ellipsis instead of wrapping. */
+    truncate?: boolean;
+    /** Custom cell renderer. Receives the full row. */
+    render?: (row: TRow) => ReactNode;
+}
+
+export interface RowAction<TRow> {
+    /** Stable id used for the menu item key. */
+    id: string;
+    label: string;
+    /** RPC method name on the SAME plugin as the table's method. */
+    method: string;
+    /** Build the action's RPC payload from the row being acted on. */
+    args: (row: TRow) => unknown;
+    /**
+     * When supplied, the action opens an AlertDialog with this text
+     * before firing the RPC. The action button label is derived from
+     * `label`. Without `confirm`, the RPC fires immediately.
+     */
+    confirm?: (row: TRow) => string;
+    /** Destructive styling on the menu item + dialog action button. */
+    danger?: boolean;
+}
+
+export interface RPCTableProps<TResponse, TRow> {
+    projectID: string;
+    agentID: string;
+    pluginID: string;
+    /** RPC method on the plugin that returns the list payload. */
+    method: string;
+    /**
+     * Operator-tunable request inputs. Defaults populate form state on
+     * mount; changes trigger debounced refetch with the new request.
+     */
+    requestForm?: ReadonlyArray<RequestFormField>;
+    /**
+     * Build the RPC request object from the current form state.
+     * Defaults to the form record verbatim when omitted.
+     */
+    buildRequest?: (form: Record<string, unknown>) => unknown;
+    /** Extract the row array from the RPC response. */
+    rowsFrom: (resp: TResponse) => TRow[];
+    /** Stable per-row identity (React key + action targeting). */
+    rowKey: (row: TRow) => string;
+    columns: ReadonlyArray<Column<TRow>>;
+    actions?: ReadonlyArray<RowAction<TRow>>;
+    /** Auto-refetch interval. 0 / undefined = no polling. */
+    refreshMs?: number;
+    /**
+     * When false, the query is paused — used by the activity-bar
+     * pattern to stop polling for offscreen tabs. Defaults to true.
+     */
+    active?: boolean;
+    /** Empty-state body when rowsFrom returns []. */
+    emptyText?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+export default function RPCTable<TResponse, TRow>(
+    props: RPCTableProps<TResponse, TRow>,
+) {
+    const {
+        projectID,
+        agentID,
+        pluginID,
+        method,
+        requestForm = [],
+        buildRequest,
+        rowsFrom,
+        rowKey,
+        columns,
+        actions = [],
+        refreshMs = 0,
+        active = true,
+        emptyText,
+    } = props;
+
+    // ----- form state -----
+    const [form, setForm] = useState<Record<string, unknown>>(() =>
+        initialFormValues(requestForm),
+    );
+    const [debouncedForm, setDebouncedForm] = useState(form);
+    // Debounce search/text inputs so each keystroke doesn't refire
+    // the RPC. The longest debounceMs across registered fields wins
+    // (per-field timers would require a richer state machine; v1
+    // keeps it simple).
+    const debounceMs = useMemo(() => {
+        let max = 0;
+        for (const f of requestForm) {
+            if ("debounceMs" in f && typeof f.debounceMs === "number") {
+                if (f.debounceMs > max) max = f.debounceMs;
+            }
+        }
+        return max;
+    }, [requestForm]);
+    useEffect(() => {
+        if (debounceMs <= 0) {
+            setDebouncedForm(form);
+            return;
+        }
+        const t = setTimeout(() => setDebouncedForm(form), debounceMs);
+        return () => clearTimeout(t);
+    }, [form, debounceMs]);
+
+    // ----- RPC query -----
+    const requestPayload = useMemo(
+        () =>
+            buildRequest ? buildRequest(debouncedForm) : { ...debouncedForm },
+        [buildRequest, debouncedForm],
+    );
+
+    const queryClient = useQueryClient();
+    const queryKey = [
+        "plugin-rpc",
+        projectID,
+        agentID,
+        pluginID,
+        method,
+        requestPayload,
+    ] as const;
+
+    const query = useQuery({
+        queryKey,
+        queryFn: ({ signal }) =>
+            invokePluginRPC<TResponse>(
+                projectID,
+                agentID,
+                pluginID,
+                method,
+                requestPayload,
+                { signal },
+            ),
+        enabled: active && agentID !== "",
+        refetchInterval: active && refreshMs > 0 ? refreshMs : false,
+        refetchOnWindowFocus: false,
+        retry: false,
+    });
+
+    // ----- row-action mutation -----
+    const [pendingAction, setPendingAction] = useState<{
+        action: RowAction<TRow>;
+        row: TRow;
+    } | null>(null);
+
+    const actionMutation = useMutation({
+        mutationFn: async (vars: { action: RowAction<TRow>; row: TRow }) => {
+            await invokePluginRPC(
+                projectID,
+                agentID,
+                pluginID,
+                vars.action.method,
+                vars.action.args(vars.row),
+            );
+        },
+        onSuccess: (_res, vars) => {
+            toast.success(`${vars.action.label} ${rowKey(vars.row)}: ok`);
+            setPendingAction(null);
+            void queryClient.invalidateQueries({ queryKey });
+        },
+        onError: (err) => {
+            toast.error(humanizeError(err));
+            setPendingAction(null);
+        },
+    });
+
+    function fireAction(action: RowAction<TRow>, row: TRow) {
+        if (action.confirm) {
+            setPendingAction({ action, row });
+            return;
+        }
+        actionMutation.mutate({ action, row });
+    }
+
+    // ----- render -----
+    const rows: TRow[] = useMemo(() => {
+        if (!query.data) return [];
+        return rowsFrom(query.data);
+    }, [query.data, rowsFrom]);
+
+    return (
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: space[3],
+            }}
+        >
+            {requestForm.length > 0 && (
+                <RequestForm
+                    fields={requestForm}
+                    values={form}
+                    onChange={setForm}
+                />
+            )}
+
+            {query.isLoading ? (
+                <div
+                    style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        padding: space[6],
+                    }}
+                >
+                    <Loader2 className="size-5 animate-spin" />
+                </div>
+            ) : query.error ? (
+                <EmptyState
+                    title="Couldn't load"
+                    description={humanizeError(query.error)}
+                />
+            ) : rows.length === 0 ? (
+                <EmptyState
+                    title="Nothing to show"
+                    description={emptyText ?? "The plugin returned no rows."}
+                />
+            ) : (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            {columns.map((c) => (
+                                <TableHead key={c.field}>{c.label}</TableHead>
+                            ))}
+                            {actions.length > 0 && (
+                                <TableHead style={{ width: 48 }} aria-label="Actions">
+                                    {""}
+                                </TableHead>
+                            )}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {rows.map((row) => {
+                            const id = rowKey(row);
+                            return (
+                                <TableRow key={id}>
+                                    {columns.map((c) => (
+                                        <TableCell
+                                            key={c.field}
+                                            data-primary={c.primary ? "true" : "false"}
+                                            style={{
+                                                fontWeight: c.primary ? 600 : 400,
+                                                whiteSpace: c.truncate
+                                                    ? "nowrap"
+                                                    : undefined,
+                                                overflow: c.truncate
+                                                    ? "hidden"
+                                                    : undefined,
+                                                textOverflow: c.truncate
+                                                    ? "ellipsis"
+                                                    : undefined,
+                                                maxWidth: c.truncate ? 320 : undefined,
+                                                color: palette.textPrimary,
+                                            }}
+                                        >
+                                            {c.render
+                                                ? c.render(row)
+                                                : defaultCell(row[c.field])}
+                                        </TableCell>
+                                    ))}
+                                    {actions.length > 0 && (
+                                        <TableCell>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={`Actions for ${id}`}
+                                                    >
+                                                        <MoreHorizontal className="size-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    {actions.map((a) => (
+                                                        <DropdownMenuItem
+                                                            key={a.id}
+                                                            onClick={() => fireAction(a, row)}
+                                                            variant={
+                                                                a.danger
+                                                                    ? "destructive"
+                                                                    : "default"
+                                                            }
+                                                        >
+                                                            {a.label}
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    )}
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            )}
+
+            <AlertDialog
+                open={pendingAction !== null}
+                onOpenChange={(open) => {
+                    if (!open) setPendingAction(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {pendingAction
+                                ? pendingAction.action.label
+                                : ""}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {pendingAction
+                                ? pendingAction.action.confirm?.(pendingAction.row)
+                                : ""}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                if (pendingAction) {
+                                    actionMutation.mutate(pendingAction);
+                                }
+                            }}
+                            data-variant={
+                                pendingAction?.action.danger ? "destructive" : "default"
+                            }
+                            style={{
+                                backgroundColor: pendingAction?.action.danger
+                                    ? palette.danger
+                                    : undefined,
+                            }}
+                        >
+                            {pendingAction?.action.label ?? ""}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function initialFormValues(
+    fields: ReadonlyArray<RequestFormField>,
+): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const f of fields) {
+        switch (f.kind) {
+            case "text":
+            case "search":
+            case "select":
+                out[f.field] = f.default ?? "";
+                break;
+            case "number":
+                out[f.field] = f.default ?? 0;
+                break;
+            case "toggle":
+                out[f.field] = f.default ?? false;
+                break;
+        }
+    }
+    return out;
+}
+
+function defaultCell(v: unknown): ReactNode {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+        return String(v);
+    }
+    return JSON.stringify(v);
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponent: RequestForm
+// ---------------------------------------------------------------------------
+
+function RequestForm({
+    fields,
+    values,
+    onChange,
+}: {
+    fields: ReadonlyArray<RequestFormField>;
+    values: Record<string, unknown>;
+    onChange: (next: Record<string, unknown>) => void;
+}) {
+    const setOne = (field: string, value: unknown) =>
+        onChange({ ...values, [field]: value });
+
+    return (
+        <div
+            style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "flex-end",
+                gap: space[3],
+                paddingBottom: space[1],
+            }}
+        >
+            {fields.map((f) => (
+                <div
+                    key={f.field}
+                    style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                >
+                    <Label
+                        htmlFor={`rpc-form-${f.field}`}
+                        style={{ fontSize: 11, color: palette.textMuted }}
+                    >
+                        {f.label}
+                    </Label>
+                    {renderInput(f, values, setOne)}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function renderInput(
+    f: RequestFormField,
+    values: Record<string, unknown>,
+    setOne: (field: string, value: unknown) => void,
+): ReactNode {
+    const id = `rpc-form-${f.field}`;
+    switch (f.kind) {
+        case "text":
+        case "search":
+            return (
+                <Input
+                    id={id}
+                    type={f.kind === "search" ? "search" : "text"}
+                    placeholder={f.kind === "search" ? f.placeholder : undefined}
+                    value={(values[f.field] as string) ?? ""}
+                    onChange={(e) => setOne(f.field, e.target.value)}
+                    style={{ width: 240 }}
+                />
+            );
+        case "number":
+            return (
+                <Input
+                    id={id}
+                    type="number"
+                    min={f.min}
+                    max={f.max}
+                    step={f.step}
+                    value={(values[f.field] as number) ?? 0}
+                    onChange={(e) => setOne(f.field, Number(e.target.value))}
+                    style={{ width: 120 }}
+                />
+            );
+        case "select":
+            // shadcn's <Select> uses Radix portal which is finicky in
+            // jsdom; native <select> matches userEvent.selectOptions
+            // reliably and renders identically inside our theme.
+            return (
+                <select
+                    id={id}
+                    aria-label={f.label}
+                    value={(values[f.field] as string) ?? ""}
+                    onChange={(e) => setOne(f.field, e.target.value)}
+                    style={{
+                        height: 32,
+                        padding: "0 8px",
+                        background: palette.surface,
+                        color: palette.textPrimary,
+                        border: `1px solid ${palette.border}`,
+                        borderRadius: 6,
+                    }}
+                >
+                    {f.options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                            {o.label}
+                        </option>
+                    ))}
+                </select>
+            );
+        case "toggle":
+            return (
+                <input
+                    id={id}
+                    type="checkbox"
+                    checked={Boolean(values[f.field])}
+                    onChange={(e) => setOne(f.field, e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                />
+            );
+    }
+}
