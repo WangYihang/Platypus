@@ -33,6 +33,19 @@ type fakeSession struct {
 	calls []openCall
 }
 
+// specsOf is a tiny test helper that wraps each plugin id into a
+// minimal PluginSpec (empty caps, empty config, schema_version=0).
+// Tests that exercise the rich-shape path (config_overrides /
+// granted_capabilities / schema_version) construct PluginSpec
+// literals directly.
+func specsOf(ids ...string) []storage.PluginSpec {
+	out := make([]storage.PluginSpec, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, storage.PluginSpec{PluginID: id})
+	}
+	return out
+}
+
 type openCall struct {
 	streamType    v2pb.StreamType
 	correlationID string
@@ -280,7 +293,7 @@ func TestReconcileSystemPlugins_BaselinePicksPlusCore(t *testing.T) {
 	stageBundle(t, root, "com.platypus.sys-process", "1.0.0", []string{"exec", "process"})
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.sys-files-read", "com.platypus.sys-process"}
+	baseline := specsOf("com.platypus.sys-files-read", "com.platypus.sys-process")
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -319,7 +332,7 @@ func TestReconcileSystemPlugins_AlreadyInstalledIsNoOp(t *testing.T) {
 
 	sess := &fakeSession{installedVersions: map[string]string{"com.platypus.sys-info": "2.0.0"}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+		specsOf("com.platypus.sys-info"), "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list only; nothing missing.
@@ -339,7 +352,7 @@ func TestReconcileSystemPlugins_VersionMismatchTriggersUpgrade(t *testing.T) {
 		"com.platypus.sys-info": "1.0.0",
 	}}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
+		specsOf("com.platypus.sys-info"), "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	// list + install (the upgrade).
@@ -359,7 +372,7 @@ func TestReconcileSystemPlugins_MissingFromBundleIsLoggedNotFatal(t *testing.T) 
 	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.sys-files-read"} // not staged
+	baseline := specsOf("com.platypus.sys-files-read") // not staged
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1", baseline, "linux", "amd64", os.DirFS(filepath.Join(dataDir, "system-plugins"))); err != nil {
 		t.Fatalf("reconcile should not error on missing bundle entry: %v", err)
 	}
@@ -400,7 +413,7 @@ func TestReconcileSystemPlugins_PrebuiltEmbed(t *testing.T) {
 func TestReconcileSystemPlugins_NoBundleDirShortCircuits(t *testing.T) {
 	sess := &fakeSession{}
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
-		[]string{"com.platypus.sys-info"}, "linux", "amd64", nil); err != nil {
+		specsOf("com.platypus.sys-info"), "linux", "amd64", nil); err != nil {
 		t.Fatalf("reconcile with nil bundle: %v", err)
 	}
 	if len(sess.calls) != 0 {
@@ -448,7 +461,7 @@ func TestReconcileSystemPlugins_SkipsByOSTarget(t *testing.T) {
 	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.sys-systemd-linux"}
+	baseline := specsOf("com.platypus.sys-systemd-linux")
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
 		baseline, "darwin", "amd64", os.DirFS(root)); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -472,7 +485,7 @@ func TestReconcileSystemPlugins_PushesMatchingOSTarget(t *testing.T) {
 	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.sys-systemd-linux"}
+	baseline := specsOf("com.platypus.sys-systemd-linux")
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
 		baseline, "linux", "amd64", os.DirFS(root)); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -493,7 +506,7 @@ func TestReconcileSystemPlugins_SkipsByArchTarget(t *testing.T) {
 	stageBundlePlatformed(t, root, "com.platypus.amd64-only", "1.0.0", nil, []string{"amd64"})
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.amd64-only"}
+	baseline := specsOf("com.platypus.amd64-only")
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
 		baseline, "linux", "arm64", os.DirFS(root)); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -519,7 +532,7 @@ func TestReconcileSystemPlugins_EmptyAgentOSAllowsAll(t *testing.T) {
 	stageBundlePlatformed(t, root, "com.platypus.sys-systemd-linux", "1.0.0", []string{"linux"}, nil)
 
 	sess := &fakeSession{installedVersions: nil}
-	baseline := []string{"com.platypus.sys-systemd-linux"}
+	baseline := specsOf("com.platypus.sys-systemd-linux")
 	if err := reconcileSystemPlugins(context.Background(), sess, "agent-1",
 		baseline, "" /*agentOS unknown*/, "" /*agentArch unknown*/, os.DirFS(root)); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -553,7 +566,7 @@ func TestReconcileSystemPlugins_ForwardsConfigJsonFromHostSpecs(t *testing.T) {
 		},
 	}
 	sess := &fakeSession{installedVersions: nil}
-	if err := reconcileSystemPluginsRich(
+	if err := reconcileSystemPlugins(
 		context.Background(), sess, "agent-1", specs, "linux", "amd64",
 		os.DirFS(filepath.Join(dataDir, "system-plugins")),
 	); err != nil {
@@ -600,7 +613,7 @@ func TestReconcileSystemPlugins_NoConfigStaysNoConfig(t *testing.T) {
 		{PluginID: "com.platypus.sys-info"},
 	}
 	sess := &fakeSession{installedVersions: nil}
-	if err := reconcileSystemPluginsRich(
+	if err := reconcileSystemPlugins(
 		context.Background(), sess, "agent-1", specs, "linux", "amd64",
 		os.DirFS(filepath.Join(dataDir, "system-plugins")),
 	); err != nil {

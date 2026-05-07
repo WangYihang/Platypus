@@ -49,26 +49,14 @@ type issueInstallRequest struct {
 	PATMaxUses          int    `json:"pat_max_uses"`
 	PATBindingMachineID string `json:"pat_binding_machine_id"`
 	PATDescription      string `json:"pat_description"`
-	// BaselinePluginIDs is the operator-chosen system-plugin allowlist
-	// for the agent created by this install. The list rides the
-	// install bundle / install script down to the agent's first boot,
-	// where it filters which embedded system plugins get installed.
-	// Empty = the agent boots with only its mandatory core plugin
-	// (sys-info), the secure-by-default the enroll wizard ships.
-	// Anything beyond the baseline must be installed later via the
-	// per-agent plugin REST surface with explicit capability
-	// authorization.
-	BaselinePluginIDs []string `json:"baseline_plugin_ids"`
-	// PluginSpecs is the rich shape PR 4 will start sending. When
-	// supplied, it overrides BaselinePluginIDs entirely. PR 3 plumbs
-	// PluginSpecs through enrollment.Service end-to-end; until then
-	// the handler projects to []string at the boundary so the
-	// enrollment service / storage layer keep their existing
-	// signatures. Rich fields (version, granted_capabilities,
-	// config_overrides, schema_version) are not lost — they're
-	// stored in the install_download_tokens.plugin_specs column —
-	// but the agent-side reconciler still keys on plugin_id alone
-	// in PR 2.
+	// PluginSpecs is the operator-chosen baseline. Each entry
+	// carries plugin_id + version + granted_capabilities +
+	// config_overrides + schema_version; the install bundle
+	// passes this through unchanged so the agent's reconciler can
+	// install each plugin with the operator's full deployment
+	// intent on first boot. Empty = the agent boots with only its
+	// mandatory core plugin set (sys-info), the secure-by-default
+	// the enroll wizard ships.
 	PluginSpecs []storage.PluginSpec `json:"plugin_specs,omitempty"`
 	// AutoApprove pre-authorizes the host that redeems this install
 	// link — the host enrolls straight to `approved` without a
@@ -138,30 +126,14 @@ type installListItem struct {
 	PATMaxUses          int        `json:"pat_max_uses"`
 	PATBindingMachineID string     `json:"pat_binding_machine_id,omitempty"`
 	PATDescription      string     `json:"pat_description,omitempty"`
-	BaselinePluginIDs []string `json:"baseline_plugin_ids,omitempty"`
-	// PluginSpecs is the dual-emit rich shape; PR 4 will read this
-	// instead of the legacy ID list and we'll drop
-	// BaselinePluginIDs from the response.
-	PluginSpecs []storage.PluginSpec `json:"plugin_specs,omitempty"`
-	ConsumedAt  *time.Time           `json:"consumed_at,omitempty"`
-	ConsumedIP          string     `json:"consumed_ip,omitempty"`
-	ConsumedPATID       string     `json:"consumed_pat_id,omitempty"`
-	AutoApprove         bool       `json:"auto_approve"`
-	Revoked             bool       `json:"revoked"`
-	RevokedAt           *time.Time `json:"revoked_at,omitempty"`
-	Status              string     `json:"status"`
-}
-
-// chosenInstallPluginIDs picks the storage-shape []string of plugin
-// ids to forward to the enrollment service. The rich PluginSpecs
-// field wins when supplied; otherwise the legacy BaselinePluginIDs
-// passes through. PR 3 will plumb the rich PluginSpec end-to-end
-// through enrollment.Service and this projection helper goes away.
-func chosenInstallPluginIDs(req issueInstallRequest) []string {
-	if len(req.PluginSpecs) > 0 {
-		return pluginIDsFromSpecs(req.PluginSpecs)
-	}
-	return req.BaselinePluginIDs
+	PluginSpecs   []storage.PluginSpec `json:"plugin_specs,omitempty"`
+	ConsumedAt    *time.Time           `json:"consumed_at,omitempty"`
+	ConsumedIP    string               `json:"consumed_ip,omitempty"`
+	ConsumedPATID string               `json:"consumed_pat_id,omitempty"`
+	AutoApprove   bool                 `json:"auto_approve"`
+	Revoked       bool                 `json:"revoked"`
+	RevokedAt     *time.Time           `json:"revoked_at,omitempty"`
+	Status        string               `json:"status"`
 }
 
 func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installListItem {
@@ -178,8 +150,7 @@ func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installLi
 		PATMaxUses:          t.PATMaxUses,
 		PATBindingMachineID: t.PATBindingMachineID,
 		PATDescription:      t.PATDescription,
-		BaselinePluginIDs:   t.BaselinePluginIDs,
-		PluginSpecs:         specsFromPluginIDs(t.BaselinePluginIDs),
+		PluginSpecs:         t.PluginSpecs,
 		ConsumedAt:          t.ConsumedAt,
 		ConsumedIP:          t.ConsumedIP,
 		ConsumedPATID:       t.ConsumedPATID,
@@ -218,7 +189,6 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		PATDescription:      req.PATDescription,
 		AutoApprove:         req.AutoApprove,
 		PluginSpecs:         req.PluginSpecs,
-		BaselinePluginIDs:   chosenInstallPluginIDs(req),
 	})
 	if err != nil {
 		h.audit(c, "install.issue", "install_download", "", projectID, req, "error", err.Error())

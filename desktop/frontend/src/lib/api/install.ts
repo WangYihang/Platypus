@@ -21,13 +21,9 @@ export interface InstallArtifactListItem {
     // the agent created by this token will boot with. Omitted on
     // older rows.
     //
-    // Dual-emit during the FE migration: `plugin_specs` carries
-    // the rich PluginSpec shape (plugin_id + version +
+    // PluginSpecRef carries the rich shape (plugin_id + version +
     // granted_capabilities + config_overrides + schema_version);
-    // `baseline_plugin_ids` is the projected list of plugin ids
-    // for legacy consumers. PR 4 drops baseline_plugin_ids; new
-    // code should read plugin_specs.
-    baseline_plugin_ids?: string[];
+    // PR 5 finished the migration so this is the only field.
     plugin_specs?: PluginSpecRef[];
     consumed_at?: string;
     consumed_ip?: string;
@@ -87,16 +83,13 @@ export interface IssueInstallRequest {
     // false (default) → host enrolls in `pending`. true skips approval
     // for unattended automation (Ansible / CI / cloud-init).
     auto_approve?: boolean;
-    // Plugin ids the agent should auto-install on first boot.
+    // Plugin specs the agent should auto-install on first boot.
     // Empty / omitted = the agent connects with no host capabilities;
     // operators add plugins later from the per-host Plugins tab.
     // (Default secure: minimal-on-first-boot — see the wizard's
-    // baseline_plugins step.)
-    //
-    // Dual-accept: `plugin_specs` is the rich shape (PR 4), and
-    // wins when both fields are present. Legacy callers that only
-    // know about `baseline_plugin_ids` keep working until then.
-    baseline_plugin_ids?: string[];
+    // baseline_plugins step.) Each spec carries plugin_id +
+    // optional version + granted_capabilities + config_overrides +
+    // schema_version.
     plugin_specs?: PluginSpecRef[];
 }
 

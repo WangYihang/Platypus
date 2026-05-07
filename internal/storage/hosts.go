@@ -96,19 +96,14 @@ type Host struct {
 	ApprovalDecidedBy string
 	ApprovalReason    string
 
-	// PluginSpecs is the rich shape of the operator's system-plugin
-	// allowlist — plugin_id + version + granted_capabilities +
-	// config_overrides + schema_version per entry. Same JSON column
-	// (plugin_specs) as BaselinePluginIDs; both fields are populated
-	// on read so callers that haven't migrated keep working. New
-	// code (the agent-link reconciler in PR 3.4+, the wire builder
-	// in PR 3.5+) reads this rich shape so it has config + caps to
-	// forward to the agent.
+	// PluginSpecs is the operator's system-plugin allowlist:
+	// plugin_id + version + granted_capabilities +
+	// config_overrides + schema_version per entry. Persisted as a
+	// JSON array in the plugin_specs column. The agent-link
+	// reconciler reads this on every connect and pushes each
+	// missing plugin to the agent with the operator's full
+	// deployment intent.
 	PluginSpecs []PluginSpec
-	// BaselinePluginIDs is the legacy []string projection of
-	// PluginSpecs. Populated alongside PluginSpecs on read; goes
-	// away when PR 4 closes the migration.
-	BaselinePluginIDs []string
 }
 
 // HostApprovalStatus is the host-level approval state. See migration
@@ -801,7 +796,6 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if specs, err := DecodePluginSpecs(baselineCSV.String); err == nil {
 		h.PluginSpecs = specs
 	}
-	h.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	return &h, nil
 }
 
@@ -944,13 +938,11 @@ func nullIfUint32(n uint32) any {
 	return int64(n)
 }
 
-// SetPluginSpecs persists the rich operator-chosen baseline as
-// PluginSpec rows. Preferred over SetBaselinePluginIDs for new
-// callers — preserves version, granted_capabilities,
-// config_overrides, and schema_version per entry rather than
-// flattening to a list of plugin ids. Empty slice clears the
-// column to "" (the reconciler then installs only the mandatory
-// core).
+// SetPluginSpecs persists the operator-chosen baseline as
+// PluginSpec rows. Preserves version + granted_capabilities +
+// config_overrides + schema_version per entry. Empty slice clears
+// the column to "" (the reconciler then installs only the
+// mandatory core).
 func (r *HostRepo) SetPluginSpecs(ctx context.Context, hostID string, specs []PluginSpec) error {
 	encoded, err := EncodePluginSpecs(specs)
 	if err != nil {
@@ -978,24 +970,3 @@ func (r *HostRepo) SetPluginSpecs(ctx context.Context, hostID string, specs []Pl
 	return nil
 }
 
-// SetBaselinePluginIDs persists the operator's system-plugin allowlist
-// onto a host row. Called from ConsumeInstallDownload right after the
-// hosts row is upserted, so the link-handler reconciler has something
-// to diff each agent's installed catalog against. Empty slice clears
-// the column to "" — the agent gets reconciled to mandatory-core only.
-func (r *HostRepo) SetBaselinePluginIDs(ctx context.Context, hostID string, ids []string) error {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE hosts SET plugin_specs = ? WHERE id = ?`,
-		encodeBaselinePluginIDs(ids), hostID)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}

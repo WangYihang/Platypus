@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/WangYihang/Platypus/internal/enrollment"
+	"github.com/WangYihang/Platypus/internal/storage"
 )
 
 // Happy path: admin mints an install artifact → curl consumes it once
@@ -101,10 +102,13 @@ func TestConsumeInstallDownload_PreservesBaselinePluginIDs(t *testing.T) {
 	ctx := context.Background()
 
 	artifact, err := svc.Svc.MintInstallArtifact(ctx, enrollment.MintInstallArtifactInput{
-		ProjectID:         proj.ID,
-		IssuedByUser:      admin.ID,
-		ServerEndpoint:    "127.0.0.1:13337",
-		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+		ProjectID:      proj.ID,
+		IssuedByUser:   admin.ID,
+		ServerEndpoint: "127.0.0.1:13337",
+		PluginSpecs: []storage.PluginSpec{
+			{PluginID: "com.platypus.sys-info"},
+			{PluginID: "com.platypus.sys-listdir"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("MintInstallArtifact: %v", err)
@@ -118,10 +122,10 @@ func TestConsumeInstallDownload_PreservesBaselinePluginIDs(t *testing.T) {
 	if res.Outcome != "success" {
 		t.Fatalf("Outcome = %q; want success", res.Outcome)
 	}
-	if len(res.BaselinePluginIDs) != 2 ||
-		res.BaselinePluginIDs[0] != "com.platypus.sys-info" ||
-		res.BaselinePluginIDs[1] != "com.platypus.sys-listdir" {
-		t.Fatalf("BaselinePluginIDs = %v", res.BaselinePluginIDs)
+	if len(res.PluginSpecs) != 2 ||
+		res.PluginSpecs[0].PluginID != "com.platypus.sys-info" ||
+		res.PluginSpecs[1].PluginID != "com.platypus.sys-listdir" {
+		t.Fatalf("PluginSpecs = %+v", res.PluginSpecs)
 	}
 }
 
@@ -145,8 +149,8 @@ func TestConsumeInstallDownload_NoBaselineYieldsNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConsumeInstallDownload: %v", err)
 	}
-	if res.BaselinePluginIDs != nil {
-		t.Fatalf("BaselinePluginIDs = %v; want nil", res.BaselinePluginIDs)
+	if res.PluginSpecs != nil {
+		t.Fatalf("PluginSpecs = %v; want nil", res.PluginSpecs)
 	}
 }
 

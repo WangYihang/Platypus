@@ -5,9 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 )
 
@@ -38,22 +36,15 @@ type InstallDownloadToken struct {
 	// the resulting host enrolls straight to `approved` instead of
 	// the default `pending`. See migration 000022.
 	AutoApprove bool
-	// PluginSpecs is the rich shape — plugin_id + version +
-	// granted_capabilities + config_overrides + schema_version per
-	// entry — that PR 1+2 introduced. The on-disk JSON in the
-	// plugin_specs column is the source of truth; both this field
-	// and BaselinePluginIDs (a []string projection) are populated
-	// from it on read. New code should reach for PluginSpecs;
-	// BaselinePluginIDs sticks around for callers (enrollment
-	// service, agent-link reconciler) that haven't migrated yet
-	// and goes away when PR 4 closes the migration.
+	// PluginSpecs captures the operator's chosen baseline at mint
+	// time: plugin_id + version + granted_capabilities +
+	// config_overrides + schema_version per entry. Persisted as a
+	// JSON array in the plugin_specs column. ConsumeInstallDownload
+	// hands these to handler_enroll_v2 which stamps them onto the
+	// host record so the agent-link reconciler can install each
+	// plugin with full deployment intent.
 	PluginSpecs []PluginSpec
-	// BaselinePluginIDs is the legacy projection — a flat []string
-	// of plugin_ids — kept for back-compat with callers that
-	// haven't been upgraded to read PluginSpecs. Same column,
-	// different view.
-	BaselinePluginIDs []string
-	Revoked           bool
+	Revoked     bool
 	RevokedAt         *time.Time
 	RevokedByUser     string
 	RevokedReason     string
@@ -339,12 +330,9 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.PATDescription = patDesc.String
 	t.AutoApprove = autoApprove == 1
 	// Both views of the same JSON column are populated on read so
-	// migrating callers (PluginSpecs) and legacy callers
-	// (BaselinePluginIDs) each see what they expect.
 	if specs, err := DecodePluginSpecs(baselineCSV.String); err == nil {
 		t.PluginSpecs = specs
 	}
-	t.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	if consAt.Valid {
 		v := consAt.Time
 		t.ConsumedAt = &v
@@ -364,75 +352,19 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 
 // encodeInstallTokenSpecs picks the right value to persist into the
 // plugin_specs JSON column. Rich PluginSpecs wins when supplied —
-// the rich shape carries version + granted_capabilities +
-// config_overrides + schema_version that the legacy []string
-// projection would silently drop. Falling back to the legacy
-// BaselinePluginIDs is the path the un-migrated callers
-// (enrollment.Service, plugin_sync reconciler) still take.
+// encodeInstallTokenSpecs persists the install token's PluginSpecs
+// into the plugin_specs JSON column. Empty slice → "" so the
+// column reads back as "no baseline".
 func encodeInstallTokenSpecs(t *InstallDownloadToken) string {
-	if len(t.PluginSpecs) > 0 {
-		raw, err := EncodePluginSpecs(t.PluginSpecs)
-		if err != nil || raw == nil {
-			return ""
-		}
-		s, _ := raw.(string)
-		return s
-	}
-	return encodeBaselinePluginIDs(t.BaselinePluginIDs)
-}
-
-// encodeBaselinePluginIDs converts the operator's plugin-id slice
-// into the new plugin_specs column shape — a JSON array of
-// PluginSpec objects, each with just plugin_id populated. PR 2
-// replaces this shim with the rich PluginSpec API; for now the
-// callers (install token + host upsert) keep their []string-shaped
-// public surface and the JSON wrap happens at the storage boundary.
-//
-// Empty slice → "" so the storage column DEFAULT '' shape is
-// preserved (callers continue to treat that as "no baseline").
-func encodeBaselinePluginIDs(ids []string) string {
-	cleaned := make([]PluginSpec, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			cleaned = append(cleaned, PluginSpec{PluginID: id})
-		}
-	}
-	if len(cleaned) == 0 {
+	if len(t.PluginSpecs) == 0 {
 		return ""
 	}
-	b, err := json.Marshal(cleaned)
-	if err != nil {
-		// PluginSpec marshalling cannot fail for this field set
-		// (plain strings); fall through to "" rather than propagate.
+	raw, err := EncodePluginSpecs(t.PluginSpecs)
+	if err != nil || raw == nil {
 		return ""
 	}
-	return string(b)
-}
-
-// decodeBaselinePluginIDs reads the plugin_specs JSON column and
-// projects it back to a []string of plugin ids. "" / "[]" round-trip
-// to nil so callers can distinguish "no baseline" from "empty
-// baseline" the same way they always have.
-func decodeBaselinePluginIDs(s string) []string {
-	if s == "" || s == "[]" {
-		return nil
-	}
-	specs, err := DecodePluginSpecs(s)
-	if err != nil {
-		return nil
-	}
-	out := make([]string, 0, len(specs))
-	for _, sp := range specs {
-		p := strings.TrimSpace(sp.PluginID)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	s, _ := raw.(string)
+	return s
 }
 
 // sha256Sum is a small helper so callers (and tests) don't need to

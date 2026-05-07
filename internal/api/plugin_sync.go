@@ -68,37 +68,14 @@ const pluginSyncTimeout = 2 * time.Minute
 // nil bundle → returns nil (reconciliation disabled). Missing
 // entries in the bundle are logged and skipped; the agent surfaces
 // plugin_not_installed when an RPC actually tries to use them.
-// reconcileSystemPlugins is the legacy []string entry point. New
-// callers should reach for reconcileSystemPluginsRich, which
-// preserves the operator's config_overrides + granted_capabilities
-// + schema_version per spec. This shim wraps each id into a
-// minimal PluginSpec so the rich path is the only code path the
-// reconciler actually executes.
+// reconcileSystemPlugins is the agent-link reconciler. Takes the
+// host's PluginSpec rows and pushes whatever's missing relative to
+// the agent's reported catalog, threading per-spec
+// config_overrides + granted_capabilities + schema_version onto
+// each wire request so the agent's plugin runtime can hand them to
+// OnInstall hooks. Empty / nil specs → only the mandatory core
+// plugins get installed.
 func reconcileSystemPlugins(
-	ctx context.Context,
-	sess pluginSyncSession,
-	agentID string,
-	hostBaseline []string,
-	agentOS, agentArch string,
-	systemBundle fs.FS,
-) error {
-	specs := make([]storage.PluginSpec, 0, len(hostBaseline))
-	for _, id := range hostBaseline {
-		specs = append(specs, storage.PluginSpec{PluginID: id})
-	}
-	return reconcileSystemPluginsRich(ctx, sess, agentID, specs, agentOS, agentArch, systemBundle)
-}
-
-// reconcileSystemPluginsRich is the agent-link reconciler proper.
-// Takes the host's rich PluginSpec rows and pushes whatever's
-// missing relative to the agent's reported catalog, threading per-
-// spec config_overrides + granted_capabilities + schema_version
-// onto the wire request so the agent's plugin runtime can hand
-// them to OnInstall hooks.
-//
-// Empty / nil specs → only the mandatory core plugins get installed,
-// same posture as the legacy entry point.
-func reconcileSystemPluginsRich(
 	ctx context.Context,
 	sess pluginSyncSession,
 	agentID string,

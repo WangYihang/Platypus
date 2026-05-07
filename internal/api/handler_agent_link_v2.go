@@ -523,7 +523,7 @@ func (h *AgentLinkHandler) reconcilePlugins(agentID string, sess *link.Session) 
 		// next reconnect will catch up.
 		return
 	}
-	if err := reconcileSystemPluginsRich(ctx, sess, agentID, host.PluginSpecs, host.OS, host.Arch, h.systemBundle); err != nil {
+	if err := reconcileSystemPlugins(ctx, sess, agentID, host.PluginSpecs, host.OS, host.Arch, h.systemBundle); err != nil {
 		log.L.Warn("plugin sync: reconcile",
 			"agent_id", agentID,
 			"error", err.Error(),

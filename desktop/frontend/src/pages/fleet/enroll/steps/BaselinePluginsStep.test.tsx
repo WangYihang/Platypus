@@ -15,6 +15,22 @@ vi.mock("../../../../lib/api/system_plugins", () => ({
     listSystemPlugins: vi.fn(),
 }));
 
+// PR 5.1 mounted PluginSpecEditor inline; the editor's
+// SecretPicker reads from project_secrets which the step now
+// fetches via useCurrentProject + useQuery. Stubbing both keeps
+// the test focused on the picker UI.
+vi.mock("../../../../lib/api/project_secrets", () => ({
+    listProjectSecrets: vi.fn().mockResolvedValue([]),
+    createProjectSecret: vi.fn(),
+}));
+vi.mock("../../../../layout/ProjectShell", () => ({
+    useCurrentProject: () => ({
+        id: "p1",
+        slug: "test-project",
+        name: "Test Project",
+    }),
+}));
+
 import { listSystemPlugins } from "../../../../lib/api/system_plugins";
 import BaselinePluginsStep from "./BaselinePluginsStep";
 
@@ -167,5 +183,35 @@ describe("<BaselinePluginsStep>", () => {
         const user = userEvent.setup();
         await user.click(screen.getByRole("button", { name: /Minimal/i }));
         expect(asIDs(onChange)).toEqual([]);
+    });
+
+    // The mounted PluginSpecEditor is the user-facing payoff of the
+    // PR 1-4 framework. Selected plugins get a "Configure" toggle
+    // that expands the row to expose capability checkboxes + (when
+    // declared) a schema-driven config form. Pinning the affordance
+    // keeps the configure-during-enrollment flow from regressing.
+    it("a selected plugin shows a Configure toggle that opens the editor", async () => {
+        mocked.listSystemPlugins.mockResolvedValueOnce(fakePlugins);
+        const { onChange } = renderStep(["com.platypus.sys-info"]);
+        await waitFor(() =>
+            screen.getByRole("checkbox", { name: /System Info/i }),
+        );
+        const user = userEvent.setup();
+        // Configure trigger only renders for SELECTED plugins —
+        // unselected ones can't carry config because they're not
+        // installing.
+        const configure = await screen.findByTestId(
+            "baseline-plugins-configure-com.platypus.sys-info",
+        );
+        await user.click(configure);
+        // The expanded editor exposes the manifest's capabilities
+        // as checkboxes (one per declared family). Picking one
+        // updates the spec's granted_capabilities — which lets us
+        // assert the data flow without depending on full schema
+        // form rendering, since this fake plugin has no
+        // config_schema.
+        await user.click(screen.getByLabelText(/^fs\.read$/i));
+        const last = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+        expect(last[0].granted_capabilities).toEqual(["fs.read"]);
     });
 });

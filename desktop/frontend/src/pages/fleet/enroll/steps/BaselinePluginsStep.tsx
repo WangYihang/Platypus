@@ -1,7 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+    ChevronDown,
+    ChevronRight,
+    Loader2,
+    Settings2,
+    ShieldAlert,
+    ShieldCheck,
+} from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,22 +17,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import EmptyState from "../../../../components/EmptyState";
 import { palette, radius, space } from "../../../../layout/theme";
 import { capabilityMeta, sortCapabilities } from "../../../../lib/capabilities";
-import { listSystemPlugins } from "../../../../lib/api/system_plugins";
+import { useCurrentProject } from "../../../../layout/ProjectShell";
+import {
+    SystemPlugin,
+    listSystemPlugins,
+} from "../../../../lib/api/system_plugins";
+import {
+    createProjectSecret,
+    listProjectSecrets,
+} from "../../../../lib/api/project_secrets";
 import {
     BASELINE_PRESETS,
     BaselinePreset,
     matchingPreset,
 } from "../../../../lib/baselinePresets";
 import { humanizeError } from "../../../../lib/humanizeError";
-import { PluginSpecDraft } from "../../../../components/PluginSpecEditor";
+import PluginSpecEditor, {
+    PluginSpecDraft,
+} from "../../../../components/PluginSpecEditor";
+import { MarketplacePlugin } from "../../../../lib/api";
 
 interface Props {
     /** PluginSpec drafts the operator has selected so far. The
-     *  step renders only the picker UI; rich per-plugin config is
-     *  edited via the parent's "Configure" expand affordance
-     *  (see PR 4.6 follow-up). For now every selected plugin gets
-     *  a minimal {plugin_id} spec — empty caps, empty config —
-     *  matching the legacy zero-config default. */
+     *  step renders the picker UI plus an inline expand row per
+     *  selected plugin that surfaces capability checkboxes and
+     *  (when the plugin declares a config schema) the schema-driven
+     *  form. */
     value: PluginSpecDraft[];
     onChange: (next: PluginSpecDraft[]) => void;
 }
@@ -46,11 +64,26 @@ interface Props {
 //     carries them forward and the agent's allowlist filter applies
 //     at first boot.
 export default function BaselinePluginsStep({ value, onChange }: Props) {
+    const project = useCurrentProject();
     const plugins = useQuery({
         queryKey: ["enroll", "system-plugins-pool"],
         queryFn: () => listSystemPlugins(),
         refetchOnWindowFocus: false,
     });
+    // Project-scoped secrets feed the inline PluginSpecEditor's
+    // SecretPicker. Fetched lazily — most plugins won't reach for
+    // it, but having the list ready means there's no UI churn the
+    // moment an operator opens a Configure panel.
+    const secrets = useQuery({
+        queryKey: ["enroll", "project-secrets", project.id],
+        queryFn: () => listProjectSecrets(project.id),
+        refetchOnWindowFocus: false,
+    });
+    // Inline editor expansion state — keyed by plugin_id. Stored
+    // as a Set so the per-row toggle stays O(1) and the operator
+    // can have multiple panels open at once when fine-tuning a
+    // multi-plugin baseline.
+    const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
     // Project value → flat ids for rendering (the picker UI stays
     // checkbox-per-plugin) and back to PluginSpec rows on each
@@ -152,110 +185,42 @@ export default function BaselinePluginsStep({ value, onChange }: Props) {
                     }}
                 >
                     {list.map((p) => {
-                        const isSel = selected.includes(p.id);
-                        const caps = sortCapabilities(
-                            p.capabilities.map((f) => ({ family: f })),
-                        );
-                        const hasHigh = caps.some(
-                            (c) => capabilityMeta(c.family).risk === "high",
-                        );
+                        const spec = value.find((s) => s.plugin_id === p.id);
+                        const isSel = !!spec;
+                        const isExpanded = expanded.has(p.id);
                         return (
-                            <li
+                            <PluginRow
                                 key={p.id}
-                                style={{
-                                    display: "flex",
-                                    gap: space[2],
-                                    border: `1px solid ${palette.border}`,
-                                    borderRadius: radius.md,
-                                    padding: space[3],
-                                    background: palette.surface,
-                                    alignItems: "flex-start",
+                                plugin={p}
+                                spec={spec}
+                                selected={isSel}
+                                expanded={isExpanded}
+                                projectID={project.id}
+                                secrets={secrets.data ?? []}
+                                onToggleSelected={() => toggle(p.id)}
+                                onToggleExpanded={() =>
+                                    setExpanded((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(p.id)) next.delete(p.id);
+                                        else next.add(p.id);
+                                        return next;
+                                    })
+                                }
+                                onSpecChange={(updated) => {
+                                    const next = value.map((s) =>
+                                        s.plugin_id === p.id ? updated : s,
+                                    );
+                                    onChange(next);
                                 }}
-                            >
-                                <Checkbox
-                                    id={`baseline-${p.id}`}
-                                    aria-label={p.name}
-                                    checked={isSel}
-                                    onCheckedChange={() => toggle(p.id)}
-                                    className="mt-1"
-                                />
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 2,
-                                        flex: 1,
-                                        minWidth: 0,
-                                    }}
-                                >
-                                    <Label
-                                        htmlFor={`baseline-${p.id}`}
-                                        className="text-sm font-medium cursor-pointer"
-                                    >
-                                        <span style={{ display: "flex", gap: space[2], alignItems: "center" }}>
-                                            {p.name}
-                                            <span
-                                                style={{
-                                                    fontSize: 11,
-                                                    color: palette.textMuted,
-                                                }}
-                                            >
-                                                v{p.version}
-                                            </span>
-                                            {hasHigh ? (
-                                                <ShieldAlert className="size-3 text-red-600" />
-                                            ) : (
-                                                <ShieldCheck className="size-3 text-emerald-600" />
-                                            )}
-                                        </span>
-                                    </Label>
-                                    <span
-                                        style={{
-                                            fontSize: 11,
-                                            color: palette.textMuted,
-                                            fontFamily: "monospace",
-                                        }}
-                                    >
-                                        {p.id}
-                                    </span>
-                                    {p.description && (
-                                        <span
-                                            style={{
-                                                fontSize: 12,
-                                                color: palette.textSecondary,
-                                            }}
-                                        >
-                                            {p.description}
-                                        </span>
-                                    )}
-                                    {caps.length > 0 && (
-                                        <div
-                                            style={{
-                                                display: "flex",
-                                                flexWrap: "wrap",
-                                                gap: 4,
-                                                marginTop: 2,
-                                            }}
-                                        >
-                                            {caps.map(({ family }) => (
-                                                <span
-                                                    key={family}
-                                                    style={{
-                                                        fontSize: 10,
-                                                        background: palette.surfaceHover,
-                                                        color: palette.textPrimary,
-                                                        padding: "2px 6px",
-                                                        borderRadius: 4,
-                                                        fontFamily: "monospace",
-                                                    }}
-                                                >
-                                                    {family}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </li>
+                                onCreateSecret={async (req) => {
+                                    const r = await createProjectSecret(
+                                        project.id,
+                                        req,
+                                    );
+                                    await secrets.refetch();
+                                    return r;
+                                }}
+                            />
                         );
                     })}
                 </ul>
@@ -352,5 +317,219 @@ function PresetGrid({
                 );
             })}
         </div>
+    );
+}
+
+// PluginRow renders one plugin in the baseline picker plus, when
+// the operator both selects and expands the row, the
+// PluginSpecEditor for per-plugin capabilities + config. The
+// editor is the user-facing payoff of the PluginSpec atom that
+// PR 1-4 plumbed end-to-end: every spec the operator authors here
+// flows through the wire as-is to the agent's plugin runtime.
+//
+// SystemPlugin → MarketplacePlugin coercion is necessary because
+// the editor is shape-agnostic but typed against MarketplacePlugin
+// (the marketplace + system flows are gradually converging on a
+// shared "PluginManifestInfo" shape; until then the inline
+// coercion keeps the editor's surface narrow).
+function PluginRow({
+    plugin,
+    spec,
+    selected,
+    expanded,
+    projectID,
+    secrets,
+    onToggleSelected,
+    onToggleExpanded,
+    onSpecChange,
+    onCreateSecret,
+}: {
+    plugin: SystemPlugin;
+    spec: PluginSpecDraft | undefined;
+    selected: boolean;
+    expanded: boolean;
+    projectID: string;
+    secrets: import("../../../../lib/api/project_secrets").ProjectSecretRedacted[];
+    onToggleSelected: () => void;
+    onToggleExpanded: () => void;
+    onSpecChange: (next: PluginSpecDraft) => void;
+    onCreateSecret: (
+        req: import("../../../../lib/api/project_secrets").CreateProjectSecretRequest,
+    ) => Promise<
+        import("../../../../lib/api/project_secrets").ProjectSecretRedacted
+    >;
+}) {
+    const caps = sortCapabilities(
+        plugin.capabilities.map((f) => ({ family: f })),
+    );
+    const hasHigh = caps.some(
+        (c) => capabilityMeta(c.family).risk === "high",
+    );
+    const editorPlugin: MarketplacePlugin = {
+        plugin_id: plugin.id,
+        version: plugin.version,
+        name: plugin.name,
+        author: plugin.author ?? "",
+        license: plugin.license ?? "",
+        homepage: "",
+        description: plugin.description ?? "",
+        latest_version: plugin.version,
+        publisher_key_id: "",
+        wasm_url: "",
+        signature_url: "",
+        wasm_sha256_hex: "",
+        capabilities: plugin.capabilities,
+        fetched_at_unix: 0,
+        // System plugins don't yet surface config_schema /
+        // secret_fields / schema_version; the editor handles
+        // their absence by rendering only the capability section.
+        // Once the system-plugins endpoint is upgraded to expose
+        // config metadata, this row picks up schema-driven config
+        // automatically.
+    };
+    return (
+        <li
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: space[2],
+                border: `1px solid ${palette.border}`,
+                borderRadius: radius.md,
+                padding: space[3],
+                background: palette.surface,
+            }}
+        >
+            <div
+                style={{
+                    display: "flex",
+                    gap: space[2],
+                    alignItems: "flex-start",
+                }}
+            >
+                <Checkbox
+                    id={`baseline-${plugin.id}`}
+                    aria-label={plugin.name}
+                    checked={selected}
+                    onCheckedChange={onToggleSelected}
+                    className="mt-1"
+                />
+                <div
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        flex: 1,
+                        minWidth: 0,
+                    }}
+                >
+                    <Label
+                        htmlFor={`baseline-${plugin.id}`}
+                        className="text-sm font-medium cursor-pointer"
+                    >
+                        <span
+                            style={{
+                                display: "flex",
+                                gap: space[2],
+                                alignItems: "center",
+                            }}
+                        >
+                            {plugin.name}
+                            <span
+                                style={{
+                                    fontSize: 11,
+                                    color: palette.textMuted,
+                                }}
+                            >
+                                v{plugin.version}
+                            </span>
+                            {hasHigh ? (
+                                <ShieldAlert className="size-3 text-red-600" />
+                            ) : (
+                                <ShieldCheck className="size-3 text-emerald-600" />
+                            )}
+                        </span>
+                    </Label>
+                    <span
+                        style={{
+                            fontSize: 11,
+                            color: palette.textMuted,
+                            fontFamily: "monospace",
+                        }}
+                    >
+                        {plugin.id}
+                    </span>
+                    {plugin.description && (
+                        <span
+                            style={{
+                                fontSize: 12,
+                                color: palette.textSecondary,
+                            }}
+                        >
+                            {plugin.description}
+                        </span>
+                    )}
+                    {caps.length > 0 && (
+                        <div
+                            style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 4,
+                                marginTop: 2,
+                            }}
+                        >
+                            {caps.map(({ family }) => (
+                                <span
+                                    key={family}
+                                    style={{
+                                        fontSize: 10,
+                                        background: palette.surfaceHover,
+                                        color: palette.textPrimary,
+                                        padding: "2px 6px",
+                                        borderRadius: 4,
+                                        fontFamily: "monospace",
+                                    }}
+                                >
+                                    {family}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                {selected && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={onToggleExpanded}
+                        data-testid={`baseline-plugins-configure-${plugin.id}`}
+                    >
+                        {expanded ? (
+                            <ChevronDown className="size-3.5" />
+                        ) : (
+                            <ChevronRight className="size-3.5" />
+                        )}
+                        <Settings2 className="size-3.5" />
+                        Configure
+                    </Button>
+                )}
+            </div>
+            {selected && expanded && spec && (
+                <div
+                    style={{
+                        borderTop: `1px solid ${palette.border}`,
+                        paddingTop: space[2],
+                    }}
+                >
+                    <PluginSpecEditor
+                        projectID={projectID}
+                        plugin={editorPlugin}
+                        secrets={secrets}
+                        value={spec}
+                        onChange={onSpecChange}
+                        onCreateSecret={onCreateSecret}
+                    />
+                </div>
+            )}
+        </li>
     );
 }

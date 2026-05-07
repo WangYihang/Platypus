@@ -351,7 +351,7 @@ describe("<EnrollAgentWizard>", () => {
             pat_max_uses: 1,
             auto_approve: false,
             skip_tls_verification: true,
-            baseline_plugin_ids: ["sys-info"],
+            plugin_specs: [{ plugin_id: "sys-info" }],
             pat_description: "Linux fleet",
             is_seed: false,
             created_at: "2026-05-01T00:00:00Z",
@@ -388,10 +388,8 @@ describe("<EnrollAgentWizard>", () => {
         expect(body.target_arch).toBe("amd64");
         expect(body.ttl_seconds).toBe(600);
         expect(body.pat_max_uses).toBe(1);
-        // Wizard now sends plugin_specs (rich shape). The preset
-        // here used the legacy baseline_plugin_ids field; the
-        // wizard's specsFromPreset wraps each id into a minimal
-        // {plugin_id} spec. Assert the projected plugin_ids match.
+        // Wizard sends plugin_specs (rich shape) lifted directly
+        // from preset.plugin_specs.
         expect(
             (body.plugin_specs ?? []).map(
                 (s: { plugin_id: string }) => s.plugin_id,

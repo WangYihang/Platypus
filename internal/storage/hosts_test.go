@@ -265,41 +265,4 @@ func TestHostRepo_PluginSpecs_RoundtripPreservesRichFields(t *testing.T) {
 	if first.SchemaVersion != 1 {
 		t.Fatalf("first.schema_version = %d", first.SchemaVersion)
 	}
-	// Legacy projection still works for the agent-link reconciler
-	// + everything else that hasn't been upgraded.
-	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "com.example.syslog" {
-		t.Fatalf("legacy projection lost: %v", got.BaselinePluginIDs)
-	}
-}
-
-// TestHostRepo_SetBaselinePluginIDs_LegacyStillWorks: callers that
-// only know about []string keep working. The legacy setter wraps
-// each id into a minimal PluginSpec so the column shape stays
-// uniform — when the agent-link reconciler later reads it back,
-// PluginSpecs is populated (rich-shape-friendly) and the rich
-// fields are simply absent (not corrupted).
-func TestHostRepo_SetBaselinePluginIDs_LegacyStillWorks(t *testing.T) {
-	db := newTestDB(t)
-	ctx := context.Background()
-	admin := seedUser(t, db, "admin", user.RoleAdmin)
-	proj := seedProject(t, db, "p1", "Project 1", admin)
-
-	h, _ := db.Hosts().Upsert(ctx, &storage.HostIdentity{
-		ProjectID:   proj.ID,
-		MachineID:   "m-legacy",
-		Fingerprint: "fp-legacy",
-		Hostname:    "legacy-host",
-		SeenAt:      time.Now().UTC(),
-	})
-	if err := db.Hosts().SetBaselinePluginIDs(ctx, h.ID, []string{"a", "b"}); err != nil {
-		t.Fatalf("SetBaselinePluginIDs: %v", err)
-	}
-	got, _ := db.Hosts().GetByID(ctx, h.ID)
-	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "a" {
-		t.Fatalf("legacy round-trip: %v", got.BaselinePluginIDs)
-	}
-	// PluginSpecs is also populated (same column, dual view).
-	if len(got.PluginSpecs) != 2 || got.PluginSpecs[0].PluginID != "a" {
-		t.Fatalf("rich view of legacy data: %+v", got.PluginSpecs)
-	}
 }

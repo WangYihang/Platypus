@@ -23,14 +23,11 @@ export interface EnrollmentPreset {
     pat_max_uses?: number;
     auto_approve: boolean;
     skip_tls_verification: boolean;
-    // plugin_specs is the rich shape: plugin_id + version +
+    // plugin_specs carries the rich shape — plugin_id + version +
     // granted_capabilities + config_overrides + schema_version per
-    // entry. Server emits both this AND the legacy
-    // baseline_plugin_ids during the migration window so consumers
-    // that haven't been upgraded keep working. New code reads
-    // plugin_specs.
+    // entry. PR 5 finished the migration; the legacy
+    // baseline_plugin_ids parallel field is gone server-side too.
     plugin_specs?: PluginSpecRef[];
-    baseline_plugin_ids?: string[];
     pat_description?: string;
     // is_seed flags the three system-default presets seeded on first
     // wizard open of a fresh project. Operators can edit / delete them

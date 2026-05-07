@@ -57,17 +57,20 @@ func TestInstallTokens_BaselinePluginIDs_Roundtrip(t *testing.T) {
 	admin := seedUser(t, db, "admin", user.RoleAdmin)
 	proj := seedProject(t, db, "p1", "Project 1", admin)
 
-	// With a baseline.
+	// With a baseline (minimal PluginSpec — id-only, no caps/config).
 	tok := &storage.InstallDownloadToken{
-		DownloadID:        "dl_with_baseline",
-		SecretHash:        hashBytes([]byte("s")),
-		ProjectID:         proj.ID,
-		IssuedByUser:      admin.ID,
-		IssuedAt:          time.Now().UTC(),
-		ExpiresAt:         time.Now().Add(time.Hour).UTC(),
-		ServerEndpoint:    "127.0.0.1:13337",
-		PATTTLSeconds:     3600,
-		BaselinePluginIDs: []string{"com.platypus.sys-info", "com.platypus.sys-listdir"},
+		DownloadID:     "dl_with_baseline",
+		SecretHash:     hashBytes([]byte("s")),
+		ProjectID:      proj.ID,
+		IssuedByUser:   admin.ID,
+		IssuedAt:       time.Now().UTC(),
+		ExpiresAt:      time.Now().Add(time.Hour).UTC(),
+		ServerEndpoint: "127.0.0.1:13337",
+		PATTTLSeconds:  3600,
+		PluginSpecs: []storage.PluginSpec{
+			{PluginID: "com.platypus.sys-info"},
+			{PluginID: "com.platypus.sys-listdir"},
+		},
 	}
 	if err := db.InstallDownloadTokens().Create(context.Background(), tok); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -76,10 +79,10 @@ func TestInstallTokens_BaselinePluginIDs_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if len(got.BaselinePluginIDs) != 2 ||
-		got.BaselinePluginIDs[0] != "com.platypus.sys-info" ||
-		got.BaselinePluginIDs[1] != "com.platypus.sys-listdir" {
-		t.Fatalf("BaselinePluginIDs = %v", got.BaselinePluginIDs)
+	if len(got.PluginSpecs) != 2 ||
+		got.PluginSpecs[0].PluginID != "com.platypus.sys-info" ||
+		got.PluginSpecs[1].PluginID != "com.platypus.sys-listdir" {
+		t.Fatalf("PluginSpecs = %+v", got.PluginSpecs)
 	}
 
 	// Without a baseline → nil round-trip.
@@ -88,8 +91,8 @@ func TestInstallTokens_BaselinePluginIDs_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got2.BaselinePluginIDs != nil {
-		t.Fatalf("BaselinePluginIDs = %v; want nil", got2.BaselinePluginIDs)
+	if got2.PluginSpecs != nil {
+		t.Fatalf("PluginSpecs = %v; want nil", got2.PluginSpecs)
 	}
 }
 
@@ -149,10 +152,6 @@ func TestInstallTokens_PluginSpecs_RoundtripPreservesRichFields(t *testing.T) {
 	}
 	if first.SchemaVersion != 1 {
 		t.Fatalf("first.schema_version = %d", first.SchemaVersion)
-	}
-	// Legacy projection still works for callers that haven't migrated.
-	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "com.example.syslog" {
-		t.Fatalf("legacy projection lost: %v", got.BaselinePluginIDs)
 	}
 }
 

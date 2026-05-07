@@ -276,16 +276,14 @@ type RedeemResult struct {
 	// host insert stay decoupled.
 	AutoApprove bool
 
-	// PluginSpecs is the rich operator-chosen baseline recovered from
-	// the install_download_tokens row that minted this PAT. The v2
-	// enroll handler stamps the rich shape onto the host record so
-	// the agent-link reconciler has version + caps + config to push
-	// at connect time. nil when the PAT was minted directly.
+	// PluginSpecs is the operator-chosen baseline recovered from
+	// the install_download_tokens row that minted this PAT. The
+	// v2 enroll handler stamps the spec onto the host record so
+	// the agent-link reconciler has version + caps + config to
+	// push at connect time. nil when the PAT was minted directly
+	// (no install flow), in which case the host gets only the
+	// mandatory core plugins after reconciliation.
 	PluginSpecs []storage.PluginSpec
-	// BaselinePluginIDs is the legacy []string projection of
-	// PluginSpecs, kept on this struct so callers that still read
-	// the flat list keep working. Goes away in PR 4.
-	BaselinePluginIDs []string
 }
 
 // RedeemContext is the per-request metadata the enrollment code needs
@@ -340,21 +338,18 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 	// in which case the host gets only the mandatory core after
 	// reconciliation.
 	var pluginSpecs []storage.PluginSpec
-	var baselinePluginIDs []string
 	if installTok, lookupErr := s.db.InstallDownloadTokens().GetByConsumedPATID(ctx, parsed.ID); lookupErr == nil {
 		pluginSpecs = installTok.PluginSpecs
-		baselinePluginIDs = installTok.BaselinePluginIDs
 	}
 
 	return &RedeemResult{
-		AgentID:           agentID,
-		ProjectID:         tok.ProjectID,
-		Outcome:           "success",
-		CertPEM:           certPEM,
-		CAPem:             caPEM,
-		AutoApprove:       tok.AutoApprove,
-		PluginSpecs:       pluginSpecs,
-		BaselinePluginIDs: baselinePluginIDs,
+		AgentID:     agentID,
+		ProjectID:   tok.ProjectID,
+		Outcome:     "success",
+		CertPEM:     certPEM,
+		CAPem:       caPEM,
+		AutoApprove: tok.AutoApprove,
+		PluginSpecs: pluginSpecs,
 	}, nil
 }
 

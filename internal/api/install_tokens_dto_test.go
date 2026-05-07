@@ -7,12 +7,11 @@ import (
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
-// TestIssueInstallRequest_AcceptsPluginSpecs: the rich shape PR 4
-// will start sending. JSON-decoded request struct carries
-// PluginSpecs faithfully so the handler can route them into the
-// enrollment service. Pinning at the DTO layer is enough — the
-// downstream wire integration is exercised by the FE wizard tests
-// against the running server.
+// TestIssueInstallRequest_AcceptsPluginSpecs: the rich PluginSpec
+// shape JSON-decodes into the request struct faithfully so the
+// handler can route it through to the enrollment service. PR 5
+// finished the migration; baseline_plugin_ids no longer exists on
+// the wire.
 func TestIssueInstallRequest_AcceptsPluginSpecs(t *testing.T) {
 	body := []byte(`{
 		"server_endpoint": "1.2.3.4:13337",
@@ -36,61 +35,14 @@ func TestIssueInstallRequest_AcceptsPluginSpecs(t *testing.T) {
 	}
 }
 
-// TestIssueInstallRequest_AcceptsLegacyIDs: the current FE shape
-// keeps working unchanged.
-func TestIssueInstallRequest_AcceptsLegacyIDs(t *testing.T) {
-	body := []byte(`{
-		"server_endpoint": "1.2.3.4:13337",
-		"baseline_plugin_ids": ["sys-info", "shell"]
-	}`)
-	var req issueInstallRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(req.BaselinePluginIDs) != 2 || req.BaselinePluginIDs[0] != "sys-info" {
-		t.Fatalf("BaselinePluginIDs = %v", req.BaselinePluginIDs)
-	}
-}
-
-// TestChosenInstallPluginIDs_PrefersRichSpecs: when both shapes
-// arrive, the rich PluginSpecs win and we project them down to
-// plugin_id strings for the (PR-2-still-string-shaped) enrollment
-// service call. PR 3 will plumb the rich spec end-to-end and this
-// projection helper goes away.
-func TestChosenInstallPluginIDs_PrefersRichSpecs(t *testing.T) {
-	req := issueInstallRequest{
-		BaselinePluginIDs: []string{"legacy-only"},
-		PluginSpecs: []storage.PluginSpec{
-			{PluginID: "rich-1", Version: "v1"},
-			{PluginID: "rich-2"},
-		},
-	}
-	got := chosenInstallPluginIDs(req)
-	if len(got) != 2 || got[0] != "rich-1" || got[1] != "rich-2" {
-		t.Fatalf("got = %v, want [rich-1 rich-2]", got)
-	}
-}
-
-// TestChosenInstallPluginIDs_FallsBackToLegacy: when only legacy
-// is supplied, it round-trips unchanged. This is the path the
-// current FE exercises until PR 4.
-func TestChosenInstallPluginIDs_FallsBackToLegacy(t *testing.T) {
-	req := issueInstallRequest{
-		BaselinePluginIDs: []string{"sys-info", "shell"},
-	}
-	got := chosenInstallPluginIDs(req)
-	if len(got) != 2 || got[0] != "sys-info" {
-		t.Fatalf("got = %v", got)
-	}
-}
-
-// TestInstallListItem_DualEmitShape: serialised list-item carries
-// both rich plugin_specs and the projected baseline_plugin_ids,
-// so legacy and new clients each get the field they expect.
-func TestInstallListItem_DualEmitShape(t *testing.T) {
+// TestInstallListItem_OnlyEmitsPluginSpecs pins the absence of the
+// retired baseline_plugin_ids JSON key. The list-item shape is the
+// only place a downstream consumer would scrape for legacy keys —
+// pinning the absence here would catch a regression that
+// re-introduced the dual emit.
+func TestInstallListItem_OnlyEmitsPluginSpecs(t *testing.T) {
 	item := installListItem{
-		DownloadID:        "dl_x",
-		BaselinePluginIDs: []string{"a", "b"},
+		DownloadID: "dl_x",
 		PluginSpecs: []storage.PluginSpec{
 			{PluginID: "a"}, {PluginID: "b"},
 		},
@@ -100,13 +52,10 @@ func TestInstallListItem_DualEmitShape(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	s := string(b)
-	for _, want := range []string{
-		`"baseline_plugin_ids":["a","b"]`,
-		`"plugin_specs":[`,
-		`"plugin_id":"a"`,
-	} {
-		if indexLower(s, want) < 0 {
-			t.Fatalf("response missing %q: %s", want, s)
-		}
+	if indexLower(s, `"plugin_specs":[`) < 0 {
+		t.Fatalf("expected plugin_specs in output: %s", s)
+	}
+	if indexLower(s, `"baseline_plugin_ids"`) >= 0 {
+		t.Fatalf("legacy baseline_plugin_ids still emitted: %s", s)
 	}
 }

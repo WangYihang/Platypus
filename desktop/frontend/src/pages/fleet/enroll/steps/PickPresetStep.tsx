@@ -165,11 +165,8 @@ function PresetCard({
     if (preset.ttl_seconds) policyBits.push(`${preset.ttl_seconds}s TTL`);
     if (preset.pat_max_uses) policyBits.push(`${preset.pat_max_uses}× use`);
     policyBits.push(preset.auto_approve ? "auto-approve" : "manual approval");
-    if (
-        preset.baseline_plugin_ids &&
-        preset.baseline_plugin_ids.length > 0
-    ) {
-        policyBits.push(`${preset.baseline_plugin_ids.length} plugin(s)`);
+    if (preset.plugin_specs && preset.plugin_specs.length > 0) {
+        policyBits.push(`${preset.plugin_specs.length} plugin(s)`);
     }
     return (
         <div

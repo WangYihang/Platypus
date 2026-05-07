@@ -61,20 +61,12 @@ type MintInstallArtifactInput struct {
 	// can still create a `pending` host but can't reach the agent
 	// runtime until an admin clicks Approve.
 	AutoApprove bool
-	// PluginSpecs is the rich operator-chosen baseline. When
-	// supplied (non-empty), every entry's plugin_id, version,
-	// granted_capabilities, config_overrides, and schema_version
-	// flow through the install token + host record without
-	// projection — the agent-link reconciler reads them back to
-	// build wire requests with full config + caps. Preferred over
-	// BaselinePluginIDs for new callers.
+	// PluginSpecs is the operator-chosen baseline. Each entry's
+	// plugin_id, version, granted_capabilities, config_overrides,
+	// and schema_version flow through the install token + host
+	// record so the agent-link reconciler can install each plugin
+	// with full deployment intent on first boot.
 	PluginSpecs []storage.PluginSpec
-	// BaselinePluginIDs is the legacy []string allowlist. Used by
-	// the un-migrated callers (agent-link reconciler that still
-	// reads via the legacy projection). When PluginSpecs is also
-	// supplied, PluginSpecs wins. Goes away when PR 4 closes the
-	// migration.
-	BaselinePluginIDs []string
 }
 
 // MintInstallArtifact inserts a new install_download_tokens row and
@@ -129,7 +121,6 @@ func (s *Service) MintInstallArtifact(ctx context.Context, in MintInstallArtifac
 		PATDescription:      in.PATDescription,
 		AutoApprove:         in.AutoApprove,
 		PluginSpecs:         in.PluginSpecs,
-		BaselinePluginIDs:   in.BaselinePluginIDs,
 	}
 	if err := s.db.InstallDownloadTokens().Create(ctx, tok); err != nil {
 		return nil, fmt.Errorf("enrollment: create install download token: %w", err)
@@ -165,17 +156,11 @@ type ConsumeResult struct {
 	PATExpiresAt   time.Time
 	ProjectID      string
 	ProjectCAPEM   string
-	// PluginSpecs surfaces the rich operator-chosen baseline back to
-	// the distributor / host writer so version + caps + config flow
-	// onto the host record on consume. New callers should read this;
-	// the legacy []string projection is preserved alongside in
-	// BaselinePluginIDs until PR 4 closes the migration.
+	// PluginSpecs surfaces the operator's chosen baseline back to
+	// the consume path so the host writer can stamp version +
+	// caps + config onto the host record. Empty means "agent runs
+	// with mandatory core only" (sys-info).
 	PluginSpecs []storage.PluginSpec
-	// BaselinePluginIDs surfaces the operator's allowlist back to the
-	// distributor so it can render the agent's --baseline-plugins flag /
-	// install-bundle field. Empty means "agent runs with mandatory core
-	// only" (sys-info).
-	BaselinePluginIDs []string
 }
 
 // ConsumeContext carries request metadata used for audit rows.
@@ -282,7 +267,6 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		ProjectID:         tok.ProjectID,
 		ProjectCAPEM:      caPEM,
 		PluginSpecs:       tok.PluginSpecs,
-		BaselinePluginIDs: tok.BaselinePluginIDs,
 	}, nil
 }
 

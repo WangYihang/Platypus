@@ -32,38 +32,10 @@ func enrollmentPresetsTestSetup(t *testing.T) (*gin.Engine, *storage.DB) {
 	return r, db
 }
 
-// TestEnrollmentPresets_Create_AcceptsLegacyPluginIDs: the existing
-// FE still sends baseline_plugin_ids: []string. PR 1 added the
-// PluginSpec atom to storage but kept the wire shape; this pins
-// that the legacy field continues to work end-to-end (POST → GET
-// → roundtrip values present) while the FE catches up in PR 4.
-func TestEnrollmentPresets_Create_AcceptsLegacyPluginIDs(t *testing.T) {
-	r, db := enrollmentPresetsTestSetup(t)
-	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	proj := seedProjectForAPITest(t, db, "prod", admin)
-	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
-
-	body := map[string]any{
-		"name":                "linux-prod-legacy",
-		"baseline_plugin_ids": []string{"sys-info", "shell"},
-	}
-	w := probeReqWithPath(r, "POST",
-		"/api/v1/projects/"+proj.ID+"/enrollment-presets", tok, body)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create status=%d body=%s", w.Code, w.Body.String())
-	}
-	var resp enrollmentPresetItem
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.BaselinePluginIDs) != 2 || resp.BaselinePluginIDs[0] != "sys-info" {
-		t.Fatalf("response.baseline_plugin_ids = %v, want [sys-info, shell]", resp.BaselinePluginIDs)
-	}
-}
-
-// TestEnrollmentPresets_Create_AcceptsPluginSpecs: the rich shape
-// — what the FE will start sending in PR 4 — POSTs plugin_specs:
-// [{plugin_id, version, granted_capabilities, config_overrides,
-// schema_version}, ...]. Storage round-trips every field
-// faithfully.
+// TestEnrollmentPresets_Create_AcceptsPluginSpecs: rich PluginSpec
+// (plugin_id + version + granted_capabilities + config_overrides +
+// schema_version) round-trips through storage faithfully — every
+// field comes back through the GET response unchanged.
 func TestEnrollmentPresets_Create_AcceptsPluginSpecs(t *testing.T) {
 	r, db := enrollmentPresetsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
@@ -109,69 +81,31 @@ func TestEnrollmentPresets_Create_AcceptsPluginSpecs(t *testing.T) {
 	}
 }
 
-// TestEnrollmentPresets_DualEmit_ResponseCarriesBothShapes: while
-// the FE migrates, every list / get response must include BOTH
-// the rich plugin_specs and the projected baseline_plugin_ids
-// shapes so legacy consumers keep working alongside the new ones.
-// PR 4 drops baseline_plugin_ids; until then the dual-emit is
-// load-bearing.
-func TestEnrollmentPresets_DualEmit_ResponseCarriesBothShapes(t *testing.T) {
+// TestEnrollmentPresets_RejectsLegacyBaselinePluginIDs pins the
+// retirement: clients that send the legacy baseline_plugin_ids key
+// in the request body get a clean response with empty PluginSpecs
+// (the unknown field is simply discarded, no error). This is what
+// catches a stale client trying to use the old wire shape.
+func TestEnrollmentPresets_RejectsLegacyBaselinePluginIDs(t *testing.T) {
 	r, db := enrollmentPresetsTestSetup(t)
 	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
 	proj := seedProjectForAPITest(t, db, "prod", admin)
 	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
 
 	body := map[string]any{
-		"name": "dual",
-		"plugin_specs": []map[string]any{
-			{"plugin_id": "a"}, {"plugin_id": "b"},
-		},
+		"name":                "legacy-shape",
+		"baseline_plugin_ids": []string{"sys-info", "shell"},
 	}
 	w := probeReqWithPath(r, "POST",
 		"/api/v1/projects/"+proj.ID+"/enrollment-presets", tok, body)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("create status=%d", w.Code)
+		t.Fatalf("create status=%d body=%s", w.Code, w.Body.String())
 	}
 	var resp enrollmentPresetItem
 	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.PluginSpecs) != 2 || len(resp.BaselinePluginIDs) != 2 {
-		t.Fatalf("dual emit failed: specs=%d, ids=%d", len(resp.PluginSpecs), len(resp.BaselinePluginIDs))
-	}
-	if resp.BaselinePluginIDs[0] != "a" || resp.BaselinePluginIDs[1] != "b" {
-		t.Fatalf("projection from specs to ids drifted: %v", resp.BaselinePluginIDs)
-	}
-}
-
-// TestEnrollmentPresets_PluginSpecsWinsOverLegacy: when both
-// fields are supplied (a transitional FE that's mid-migration, or
-// a confused client), the rich shape wins. This is the "no
-// silent data loss" property: the client that knows about
-// PluginSpec gets the storage shape it expects.
-func TestEnrollmentPresets_PluginSpecsWinsOverLegacy(t *testing.T) {
-	r, db := enrollmentPresetsTestSetup(t)
-	admin := seedUserForAPITest(t, db, "admin", user.RoleAdmin)
-	proj := seedProjectForAPITest(t, db, "prod", admin)
-	tok := mintBearerForUserID(t, db, admin.ID, user.RoleAdmin)
-
-	body := map[string]any{
-		"name":                "both",
-		"baseline_plugin_ids": []string{"legacy-only"},
-		"plugin_specs": []map[string]any{
-			{"plugin_id": "rich-1", "version": "v1"},
-		},
-	}
-	w := probeReqWithPath(r, "POST",
-		"/api/v1/projects/"+proj.ID+"/enrollment-presets", tok, body)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create status=%d", w.Code)
-	}
-	var resp enrollmentPresetItem
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.PluginSpecs) != 1 || resp.PluginSpecs[0].PluginID != "rich-1" {
-		t.Fatalf("plugin_specs lost: %+v", resp.PluginSpecs)
-	}
-	if resp.PluginSpecs[0].Version != "v1" {
-		t.Fatalf("rich field dropped: %+v", resp.PluginSpecs[0])
+	if len(resp.PluginSpecs) != 0 {
+		t.Fatalf("legacy field shouldn't populate plugin_specs: got %+v",
+			resp.PluginSpecs)
 	}
 }
 

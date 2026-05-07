@@ -210,17 +210,11 @@ export default function EnrollAgentWizard() {
     }
 
     // specsFromPreset projects an EnrollmentPreset's plugin
-    // selection into the wizard's PluginSpecDraft[] state. Rich
-    // plugin_specs (PR 4 onward) wins when supplied — preserves
-    // version + caps + config + schema_version. Falls back to
-    // wrapping each id from the legacy baseline_plugin_ids field
-    // for presets that haven't been re-saved since the migration.
+    // selection into the wizard's PluginSpecDraft[] state. The
+    // rich plugin_specs[] is the only carrier the server emits
+    // since PR 5; the wizard simply unwraps it.
     function specsFromPreset(p: EnrollmentPreset): PluginSpecDraft[] {
-        if (p.plugin_specs && p.plugin_specs.length > 0) {
-            return p.plugin_specs as PluginSpecDraft[];
-        }
-        const ids = p.baseline_plugin_ids ?? [];
-        return ids.map((id) => ({ plugin_id: id }));
+        return (p.plugin_specs ?? []) as PluginSpecDraft[];
     }
 
     // applyPreset snaps every wizard field to the preset's saved
