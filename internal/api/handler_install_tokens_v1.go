@@ -217,6 +217,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		PATBindingMachineID: req.PATBindingMachineID,
 		PATDescription:      req.PATDescription,
 		AutoApprove:         req.AutoApprove,
+		PluginSpecs:         req.PluginSpecs,
 		BaselinePluginIDs:   chosenInstallPluginIDs(req),
 	})
 	if err != nil {

@@ -207,3 +207,99 @@ func TestHostRepo_TouchLastSeen(t *testing.T) {
 		t.Fatalf("TouchLastSeen on missing agent_id should return error")
 	}
 }
+
+// TestHostRepo_PluginSpecs_RoundtripPreservesRichFields: the
+// hosts.plugin_specs column captures the rich PluginSpec shape
+// chosen at enroll time. Pinning the round-trip means the agent-
+// link reconciler (PR 3.4 next) can read full version + caps +
+// config — not just plugin_id — when it diffs the agent's
+// installed catalog against the operator's baseline.
+func TestHostRepo_PluginSpecs_RoundtripPreservesRichFields(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", "Project 1", admin)
+
+	h, err := db.Hosts().Upsert(ctx, &storage.HostIdentity{
+		ProjectID:   proj.ID,
+		MachineID:   "m-rich",
+		Fingerprint: "fp-rich",
+		Hostname:    "rich-host",
+		SeenAt:      time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Upsert host: %v", err)
+	}
+
+	specs := []storage.PluginSpec{
+		{
+			PluginID:            "com.example.syslog",
+			Version:             "1.4.0",
+			GrantedCapabilities: []string{"net.dial"},
+			ConfigOverrides:     []byte(`{"destination":"udp://10.0.0.1:514"}`),
+			SchemaVersion:       1,
+		},
+		{PluginID: "com.example.sysinfo"},
+	}
+	if err := db.Hosts().SetPluginSpecs(ctx, h.ID, specs); err != nil {
+		t.Fatalf("SetPluginSpecs: %v", err)
+	}
+
+	got, err := db.Hosts().GetByID(ctx, h.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if len(got.PluginSpecs) != 2 {
+		t.Fatalf("PluginSpecs len = %d, want 2", len(got.PluginSpecs))
+	}
+	first := got.PluginSpecs[0]
+	if first.PluginID != "com.example.syslog" || first.Version != "1.4.0" {
+		t.Fatalf("first.identity = %+v", first)
+	}
+	if len(first.GrantedCapabilities) != 1 || first.GrantedCapabilities[0] != "net.dial" {
+		t.Fatalf("first.caps = %v", first.GrantedCapabilities)
+	}
+	if string(first.ConfigOverrides) != `{"destination":"udp://10.0.0.1:514"}` {
+		t.Fatalf("first.config = %s", first.ConfigOverrides)
+	}
+	if first.SchemaVersion != 1 {
+		t.Fatalf("first.schema_version = %d", first.SchemaVersion)
+	}
+	// Legacy projection still works for the agent-link reconciler
+	// + everything else that hasn't been upgraded.
+	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "com.example.syslog" {
+		t.Fatalf("legacy projection lost: %v", got.BaselinePluginIDs)
+	}
+}
+
+// TestHostRepo_SetBaselinePluginIDs_LegacyStillWorks: callers that
+// only know about []string keep working. The legacy setter wraps
+// each id into a minimal PluginSpec so the column shape stays
+// uniform — when the agent-link reconciler later reads it back,
+// PluginSpecs is populated (rich-shape-friendly) and the rich
+// fields are simply absent (not corrupted).
+func TestHostRepo_SetBaselinePluginIDs_LegacyStillWorks(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", "Project 1", admin)
+
+	h, _ := db.Hosts().Upsert(ctx, &storage.HostIdentity{
+		ProjectID:   proj.ID,
+		MachineID:   "m-legacy",
+		Fingerprint: "fp-legacy",
+		Hostname:    "legacy-host",
+		SeenAt:      time.Now().UTC(),
+	})
+	if err := db.Hosts().SetBaselinePluginIDs(ctx, h.ID, []string{"a", "b"}); err != nil {
+		t.Fatalf("SetBaselinePluginIDs: %v", err)
+	}
+	got, _ := db.Hosts().GetByID(ctx, h.ID)
+	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "a" {
+		t.Fatalf("legacy round-trip: %v", got.BaselinePluginIDs)
+	}
+	// PluginSpecs is also populated (same column, dual view).
+	if len(got.PluginSpecs) != 2 || got.PluginSpecs[0].PluginID != "a" {
+		t.Fatalf("rich view of legacy data: %+v", got.PluginSpecs)
+	}
+}

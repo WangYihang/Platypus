@@ -276,11 +276,15 @@ type RedeemResult struct {
 	// host insert stay decoupled.
 	AutoApprove bool
 
-	// BaselinePluginIDs is the operator's system-plugin allowlist,
-	// recovered from the install_download_tokens row that minted this
-	// PAT. The v2 enroll handler stamps it onto the host record so
-	// the link-handler reconciler has something to push at connect
-	// time. nil when the PAT was minted directly (no install flow).
+	// PluginSpecs is the rich operator-chosen baseline recovered from
+	// the install_download_tokens row that minted this PAT. The v2
+	// enroll handler stamps the rich shape onto the host record so
+	// the agent-link reconciler has version + caps + config to push
+	// at connect time. nil when the PAT was minted directly.
+	PluginSpecs []storage.PluginSpec
+	// BaselinePluginIDs is the legacy []string projection of
+	// PluginSpecs, kept on this struct so callers that still read
+	// the flat list keep working. Goes away in PR 4.
 	BaselinePluginIDs []string
 }
 
@@ -335,8 +339,10 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 	// install flow (admin REST direct mint) won't have a parent row,
 	// in which case the host gets only the mandatory core after
 	// reconciliation.
+	var pluginSpecs []storage.PluginSpec
 	var baselinePluginIDs []string
 	if installTok, lookupErr := s.db.InstallDownloadTokens().GetByConsumedPATID(ctx, parsed.ID); lookupErr == nil {
+		pluginSpecs = installTok.PluginSpecs
 		baselinePluginIDs = installTok.BaselinePluginIDs
 	}
 
@@ -347,6 +353,7 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 		CertPEM:           certPEM,
 		CAPem:             caPEM,
 		AutoApprove:       tok.AutoApprove,
+		PluginSpecs:       pluginSpecs,
 		BaselinePluginIDs: baselinePluginIDs,
 	}, nil
 }

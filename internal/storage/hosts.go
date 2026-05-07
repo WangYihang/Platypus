@@ -96,13 +96,18 @@ type Host struct {
 	ApprovalDecidedBy string
 	ApprovalReason    string
 
-	// BaselinePluginIDs is the operator's system-plugin allowlist for
-	// this host. Populated at enroll time from the install token's
-	// baseline_plugin_ids column (see migration 000032). The
-	// agent-link handler reconciles each connect against this list:
-	// missing plugins get pushed from <data_dir>/system-plugins/.
-	// Empty slice = no operator picks; the reconciler still installs
-	// the mandatory core (sys-info).
+	// PluginSpecs is the rich shape of the operator's system-plugin
+	// allowlist — plugin_id + version + granted_capabilities +
+	// config_overrides + schema_version per entry. Same JSON column
+	// (plugin_specs) as BaselinePluginIDs; both fields are populated
+	// on read so callers that haven't migrated keep working. New
+	// code (the agent-link reconciler in PR 3.4+, the wire builder
+	// in PR 3.5+) reads this rich shape so it has config + caps to
+	// forward to the agent.
+	PluginSpecs []PluginSpec
+	// BaselinePluginIDs is the legacy []string projection of
+	// PluginSpecs. Populated alongside PluginSpecs on read; goes
+	// away when PR 4 closes the migration.
 	BaselinePluginIDs []string
 }
 
@@ -793,6 +798,9 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if approvalReason.Valid {
 		h.ApprovalReason = approvalReason.String
 	}
+	if specs, err := DecodePluginSpecs(baselineCSV.String); err == nil {
+		h.PluginSpecs = specs
+	}
 	h.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	return &h, nil
 }
@@ -934,6 +942,40 @@ func nullIfUint32(n uint32) any {
 		return nil
 	}
 	return int64(n)
+}
+
+// SetPluginSpecs persists the rich operator-chosen baseline as
+// PluginSpec rows. Preferred over SetBaselinePluginIDs for new
+// callers — preserves version, granted_capabilities,
+// config_overrides, and schema_version per entry rather than
+// flattening to a list of plugin ids. Empty slice clears the
+// column to "" (the reconciler then installs only the mandatory
+// core).
+func (r *HostRepo) SetPluginSpecs(ctx context.Context, hostID string, specs []PluginSpec) error {
+	encoded, err := EncodePluginSpecs(specs)
+	if err != nil {
+		return err
+	}
+	value := ""
+	if encoded != nil {
+		s, _ := encoded.(string)
+		value = s
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE hosts SET plugin_specs = ? WHERE id = ?`,
+		nullableString(value), hostID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetBaselinePluginIDs persists the operator's system-plugin allowlist

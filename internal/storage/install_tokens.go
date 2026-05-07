@@ -38,12 +38,20 @@ type InstallDownloadToken struct {
 	// the resulting host enrolls straight to `approved` instead of
 	// the default `pending`. See migration 000022.
 	AutoApprove bool
-	// BaselinePluginIDs is the operator-chosen system-plugin allowlist
-	// at mint time. Carried on this row only as a mint→consume
-	// stash; ConsumeInstallDownload copies it onto the host record
-	// (long-term source of truth, see migration 000032) and the
-	// link-handler reconciler pushes the missing plugins from
-	// <data_dir>/system-plugins/ on every connect.
+	// PluginSpecs is the rich shape — plugin_id + version +
+	// granted_capabilities + config_overrides + schema_version per
+	// entry — that PR 1+2 introduced. The on-disk JSON in the
+	// plugin_specs column is the source of truth; both this field
+	// and BaselinePluginIDs (a []string projection) are populated
+	// from it on read. New code should reach for PluginSpecs;
+	// BaselinePluginIDs sticks around for callers (enrollment
+	// service, agent-link reconciler) that haven't migrated yet
+	// and goes away when PR 4 closes the migration.
+	PluginSpecs []PluginSpec
+	// BaselinePluginIDs is the legacy projection — a flat []string
+	// of plugin_ids — kept for back-compat with callers that
+	// haven't been upgraded to read PluginSpecs. Same column,
+	// different view.
 	BaselinePluginIDs []string
 	Revoked           bool
 	RevokedAt         *time.Time
@@ -116,7 +124,7 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 		nullableString(t.PATBindingMachineID),
 		nullableString(t.PATDescription),
 		autoApprove,
-		encodeBaselinePluginIDs(t.BaselinePluginIDs),
+		encodeInstallTokenSpecs(t),
 	)
 	return err
 }
@@ -330,6 +338,12 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.PATBindingMachineID = bindMID.String
 	t.PATDescription = patDesc.String
 	t.AutoApprove = autoApprove == 1
+	// Both views of the same JSON column are populated on read so
+	// migrating callers (PluginSpecs) and legacy callers
+	// (BaselinePluginIDs) each see what they expect.
+	if specs, err := DecodePluginSpecs(baselineCSV.String); err == nil {
+		t.PluginSpecs = specs
+	}
 	t.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	if consAt.Valid {
 		v := consAt.Time
@@ -346,6 +360,25 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.RevokedByUser = revBy.String
 	t.RevokedReason = revReas.String
 	return &t, nil
+}
+
+// encodeInstallTokenSpecs picks the right value to persist into the
+// plugin_specs JSON column. Rich PluginSpecs wins when supplied —
+// the rich shape carries version + granted_capabilities +
+// config_overrides + schema_version that the legacy []string
+// projection would silently drop. Falling back to the legacy
+// BaselinePluginIDs is the path the un-migrated callers
+// (enrollment.Service, plugin_sync reconciler) still take.
+func encodeInstallTokenSpecs(t *InstallDownloadToken) string {
+	if len(t.PluginSpecs) > 0 {
+		raw, err := EncodePluginSpecs(t.PluginSpecs)
+		if err != nil || raw == nil {
+			return ""
+		}
+		s, _ := raw.(string)
+		return s
+	}
+	return encodeBaselinePluginIDs(t.BaselinePluginIDs)
 }
 
 // encodeBaselinePluginIDs converts the operator's plugin-id slice

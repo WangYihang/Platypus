@@ -93,6 +93,69 @@ func TestInstallTokens_BaselinePluginIDs_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestInstallTokens_PluginSpecs_RoundtripPreservesRichFields: the
+// rich PluginSpec shape (version + granted_capabilities +
+// config_overrides + schema_version) round-trips through the
+// install_download_tokens.plugin_specs JSON column without loss.
+// Pinning this is the whole point of PR 3 — until now the
+// enrollment.Service only handed [string] of plugin ids to
+// storage; PR 3 plumbs the rich shape end-to-end so the wire path
+// (PR 3.5+) has data to forward.
+func TestInstallTokens_PluginSpecs_RoundtripPreservesRichFields(t *testing.T) {
+	db := newTestDB(t)
+	admin := seedUser(t, db, "admin", user.RoleAdmin)
+	proj := seedProject(t, db, "p1", "Project 1", admin)
+
+	tok := &storage.InstallDownloadToken{
+		DownloadID:     "dl_rich",
+		SecretHash:     hashBytes([]byte("s")),
+		ProjectID:      proj.ID,
+		IssuedByUser:   admin.ID,
+		IssuedAt:       time.Now().UTC(),
+		ExpiresAt:      time.Now().Add(time.Hour).UTC(),
+		ServerEndpoint: "127.0.0.1:13337",
+		PATTTLSeconds:  3600,
+		PluginSpecs: []storage.PluginSpec{
+			{
+				PluginID:            "com.example.syslog",
+				Version:             "1.4.0",
+				GrantedCapabilities: []string{"net.dial"},
+				ConfigOverrides:     []byte(`{"destination":"udp://10.0.0.1:514"}`),
+				SchemaVersion:       1,
+			},
+			{PluginID: "com.example.sysinfo"},
+		},
+	}
+	if err := db.InstallDownloadTokens().Create(context.Background(), tok); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := db.InstallDownloadTokens().Get(context.Background(), tok.DownloadID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if len(got.PluginSpecs) != 2 {
+		t.Fatalf("PluginSpecs len = %d, want 2", len(got.PluginSpecs))
+	}
+	first := got.PluginSpecs[0]
+	if first.PluginID != "com.example.syslog" || first.Version != "1.4.0" {
+		t.Fatalf("first.identity = %+v", first)
+	}
+	if len(first.GrantedCapabilities) != 1 || first.GrantedCapabilities[0] != "net.dial" {
+		t.Fatalf("first.caps = %v", first.GrantedCapabilities)
+	}
+	if string(first.ConfigOverrides) != `{"destination":"udp://10.0.0.1:514"}` {
+		t.Fatalf("first.config = %s", first.ConfigOverrides)
+	}
+	if first.SchemaVersion != 1 {
+		t.Fatalf("first.schema_version = %d", first.SchemaVersion)
+	}
+	// Legacy projection still works for callers that haven't migrated.
+	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "com.example.syslog" {
+		t.Fatalf("legacy projection lost: %v", got.BaselinePluginIDs)
+	}
+}
+
 // Happy path: secret matches, TryConsume records consumer metadata +
 // linked PAT id, status flips to consumed, and nothing is deleted.
 func TestInstallTokens_TryConsume_Success(t *testing.T) {

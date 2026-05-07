@@ -221,9 +221,18 @@ func upsertHostFromEnroll(ctx context.Context, db *storage.DB, redeemed *enrollm
 	}
 	// Stamp the operator's system-plugin allowlist onto the row so
 	// the link-handler reconciler can diff against it on every
-	// connect. Skip when the PAT was minted directly (no install
-	// flow) — the host gets mandatory-core-only after reconcile.
-	if len(redeemed.BaselinePluginIDs) > 0 {
+	// connect. PluginSpecs (rich) wins when supplied — the agent-
+	// link reconciler in PR 3.4+ reads the rich shape so version +
+	// caps + config flow through. Falls back to BaselinePluginIDs
+	// for the un-migrated direct-mint path. Skip when neither is
+	// set (PAT minted directly, no install flow): the host gets
+	// mandatory-core-only after reconcile.
+	switch {
+	case len(redeemed.PluginSpecs) > 0:
+		if err := db.Hosts().SetPluginSpecs(ctx, host.ID, redeemed.PluginSpecs); err != nil {
+			return fmt.Errorf("set plugin specs: %w", err)
+		}
+	case len(redeemed.BaselinePluginIDs) > 0:
 		if err := db.Hosts().SetBaselinePluginIDs(ctx, host.ID, redeemed.BaselinePluginIDs); err != nil {
 			return fmt.Errorf("set baseline plugin ids: %w", err)
 		}
