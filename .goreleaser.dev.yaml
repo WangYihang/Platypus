@@ -7,8 +7,8 @@
 # what `make snapshot` / `make release` use; this one targets local
 # dev / `make releases` only.
 #
-# Targets list mirrors scripts/dev-publish-entrypoint.sh:55-63 — the
-# matrix the docker compose sidecar has been smoke-testing daily.
+# Active matrix mirrors scripts/dev-publish-entrypoint.sh:55-63 — the
+# 24 GOOS/GOARCH pairs the docker compose sidecar smoke-tests daily.
 
 version: 2
 project_name: platypus
@@ -19,14 +19,93 @@ builds:
     binary: platypus-agent
     env:
       - CGO_ENABLED=0
-    targets:
-      - linux_amd64
-      - darwin_amd64
-      - darwin_arm64
-      - windows_amd64
+    goos: [linux, darwin, windows, freebsd, openbsd, netbsd]
+    goarch: [amd64, arm64, arm, "386", riscv64, ppc64le, s390x, loong64, mips, mipsle, mips64, mips64le]
+    ignore:
+      # darwin: only amd64 + arm64 are valid Go targets.
+      - { goos: darwin, goarch: "386" }
+      - { goos: darwin, goarch: arm }
+      - { goos: darwin, goarch: riscv64 }
+      - { goos: darwin, goarch: ppc64le }
+      - { goos: darwin, goarch: s390x }
+      - { goos: darwin, goarch: loong64 }
+      - { goos: darwin, goarch: mips }
+      - { goos: darwin, goarch: mipsle }
+      - { goos: darwin, goarch: mips64 }
+      - { goos: darwin, goarch: mips64le }
+      # windows: amd64 + arm64 + 386 only — the others either don't
+      # exist as Go targets or fail in our pinned gopsutil.
+      - { goos: windows, goarch: arm }
+      - { goos: windows, goarch: riscv64 }
+      - { goos: windows, goarch: ppc64le }
+      - { goos: windows, goarch: s390x }
+      - { goos: windows, goarch: loong64 }
+      - { goos: windows, goarch: mips }
+      - { goos: windows, goarch: mipsle }
+      - { goos: windows, goarch: mips64 }
+      - { goos: windows, goarch: mips64le }
+      # freebsd: only the three smoke-tested combos.
+      - { goos: freebsd, goarch: arm }
+      - { goos: freebsd, goarch: riscv64 }
+      - { goos: freebsd, goarch: ppc64le }
+      - { goos: freebsd, goarch: s390x }
+      - { goos: freebsd, goarch: loong64 }
+      - { goos: freebsd, goarch: mips }
+      - { goos: freebsd, goarch: mipsle }
+      - { goos: freebsd, goarch: mips64 }
+      - { goos: freebsd, goarch: mips64le }
+      # openbsd: amd64 + arm64 only.
+      - { goos: openbsd, goarch: "386" }
+      - { goos: openbsd, goarch: arm }
+      - { goos: openbsd, goarch: riscv64 }
+      - { goos: openbsd, goarch: ppc64le }
+      - { goos: openbsd, goarch: s390x }
+      - { goos: openbsd, goarch: loong64 }
+      - { goos: openbsd, goarch: mips }
+      - { goos: openbsd, goarch: mipsle }
+      - { goos: openbsd, goarch: mips64 }
+      - { goos: openbsd, goarch: mips64le }
+      # netbsd: amd64 + arm64 only — gopsutil's netbsd Statvfs/cpuTimes
+      # bindings are amd64-specific and don't compile elsewhere.
+      - { goos: netbsd, goarch: "386" }
+      - { goos: netbsd, goarch: arm }
+      - { goos: netbsd, goarch: riscv64 }
+      - { goos: netbsd, goarch: ppc64le }
+      - { goos: netbsd, goarch: s390x }
+      - { goos: netbsd, goarch: loong64 }
+      - { goos: netbsd, goarch: mips }
+      - { goos: netbsd, goarch: mipsle }
+      - { goos: netbsd, goarch: mips64 }
+      - { goos: netbsd, goarch: mips64le }
     ldflags:
       - -s -w
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
       - -X "github.com/WangYihang/Platypus/pkg/version.Commit={{.Commit}}"
       - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
       - -X "github.com/WangYihang/Platypus/internal/agent.SigningPublicKey={{ .Env.AGENT_SIGNING_PUBKEY_B64 }}"
+
+# UPX with --best --lzma cuts the agent binary in half (~16 MB →
+# ~5 MB) at ~30 s of CPU per binary; the goreleaser parallelism
+# fans this out across cores. `brute` mode tries every algorithm
+# combination for a further ~1-3 % shrink at ~10x runtime cost
+# (8+ min per binary) — opt in by setting UPX_BRUTE=true if you
+# need the absolute smallest payload.
+#
+# Skipped automatically when `upx` is not on PATH — install via
+# `apt install upx-ucl` / `brew install upx`. UPX cannot compress
+# mach-O / darwin binaries (refused since UPX 4.x), so darwin is
+# excluded from the platform list.
+upx:
+  - enabled: true
+    ids: [platypus-agent]
+    # UPX 4.x ELF/PE support is narrow: linux ELF on x86 / x86_64 /
+    # arm / arm64 / mips / mipsle / ppc64le, plus windows PE on x86 /
+    # x86_64. Other GOOS/GOARCH combos either log "could not pack"
+    # (silent, fine) or fail fatally (freebsd/386 hits an LEXEC025
+    # reloc bug). Pinning the matrix here keeps the build green.
+    # Darwin mach-O is refused by UPX entirely since 4.x.
+    goos: [linux, windows]
+    goarch: [amd64, "386", arm64, arm, mips, mipsle, ppc64le]
+    compress: best
+    lzma: true
+    brute: false

@@ -110,6 +110,15 @@ export default defineConfig(({ mode }) => {
                         ) {
                             return "vendor-editor";
                         }
+                        // pdfjs-dist's main lib (~600 KB) is route-lazy
+                        // (PdfViewer only). Splitting it out keeps it
+                        // off the always-on vendor-misc bundle.
+                        if (id.includes("/pdfjs-dist/")) return "vendor-pdf";
+                        // Radix primitives are spread across ~30 packages
+                        // that aggregate to ~250 KB. They're imported
+                        // app-wide; pinning them to one chunk gives a
+                        // stable filename + shrinks vendor-misc.
+                        if (id.includes("/@radix-ui/")) return "vendor-radix";
                         if (
                             id.includes("/react/") ||
                             id.includes("/react-dom/") ||
@@ -121,15 +130,14 @@ export default defineConfig(({ mode }) => {
                     },
                 },
             },
-            // vendor-misc stays under the default 500 KB warning after
-            // the cytoscape / codemirror splits above; vendor-graph and
-            // vendor-editor are each inherently ~560 KB (single
-            // monolithic libs that can't be split further without
-            // over-engineering) and are route-lazy-loaded — only the
-            // Fleet Graph view / FileEditor pay for them. Bump the
-            // warning just past that natural ceiling so only a NEW
-            // regression past 600 KB trips it.
-            chunkSizeWarningLimit: 600,
+            // vendor-misc + vendor-editor are the natural ceilings here
+            // after splitting out cytoscape (vendor-graph), pdfjs
+            // (vendor-pdf), and radix (vendor-radix). Both top out
+            // around ~700 KB raw / ~200 KB gzipped — anything bigger
+            // is a regression worth investigating. The pdf.worker.mjs
+            // chunk is a Web Worker (separate execution context), so
+            // its size doesn't count against the main bundle.
+            chunkSizeWarningLimit: 800,
         },
         // Build-time globals consumed by the status bar. Set GIT_COMMIT in
         // CI (or via the Makefile) to get a real short hash; falls back to

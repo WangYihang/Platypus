@@ -34,11 +34,42 @@ IP2REGION_V4 := internal/ipinfo/data/ip2region_v4.xdb
 
 .DEFAULT_GOAL := all
 .PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
-        hooks pre-commit data data-v6 releases \
+        hooks pre-commit data data-v6 releases check-deps \
         example-plugins stage-system-plugins \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
         web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots \
         $(BIN_PATHS)
+
+# ---------- Dependency preflight ----------
+# Recipes call `$(call require-bin,<tool>,<install hint>)` inline so
+# the failure happens at the point of need, with an actionable fix.
+# `make check-deps` runs the same survey across every tool the local-
+# dev `make` flow expects, marking optional ones (upx, protoc) so a
+# missing one doesn't look fatal.
+require-bin = command -v $(1) >/dev/null 2>&1 || { \
+  printf >&2 '\033[31m✗ %s not found on PATH\033[0m\n  → install: %s\n' '$(1)' '$(2)'; \
+  exit 1; \
+}
+check-bin = if command -v $(1) >/dev/null 2>&1; then \
+              printf '  \033[32m✓\033[0m %-12s %s\n' '$(1)' "$$(command -v $(1))"; \
+            else \
+              printf '  \033[31m✗\033[0m %-12s missing — %s\n' '$(1)' '$(2)'; \
+            fi
+
+check-deps:
+	@printf "Build dependencies for the local-dev \`make\` flow:\n\n"
+	@printf "Required:\n"
+	@$(call check-bin,go,install Go from https://go.dev/dl/)
+	@$(call check-bin,openssl,apt install openssl  /  brew install openssl)
+	@$(call check-bin,goreleaser,go install github.com/goreleaser/goreleaser/v2@latest)
+	@$(call check-bin,pnpm,npm i -g pnpm  /  curl -fsSL https://get.pnpm.io/install.sh | sh -)
+	@$(call check-bin,rsync,apt install rsync  /  brew install rsync)
+	@$(call check-bin,curl,apt install curl  /  brew install curl)
+	@printf "\nOptional:\n"
+	@$(call check-bin,upx,apt install upx-ucl  /  brew install upx  (halves the agent binary size))
+	@$(call check-bin,protoc,apt install protobuf-compiler  /  brew install protobuf  (only when proto sources change))
+	@$(call check-bin,tinygo,https://tinygo.org/getting-started/install/  (only for Go-based system plugins))
+	@$(call check-bin,cargo,https://rustup.rs/  (only for Rust-based plugins))
 
 # `make` after a fresh clone produces a fully-functioning ./build/*:
 # data fetched, web UI baked in, signed cross-platform agent releases
@@ -52,6 +83,7 @@ help:
 	@echo "Quick start:"
 	@echo "  make                  data + web UI + binaries (full local dev build)"
 	@echo "  make build            Go binaries only (fast iteration)"
+	@echo "  make check-deps       Survey required + optional toolchain (install hints)"
 	@echo ""
 	@echo "Server / agent / CLI:"
 	@echo "  proto                 Regenerate protobuf code"
@@ -86,6 +118,7 @@ help:
 # ---------- Protobuf ----------
 
 $(PROTO_V2_OUT): $(PROTO_V2_SRC)
+	@$(call require-bin,protoc,apt install protobuf-compiler  /  brew install protobuf)
 	protoc --proto_path=proto/v2 --go_out=pkg/proto/v2 --go_opt=paths=source_relative $(notdir $(PROTO_V2_SRC))
 
 proto: $(PROTO_V2_OUT)
@@ -131,6 +164,7 @@ swag:
 # (with a warning) when tinygo isn't on PATH.
 
 example-plugins:
+	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
 	@: $${PLATYPUS_PUBLISHER_KEY:?required: path to a plugin keygen secret}
 	@test -x $(BUILD_DIR)/platypus-cli || { echo "run \`make build\` first"; exit 1; }
 	@for d in example/plugins/*/Cargo.toml; do \
@@ -142,6 +176,7 @@ example-plugins:
 	done
 
 stage-system-plugins:
+	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
 	@for d in example/plugins/system/*/Cargo.toml; do \
 	  dir=$$(dirname $$d); echo "→ rust:$$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
@@ -161,11 +196,13 @@ stage-system-plugins:
 # already there.
 
 $(IP2REGION_V4):
+	@$(call require-bin,curl,apt install curl  /  brew install curl)
 	./scripts/fetch-ip2region.sh
 
 data: $(IP2REGION_V4)
 
 data-v6:
+	@$(call require-bin,curl,apt install curl  /  brew install curl)
 	./scripts/fetch-ip2region.sh --v6
 
 # ---------- Local-dev releases ----------
@@ -179,6 +216,7 @@ data-v6:
 # Six-line openssl recipe lifted verbatim from
 # scripts/dev-publish-entrypoint.sh:28-37 (dev compose sidecar).
 $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY):
+	@$(call require-bin,openssl,apt install openssl  /  brew install openssl)
 	@mkdir -p hack
 	@openssl genpkey -algorithm ED25519 -out $(DEV_SIGNING_KEY)
 	@openssl pkey -in $(DEV_SIGNING_KEY) -pubout -outform DER \
@@ -194,6 +232,9 @@ $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY):
 # so installed agents trust the same dev key the manifest is signed
 # with.
 $(RELEASES_MANIFEST): $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY)
+	@$(call require-bin,goreleaser,go install github.com/goreleaser/goreleaser/v2@latest)
+	@command -v upx >/dev/null 2>&1 || \
+	  printf >&2 '\033[33mℹ\033[0m upx not on PATH — agent binaries will ship uncompressed (~2x download size). install: apt install upx-ucl  /  brew install upx\n'
 	@echo "→ building cross-platform agents via goreleaser"
 	AGENT_SIGNING_PUBKEY_B64=$$(cat $(DEV_SIGNING_PUBKEY)) \
 	  goreleaser build --config .goreleaser.dev.yaml --snapshot --clean
@@ -226,6 +267,7 @@ WAILS_TAGS ?= webkit2_41
 WAILS      ?= $(subst \,/,$(shell $(GO) env GOPATH))/bin/wails$(shell $(GO) env GOEXE)
 
 desktop-deps:
+	@$(call require-bin,pnpm,npm i -g pnpm)
 	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
 	cd desktop/frontend && pnpm install
 
@@ -239,11 +281,13 @@ desktop-test:      ; cd desktop && $(GO) test -race -count=1 -timeout=120s ./int
 # no /ui/ route. Login form points at any platypus-server.
 
 web-ui:
+	@$(call require-bin,pnpm,npm i -g pnpm  /  curl -fsSL https://get.pnpm.io/install.sh | sh -)
 	cd desktop/frontend && pnpm install && pnpm run build:web
 
 # rsync --delete drops stale files from a previous build; the
 # excludes preserve the committed stub + .gitignore.
 web-ui-embed: web-ui
+	@$(call require-bin,rsync,apt install rsync  /  brew install rsync)
 	@mkdir -p internal/webui/dist
 	rsync -a --delete --exclude='.gitignore' --exclude='.gitkeep' \
 	  desktop/frontend/dist-web/ internal/webui/dist/
@@ -251,6 +295,7 @@ web-ui-embed: web-ui
 # Vite preview has SPA history fallback, so React Router routes
 # survive a refresh — `python -m http.server` can't.
 web-ui-serve:
+	@$(call require-bin,pnpm,npm i -g pnpm)
 	@cd desktop/frontend && pnpm preview:web --port 7777
 
 # ---------- E2E ----------
