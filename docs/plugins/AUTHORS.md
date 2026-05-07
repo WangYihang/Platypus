@@ -4,7 +4,10 @@ This guide is for **plugin authors** — anyone building a new
 extension that will be installed onto a Platypus agent. Operator-side
 documentation (browse the marketplace, install on a fleet, audit
 capability grants) lives in [USERS.md](USERS.md). The trust model
-+ sandbox guarantees live in [SECURITY.md](SECURITY.md).
++ sandbox guarantees live in [SECURITY.md](SECURITY.md). Plugins
+that take install-time configuration (endpoints, credentials,
+allowlists) declare it via the `config:` block — see
+[CONFIG_AUTHORING.md](CONFIG_AUTHORING.md).
 
 ## TL;DR
 
