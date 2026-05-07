@@ -14,8 +14,8 @@ import (
 
 func installSysConfigAuditGo(t *testing.T) *plugin.Registry {
 	t.Helper()
-	wasm := stagedWasmBytes(t, "com.platypus.sys-config-audit-go", "1.0.0", "sys_config_audit.wasm")
-	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-config-audit-go", "1.0.0")
+	wasm := stagedWasmBytes(t, "com.platypus.sys-config-audit-go", "2.0.0", "sys_config_audit.wasm")
+	manifestBytes := stagedManifestBytes(t, "com.platypus.sys-config-audit-go", "2.0.0")
 
 	pluginRoot := t.TempDir()
 	paths := plugin.NewPaths(pluginRoot)
@@ -43,7 +43,7 @@ func installSysConfigAuditGo(t *testing.T) *plugin.Registry {
 
 	if err := reg.InstallFromBytes(context.Background(), plugin.InstallParams{
 		PluginID:            "com.platypus.sys-config-audit-go",
-		Version:             "1.0.0",
+		Version:             "2.0.0",
 		PublisherPubkey:     []byte(plugin.EncodePublicKey(pk, "")),
 		Manifest:            []byte(manifestStr),
 		Wasm:                wasm,
@@ -70,8 +70,26 @@ func TestConfigAuditGo_ListAuditors(t *testing.T) {
 	if err := protojson.Unmarshal(resp.GetPayload(), out); err != nil {
 		t.Fatalf("unmarshal: %v\npayload: %s", err, resp.GetPayload())
 	}
-	if len(out.GetAuditors()) == 0 {
-		t.Errorf("expected ≥1 auditor; got 0")
+	got := map[string]bool{}
+	for _, a := range out.GetAuditors() {
+		got[a.GetId()] = true
+	}
+	want := []string{
+		"shell.history",
+		"cloud.aws",
+		"ssh.private_keys",
+		"env.process",
+		"db.config",
+		"webapp.config",
+	}
+	for _, id := range want {
+		if !got[id] {
+			ids := make([]string, 0, len(out.GetAuditors()))
+			for _, a := range out.GetAuditors() {
+				ids = append(ids, a.GetId())
+			}
+			t.Errorf("v3 catalog missing auditor %q; got %v", id, ids)
+		}
 	}
 }
 

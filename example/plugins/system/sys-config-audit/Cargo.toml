@@ -1,6 +1,6 @@
 [package]
 name = "sys-config-audit"
-version = "2.0.0"
+version = "3.0.0"
 edition = "2021"
 publish = false
 
@@ -14,6 +14,13 @@ crate-type = ["cdylib", "rlib"]
 extism-pdk = "1.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# regex powers the gitleaks-style rule pack in src/rules.rs. We
+# enable the `unicode-perl` feature so `\b`, `\d`, `\w` work as
+# expected (gitleaks-shaped patterns rely on them); the rest of the
+# unicode features (case folding, script tables, …) stay off so the
+# wasm artefact stays close to the original size. perf-* covers DFA
+# and Aho-Corasick fast paths.
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode-perl"] }
 
 [profile.release]
 opt-level = "z"
