@@ -5,12 +5,14 @@ import { useCurrentProject } from "../../../layout/ProjectShell";
 import {
     EnrollmentPreset,
     IssueInstallResponse,
+    PluginSpecRef,
     getServerInfo,
     issueInstallArtifact,
     listEnrollmentPresets,
     listInstallPlatforms,
     seedEnrollmentPresets,
 } from "../../../lib/api";
+import { PluginSpecDraft } from "../../../components/PluginSpecEditor";
 import { humanizeError } from "../../../lib/humanizeError";
 import {
     Dialog,
@@ -57,7 +59,12 @@ export default function EnrollAgentWizard() {
     const [ttlSeconds, setTtlSeconds] = useState<number | undefined>(undefined);
     const [patMaxUses, setPatMaxUses] = useState<number | undefined>(undefined);
     const [autoApprove, setAutoApprove] = useState(false);
-    const [baselinePluginIDs, setBaselinePluginIDs] = useState<string[]>([]);
+    // pluginSpecs is the rich operator-authored shape — plugin_id +
+    // version + granted_capabilities + config_overrides +
+    // schema_version per entry. Replaces the legacy []string of
+    // plugin ids. The save-as-preset + issueInstallArtifact paths
+    // each project to the right wire shape.
+    const [pluginSpecs, setPluginSpecs] = useState<PluginSpecDraft[]>([]);
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [issued, setIssued] = useState<IssueInstallResponse | null>(null);
@@ -81,7 +88,7 @@ export default function EnrollAgentWizard() {
         setTtlSeconds(undefined);
         setPatMaxUses(undefined);
         setAutoApprove(false);
-        setBaselinePluginIDs([]);
+        setPluginSpecs([]);
         setDescription("");
         setSkipTLSVerification(true);
         setIssued(null);
@@ -181,8 +188,10 @@ export default function EnrollAgentWizard() {
                 pat_max_uses: patMaxUses,
                 auto_approve: autoApprove,
                 pat_description: description.trim() || undefined,
-                baseline_plugin_ids:
-                    baselinePluginIDs.length > 0 ? baselinePluginIDs : undefined,
+                plugin_specs:
+                    pluginSpecs.length > 0
+                        ? (pluginSpecs as PluginSpecRef[])
+                        : undefined,
             });
             setIssued(r);
             setStep("run");
@@ -200,6 +209,20 @@ export default function EnrollAgentWizard() {
         setOpen(false, { key: "await", value: "enroll" });
     }
 
+    // specsFromPreset projects an EnrollmentPreset's plugin
+    // selection into the wizard's PluginSpecDraft[] state. Rich
+    // plugin_specs (PR 4 onward) wins when supplied — preserves
+    // version + caps + config + schema_version. Falls back to
+    // wrapping each id from the legacy baseline_plugin_ids field
+    // for presets that haven't been re-saved since the migration.
+    function specsFromPreset(p: EnrollmentPreset): PluginSpecDraft[] {
+        if (p.plugin_specs && p.plugin_specs.length > 0) {
+            return p.plugin_specs as PluginSpecDraft[];
+        }
+        const ids = p.baseline_plugin_ids ?? [];
+        return ids.map((id) => ({ plugin_id: id }));
+    }
+
     // applyPreset snaps every wizard field to the preset's saved
     // values and jumps the operator straight to Review. Server
     // endpoint falls back to the live server when the preset doesn't
@@ -215,7 +238,7 @@ export default function EnrollAgentWizard() {
         setPatMaxUses(p.pat_max_uses);
         setAutoApprove(p.auto_approve);
         setSkipTLSVerification(p.skip_tls_verification);
-        setBaselinePluginIDs(p.baseline_plugin_ids ?? []);
+        setPluginSpecs(specsFromPreset(p));
         setDescription(p.pat_description ?? "");
         setEditingPresetID(null);
         setStep("review");
@@ -232,7 +255,7 @@ export default function EnrollAgentWizard() {
         setPatMaxUses(p.pat_max_uses);
         setAutoApprove(p.auto_approve);
         setSkipTLSVerification(p.skip_tls_verification);
-        setBaselinePluginIDs(p.baseline_plugin_ids ?? []);
+        setPluginSpecs(specsFromPreset(p));
         setDescription(p.pat_description ?? "");
         setEditingPresetID(p.preset_id);
         setStep("server");
@@ -306,9 +329,9 @@ export default function EnrollAgentWizard() {
         {
             label: "Baseline plugins",
             value:
-                baselinePluginIDs.length === 0
+                pluginSpecs.length === 0
                     ? "(none — agent boots empty)"
-                    : `${baselinePluginIDs.length}: ${baselinePluginIDs.join(", ")}`,
+                    : `${pluginSpecs.length}: ${pluginSpecs.map((s) => s.plugin_id).join(", ")}`,
             editStep: "baseline_plugins",
         },
         {
@@ -415,8 +438,8 @@ export default function EnrollAgentWizard() {
                 )}
                 {step === "baseline_plugins" && (
                     <BaselinePluginsStep
-                        selected={baselinePluginIDs}
-                        onChange={setBaselinePluginIDs}
+                        value={pluginSpecs}
+                        onChange={setPluginSpecs}
                     />
                 )}
                 {step === "description" && (
@@ -446,9 +469,9 @@ export default function EnrollAgentWizard() {
                             pat_max_uses: patMaxUses,
                             auto_approve: autoApprove,
                             skip_tls_verification: skipTLSVerification,
-                            baseline_plugin_ids:
-                                baselinePluginIDs.length > 0
-                                    ? baselinePluginIDs
+                            plugin_specs:
+                                pluginSpecs.length > 0
+                                    ? pluginSpecs
                                     : undefined,
                             pat_description:
                                 description.trim() || undefined,

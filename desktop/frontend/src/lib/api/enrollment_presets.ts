@@ -1,5 +1,7 @@
 import { authFetch, authJSON } from "../auth";
 
+import type { PluginSpecRef } from "./install";
+
 // Saved enrollment configurations. A preset captures the operator's
 // wizard inputs (target OS/arch, TTL, PAT max-uses, baseline plugins,
 // …) so repeat enrolments collapse to "pick preset → Generate" instead
@@ -21,6 +23,13 @@ export interface EnrollmentPreset {
     pat_max_uses?: number;
     auto_approve: boolean;
     skip_tls_verification: boolean;
+    // plugin_specs is the rich shape: plugin_id + version +
+    // granted_capabilities + config_overrides + schema_version per
+    // entry. Server emits both this AND the legacy
+    // baseline_plugin_ids during the migration window so consumers
+    // that haven't been upgraded keep working. New code reads
+    // plugin_specs.
+    plugin_specs?: PluginSpecRef[];
     baseline_plugin_ids?: string[];
     pat_description?: string;
     // is_seed flags the three system-default presets seeded on first

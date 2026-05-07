@@ -16,11 +16,17 @@ import {
     matchingPreset,
 } from "../../../../lib/baselinePresets";
 import { humanizeError } from "../../../../lib/humanizeError";
+import { PluginSpecDraft } from "../../../../components/PluginSpecEditor";
 
 interface Props {
-    /** Plugin IDs the operator has ticked so far. */
-    selected: string[];
-    onChange: (next: string[]) => void;
+    /** PluginSpec drafts the operator has selected so far. The
+     *  step renders only the picker UI; rich per-plugin config is
+     *  edited via the parent's "Configure" expand affordance
+     *  (see PR 4.6 follow-up). For now every selected plugin gets
+     *  a minimal {plugin_id} spec — empty caps, empty config —
+     *  matching the legacy zero-config default. */
+    value: PluginSpecDraft[];
+    onChange: (next: PluginSpecDraft[]) => void;
 }
 
 // BaselinePluginsStep is the wizard's per-enrollment plugin picker.
@@ -39,18 +45,33 @@ interface Props {
 //   - Selection is just a list of plugin IDs; the install bundle
 //     carries them forward and the agent's allowlist filter applies
 //     at first boot.
-export default function BaselinePluginsStep({ selected, onChange }: Props) {
+export default function BaselinePluginsStep({ value, onChange }: Props) {
     const plugins = useQuery({
         queryKey: ["enroll", "system-plugins-pool"],
         queryFn: () => listSystemPlugins(),
         refetchOnWindowFocus: false,
     });
 
+    // Project value → flat ids for rendering (the picker UI stays
+    // checkbox-per-plugin) and back to PluginSpec rows on each
+    // edit. Per-plugin rich config is added by the parent's future
+    // "Configure" expand row; for now the spec carries only its id.
+    const selected = value.map((s) => s.plugin_id);
+
     function toggle(id: string) {
-        const set = new Set(selected);
-        if (set.has(id)) set.delete(id);
-        else set.add(id);
-        onChange([...set]);
+        const has = value.some((s) => s.plugin_id === id);
+        if (has) {
+            onChange(value.filter((s) => s.plugin_id !== id));
+        } else {
+            onChange([...value, { plugin_id: id }]);
+        }
+    }
+
+    function setSelectedIDs(ids: string[]) {
+        // Preserve any rich PluginSpec entries the operator has
+        // already authored; new ids get a minimal {plugin_id} spec.
+        const byID = new Map(value.map((s) => [s.plugin_id, s] as const));
+        onChange(ids.map((id) => byID.get(id) ?? { plugin_id: id }));
     }
 
     if (plugins.isLoading) {
@@ -112,7 +133,7 @@ export default function BaselinePluginsStep({ selected, onChange }: Props) {
                 catalogIDs={new Set(list.map((p) => p.id))}
                 selected={selected}
                 onPick={(p) =>
-                    onChange(
+                    setSelectedIDs(
                         p.pluginIDs.filter((id) =>
                             list.some((catalog) => catalog.id === id),
                         ),

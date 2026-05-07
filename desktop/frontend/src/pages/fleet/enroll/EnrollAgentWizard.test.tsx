@@ -388,7 +388,15 @@ describe("<EnrollAgentWizard>", () => {
         expect(body.target_arch).toBe("amd64");
         expect(body.ttl_seconds).toBe(600);
         expect(body.pat_max_uses).toBe(1);
-        expect(body.baseline_plugin_ids).toEqual(["sys-info"]);
+        // Wizard now sends plugin_specs (rich shape). The preset
+        // here used the legacy baseline_plugin_ids field; the
+        // wizard's specsFromPreset wraps each id into a minimal
+        // {plugin_id} spec. Assert the projected plugin_ids match.
+        expect(
+            (body.plugin_specs ?? []).map(
+                (s: { plugin_id: string }) => s.plugin_id,
+            ),
+        ).toEqual(["sys-info"]);
         expect(body.pat_description).toBe("Linux fleet");
         expect(body.auto_approve).toBe(false);
     });

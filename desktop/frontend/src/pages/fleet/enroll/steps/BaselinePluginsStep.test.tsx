@@ -39,11 +39,26 @@ function renderStep(selected: string[], onChange = vi.fn()) {
     function Wrapper({ children }: { children: ReactNode }) {
         return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
     }
+    // The step now takes PluginSpecDraft[] (rich shape). Tests
+    // continue to pass plain id strings — the helper wraps each
+    // into a minimal {plugin_id} spec so the existing assertion
+    // shape stays readable.
+    const value = selected.map((id) => ({ plugin_id: id }));
     render(
-        <BaselinePluginsStep selected={selected} onChange={onChange} />,
+        <BaselinePluginsStep value={value} onChange={onChange} />,
         { wrapper: Wrapper },
     );
     return { onChange };
+}
+
+// asIDs reads the latest onChange call's PluginSpecDraft[] and
+// projects to a flat []string of plugin_id values, so existing
+// id-based assertions keep working without per-test rewriting.
+function asIDs(onChange: ReturnType<typeof vi.fn>): string[] {
+    const calls = onChange.mock.calls;
+    if (calls.length === 0) return [];
+    const last = calls[calls.length - 1][0] as { plugin_id: string }[];
+    return last.map((s) => s.plugin_id);
 }
 
 const fakePlugins = [
@@ -94,7 +109,7 @@ describe("<BaselinePluginsStep>", () => {
         const cb = screen.getByRole("checkbox", { name: /System Info/i });
         await user.click(cb);
 
-        expect(onChange).toHaveBeenCalledWith(["com.platypus.sys-info"]);
+        expect(asIDs(onChange)).toEqual(["com.platypus.sys-info"]);
     });
 
     it("clearing a previously selected row removes it", async () => {
@@ -106,7 +121,7 @@ describe("<BaselinePluginsStep>", () => {
         const cb = screen.getByRole("checkbox", { name: /System Info/i });
         await user.click(cb);
 
-        expect(onChange).toHaveBeenCalledWith([]);
+        expect(asIDs(onChange)).toEqual([]);
     });
 
     it("default-empty selection is the secure default for fresh enrollments", () => {
@@ -134,7 +149,7 @@ describe("<BaselinePluginsStep>", () => {
         await user.click(
             screen.getByRole("button", { name: /Read-only inspection/i }),
         );
-        expect(onChange).toHaveBeenCalledWith([
+        expect(asIDs(onChange)).toEqual([
             "com.platypus.sys-info",
             "com.platypus.sys-procs-linux",
         ]);
@@ -151,6 +166,6 @@ describe("<BaselinePluginsStep>", () => {
         );
         const user = userEvent.setup();
         await user.click(screen.getByRole("button", { name: /Minimal/i }));
-        expect(onChange).toHaveBeenCalledWith([]);
+        expect(asIDs(onChange)).toEqual([]);
     });
 });
