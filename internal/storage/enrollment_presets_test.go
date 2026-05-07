@@ -38,7 +38,10 @@ func TestEnrollmentPresets_CreateGetList(t *testing.T) {
 		PATMaxUses:          intPtr(1),
 		AutoApprove:         false,
 		SkipTLSVerification: true,
-		BaselinePluginIDs:   []string{"sys-info", "shell"},
+		PluginSpecs: []storage.PluginSpec{
+			{PluginID: "sys-info"},
+			{PluginID: "shell"},
+		},
 		PATDescription:      "Linux fleet baseline",
 		CreatedByUser:       admin.ID,
 		CreatedAt:           now,
@@ -61,8 +64,8 @@ func TestEnrollmentPresets_CreateGetList(t *testing.T) {
 	if !got.SkipTLSVerification || got.AutoApprove {
 		t.Fatalf("flags: skipTLS=%v autoApprove=%v", got.SkipTLSVerification, got.AutoApprove)
 	}
-	if len(got.BaselinePluginIDs) != 2 || got.BaselinePluginIDs[0] != "sys-info" {
-		t.Fatalf("plugins = %v", got.BaselinePluginIDs)
+	if len(got.PluginSpecs) != 2 || got.PluginSpecs[0].PluginID != "sys-info" {
+		t.Fatalf("plugins = %v", got.PluginSpecs)
 	}
 
 	// Listing returns at least our row.
@@ -109,7 +112,7 @@ func TestEnrollmentPresets_Update(t *testing.T) {
 	p.Name = "win-prod"
 	p.TTLSeconds = intPtr(900)
 	p.AutoApprove = true
-	p.BaselinePluginIDs = []string{"shell"}
+	p.PluginSpecs = []storage.PluginSpec{{PluginID: "shell"}}
 	p.UpdatedAt = now.Add(time.Minute)
 	if err := db.EnrollmentPresets().Update(context.Background(), p); err != nil {
 		t.Fatalf("Update: %v", err)
@@ -122,8 +125,8 @@ func TestEnrollmentPresets_Update(t *testing.T) {
 	if got.Name != "win-prod" || *got.TTLSeconds != 900 || !got.AutoApprove {
 		t.Fatalf("post-update: %+v", got)
 	}
-	if len(got.BaselinePluginIDs) != 1 || got.BaselinePluginIDs[0] != "shell" {
-		t.Fatalf("plugins post-update = %v", got.BaselinePluginIDs)
+	if len(got.PluginSpecs) != 1 || got.PluginSpecs[0].PluginID != "shell" {
+		t.Fatalf("plugins post-update = %v", got.PluginSpecs)
 	}
 }
 

@@ -45,6 +45,7 @@ import (
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/mesh"
 	"github.com/WangYihang/Platypus/internal/optoken"
+	"github.com/WangYihang/Platypus/internal/cryptobox"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/recording"
 	"github.com/WangYihang/Platypus/internal/server/sysplugins"
@@ -112,12 +113,12 @@ func main() {
 	//      compromise of the data volume yields both ciphertext and key.
 	if cfg.CAKEK != "" {
 		// kong already populated the env var indirectly; re-export so
-		// internal/pki (which reads pki.KEKEnvVar at use time) finds it.
-		_ = os.Setenv(pki.KEKEnvVar, cfg.CAKEK)
+		// cryptobox (which reads the env var at use time) finds it.
+		_ = os.Setenv(cryptobox.EnvVar, cfg.CAKEK)
 	} else if cfg.Dev {
-		pki.KEKPath = cfg.CAKEKPath()
+		cryptobox.FilePath = cfg.CAKEKPath()
 		log.L.Warn("dev_mode_kek_fallback_enabled",
-			"path", pki.KEKPath,
+			"path", cryptobox.FilePath,
 			"hint", "set --ca-kek (or PLATYPUS_CA_KEK) to keep the CA key out of the data volume",
 		)
 	} else {

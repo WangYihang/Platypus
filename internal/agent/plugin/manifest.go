@@ -1,5 +1,7 @@
 package plugin
 
+import "gopkg.in/yaml.v3"
+
 // CapabilityID is the stable string a plugin uses to declare access to
 // a host-function family. The set is fixed agent-side: a plugin cannot
 // invent new capabilities. Keeping this list short and grep-able is
@@ -67,6 +69,44 @@ type Manifest struct {
 	Capabilities ManifestCapabilities `yaml:"capabilities"`
 	Resources    ManifestResources    `yaml:"resources"`
 	Signature    ManifestSignature    `yaml:"signature"`
+	// Config declares the deployment-time configuration shape for
+	// this plugin. Optional — plugins that take all their parameters
+	// at RPC-call time can leave it empty and the install path
+	// behaves as it always has. When present, the operator-facing UI
+	// renders a form against the schema, the server validates
+	// supplied configs against it, and the agent SDK delivers a
+	// validated config blob to the plugin's OnInstall hook.
+	Config ManifestConfig `yaml:"config,omitempty"`
+}
+
+// ManifestConfig is the authoring-side declaration of a plugin's
+// deployment-time configuration. The shape mirrors what the
+// frontend's schema-driven editor consumes:
+//
+//   - Schema: a JSON Schema (draft 2020-12 by convention) describing
+//     valid configurations. We pass the schema through verbatim — Go
+//     never materialises it as an AST. yaml.Node is the
+//     pass-through-friendly representation; validation happens via
+//     gojsonschema (or similar) in manifest_validate.go.
+//   - Defaults: optional initial values that get merged with the
+//     schema's `default:` keywords at resolve time. Saved configs
+//     store only the operator's overrides; this lets plugin authors
+//     change defaults without rewriting every deployed config.
+//   - SecretFields: JSON Pointer-style paths into the schema marking
+//     fields as sensitive. The UI renders password inputs / "use
+//     saved secret" pickers for these; storage swaps the inline
+//     value for a {"$secret": "sec_..."} reference; logs and
+//     responses redact them.
+//   - SchemaVersion: bumped on breaking changes. PluginSpec carries
+//     the schema_version it was authored against; the resolver
+//     refuses to deploy a config whose schema_version doesn't match
+//     the manifest currently published, surfacing a clear
+//     "operator must reauthor" prompt rather than silent breakage.
+type ManifestConfig struct {
+	Schema        yaml.Node `yaml:"schema,omitempty"`
+	Defaults      yaml.Node `yaml:"defaults,omitempty"`
+	SecretFields  []string  `yaml:"secret_fields,omitempty"`
+	SchemaVersion int       `yaml:"schema_version,omitempty"`
 }
 
 // ManifestStream declares ownership of one wire stream type. The

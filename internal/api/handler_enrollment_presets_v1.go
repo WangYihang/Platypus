@@ -76,13 +76,41 @@ func toEnrollmentPresetItem(p *storage.EnrollmentPreset) enrollmentPresetItem {
 		PATMaxUses:          p.PATMaxUses,
 		AutoApprove:         p.AutoApprove,
 		SkipTLSVerification: p.SkipTLSVerification,
-		BaselinePluginIDs:   p.BaselinePluginIDs,
+		BaselinePluginIDs:   pluginIDsFromSpecs(p.PluginSpecs),
 		PATDescription:      p.PATDescription,
 		IsSeed:              p.IsSeed,
 		CreatedByUser:       p.CreatedByUser,
 		CreatedAt:           p.CreatedAt,
 		UpdatedAt:           p.UpdatedAt,
 	}
+}
+
+// pluginIDsFromSpecs / specsFromPluginIDs are the back-compat shim
+// the v1 enrollment-presets API uses while PR 1 ships the unified
+// PluginSpec storage shape but keeps the legacy wire format. PR 2
+// replaces the API DTO with the rich shape and these helpers go away.
+func pluginIDsFromSpecs(specs []storage.PluginSpec) []string {
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(specs))
+	for _, s := range specs {
+		if s.PluginID != "" {
+			out = append(out, s.PluginID)
+		}
+	}
+	return out
+}
+
+func specsFromPluginIDs(ids []string) []storage.PluginSpec {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]storage.PluginSpec, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, storage.PluginSpec{PluginID: id})
+	}
+	return out
 }
 
 // --- Handlers ------------------------------------------------------------
@@ -120,7 +148,7 @@ func (h *EnrollmentPresetsHandler) Create(c *gin.Context) {
 		PATMaxUses:          req.PATMaxUses,
 		AutoApprove:         req.AutoApprove,
 		SkipTLSVerification: req.SkipTLSVerification,
-		BaselinePluginIDs:   req.BaselinePluginIDs,
+		PluginSpecs:         specsFromPluginIDs(req.BaselinePluginIDs),
 		PATDescription:      req.PATDescription,
 		CreatedByUser:       claims.UserID,
 		CreatedAt:           now,
@@ -215,7 +243,7 @@ func (h *EnrollmentPresetsHandler) Update(c *gin.Context) {
 	existing.PATMaxUses = req.PATMaxUses
 	existing.AutoApprove = req.AutoApprove
 	existing.SkipTLSVerification = req.SkipTLSVerification
-	existing.BaselinePluginIDs = req.BaselinePluginIDs
+	existing.PluginSpecs = specsFromPluginIDs(req.BaselinePluginIDs)
 	existing.PATDescription = req.PATDescription
 	existing.UpdatedAt = time.Now().UTC()
 

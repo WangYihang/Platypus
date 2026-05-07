@@ -194,7 +194,7 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
        approval_status, approval_decided_at, approval_decided_by, approval_reason,
-       baseline_plugin_ids`
+       plugin_specs`
 
 // Upsert merges the given identity into the hosts table. Matching order:
 //
@@ -669,7 +669,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		approvalAt      sql.NullTime
 		approvalBy      sql.NullString
 		approvalReason  sql.NullString
-		baselineCSV     string
+		baselineCSV     sql.NullString
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
@@ -793,7 +793,7 @@ func scanHostRow(s rowScanner) (*Host, error) {
 	if approvalReason.Valid {
 		h.ApprovalReason = approvalReason.String
 	}
-	h.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV)
+	h.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	return &h, nil
 }
 
@@ -943,7 +943,7 @@ func nullIfUint32(n uint32) any {
 // the column to "" — the agent gets reconciled to mandatory-core only.
 func (r *HostRepo) SetBaselinePluginIDs(ctx context.Context, hostID string, ids []string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE hosts SET baseline_plugin_ids = ? WHERE id = ?`,
+		`UPDATE hosts SET plugin_specs = ? WHERE id = ?`,
 		encodeBaselinePluginIDs(ids), hostID)
 	if err != nil {
 		return err

@@ -28,6 +28,32 @@ export interface MarketplacePlugin {
     capabilities: string[];
     tags?: string[];
     fetched_at_unix: number;
+
+    /**
+     * Optional plugin-config block surfaced from the manifest. When a
+     * plugin declares a config schema, the install / preset editor
+     * renders a schema-driven form (RJSF or equivalent) instead of
+     * the legacy "no per-plugin parameters" path. All four fields are
+     * absent for plugins that don't declare config; consumers should
+     * treat that as "this plugin has no deployment-time configuration".
+     *
+     * - config_schema: JSON Schema (draft 2020-12 by convention).
+     *   Pass directly to ajv / RJSF — the server emits it as JSON.
+     * - config_defaults: optional initial values, merged with the
+     *   schema's `default:` keywords on the server side at resolve
+     *   time. The UI typically pre-fills these in the form.
+     * - config_secret_fields: JSON Pointer paths into the schema
+     *   marking sensitive fields. The editor swaps in a "saved
+     *   secret" picker for these so the operator never types
+     *   credentials in the clear.
+     * - config_schema_version: pinned by the PluginSpec the operator
+     *   authors against. The server refuses to deploy a spec whose
+     *   version doesn't match the manifest currently published.
+     */
+    config_schema?: object;
+    config_defaults?: object;
+    config_secret_fields?: string[];
+    config_schema_version?: number;
 }
 
 export interface MarketplaceRefreshStatus {

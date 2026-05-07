@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/cryptobox"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
@@ -349,9 +350,9 @@ func TestEnsureCA_KEKFileFallback(t *testing.T) {
 
 	t.Setenv(pki.KEKEnvVar, "")
 	kekPath := filepath.Join(t.TempDir(), "nested", "ca.kek")
-	prev := pki.KEKPath
-	pki.KEKPath = kekPath
-	t.Cleanup(func() { pki.KEKPath = prev })
+	prev := cryptobox.FilePath
+	cryptobox.FilePath = kekPath
+	t.Cleanup(func() { cryptobox.FilePath = prev })
 
 	ctx := context.Background()
 	admin := &user.User{ID: "u", Username: "u", PasswordHash: "h", Role: user.RoleAdmin, CreatedAt: time.Now().UTC()}

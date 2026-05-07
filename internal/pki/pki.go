@@ -25,8 +25,6 @@ package pki
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -34,21 +32,15 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/fs"
 	"math/big"
 	"net"
 	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/cryptobox"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
@@ -63,44 +55,23 @@ const (
 	// always valid when the other is — simplifies reasoning.
 	DefaultAgentCertTTL = 30 * 24 * time.Hour
 
-	// KEKEnvVar is where the AES-256 key-encryption-key lives. Hex-
-	// encoded (64 chars). Empty or missing → operator hasn't
-	// configured CA; the service refuses to mint keys rather than
-	// silently falling back to plaintext.
-	KEKEnvVar = "PLATYPUS_CA_KEK"
-
-	aesNonceLen = 12 // AES-GCM standard nonce length
-	aesKeyLen   = 32 // AES-256
+// KEKEnvVar / KEKPath are kept as alias spellings for back-compat
+// with the pre-cryptobox call sites; the canonical names live in the
+// cryptobox package. New code should reach for cryptobox.EnvVar /
+// cryptobox.FilePath directly.
 )
 
-// ErrKEKMissing is returned when PLATYPUS_CA_KEK isn't set at the
-// moment we need to seal / unseal a key. Handled as "CA not
-// configured" at the admin layer.
-var ErrKEKMissing = errors.New("pki: PLATYPUS_CA_KEK not set")
+// KEKEnvVar is the env var name carrying the hex-encoded KEK. Alias
+// for cryptobox.EnvVar; new callers should reach for cryptobox.
+const KEKEnvVar = cryptobox.EnvVar
 
-// ErrKEKMalformed is returned when the env var is set but isn't 32
-// bytes of hex. Operators get a crisp error at startup rather than a
-// mysterious 500 later.
-var ErrKEKMalformed = errors.New("pki: PLATYPUS_CA_KEK must be 64 hex chars (32 bytes)")
-
-// KEKPath, when non-empty, enables a dev-friendly fallback: if the
-// PLATYPUS_CA_KEK env var is unset, readKEK reads the hex-encoded KEK
-// from this file, and if the file is missing it generates a random
-// KEK and writes it there (0600). The server main sets this to
-// "<data-dir>/ca.kek" so `docker compose up` works with zero config.
-// Tests and code paths that want the strict "env var required" old
-// behavior leave it empty.
-//
-// Trade-off when the fallback is active: the KEK sits next to the
-// SQLite file it's supposed to protect, so the CA private key is
-// effectively plaintext to anyone who can read the data volume. For
-// production, set PLATYPUS_CA_KEK explicitly (env takes precedence).
-var KEKPath string
-
-// autoKEKWarnOnce gates the one-shot WARN log emitted when readKEK
-// auto-generates a KEK. Without it the warning would fire on every
-// IssueAgentCert / RotateCA call.
-var autoKEKWarnOnce sync.Once
+// ErrKEKMissing / ErrKEKMalformed are re-exports of the cryptobox
+// errors so existing handler call sites keep matching the right
+// sentinel without having to import a new package.
+var (
+	ErrKEKMissing   = cryptobox.ErrKEKMissing
+	ErrKEKMalformed = cryptobox.ErrKEKMalformed
+)
 
 // Service wraps the storage + KEK plumbing. Stateless — safe to share
 // across goroutines.
@@ -149,11 +120,6 @@ func (s *Service) EnsureCA(ctx context.Context, projectID, createdBy string) (*s
 // createCA generates a fresh ECDSA P-256 keypair, self-signs a root
 // cert, encrypts the private key under the KEK, and persists the row.
 func (s *Service) createCA(ctx context.Context, projectID, createdBy string) (*storage.ProjectCA, error) {
-	kek, err := readKEK()
-	if err != nil {
-		return nil, err
-	}
-
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("pki: generate CA key: %w", err)
@@ -166,7 +132,7 @@ func (s *Service) createCA(ctx context.Context, projectID, createdBy string) (*s
 	if err != nil {
 		return nil, fmt.Errorf("pki: marshal CA privkey: %w", err)
 	}
-	nonce, ct, err := aesGCMSeal(kek, privDER)
+	nonce, ct, err := cryptobox.Seal(privDER)
 	if err != nil {
 		return nil, err
 	}
@@ -267,11 +233,7 @@ func (s *Service) IssueAgentCert(ctx context.Context, in IssueInput) (*IssueResu
 	// Decrypt CA private key (kept in memory for the minimum necessary
 	// span; Go's GC will zero it eventually, which is acceptable for
 	// MVP — a forensic-grade solution would explicitly zero the slice).
-	kek, err := readKEK()
-	if err != nil {
-		return nil, err
-	}
-	caPriv, err := unsealCAPriv(kek, ca.PrivKeyNonce, ca.PrivKeyCT)
+	caPriv, err := unsealCAPriv(ca.PrivKeyNonce, ca.PrivKeyCT)
 	if err != nil {
 		return nil, err
 	}
@@ -369,11 +331,7 @@ func (s *Service) IssueServerCert(ctx context.Context, projectID string, hosts [
 		return nil, errors.New("pki: IssueServerCert: project CA is revoked")
 	}
 
-	kek, err := readKEK()
-	if err != nil {
-		return nil, err
-	}
-	caPriv, err := unsealCAPriv(kek, ca.PrivKeyNonce, ca.PrivKeyCT)
+	caPriv, err := unsealCAPriv(ca.PrivKeyNonce, ca.PrivKeyCT)
 	if err != nil {
 		return nil, err
 	}
@@ -527,93 +485,12 @@ func serverURISANs(projectID string) ([]*url.URL, error) {
 
 // --- Low-level helpers ---------------------------------------------------
 
-// readKEK resolves the key-encryption-key in priority order:
-//  1. PLATYPUS_CA_KEK env var (the production path).
-//  2. KEKPath file, if that package-level var is set (dev fallback).
-//  3. Generate a random KEK and persist it at KEKPath, emitting a
-//     one-shot WARN. Only reachable when KEKPath is set.
-//
-// If neither the env var nor KEKPath is set the function returns
-// ErrKEKMissing, preserving the prior strict behavior for tests and
-// any deployment that opts out of the file fallback.
-func readKEK() ([]byte, error) {
-	if raw := os.Getenv(KEKEnvVar); raw != "" {
-		return decodeKEK(raw)
-	}
-	if KEKPath == "" {
-		return nil, ErrKEKMissing
-	}
-
-	data, err := os.ReadFile(KEKPath)
-	if err == nil {
-		return decodeKEK(strings.TrimSpace(string(data)))
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("pki: read kek file %q: %w", KEKPath, err)
-	}
-
-	kek := make([]byte, aesKeyLen)
-	if _, err := rand.Read(kek); err != nil {
-		return nil, fmt.Errorf("pki: generate kek: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(KEKPath), 0o700); err != nil {
-		return nil, fmt.Errorf("pki: create kek dir: %w", err)
-	}
-	encoded := hex.EncodeToString(kek) + "\n"
-	if err := os.WriteFile(KEKPath, []byte(encoded), 0o600); err != nil {
-		return nil, fmt.Errorf("pki: write kek file %q: %w", KEKPath, err)
-	}
-	autoKEKWarnOnce.Do(func() {
-		log.L.Warn("auto_generated_ca_kek",
-			"path", KEKPath,
-			"hint", "set PLATYPUS_CA_KEK in production to keep the key outside the data volume",
-		)
-	})
-	return kek, nil
-}
-
-// decodeKEK validates a hex-encoded KEK string and returns the raw
-// 32-byte key, or ErrKEKMalformed on any decoding / length mismatch.
-func decodeKEK(raw string) ([]byte, error) {
-	kek, err := hex.DecodeString(raw)
-	if err != nil || len(kek) != aesKeyLen {
-		return nil, ErrKEKMalformed
-	}
-	return kek, nil
-}
-
-// aesGCMSeal encrypts plaintext under kek with a fresh nonce.
-func aesGCMSeal(kek, plaintext []byte) (nonce, ciphertext []byte, err error) {
-	block, err := aes.NewCipher(kek)
-	if err != nil {
-		return nil, nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, nil, err
-	}
-	nonce = make([]byte, aesNonceLen)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, nil, err
-	}
-	ciphertext = gcm.Seal(nil, nonce, plaintext, nil)
-	return nonce, ciphertext, nil
-}
-
-func aesGCMOpen(kek, nonce, ct []byte) ([]byte, error) {
-	block, err := aes.NewCipher(kek)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	return gcm.Open(nil, nonce, ct, nil)
-}
-
-func unsealCAPriv(kek, nonce, ct []byte) (*ecdsa.PrivateKey, error) {
-	pkcs8, err := aesGCMOpen(kek, nonce, ct)
+// unsealCAPriv decrypts the stored CA private key blob using the
+// process-wide KEK and parses it back into an *ecdsa.PrivateKey.
+// KEK loading lives in cryptobox; this wrapper preserves the strict
+// type checks (P-256 only) that callers depend on.
+func unsealCAPriv(nonce, ct []byte) (*ecdsa.PrivateKey, error) {
+	pkcs8, err := cryptobox.Open(nonce, ct)
 	if err != nil {
 		return nil, fmt.Errorf("pki: unseal CA priv: %w", err)
 	}
@@ -726,15 +603,11 @@ func encodePublicKey(pub any) (string, error) {
 // CreateRevocationList) — consumers that only speak RFC5280 v2 CRLs
 // will upgrade when we add the extension.
 func (s *Service) BuildCRL(ctx context.Context, projectID string) ([]byte, error) {
-	kek, err := readKEK()
-	if err != nil {
-		return nil, err
-	}
 	ca, err := s.db.ProjectCA().Get(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	caPriv, err := unsealCAPriv(kek, ca.PrivKeyNonce, ca.PrivKeyCT)
+	caPriv, err := unsealCAPriv(ca.PrivKeyNonce, ca.PrivKeyCT)
 	if err != nil {
 		return nil, err
 	}

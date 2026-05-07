@@ -28,6 +28,22 @@ type PluginRow struct {
 	Tags           []string `json:"tags,omitempty"`
 	FetchedAtUnix  int64    `json:"fetched_at_unix"`
 
+	// ConfigSchema, ConfigDefaults, ConfigSecretFields, and
+	// ConfigSchemaVersion surface the manifest's config block so the
+	// FE can render a schema-driven editor and so server-side
+	// validation has the schema available without re-fetching the
+	// manifest. All four are absent for plugins that don't declare a
+	// config block — the FE renders no config form in that case and
+	// the validator allows empty configs only.
+	//
+	// Schema and Defaults are pass-through json.RawMessage. The
+	// catalog ingester normalises the YAML into JSON; the FE feeds
+	// these into ajv / RJSF directly.
+	ConfigSchema        json.RawMessage `json:"config_schema,omitempty"`
+	ConfigDefaults      json.RawMessage `json:"config_defaults,omitempty"`
+	ConfigSecretFields  []string        `json:"config_secret_fields,omitempty"`
+	ConfigSchemaVersion int             `json:"config_schema_version,omitempty"`
+
 	// PublisherPubkey is the raw .pub file contents (minisign Ed25519
 	// public key) the agent uses to verify the wasm signature on
 	// install. Empty for legacy index files; the install_marketplace

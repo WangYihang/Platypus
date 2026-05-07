@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"time"
 )
@@ -29,8 +28,12 @@ type EnrollmentPreset struct {
 	PATMaxUses          *int
 	AutoApprove         bool
 	SkipTLSVerification bool
-	BaselinePluginIDs   []string
-	PATDescription      string
+	// PluginSpecs replaces the old []string baseline_plugin_ids. Each
+	// entry carries plugin_id + version + granted_capabilities +
+	// config_overrides + schema_version, the same atom used at every
+	// other layer that ships plugin deployment intent.
+	PluginSpecs    []PluginSpec
+	PATDescription string
 	// IsSeed flags the three system defaults that are inserted on
 	// first wizard open of a fresh project. Operators can still
 	// edit / delete them; the flag exists so the UI can render a
@@ -91,7 +94,7 @@ func NewPresetID() (string, error) {
 
 // Create inserts a single preset row.
 func (r *EnrollmentPresetRepo) Create(ctx context.Context, p *EnrollmentPreset) error {
-	pluginsJSON, err := encodePluginIDs(p.BaselinePluginIDs)
+	specsJSON, err := EncodePluginSpecs(p.PluginSpecs)
 	if err != nil {
 		return err
 	}
@@ -101,14 +104,14 @@ func (r *EnrollmentPresetRepo) Create(ctx context.Context, p *EnrollmentPreset) 
 			server_endpoint, target_os, target_arch,
 			ttl_seconds, pat_max_uses,
 			auto_approve, skip_tls_verification,
-			baseline_plugin_ids, pat_description,
+			plugin_specs, pat_description,
 			is_seed, created_by_user, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.PresetID, p.ProjectID, p.Name, nullableString(p.Description),
 		nullableString(p.ServerEndpoint), nullableString(p.TargetOS), nullableString(p.TargetArch),
 		nullableIntPtr(p.TTLSeconds), nullableIntPtr(p.PATMaxUses),
 		boolToInt(p.AutoApprove), boolToInt(p.SkipTLSVerification),
-		pluginsJSON, nullableString(p.PATDescription),
+		specsJSON, nullableString(p.PATDescription),
 		boolToInt(p.IsSeed), nullableString(p.CreatedByUser),
 		p.CreatedAt.UTC(), p.UpdatedAt.UTC(),
 	)
@@ -122,7 +125,7 @@ func (r *EnrollmentPresetRepo) Get(ctx context.Context, presetID string) (*Enrol
 		       server_endpoint, target_os, target_arch,
 		       ttl_seconds, pat_max_uses,
 		       auto_approve, skip_tls_verification,
-		       baseline_plugin_ids, pat_description,
+		       plugin_specs, pat_description,
 		       is_seed, created_by_user, created_at, updated_at
 		  FROM enrollment_presets WHERE preset_id = ?`, presetID)
 	p, err := scanEnrollmentPreset(row)
@@ -139,7 +142,7 @@ func (r *EnrollmentPresetRepo) ListByProject(ctx context.Context, projectID stri
 		       server_endpoint, target_os, target_arch,
 		       ttl_seconds, pat_max_uses,
 		       auto_approve, skip_tls_verification,
-		       baseline_plugin_ids, pat_description,
+		       plugin_specs, pat_description,
 		       is_seed, created_by_user, created_at, updated_at
 		  FROM enrollment_presets
 		 WHERE project_id = ?
@@ -164,7 +167,7 @@ func (r *EnrollmentPresetRepo) ListByProject(ctx context.Context, projectID stri
 // rename and tweak settings; provenance and "is this a seed?" don't
 // change after creation. Returns ErrNotFound if the row vanished.
 func (r *EnrollmentPresetRepo) Update(ctx context.Context, p *EnrollmentPreset) error {
-	pluginsJSON, err := encodePluginIDs(p.BaselinePluginIDs)
+	specsJSON, err := EncodePluginSpecs(p.PluginSpecs)
 	if err != nil {
 		return err
 	}
@@ -174,14 +177,14 @@ func (r *EnrollmentPresetRepo) Update(ctx context.Context, p *EnrollmentPreset) 
 		       server_endpoint = ?, target_os = ?, target_arch = ?,
 		       ttl_seconds = ?, pat_max_uses = ?,
 		       auto_approve = ?, skip_tls_verification = ?,
-		       baseline_plugin_ids = ?, pat_description = ?,
+		       plugin_specs = ?, pat_description = ?,
 		       updated_at = ?
 		 WHERE preset_id = ?`,
 		p.Name, nullableString(p.Description),
 		nullableString(p.ServerEndpoint), nullableString(p.TargetOS), nullableString(p.TargetArch),
 		nullableIntPtr(p.TTLSeconds), nullableIntPtr(p.PATMaxUses),
 		boolToInt(p.AutoApprove), boolToInt(p.SkipTLSVerification),
-		pluginsJSON, nullableString(p.PATDescription),
+		specsJSON, nullableString(p.PATDescription),
 		p.UpdatedAt.UTC(),
 		p.PresetID,
 	)
@@ -262,7 +265,7 @@ func (r *EnrollmentPresetRepo) SeedSystemPresets(
 				server_endpoint, target_os, target_arch,
 				ttl_seconds, pat_max_uses,
 				auto_approve, skip_tls_verification,
-				baseline_plugin_ids, pat_description,
+				plugin_specs, pat_description,
 				is_seed, created_by_user, created_at, updated_at
 			) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, 0, 1, NULL, NULL, 1, ?, ?, ?)`,
 			id, projectID, spec.Name, nullableString(spec.Comment),
@@ -291,7 +294,7 @@ func scanEnrollmentPreset(row rowScanner) (*EnrollmentPreset, error) {
 		maxUses     sql.NullInt64
 		autoApprove int
 		skipTLS     int
-		plugins     sql.NullString
+		specs       sql.NullString
 		patDesc     sql.NullString
 		isSeed      int
 		byUser      sql.NullString
@@ -301,7 +304,7 @@ func scanEnrollmentPreset(row rowScanner) (*EnrollmentPreset, error) {
 		&serverEp, &os, &arch,
 		&ttl, &maxUses,
 		&autoApprove, &skipTLS,
-		&plugins, &patDesc,
+		&specs, &patDesc,
 		&isSeed, &byUser, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -321,36 +324,17 @@ func scanEnrollmentPreset(row rowScanner) (*EnrollmentPreset, error) {
 	}
 	p.AutoApprove = autoApprove == 1
 	p.SkipTLSVerification = skipTLS == 1
-	if plugins.Valid && plugins.String != "" {
-		ids, err := decodePluginIDs(plugins.String)
+	if specs.Valid && specs.String != "" {
+		decoded, err := DecodePluginSpecs(specs.String)
 		if err != nil {
 			return nil, err
 		}
-		p.BaselinePluginIDs = ids
+		p.PluginSpecs = decoded
 	}
 	p.PATDescription = patDesc.String
 	p.IsSeed = isSeed == 1
 	p.CreatedByUser = byUser.String
 	return &p, nil
-}
-
-func encodePluginIDs(ids []string) (interface{}, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	b, err := json.Marshal(ids)
-	if err != nil {
-		return nil, err
-	}
-	return string(b), nil
-}
-
-func decodePluginIDs(s string) ([]string, error) {
-	var out []string
-	if err := json.Unmarshal([]byte(s), &out); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // nullableIntPtr maps a *int to a SQL value: nil → NULL, non-nil →

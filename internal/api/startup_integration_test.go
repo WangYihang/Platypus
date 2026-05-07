@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/WangYihang/Platypus/internal/optoken"
+	"github.com/WangYihang/Platypus/internal/cryptobox"
 	"github.com/WangYihang/Platypus/internal/pki"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
@@ -45,10 +46,10 @@ func TestStartupFlow(t *testing.T) {
 	// so we can assert FS side-effects without collision.
 	kekDir := t.TempDir()
 	kekPath := filepath.Join(kekDir, "ca.kek")
-	t.Setenv(pki.KEKEnvVar, "")
-	prev := pki.KEKPath
-	pki.KEKPath = kekPath
-	t.Cleanup(func() { pki.KEKPath = prev })
+	t.Setenv(cryptobox.EnvVar, "")
+	prev := cryptobox.FilePath
+	cryptobox.FilePath = kekPath
+	t.Cleanup(func() { cryptobox.FilePath = prev })
 
 	ctx := context.Background()
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (r *InstallDownloadTokenRepo) Create(ctx context.Context, t *InstallDownloa
 			download_id, secret_hash, project_id, issued_by_user,
 			issued_at, expires_at, target_os, target_arch,
 			server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
-			pat_description, auto_approve, baseline_plugin_ids,
+			pat_description, auto_approve, plugin_specs,
 			consumed_at, consumed_ip, consumed_ua,
 			consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -282,7 +283,7 @@ const installDownloadColumns = `
 	SELECT download_id, secret_hash, project_id, issued_by_user,
 	       issued_at, expires_at, target_os, target_arch,
 	       server_endpoint, pat_ttl_seconds, pat_max_uses, pat_binding_machine_id,
-	       pat_description, auto_approve, baseline_plugin_ids,
+	       pat_description, auto_approve, plugin_specs,
 	       consumed_at, consumed_ip, consumed_ua,
 	       consumed_pat_id, revoked, revoked_at, revoked_by_user, revoked_reason
 	  FROM install_download_tokens`
@@ -303,7 +304,7 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 		bindMID      sql.NullString
 		patDesc      sql.NullString
 		autoApprove  int
-		baselineCSV  string
+		baselineCSV  sql.NullString
 		consAt       sql.NullTime
 		consIP       sql.NullString
 		consUA       sql.NullString
@@ -329,7 +330,7 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	t.PATBindingMachineID = bindMID.String
 	t.PATDescription = patDesc.String
 	t.AutoApprove = autoApprove == 1
-	t.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV)
+	t.BaselinePluginIDs = decodeBaselinePluginIDs(baselineCSV.String)
 	if consAt.Valid {
 		v := consAt.Time
 		t.ConsumedAt = &v
@@ -347,32 +348,50 @@ func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	return &t, nil
 }
 
-// encodeBaselinePluginIDs joins ids with commas. Empty slice → "" so
-// the column NOT NULL DEFAULT '' is preserved verbatim. We assume
-// plugin ids never contain commas; ids are reverse-DNS-style
-// ("com.platypus.sys-info") which only allow [.\-_a-z0-9].
+// encodeBaselinePluginIDs converts the operator's plugin-id slice
+// into the new plugin_specs column shape — a JSON array of
+// PluginSpec objects, each with just plugin_id populated. PR 2
+// replaces this shim with the rich PluginSpec API; for now the
+// callers (install token + host upsert) keep their []string-shaped
+// public surface and the JSON wrap happens at the storage boundary.
+//
+// Empty slice → "" so the storage column DEFAULT '' shape is
+// preserved (callers continue to treat that as "no baseline").
 func encodeBaselinePluginIDs(ids []string) string {
-	cleaned := make([]string, 0, len(ids))
+	cleaned := make([]PluginSpec, 0, len(ids))
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
 		if id != "" {
-			cleaned = append(cleaned, id)
+			cleaned = append(cleaned, PluginSpec{PluginID: id})
 		}
 	}
-	return strings.Join(cleaned, ",")
+	if len(cleaned) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(cleaned)
+	if err != nil {
+		// PluginSpec marshalling cannot fail for this field set
+		// (plain strings); fall through to "" rather than propagate.
+		return ""
+	}
+	return string(b)
 }
 
-// decodeBaselinePluginIDs returns nil for "" so callers can distinguish
-// "no baseline provided" from "empty baseline" (functionally equivalent
-// but easier to log).
-func decodeBaselinePluginIDs(csv string) []string {
-	if csv == "" {
+// decodeBaselinePluginIDs reads the plugin_specs JSON column and
+// projects it back to a []string of plugin ids. "" / "[]" round-trip
+// to nil so callers can distinguish "no baseline" from "empty
+// baseline" the same way they always have.
+func decodeBaselinePluginIDs(s string) []string {
+	if s == "" || s == "[]" {
 		return nil
 	}
-	parts := strings.Split(csv, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
+	specs, err := DecodePluginSpecs(s)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(specs))
+	for _, sp := range specs {
+		p := strings.TrimSpace(sp.PluginID)
 		if p != "" {
 			out = append(out, p)
 		}
