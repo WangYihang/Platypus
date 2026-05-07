@@ -19,8 +19,14 @@ builds:
     binary: platypus-agent
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin, windows, freebsd, openbsd, netbsd]
+    goos: [linux, darwin, windows, freebsd, openbsd, netbsd, android]
     goarch: [amd64, arm64, arm, "386", riscv64, ppc64le, s390x, loong64, mips, mipsle, mips64, mips64le]
+    # softfloat MIPS variants run unchanged on hardfloat CPUs (the
+    # hardfloat → softfloat penalty is <1 % for the agent's workload),
+    # so we ship one universal variant rather than two. This covers
+    # ancient FPU-less SoHo router SoCs (older Broadcom / Atheros)
+    # without leaving them out of the matrix.
+    gomips: [softfloat]
     ignore:
       # darwin: only amd64 + arm64 are valid Go targets.
       - { goos: darwin, goarch: "386" }
@@ -77,6 +83,24 @@ builds:
       - { goos: netbsd, goarch: mipsle }
       - { goos: netbsd, goarch: mips64 }
       - { goos: netbsd, goarch: mips64le }
+      # android: only arm64 builds cleanly with CGO_ENABLED=0. The
+      # other arches force external (cgo) linking and need the NDK
+      # toolchain — out of scope for the local-dev flow. arm64
+      # binaries run on stock Android (rooted) and inside Termux;
+      # without root some sysinfo bits return blank because Android's
+      # SELinux profile sandboxes /proc/<other-pid>/* — the network
+      # / cpu / memory counters still work.
+      - { goos: android, goarch: amd64 }
+      - { goos: android, goarch: arm }
+      - { goos: android, goarch: "386" }
+      - { goos: android, goarch: riscv64 }
+      - { goos: android, goarch: ppc64le }
+      - { goos: android, goarch: s390x }
+      - { goos: android, goarch: loong64 }
+      - { goos: android, goarch: mips }
+      - { goos: android, goarch: mipsle }
+      - { goos: android, goarch: mips64 }
+      - { goos: android, goarch: mips64le }
     ldflags:
       - -s -w
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
