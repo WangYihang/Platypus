@@ -238,14 +238,14 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 		s.logInstallEvent(ctx, id, cctx, patRes.TokenID, "error", err.Error())
 		return &ConsumeResult{Outcome: "error"}, err
 	}
-	s.logInstallEvent(ctx, id, cctx, patRes.TokenID, outcome, "")
-	if outcome != "success" {
+	s.logInstallEvent(ctx, id, cctx, patRes.TokenID, string(outcome), "")
+	if outcome != storage.InstallOutcomeSuccess {
 		// Best-effort: proactively revoke the orphan PAT so it can never
 		// be used. If revoke fails we log and move on — the admin can
 		// still see it in ListByProject and revoke manually.
 		_ = s.RevokeEnrollmentToken(ctx, patRes.TokenID, tok.IssuedByUser,
-			"install download race: "+outcome)
-		return &ConsumeResult{Outcome: outcome}, nil
+			"install download race: "+string(outcome))
+		return &ConsumeResult{Outcome: string(outcome)}, nil
 	}
 
 	// Best-effort CA lookup. Missing is fine — agents built before

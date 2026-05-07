@@ -319,9 +319,9 @@ func (s *Service) RedeemEnrollmentToken(ctx context.Context, raw string, rctx Re
 		s.logRedemption(ctx, parsed.ID, rctx, "", "error", err.Error())
 		return &RedeemResult{Outcome: "error"}, err
 	}
-	if outcome != "success" {
-		s.logRedemption(ctx, parsed.ID, rctx, "", outcome, "")
-		return &RedeemResult{Outcome: outcome}, nil
+	if outcome != storage.EnrollmentOutcomeSuccess {
+		s.logRedemption(ctx, parsed.ID, rctx, "", string(outcome), "")
+		return &RedeemResult{Outcome: string(outcome)}, nil
 	}
 
 	// PAT accepted — mint a brand-new agent_id. The caller (v2

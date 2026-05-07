@@ -9,6 +9,31 @@ import (
 	"time"
 )
 
+// InstallTokenOutcome is the typed classification TryConsume
+// returns. Distinct from EnrollmentTokenOutcome because the
+// surface area differs slightly (install tokens have an
+// "already_consumed" path the enrollment token doesn't, since
+// install tokens are mint-once-consume-once whereas enrollment
+// tokens can have max_uses > 1). The naming convention matches
+// EnrollmentTokenOutcome — pre-typed return saves callers from
+// switch-on-string mistakes.
+type InstallTokenOutcome string
+
+const (
+	InstallOutcomeSuccess         InstallTokenOutcome = "success"
+	InstallOutcomeUnknownID       InstallTokenOutcome = "unknown_id"
+	InstallOutcomeInvalidSecret   InstallTokenOutcome = "invalid_secret"
+	InstallOutcomeExpired         InstallTokenOutcome = "expired"
+	InstallOutcomeRevoked         InstallTokenOutcome = "revoked"
+	InstallOutcomeAlreadyConsumed InstallTokenOutcome = "already_consumed"
+	// Malformed isn't a TryConsume return — the parsed token's
+	// shape failure happens upstream — but it shows up in the
+	// enrollment.Service ConsumeResult.Outcome surface, so we
+	// declare it here for completeness so callers don't compose
+	// a string literal for that one case.
+	InstallOutcomeMalformed InstallTokenOutcome = "malformed"
+)
+
 // InstallDownloadToken backs one row in install_download_tokens. It is
 // minted by an admin and consumed exactly once by `curl /api/v1/install/<id>`,
 // at which point a fresh PAT gets minted atomically and embedded in
@@ -183,7 +208,7 @@ func (r *InstallDownloadTokenRepo) TryConsume(
 	secret []byte,
 	clientIP, clientUA, patID string,
 	now time.Time,
-) (*InstallDownloadToken, string, error) {
+) (*InstallDownloadToken, InstallTokenOutcome, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, "", err
@@ -198,23 +223,23 @@ func (r *InstallDownloadTokenRepo) TryConsume(
 	t, err := scanInstallDownloadSingle(tx.QueryRowContext(ctx,
 		installDownloadColumns+` WHERE download_id = ?`, downloadID))
 	if errors.Is(err, ErrNotFound) {
-		return nil, "unknown_id", nil
+		return nil, InstallOutcomeUnknownID, nil
 	}
 	if err != nil {
 		return nil, "", err
 	}
 
 	if subtle.ConstantTimeCompare(sha256Sum(secret), t.SecretHash) != 1 {
-		return t, "invalid_secret", nil
+		return t, InstallOutcomeInvalidSecret, nil
 	}
 	if t.Revoked {
-		return t, "revoked", nil
+		return t, InstallOutcomeRevoked, nil
 	}
 	if t.ConsumedAt != nil {
-		return t, "already_consumed", nil
+		return t, InstallOutcomeAlreadyConsumed, nil
 	}
 	if !t.ExpiresAt.After(now) {
-		return t, "expired", nil
+		return t, InstallOutcomeExpired, nil
 	}
 
 	// Atomic commit. The WHERE clause re-asserts liveness so two racing
@@ -239,7 +264,7 @@ func (r *InstallDownloadTokenRepo) TryConsume(
 		return nil, "", err
 	}
 	if n == 0 {
-		return t, "already_consumed", nil
+		return t, InstallOutcomeAlreadyConsumed, nil
 	}
 
 	nowPtr := now.UTC()
@@ -252,7 +277,7 @@ func (r *InstallDownloadTokenRepo) TryConsume(
 		return nil, "", err
 	}
 	rollback = false
-	return t, "success", nil
+	return t, InstallOutcomeSuccess, nil
 }
 
 // Revoke marks the row revoked. Idempotent; revoking something that's

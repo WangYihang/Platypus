@@ -260,7 +260,7 @@ func TestInstallTokens_TryConsume_Concurrent(t *testing.T) {
 
 	const N = 8
 	var wg sync.WaitGroup
-	outcomes := make([]string, N)
+	outcomes := make([]storage.InstallTokenOutcome, N)
 	errs := make([]error, N)
 	start := make(chan struct{})
 	for i := 0; i < N; i++ {

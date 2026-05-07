@@ -18,6 +18,69 @@ import (
 	tmpls "github.com/WangYihang/Platypus/cmd/platypus-cli/templates"
 )
 
+// pluginLang is the closed set of languages the scaffolder
+// templates support. Defined as a string-derived type so it
+// composes cleanly with kong's string-flag parsing while every
+// switch / map lookup downstream gets the compiler's "is this
+// the right type" check rather than relying on a free-form
+// string. Adding a third language means adding a constant here
+// AND a templates/<name>/ directory; parseLang catches the
+// "constant added but not parsed" hole at the CLI boundary.
+type pluginLang string
+
+const (
+	langRust pluginLang = "rust"
+	langGo   pluginLang = "go"
+)
+
+// allLangs is the canonical authority — used by parseLang and
+// the help text below. Slice rather than map because order
+// matters (templates render error messages in this order).
+var allLangs = []pluginLang{langRust, langGo}
+
+// parseLang lifts a wire-string into the typed enum or returns a
+// helpful "unknown lang, valid options: ..." error. Centralising
+// parsing means a typo at the CLI boundary fails before any
+// file is written, with the full set of valid options listed.
+func parseLang(s string) (pluginLang, error) {
+	for _, l := range allLangs {
+		if string(l) == s {
+			return l, nil
+		}
+	}
+	options := make([]string, len(allLangs))
+	for i, l := range allLangs {
+		options[i] = string(l)
+	}
+	return "", fmt.Errorf("unknown language %q (valid: %s)", s, strings.Join(options, ", "))
+}
+
+// parseCapabilities lifts the kong []string into typed
+// []CapabilityID, refusing unknown families before any file is
+// written. The parser is the single place a typo or removed
+// capability surfaces an error to the operator — every
+// downstream consumer (the YAML renderer, the README list, the
+// hint blocks) operates on the already-typed slice.
+func parseCapabilities(in []string) ([]agentplugin.CapabilityID, error) {
+	out := make([]agentplugin.CapabilityID, 0, len(in))
+	for _, raw := range in {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		c, ok := agentplugin.ParseCapabilityID(raw)
+		if !ok {
+			valid := make([]string, len(agentplugin.AllCapabilityIDs))
+			for i, c := range agentplugin.AllCapabilityIDs {
+				valid[i] = string(c)
+			}
+			return nil, fmt.Errorf("unknown capability %q (valid: %s)", raw, strings.Join(valid, ", "))
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 // pluginNewCmd scaffolds a fresh plugin project. Two paths share
 // the same renderer:
 //
@@ -25,6 +88,11 @@ import (
 //     and CI use this path. Skips huh entirely.
 //   - interactive: missing flags trigger a huh form (PR 6.2). The
 //     answered struct then drives the same renderer.
+//
+// Lang and Capabilities arrive as strings (kong parses CLI
+// arguments into stringly-typed struct fields) and are parsed
+// into typed values at the top of Run() — the typed values are
+// what everything downstream operates on.
 type pluginNewCmd struct {
 	Dir          string   `arg:"" optional:"" help:"Output directory. Default: ./<rightmost-id-segment>."`
 	Lang         string   `help:"Plugin language. One of: rust, go. Prompts interactively when omitted."`
@@ -75,8 +143,13 @@ func (c *pluginNewCmd) Run(_ *runContext) error {
 			return err
 		}
 	}
-	if c.Lang != "rust" && c.Lang != "go" {
-		return fmt.Errorf("unknown --lang %q (must be rust | go)", c.Lang)
+	lang, err := parseLang(c.Lang)
+	if err != nil {
+		return err
+	}
+	caps, err := parseCapabilities(c.Capabilities)
+	if err != nil {
+		return err
 	}
 	if err := agentplugin.ValidatePluginID(c.ID); err != nil {
 		return err
@@ -101,13 +174,14 @@ func (c *pluginNewCmd) Run(_ *runContext) error {
 		return fmt.Errorf("refusing to write into non-empty %q (pass --force to override)", dir)
 	}
 
-	ctx := c.buildContext()
-	return render(c.Lang, dir, ctx)
+	ctx := c.buildContext(lang, caps)
+	return render(lang, dir, ctx)
 }
 
 // buildContext fills the templateContext from the kong struct +
-// derived fields. Pure function: every input is on the receiver.
-func (c *pluginNewCmd) buildContext() templateContext {
+// the typed values parsed in Run. Pure function: every input is
+// on the receiver or passed in by the caller.
+func (c *pluginNewCmd) buildContext(lang pluginLang, caps []agentplugin.CapabilityID) templateContext {
 	crate := strings.ReplaceAll(rightmostSegment(c.ID), ".", "-")
 	authorName := c.AuthorName
 	if authorName == "" {
@@ -128,20 +202,20 @@ func (c *pluginNewCmd) buildContext() templateContext {
 	}
 
 	return templateContext{
-		ID:              c.ID,
-		Name:            c.Name,
-		Version:         c.Version,
-		AuthorName:      authorName,
-		AuthorEmail:     authorEmail,
-		License:         c.License,
-		Description:     c.Description,
-		WithConfig:      c.WithConfig,
-		CrateName:       crate,
-		GoModule:        goModule,
-		EntryWasm:       crate + ".wasm",
-		CapabilitiesYAML: renderCapabilitiesYAML(c.Capabilities),
-		CapabilityHints:  renderCapHints(c.Capabilities, c.Lang),
-		CapabilityList:   renderCapabilityList(c.Capabilities),
+		ID:               c.ID,
+		Name:             c.Name,
+		Version:          c.Version,
+		AuthorName:       authorName,
+		AuthorEmail:      authorEmail,
+		License:          c.License,
+		Description:      c.Description,
+		WithConfig:       c.WithConfig,
+		CrateName:        crate,
+		GoModule:         goModule,
+		EntryWasm:        crate + ".wasm",
+		CapabilitiesYAML: renderCapabilitiesYAML(caps),
+		CapabilityHints:  renderCapHints(caps, lang),
+		CapabilityList:   renderCapabilityList(caps),
 	}
 }
 
@@ -149,12 +223,12 @@ func (c *pluginNewCmd) buildContext() templateContext {
 // and writes each file to the output directory with the .tmpl
 // suffix stripped. Existing non-template files in dir are
 // preserved (the --force gate already let the author through).
-func render(lang, dir string, ctx templateContext) error {
+func render(lang pluginLang, dir string, ctx templateContext) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
-	root := lang
+	root := string(lang)
 	written := []string{}
 	walkErr := fs.WalkDir(tmpls.FS, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -209,7 +283,7 @@ func render(lang, dir string, ctx templateContext) error {
 // (no styling) so test output stays clean and the message works
 // over a non-tty pipe; the interactive wizard gets its own coloured
 // preamble.
-func printSummary(dir string, ctx templateContext, lang string, written []string) {
+func printSummary(dir string, ctx templateContext, lang pluginLang, written []string) {
 	fmt.Printf("Scaffolded %s in %s\n\n", ctx.ID, dir)
 	for _, f := range written {
 		fmt.Printf("  %s\n", f)
@@ -217,7 +291,7 @@ func printSummary(dir string, ctx templateContext, lang string, written []string
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", dir)
-	if lang == "rust" {
+	if lang == langRust {
 		fmt.Println("  cargo build --release --target wasm32-unknown-unknown")
 		fmt.Printf("  cp target/wasm32-unknown-unknown/release/%s.wasm %s\n", ctx.CrateName, ctx.EntryWasm)
 	} else {

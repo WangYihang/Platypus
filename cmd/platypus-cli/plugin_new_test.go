@@ -241,6 +241,69 @@ func TestPluginNew_PluginIDValidation(t *testing.T) {
 	}
 }
 
+// TestPluginNew_CapabilityRegistries_CoverAllFamilies pins the
+// init-time exhaustiveness check: every CapabilityID the agent
+// recognises must have an entry in every renderer registry. The
+// init() in plugin_new_caps.go panics on startup if any are
+// missing — this test asserts the contract by inspecting the
+// registries directly, so a future capability addition that's
+// half-wired surfaces a clear failure here in CI rather than at
+// `platypus-cli` startup time on someone's workstation.
+func TestPluginNew_CapabilityRegistries_CoverAllFamilies(t *testing.T) {
+	registries := map[string]map[agentplugin.CapabilityID]string{
+		"capYAMLEntries":  capYAMLEntries,
+		"capHintsRust":    capHintsRust,
+		"capHintsGo":      capHintsGo,
+		"capDescriptions": capDescriptions,
+	}
+	for name, m := range registries {
+		for _, c := range agentplugin.AllCapabilityIDs {
+			if _, ok := m[c]; !ok {
+				t.Errorf("registry %s missing capability %q",
+					name, c)
+			}
+		}
+	}
+}
+
+// TestPluginNew_RejectsUnknownCapability: a typo or stale capability
+// at the CLI boundary fails before any file is written, with a
+// helpful "valid: ..." list. The typed parseCapabilities is the
+// load-bearing piece — without it a typo would silently produce
+// a manifest with an invented family name that the validator
+// later rejects mysteriously.
+func TestPluginNew_RejectsUnknownCapability(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "smoke")
+	args := scaffoldArgs(dir, "rust", "com.example.smoke")
+	args.Capabilities = []string{"log", "fs.write-but-typoed"}
+	err := args.Run(&runContext{Context: context.Background()})
+	if err == nil {
+		t.Fatalf("expected unknown-capability rejection")
+	}
+	if !strings.Contains(err.Error(), "fs.write-but-typoed") {
+		t.Fatalf("err should name the bad capability: %v", err)
+	}
+	if _, statErr := os.Stat(dir); statErr == nil {
+		t.Fatalf("dir should not exist after capability rejection")
+	}
+}
+
+// TestPluginNew_RejectsUnknownLang pins the typed-Lang behaviour:
+// a wire string that isn't one of the known languages fails at
+// parse time with the valid set listed.
+func TestPluginNew_RejectsUnknownLang(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "smoke")
+	args := scaffoldArgs(dir, "python", "com.example.smoke")
+	err := args.Run(&runContext{Context: context.Background()})
+	if err == nil {
+		t.Fatalf("expected unknown-lang rejection")
+	}
+	if !strings.Contains(err.Error(), "python") ||
+		!strings.Contains(err.Error(), "valid:") {
+		t.Fatalf("err should name the bad lang AND list valid: %v", err)
+	}
+}
+
 // TestPluginNew_DefaultsDirToPluginID: when --dir is empty, the
 // scaffolder picks a sane default (the rightmost segment of the
 // reverse-DNS id, e.g. "com.example.my-plugin" → "./my-plugin").

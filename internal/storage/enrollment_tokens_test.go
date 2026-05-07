@@ -62,7 +62,7 @@ func TestEnrollmentTokens_TryConsume_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TryConsume: %v", err)
 	}
-	if outcome != "success" {
+	if outcome != storage.EnrollmentOutcomeSuccess {
 		t.Fatalf("outcome = %q; want success", outcome)
 	}
 	if got.Uses != 1 {
@@ -129,11 +129,11 @@ func TestEnrollmentTokens_TryConsume_Classifications(t *testing.T) {
 		seedEnrollmentToken(t, db, "plt_used", proj.ID, admin.ID, []byte("x"), time.Hour, 1)
 		// consume once
 		_, outcome, _ := db.EnrollmentTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
-		if outcome != "success" {
+		if outcome != storage.EnrollmentOutcomeSuccess {
 			t.Fatalf("first consume outcome = %q", outcome)
 		}
 		_, outcome, _ = db.EnrollmentTokens().TryConsume(ctx, "plt_used", []byte("x"), "", time.Now())
-		if outcome != "max_uses_reached" {
+		if outcome != storage.EnrollmentOutcomeMaxUsesReached {
 			t.Fatalf("second outcome = %q; want max_uses_reached", outcome)
 		}
 	})
@@ -158,7 +158,7 @@ func TestEnrollmentTokens_TryConsume_Classifications(t *testing.T) {
 		}
 		// matching machine_id works
 		_, outcome, _ = db.EnrollmentTokens().TryConsume(ctx, "plt_bound", []byte("x"), "host-abc", time.Now())
-		if outcome != "success" {
+		if outcome != storage.EnrollmentOutcomeSuccess {
 			t.Fatalf("matched outcome = %q; want success", outcome)
 		}
 	})
@@ -179,7 +179,7 @@ func TestEnrollmentTokens_TryConsume_Concurrent(t *testing.T) {
 
 	const N = 16
 	var wg sync.WaitGroup
-	outcomes := make([]string, N)
+	outcomes := make([]storage.EnrollmentTokenOutcome, N)
 	errs := make([]error, N)
 	start := make(chan struct{})
 

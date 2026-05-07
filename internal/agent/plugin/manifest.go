@@ -45,10 +45,55 @@ const (
 	CapNetListen CapabilityID = "net.listen"
 )
 
-// allCapabilities is the set the agent is willing to grant. Used by
-// validation to reject manifests that ask for unknown capabilities.
-var allCapabilities = map[CapabilityID]struct{}{
-	CapLog: {}, CapKV: {}, CapSysInfo: {}, CapExec: {}, CapFSRead: {}, CapFSWrite: {}, CapNetHTTP: {}, CapProcess: {}, CapNetDial: {}, CapNetListen: {},
+// AllCapabilityIDs is the canonical authority list — the order
+// every UI / scaffold / docs surface uses to render or iterate
+// over capability families. Code that registers per-capability
+// metadata (the scaffolder's YAML / SDK-hint / description
+// renderers, the FE's capability-meta table) reads this list at
+// init time and asserts coverage; a future capability addition
+// dropped into the constants block forces every registry to
+// follow or fail loudly at startup.
+var AllCapabilityIDs = []CapabilityID{
+	CapLog, CapKV, CapSysInfo,
+	CapExec, CapFSRead, CapFSWrite,
+	CapNetHTTP, CapProcess, CapNetDial, CapNetListen,
+}
+
+// AllCapabilities returns the same list as a fresh slice so
+// callers can sort / filter without mutating the package-level
+// authority. Cheap (10 entries); allocates once per call.
+func AllCapabilities() []CapabilityID {
+	out := make([]CapabilityID, len(AllCapabilityIDs))
+	copy(out, AllCapabilityIDs)
+	return out
+}
+
+// allCapabilities is the lookup-friendly companion to
+// AllCapabilityIDs, used by manifest validation to reject manifests
+// that ask for unknown capabilities. Initialised from
+// AllCapabilityIDs so adding a constant up there + the slice entry
+// is the single source of truth.
+var allCapabilities = func() map[CapabilityID]struct{} {
+	m := make(map[CapabilityID]struct{}, len(AllCapabilityIDs))
+	for _, c := range AllCapabilityIDs {
+		m[c] = struct{}{}
+	}
+	return m
+}()
+
+// ParseCapabilityID returns the typed CapabilityID for a wire-name
+// string (e.g. the "fs.read" the scaffolder receives via
+// --capabilities) or false when the string isn't one of the
+// declared families. Centralising parsing means a typo at the CLI
+// boundary fails before any file is written, with a clear list of
+// the valid options.
+func ParseCapabilityID(s string) (CapabilityID, bool) {
+	c := CapabilityID(s)
+	_, ok := allCapabilities[c]
+	if !ok {
+		return "", false
+	}
+	return c, true
 }
 
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the

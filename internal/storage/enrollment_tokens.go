@@ -42,6 +42,24 @@ type EnrollmentToken struct {
 	RevokedReason string
 }
 
+// EnrollmentTokenOutcome is the typed classification TryConsume
+// returns. Replacing the previous bare-string contract with a
+// defined type catches misspellings ("success " with a trailing
+// space, or "unknown-token" with the wrong dash convention) at
+// compile time, and lets exhaustive linters flag missing cases
+// in callers' switches.
+type EnrollmentTokenOutcome string
+
+const (
+	EnrollmentOutcomeSuccess                EnrollmentTokenOutcome = "success"
+	EnrollmentOutcomeUnknownToken           EnrollmentTokenOutcome = "unknown_token"
+	EnrollmentOutcomeInvalidSecret          EnrollmentTokenOutcome = "invalid_secret"
+	EnrollmentOutcomeExpired                EnrollmentTokenOutcome = "expired"
+	EnrollmentOutcomeRevoked                EnrollmentTokenOutcome = "revoked"
+	EnrollmentOutcomeMaxUsesReached         EnrollmentTokenOutcome = "max_uses_reached"
+	EnrollmentOutcomeBindingMachineMismatch EnrollmentTokenOutcome = "binding_machine_mismatch"
+)
+
 // EnrollmentStatus is a view-only value derived from EnrollmentToken at
 // read time. We deliberately don't materialise this column in the
 // database — keeping state in (revoked, expires_at, uses, max_uses)
@@ -180,7 +198,7 @@ func (r *EnrollmentTokenRepo) ListByProject(ctx context.Context, projectID strin
 //	"binding_machine_mismatch"   — binding_machine_id set and ≠ provided
 //
 // On "success" the returned *EnrollmentToken reflects post-increment state.
-func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []byte, machineID string, now time.Time) (*EnrollmentToken, string, error) {
+func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, secret []byte, machineID string, now time.Time) (*EnrollmentToken, EnrollmentTokenOutcome, error) {
 	// BEGIN IMMEDIATE grabs a RESERVED lock up-front in SQLite, forcing
 	// concurrent writers to queue. This is how we make the
 	// compare-then-update sequence atomic without FOR UPDATE.
@@ -202,7 +220,7 @@ func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, se
 		       revoked_by_user, revoked_reason
 		  FROM enrollment_tokens WHERE token_id = ?`, tokenID))
 	if errors.Is(err, ErrNotFound) {
-		return nil, "unknown_token", nil
+		return nil, EnrollmentOutcomeUnknownToken, nil
 	}
 	if err != nil {
 		return nil, "", err
@@ -214,19 +232,19 @@ func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, se
 	// security (we continue to use constant-time compare below).
 	secretSum := sha256.Sum256(secret)
 	if subtle.ConstantTimeCompare(secretSum[:], p.SecretHash) != 1 {
-		return p, "invalid_secret", nil
+		return p, EnrollmentOutcomeInvalidSecret, nil
 	}
 	if p.Revoked {
-		return p, "revoked", nil
+		return p, EnrollmentOutcomeRevoked, nil
 	}
 	if !p.ExpiresAt.After(now) {
-		return p, "expired", nil
+		return p, EnrollmentOutcomeExpired, nil
 	}
 	if p.Uses >= p.MaxUses {
-		return p, "max_uses_reached", nil
+		return p, EnrollmentOutcomeMaxUsesReached, nil
 	}
 	if p.BindingMachineID != "" && p.BindingMachineID != machineID {
-		return p, "binding_machine_mismatch", nil
+		return p, EnrollmentOutcomeBindingMachineMismatch, nil
 	}
 
 	// Conditional UPDATE — double-guard against any lost race. If the row
@@ -248,7 +266,7 @@ func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, se
 		return nil, "", err
 	}
 	if n == 0 {
-		return p, "max_uses_reached", nil
+		return p, EnrollmentOutcomeMaxUsesReached, nil
 	}
 	p.Uses++
 
@@ -256,7 +274,7 @@ func (r *EnrollmentTokenRepo) TryConsume(ctx context.Context, tokenID string, se
 		return nil, "", err
 	}
 	rollback = false
-	return p, "success", nil
+	return p, EnrollmentOutcomeSuccess, nil
 }
 
 // Revoke marks a token revoked. Idempotent — revoking twice is a no-op.
