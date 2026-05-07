@@ -1,277 +1,200 @@
 GO         ?= go
-LDFLAGS    := -s -w
 BUILD_DIR  := build
+LDFLAGS    := -s -w
 BINS       := platypus-server platypus-agent platypus-cli
+BIN_PATHS  := $(addprefix $(BUILD_DIR)/,$(BINS))
+
+# Base64 Ed25519 pubkey baked into platypus-agent — the agent refuses
+# to self-update if empty (better than an unsigned channel).
+AGENT_SIGNING_PUBKEY ?=
+AGENT_LDFLAGS        := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
+
 PROTO_V2_SRC := $(wildcard proto/v2/*.proto)
 PROTO_V2_OUT := pkg/proto/v2/common.pb.go
+IP2REGION_V4 := internal/ipinfo/data/ip2region_v4.xdb
 
-# AGENT_SIGNING_PUBKEY is the base64-encoded Ed25519 public key baked
-# into the platypus-agent binary. The release pipeline signs the update
-# manifest with the matching private key; agents refuse to self-update
-# if this is empty (an unsigned channel would be worse than none).
-# Provide it via environment variable at build time.
-AGENT_SIGNING_PUBKEY ?=
-AGENT_LDFLAGS := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
-
-.PHONY: all build build-bundled proto test lint fmt vet tidy clean release snapshot help swag \
+.DEFAULT_GOAL := all
+.PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
         hooks pre-commit data data-v6 \
         example-plugins stage-system-plugins \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
-        web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots
+        web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots \
+        $(BIN_PATHS)
 
-all: build
+# `make` after a fresh clone produces a fully-functioning ./build/*:
+# data fetched, web UI baked in, all binaries built. Everything is
+# file-tracked, so re-runs only redo stale artefacts.
+all: $(IP2REGION_V4) web-ui-embed build
 
 help:
-	@echo "Server / agent (./cmd/...):"
-	@echo "  build           Build both binaries to ./$(BUILD_DIR)/"
-	@echo "  build-bundled   Build the web UI and embed it into platypus-server"
-	@echo "  proto           Regenerate protobuf code"
-	@echo "  stage-system-plugins  (Re)build + sign + stage system plugins under internal/server/sysplugins/embedded/"
-	@echo "  test            Run tests with race detector"
-	@echo "  lint            Run golangci-lint"
-	@echo "  fmt             Format Go source"
-	@echo "  vet             Run go vet"
-	@echo "  tidy            Run go mod tidy"
-	@echo "  hooks           Install git pre-commit hooks (requires 'pip install pre-commit')"
-	@echo "  pre-commit      Run all pre-commit hooks against every tracked file"
-	@echo "  snapshot        Build cross-platform snapshot via goreleaser"
-	@echo "  release         Cut a release via goreleaser (requires tag + GITHUB_TOKEN)"
-	@echo "  data            Fetch ip2region v4 xdb into internal/ipinfo/data/"
-	@echo "  data-v6         Fetch v4 + v6 xdbs (v6 is ~36 MB)"
-	@echo "  clean           Remove build artifacts"
+	@echo "Quick start:"
+	@echo "  make                  data + web UI + binaries (full local dev build)"
+	@echo "  make build            Go binaries only (fast iteration)"
 	@echo ""
-	@echo "Desktop app (./desktop):"
-	@echo "  desktop-deps     Install Wails CLI + frontend pnpm deps"
-	@echo "  desktop-bindings Regenerate Wails JS↔Go bindings under desktop/frontend/wailsjs/"
-	@echo "  desktop-dev      Run Wails dev mode (hot reload)"
-	@echo "  desktop-build    Build a native binary for the current platform"
-	@echo "  desktop-test     Run desktop Go tests with race detector"
+	@echo "Server / agent / CLI:"
+	@echo "  proto                 Regenerate protobuf code"
+	@echo "  test                  Run tests with race detector"
+	@echo "  lint / fmt / vet      golangci-lint / go fmt / go vet"
+	@echo "  tidy                  go mod tidy"
+	@echo "  swag                  Regenerate docs/swagger.{yaml,json}"
+	@echo "  snapshot / release    goreleaser builds"
+	@echo "  data / data-v6        Fetch ip2region xdb (v4 / v4+v6)"
+	@echo "  hooks / pre-commit    Install / run pre-commit hooks"
+	@echo "  clean                 Remove build artefacts"
 	@echo ""
-	@echo "Standalone web UI (no server embed):"
-	@echo "  web-ui           Build browser bundle to desktop/frontend/dist-web/"
-	@echo "  web-ui-embed     Build web UI and stage it into internal/webui/dist/"
-	@echo "  web-ui-serve     Preview dist-web/ at http://localhost:7777"
+	@echo "Plugins:"
+	@echo "  example-plugins       Build + sign every plugin under example/plugins/"
+	@echo "  stage-system-plugins  Build + sign + stage plugins into the server embed"
 	@echo ""
-	@echo "End-to-end tests + screenshot gallery:"
-	@echo "  e2e-deps         Install Playwright + browsers under e2e/"
-	@echo "  e2e              Run the full Playwright suite (boots backend + agent + vite, writes docs/screenshots/)"
-	@echo "  screenshots      Alias for e2e — run the suite and rebuild docs/screenshots/README.md"
+	@echo "Desktop app:"
+	@echo "  desktop-deps          Wails CLI + frontend deps"
+	@echo "  desktop-bindings      Regenerate Wails JS↔Go bindings"
+	@echo "  desktop-dev           Hot-reload dev mode"
+	@echo "  desktop-build         Native binary"
+	@echo "  desktop-test          Desktop Go tests (race)"
+	@echo ""
+	@echo "Web UI / e2e:"
+	@echo "  web-ui                Build standalone bundle to desktop/frontend/dist-web/"
+	@echo "  web-ui-embed          Build + stage into internal/webui/dist/"
+	@echo "  web-ui-serve          Preview at http://localhost:7777"
+	@echo "  e2e-deps              Install Playwright"
+	@echo "  e2e / screenshots     Run the full Playwright suite"
+
+# ---------- Protobuf ----------
 
 $(PROTO_V2_OUT): $(PROTO_V2_SRC)
-	protoc \
-	  --proto_path=proto/v2 \
-	  --go_out=pkg/proto/v2 \
-	  --go_opt=paths=source_relative \
-	  $(notdir $(PROTO_V2_SRC))
+	protoc --proto_path=proto/v2 --go_out=pkg/proto/v2 --go_opt=paths=source_relative $(notdir $(PROTO_V2_SRC))
 
 proto: $(PROTO_V2_OUT)
 
-build: proto
-	@mkdir -p $(BUILD_DIR)
-	@for b in $(BINS); do \
-	  echo "→ $$b"; \
-	  if [ "$$b" = "platypus-agent" ]; then \
-	    $(GO) build -ldflags="$(AGENT_LDFLAGS)" -trimpath \
-	      -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
-	  else \
-	    $(GO) build -ldflags="$(LDFLAGS)" -trimpath \
-	      -o $(BUILD_DIR)/$$b ./cmd/$$b || exit 1; \
-	  fi \
-	done
+# ---------- Go binaries ----------
+# Phony so Go's build cache (not Make) decides whether to do real
+# work. The agent gets AGENT_LDFLAGS so the signing pubkey is baked
+# in at link time; the others use plain LDFLAGS.
 
+build: $(BIN_PATHS)
+
+$(BIN_PATHS): $(PROTO_V2_OUT)
+	@mkdir -p $(@D)
+	@echo "→ $(@F)"
+	@$(GO) build \
+	  -ldflags="$(if $(filter %-agent,$(@F)),$(AGENT_LDFLAGS),$(LDFLAGS))" \
+	  -trimpath -o $@ ./cmd/$(@F)
+
+# ---------- Quality gates ----------
+
+# 600s covers slow packages (api / storage / mesh) under -race; the
+# api suite alone runs ~150 tests that each spin up a fresh sqlite.
 test:
-	# 600s per test binary covers slow packages (api / storage / mesh)
-	# under -race overhead. internal/api in particular runs ~150 tests
-	# that each spin up a fresh sqlite + migrations + http engine, and
-	# the race detector multiplies each by ~10x. Individual packages
-	# stay well below this; the timeout is a safety net, not a target.
 	$(GO) test -race -count=1 -timeout=600s ./...
 
-lint:
-	golangci-lint run ./...
+lint:    ; golangci-lint run ./...
+fmt:     ; $(GO) fmt ./...
+vet:     ; $(GO) vet ./...
+tidy:    ; $(GO) mod tidy
+hooks:       ; pre-commit install
+pre-commit:  ; pre-commit run --all-files
+snapshot:    ; goreleaser build --snapshot --clean
+release:     ; goreleaser release --clean
 
-fmt:
-	$(GO) fmt ./...
+SWAG ?= $(shell $(GO) env GOPATH)/bin/swag
+swag:
+	$(SWAG) init --generalInfo cmd/platypus-server/main.go --output docs --parseDependency --parseInternal
 
-vet:
-	$(GO) vet ./...
+# ---------- Plugins ----------
+# Both targets need rustup + wasm32-unknown-unknown. example-plugins
+# also needs PLATYPUS_PUBLISHER_KEY (from `platypus-cli plugin keygen`).
+# stage-system-plugins picks up TinyGo plugins too, but skips them
+# (with a warning) when tinygo isn't on PATH.
 
-tidy:
-	$(GO) mod tidy
-
-# example-plugins builds + signs every plugin under example/plugins/.
-# Requires:
-#   - rustup with the wasm32-unknown-unknown target installed
-#   - $(BUILD_DIR)/platypus-cli (run `make build` first)
-#   - PLATYPUS_PUBLISHER_KEY pointing at a secret key file produced
-#     by `platypus-cli plugin keygen`
-#
-# Each example plugin's .wasm + .minisig land next to its Cargo.toml
-# under target/wasm32-unknown-unknown/release/. Re-run after editing
-# the plugin source.
 example-plugins:
-	@if [ -z "$$PLATYPUS_PUBLISHER_KEY" ]; then \
-	  echo "PLATYPUS_PUBLISHER_KEY=path/to/secret.platypus is required"; exit 1; \
-	fi
-	@if [ ! -x $(BUILD_DIR)/platypus-cli ]; then \
-	  echo "$(BUILD_DIR)/platypus-cli missing — run \`make build\` first"; exit 1; \
-	fi
+	@: $${PLATYPUS_PUBLISHER_KEY:?required: path to a plugin keygen secret}
+	@test -x $(BUILD_DIR)/platypus-cli || { echo "run \`make build\` first"; exit 1; }
 	@for d in example/plugins/*/Cargo.toml; do \
-	  dir=$$(dirname $$d); name=$$(basename $$dir); \
-	  echo "→ $$name"; \
+	  dir=$$(dirname $$d); echo "→ $$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
-	  # cargo names the .wasm after the crate's [lib] name field, \
-	  # which doesn't always match the dir basename — e.g. sys-info's \
-	  # lib is sys_info_plugin. Glob the release dir to find whatever \
-	  # cargo produced; assert exactly one .wasm so we fail loud if a \
-	  # crate ever ships multiple cdylibs (would surprise the catalog). \
-	  wasm_count=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm 2>/dev/null | wc -l); \
-	  if [ "$$wasm_count" -ne 1 ]; then \
-	    echo "expected exactly 1 .wasm under $$dir/target/.../release/, found $$wasm_count"; \
-	    exit 1; \
-	  fi; \
-	  wasm=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm); \
+	  wasm=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm 2>/dev/null); \
+	  [ "$$(echo "$$wasm" | wc -l)" = 1 ] || { echo "expected exactly 1 .wasm under $$dir"; exit 1; }; \
 	  $(BUILD_DIR)/platypus-cli plugin sign --force --key $$PLATYPUS_PUBLISHER_KEY --wasm $$wasm || exit 1; \
 	done
 
-# stage-system-plugins (re)builds + signs every plugin under
-# example/plugins/system/ (Rust) and example/plugins/system-go/
-# (TinyGo), then copies plugin.yaml + .wasm + .minisig under
-# internal/server/sysplugins/embedded/system-plugins/<id>/<v>/ so
-# go:embed can pick them up. Run this when:
-#   - you've changed a rust source file under example/plugins/system/,
-#   - you've changed a go source file under example/plugins/system-go/,
-#   - you've rotated the system signing key (delete
-#     hack/.system-signing.secret to mint a fresh one),
-#   - you've added a new system plugin in either tree.
-#
-# The staged tree IS the source of truth the server binary ships with;
-# operators can override per-host by dropping their own tree under
-# <data-dir>/system-plugins/. See internal/server/sysplugins/embed.go.
-#
-# Requires:
-#   - rustup target add wasm32-unknown-unknown
-#   - tinygo (https://tinygo.org) — TinyGo plugins are skipped with a
-#     warning if `tinygo` is not on PATH, so the Rust set keeps building.
 stage-system-plugins:
 	@for d in example/plugins/system/*/Cargo.toml; do \
-	  dir=$$(dirname $$d); name=$$(basename $$dir); \
-	  echo "→ rust:$$name"; \
+	  dir=$$(dirname $$d); echo "→ rust:$$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done
 	@if command -v tinygo >/dev/null 2>&1; then \
 	  for d in example/plugins/system-go/*/go.mod; do \
-	    dir=$$(dirname $$d); name=$$(basename $$dir); \
-	    entry=$$(grep '^  entry:' $$dir/plugin.yaml | awk '{print $$2}'); \
-	    echo "→ go:$$name ($$entry)"; \
+	    dir=$$(dirname $$d); entry=$$(awk '/^  entry:/ {print $$2}' $$dir/plugin.yaml); \
+	    echo "→ go:$$(basename $$dir) ($$entry)"; \
 	    (cd $$dir && tinygo build -target wasi -o $$entry .) || exit 1; \
 	  done; \
-	else \
-	  echo "warning: tinygo not on PATH — system-go/ plugins will not be rebuilt"; \
-	fi
+	else echo "warning: tinygo not on PATH — system-go/ plugins skipped"; fi
 	$(GO) run ./hack/stage_system_plugins
 
-hooks:
-	pre-commit install
+# ---------- Geo data ----------
+# The Go binary used to embed ip2region but stopped doing so to slim
+# the binary by ~11 MB. The fetch script no-ops when the file's
+# already there.
 
-pre-commit:
-	pre-commit run --all-files
-
-# swag regenerates docs/swagger.yaml + docs/swagger.json from the //@... tags
-# on the API handlers. Run this any time those tags change; the result is
-# committed so the binary can embed them without a build-time codegen step.
-SWAG ?= $(shell $(GO) env GOPATH)/bin/swag
-
-swag:
-	$(SWAG) init --generalInfo cmd/platypus-server/main.go --output docs --parseDependency --parseInternal
-
-snapshot:
-	goreleaser build --snapshot --clean
-
-release:
-	goreleaser release --clean
-
-# `data` pulls the ip2region v4 xdb into internal/ipinfo/data/ so the
-# server can do geo / ISP enrichment at runtime. The Go binary no
-# longer embeds it (saved ~11 MB). Run once after a fresh clone; the
-# fetch script is idempotent. `data-v6` additionally pulls the ~36 MB
-# v6 dataset, which is what the docker / goreleaser pipelines use so
-# the public-IP geo lookup can attribute IPv6 addresses too.
-data:
+$(IP2REGION_V4):
 	./scripts/fetch-ip2region.sh
+
+data: $(IP2REGION_V4)
 
 data-v6:
 	./scripts/fetch-ip2region.sh --v6
 
+# ---------- Clean ----------
+# Strip the staged web bundle but keep the committed stub so a plain
+# `go build` still works without re-running web-ui-embed.
+
 clean:
 	rm -rf $(BUILD_DIR) dist
 	rm -rf desktop/build/bin desktop/frontend/dist desktop/frontend/wailsjs
-	@# Strip the staged web bundle but keep the committed stub so a
-	@# subsequent `go build` still works without re-running web-ui-embed.
 	@find internal/webui/dist -mindepth 1 \
 	  ! -name index.html ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
 
 # ---------- Desktop app ----------
+# webkit2_41 is a no-op on macOS / Windows, required on Linux (only
+# webkit2gtk-4.1 ships on Ubuntu 22.04+ / Fedora 37+ / Debian 12+).
+# subst normalises GOPATH separators so Wails resolves on Windows too.
 
-# `webkit2_41` is a no-op on macOS / Windows but required on Linux where only
-# webkit2gtk-4.1 ships (Ubuntu 22.04+, Fedora 37+, Debian 12+). Wails picks the
-# right binding at compile time based on this tag.
 WAILS_TAGS ?= webkit2_41
-# GOEXE resolves to ".exe" on Windows (empty elsewhere). GOPATH on Windows
-# uses backslashes which bash strips when interpreting the recipe (so
-# "C:\Users\x\go/bin/wails.exe" becomes "C:Usersxgo/bin/wails.exe" and
-# dies with exit 127). subst normalises separators.
 WAILS      ?= $(subst \,/,$(shell $(GO) env GOPATH))/bin/wails$(shell $(GO) env GOEXE)
 
 desktop-deps:
 	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
 	cd desktop/frontend && pnpm install
 
-desktop-bindings:
-	cd desktop && $(WAILS) generate module
+desktop-bindings:  ; cd desktop && $(WAILS) generate module
+desktop-dev:       ; cd desktop && $(WAILS) dev -tags "$(WAILS_TAGS)"
+desktop-build:     ; cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)" -ldflags "$(LDFLAGS)"
+desktop-test:      ; cd desktop && $(GO) test -race -count=1 -timeout=120s ./internal/...
 
-desktop-dev:
-	cd desktop && $(WAILS) dev -tags "$(WAILS_TAGS)"
-
-desktop-build:
-	cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)" -ldflags "$(LDFLAGS)"
-
-desktop-test:
-	cd desktop && $(GO) test -race -count=1 -timeout=120s ./internal/...
-
-# ---------- Standalone web UI ----------
-#
-# Reuses desktop/frontend/src/* with vite mode=web. Output is a static
-# bundle you can open in any browser — no server embed, no /ui/ route.
-# Point it at any running platypus-server via the login form.
+# ---------- Web UI ----------
+# Reuses desktop/frontend/src/* with vite mode=web — no server embed,
+# no /ui/ route. Login form points at any platypus-server.
 
 web-ui:
 	cd desktop/frontend && pnpm install && pnpm run build:web
 
-# Stage the dist-web bundle into internal/webui/dist/ so //go:embed
-# picks it up on the next `go build`. rsync --delete prevents stale
-# files from a previous build polluting the binary; the excludes
-# preserve the committed stub (which provides a graceful fallback when
-# the embed dir is otherwise empty) and the .gitignore that hides
-# build artifacts.
+# rsync --delete drops stale files from a previous build; the
+# excludes preserve the committed stub + .gitignore.
 web-ui-embed: web-ui
 	@mkdir -p internal/webui/dist
-	rsync -a --delete \
-	  --exclude='.gitignore' --exclude='.gitkeep' \
+	rsync -a --delete --exclude='.gitignore' --exclude='.gitkeep' \
 	  desktop/frontend/dist-web/ internal/webui/dist/
 
-# Production build path: web UI first, then both binaries with the
-# real bundle baked in. `make build` alone keeps Go-only builds fast
-# for contributors without a Node toolchain.
-build-bundled: web-ui-embed build
+# Vite preview has SPA history fallback, so React Router routes
+# survive a refresh — `python -m http.server` can't.
+web-ui-serve:
+	@cd desktop/frontend && pnpm preview:web --port 7777
 
-# ---------- End-to-end tests + screenshot gallery ----------
-#
-# `e2e` boots a fresh backend (temp SQLite + bootstrap), spawns one
-# baseline platypus-agent against the seeded listener, starts the vite
-# dev server, runs every spec in e2e/specs/, writes screenshots into
-# docs/screenshots/, and rebuilds the gallery README. Both server and
-# agent binaries must already be built (`make build`).
+# ---------- E2E ----------
+# Boots a fresh backend (temp SQLite + bootstrap), spawns one agent,
+# starts vite, runs every spec in e2e/specs/, writes screenshots
+# into docs/screenshots/, rebuilds the gallery README.
 
 e2e-deps:
 	cd e2e && pnpm install && pnpm exec playwright install chromium
@@ -280,10 +203,3 @@ e2e: build e2e-deps
 	cd e2e && pnpm run e2e
 
 screenshots: e2e
-
-# Tiny preview so you can `make web-ui-serve` and browse
-# http://localhost:7777. Vite's preview server has SPA history fallback baked
-# in, so React Router routes (e.g. /projects/<slug>/enrollment) survive a
-# refresh — `python -m http.server` can't do that.
-web-ui-serve:
-	@cd desktop/frontend && pnpm preview:web --port 7777
