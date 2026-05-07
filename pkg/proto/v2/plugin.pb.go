@@ -687,9 +687,24 @@ type PluginInstallRequest struct {
 	// with error_code="capability_overgrant" otherwise.
 	GrantedCapabilities []string `protobuf:"bytes,30,rep,name=granted_capabilities,json=grantedCapabilities,proto3" json:"granted_capabilities,omitempty"`
 	// Operator string for the audit log (e.g. "user:alice").
-	Actor         string `protobuf:"bytes,40,opt,name=actor,proto3" json:"actor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Actor string `protobuf:"bytes,40,opt,name=actor,proto3" json:"actor,omitempty"`
+	// Resolved (post-secret-substitution) plugin config blob. Bytes
+	// are a JSON object matching the manifest's config.schema. Empty
+	// when the plugin declares no config block, or when the operator
+	// installed it without overrides. The agent's plugin runtime is
+	// responsible for handing this to the plugin's OnInstall hook;
+	// older agents that don't know about config_json simply ignore
+	// it (proto3 unknown fields are preserved on read but not
+	// surfaced to handler code, so the install flow stays
+	// unchanged).
+	ConfigJson []byte `protobuf:"bytes,50,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	// Schema version the config_json was authored against. Pinned so
+	// a manifest update that bumps schema_version doesn't silently
+	// accept a stale config. Zero means "no schema declared" or
+	// "operator left it at the default".
+	ConfigSchemaVersion int32 `protobuf:"varint,51,opt,name=config_schema_version,json=configSchemaVersion,proto3" json:"config_schema_version,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PluginInstallRequest) Reset() {
@@ -780,6 +795,20 @@ func (x *PluginInstallRequest) GetActor() string {
 		return x.Actor
 	}
 	return ""
+}
+
+func (x *PluginInstallRequest) GetConfigJson() []byte {
+	if x != nil {
+		return x.ConfigJson
+	}
+	return nil
+}
+
+func (x *PluginInstallRequest) GetConfigSchemaVersion() int32 {
+	if x != nil {
+		return x.ConfigSchemaVersion
+	}
+	return 0
 }
 
 type isPluginInstallRequest_Source interface {
@@ -1863,7 +1892,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\x06enable\x18\x04 \x01(\v2!.platypus.v2.PluginEnableResponseH\x00R\x06enable\x12?\n" +
 	"\bget_logs\x18\x05 \x01(\v2\".platypus.v2.PluginGetLogsResponseH\x00R\agetLogs\x12\x14\n" +
 	"\x05error\x18d \x01(\tR\x05errorB\b\n" +
-	"\x06result\"\xb8\x02\n" +
+	"\x06result\"\x8d\x03\n" +
 	"\x14PluginInstallRequest\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\tR\bpluginId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x129\n" +
@@ -1872,7 +1901,10 @@ const file_plugin_proto_rawDesc = "" +
 	"\x03url\x18\v \x01(\v2\x1c.platypus.v2.PluginURLSourceH\x00R\x03url\x12)\n" +
 	"\x10publisher_pubkey\x18\x14 \x01(\fR\x0fpublisherPubkey\x121\n" +
 	"\x14granted_capabilities\x18\x1e \x03(\tR\x13grantedCapabilities\x12\x14\n" +
-	"\x05actor\x18( \x01(\tR\x05actorB\b\n" +
+	"\x05actor\x18( \x01(\tR\x05actor\x12\x1f\n" +
+	"\vconfig_json\x182 \x01(\fR\n" +
+	"configJson\x122\n" +
+	"\x15config_schema_version\x183 \x01(\x05R\x13configSchemaVersionB\b\n" +
 	"\x06source\"<\n" +
 	"\x12PluginInlineSource\x12&\n" +
 	"\x0fwasm_size_bytes\x18\x01 \x01(\x04R\rwasmSizeBytes\"\x95\x01\n" +

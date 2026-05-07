@@ -132,6 +132,23 @@ message PluginInstallRequest {
 
   // Operator string for the audit log (e.g. "user:alice").
   string actor = 40;
+
+  // Resolved (post-secret-substitution) plugin config blob. Bytes
+  // are a JSON object matching the manifest's config.schema. Empty
+  // when the plugin declares no config block, or when the operator
+  // installed it without overrides. The agent's plugin runtime is
+  // responsible for handing this to the plugin's OnInstall hook;
+  // older agents that don't know about config_json simply ignore
+  // it (proto3 unknown fields are preserved on read but not
+  // surfaced to handler code, so the install flow stays
+  // unchanged).
+  bytes config_json = 50;
+
+  // Schema version the config_json was authored against. Pinned so
+  // a manifest update that bumps schema_version doesn't silently
+  // accept a stale config. Zero means "no schema declared" or
+  // "operator left it at the default".
+  int32 config_schema_version = 51;
 }
 
 // PluginInlineSource: server pushes the .wasm + .minisig + manifest as

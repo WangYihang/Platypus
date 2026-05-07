@@ -12,8 +12,22 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
+	"github.com/WangYihang/Platypus/internal/storage"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
+
+// chooseCaps prefers the operator-authored grant set on a PluginSpec
+// over the manifest's full declared set. Returns the latter only
+// when the former is empty (un-migrated specs that came up through
+// a legacy []string baseline). Sharing one helper keeps the
+// "operator authority wins" rule in one place — and easy to audit
+// if it ever needs to flip.
+func chooseCaps(specGrants, manifestDeclared []string) []string {
+	if len(specGrants) > 0 {
+		return specGrants
+	}
+	return manifestDeclared
+}
 
 // mandatorySystemPlugins is the set every host gets regardless of the
 // operator's baseline pick. sys-info is here because the host
@@ -54,6 +68,12 @@ const pluginSyncTimeout = 2 * time.Minute
 // nil bundle → returns nil (reconciliation disabled). Missing
 // entries in the bundle are logged and skipped; the agent surfaces
 // plugin_not_installed when an RPC actually tries to use them.
+// reconcileSystemPlugins is the legacy []string entry point. New
+// callers should reach for reconcileSystemPluginsRich, which
+// preserves the operator's config_overrides + granted_capabilities
+// + schema_version per spec. This shim wraps each id into a
+// minimal PluginSpec so the rich path is the only code path the
+// reconciler actually executes.
 func reconcileSystemPlugins(
 	ctx context.Context,
 	sess pluginSyncSession,
@@ -62,10 +82,46 @@ func reconcileSystemPlugins(
 	agentOS, agentArch string,
 	systemBundle fs.FS,
 ) error {
+	specs := make([]storage.PluginSpec, 0, len(hostBaseline))
+	for _, id := range hostBaseline {
+		specs = append(specs, storage.PluginSpec{PluginID: id})
+	}
+	return reconcileSystemPluginsRich(ctx, sess, agentID, specs, agentOS, agentArch, systemBundle)
+}
+
+// reconcileSystemPluginsRich is the agent-link reconciler proper.
+// Takes the host's rich PluginSpec rows and pushes whatever's
+// missing relative to the agent's reported catalog, threading per-
+// spec config_overrides + granted_capabilities + schema_version
+// onto the wire request so the agent's plugin runtime can hand
+// them to OnInstall hooks.
+//
+// Empty / nil specs → only the mandatory core plugins get installed,
+// same posture as the legacy entry point.
+func reconcileSystemPluginsRich(
+	ctx context.Context,
+	sess pluginSyncSession,
+	agentID string,
+	hostSpecs []storage.PluginSpec,
+	agentOS, agentArch string,
+	systemBundle fs.FS,
+) error {
 	if systemBundle == nil {
 		return nil
 	}
 
+	// Index the host's rich specs by plugin_id so the install loop
+	// can look up per-plugin overrides (config_json, granted caps,
+	// schema_version) without doing a linear scan per id.
+	specByID := make(map[string]storage.PluginSpec, len(hostSpecs))
+	hostBaseline := make([]string, 0, len(hostSpecs))
+	for _, s := range hostSpecs {
+		if s.PluginID == "" {
+			continue
+		}
+		specByID[s.PluginID] = s
+		hostBaseline = append(hostBaseline, s.PluginID)
+	}
 	desired := dedupeAppend(nil, hostBaseline)
 	desired = dedupeAppend(desired, mandatorySystemPlugins)
 	if len(desired) == 0 {
@@ -124,7 +180,12 @@ func reconcileSystemPlugins(
 		if cur, present := haveVersion[id]; present && cur != info.Version {
 			action = "upgraded from " + cur + " to"
 		}
-		if err := installOneViaMgmt(ctx, sess, agentID, info, pubkeyBytes, systemBundle); err != nil {
+		// specByID may not have an entry for mandatory-core plugins
+		// the operator didn't list explicitly. The zero PluginSpec
+		// (empty config, empty caps) is the right default for them
+		// — installOneViaMgmt falls back to manifest-declared caps.
+		spec := specByID[id]
+		if err := installOneViaMgmt(ctx, sess, agentID, info, spec, pubkeyBytes, systemBundle); err != nil {
 			log.Warn("plugin sync: install %s@%s on %s: %v", id, info.Version, agentID, err)
 			continue
 		}
@@ -183,6 +244,7 @@ func installOneViaMgmt(
 	sess pluginSyncSession,
 	agentID string,
 	info systemPluginInfo,
+	spec storage.PluginSpec,
 	pubkeyBytes []byte,
 	systemBundle fs.FS,
 ) error {
@@ -198,13 +260,16 @@ func installOneViaMgmt(
 			Source: &v2pb.PluginInstallRequest_Inline{Inline: &v2pb.PluginInlineSource{
 				WasmSizeBytes: uint64(len(wasmBytes)),
 			}},
-			// At sync time the operator's pre-authorization is implicit
-			// in baseline_plugin_ids — grant the full declared set
-			// from the manifest. The system-plugin trust boundary is
-			// "whoever signed publisher.pub", and the operator already
-			// accepted that boundary at enroll time.
-			GrantedCapabilities: info.Capabilities,
+			// Capability source-of-truth: when the host's PluginSpec
+			// carries an explicit grant set (the operator authored it
+			// via the wizard / preset), trust that. Falls back to the
+			// manifest's declared full set when the spec is empty —
+			// the legacy "system-plugin trust boundary is publisher
+			// signing key" posture, preserved for un-migrated specs.
+			GrantedCapabilities: chooseCaps(spec.GrantedCapabilities, info.Capabilities),
 			Actor:               "system:reconcile",
+			ConfigJson:          spec.ConfigOverrides,
+			ConfigSchemaVersion: int32(spec.SchemaVersion),
 		}},
 	}
 	meta, err := proto.Marshal(req)

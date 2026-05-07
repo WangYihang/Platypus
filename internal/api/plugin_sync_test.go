@@ -15,6 +15,7 @@ import (
 
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/server/sysplugins"
+	"github.com/WangYihang/Platypus/internal/storage"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -37,6 +38,14 @@ type openCall struct {
 	correlationID string
 	pluginID      string
 	op            string // "list" / "install"
+	// installConfigJSON / installCaps / installSchemaVersion capture
+	// the rich-shape fields that PR 3.5 introduced on the
+	// PluginInstallRequest. They're only populated for "install"
+	// ops; tests that don't care about config leave them at the
+	// zero value.
+	installConfigJSON     []byte
+	installCaps           []string
+	installSchemaVersion  int32
 }
 
 func (f *fakeSession) Open(t v2pb.StreamType, metadata []byte, correlationID string) (io.ReadWriteCloser, error) {
@@ -53,6 +62,9 @@ func (f *fakeSession) Open(t v2pb.StreamType, metadata []byte, correlationID str
 	case *v2pb.PluginMgmtRequest_Install:
 		call.op = "install"
 		call.pluginID = op.Install.GetPluginId()
+		call.installConfigJSON = op.Install.GetConfigJson()
+		call.installCaps = op.Install.GetGrantedCapabilities()
+		call.installSchemaVersion = op.Install.GetConfigSchemaVersion()
 		f.calls = append(f.calls, call)
 		return f.serveInstall(op.Install.GetPluginId()), nil
 	default:
@@ -514,6 +526,91 @@ func TestReconcileSystemPlugins_EmptyAgentOSAllowsAll(t *testing.T) {
 	}
 	if len(sess.calls) != 3 {
 		t.Fatalf("calls = %d (%+v); want 3 — empty agent OS should not filter", len(sess.calls), sess.calls)
+	}
+}
+
+// TestReconcileSystemPlugins_ForwardsConfigJsonFromHostSpecs: the
+// rich-shape entry point picks up per-plugin config_overrides +
+// granted_capabilities + schema_version from the host's stored
+// PluginSpec rows and threads them into the wire request. This is
+// the property that makes the whole rich-PluginSpec edifice
+// load-bearing — without it, all the storage / API / enrollment
+// plumbing in PR 3.1 would still be silently dropped at the
+// agent-link reconciler.
+func TestReconcileSystemPlugins_ForwardsConfigJsonFromHostSpecs(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
+	stageBundle(t, root, "com.platypus.syslog-fwd", "1.0.0", []string{"net.dial"})
+
+	specs := []storage.PluginSpec{
+		{
+			PluginID:            "com.platypus.syslog-fwd",
+			GrantedCapabilities: []string{"net.dial"},
+			ConfigOverrides:     []byte(`{"destination":"udp://10.0.0.1:514"}`),
+			SchemaVersion:       1,
+		},
+	}
+	sess := &fakeSession{installedVersions: nil}
+	if err := reconcileSystemPluginsRich(
+		context.Background(), sess, "agent-1", specs, "linux", "amd64",
+		os.DirFS(filepath.Join(dataDir, "system-plugins")),
+	); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	// Find the install call for syslog-fwd and assert the rich
+	// fields all flowed through.
+	var fwd *openCall
+	for i := range sess.calls {
+		if sess.calls[i].pluginID == "com.platypus.syslog-fwd" {
+			fwd = &sess.calls[i]
+			break
+		}
+	}
+	if fwd == nil {
+		t.Fatalf("no install call for syslog-fwd; calls=%+v", sess.calls)
+	}
+	if string(fwd.installConfigJSON) != `{"destination":"udp://10.0.0.1:514"}` {
+		t.Fatalf("config_json = %s, want operator's overrides verbatim",
+			fwd.installConfigJSON)
+	}
+	if fwd.installSchemaVersion != 1 {
+		t.Fatalf("config_schema_version = %d, want 1", fwd.installSchemaVersion)
+	}
+	if len(fwd.installCaps) != 1 || fwd.installCaps[0] != "net.dial" {
+		t.Fatalf("granted_capabilities = %v, want [net.dial] from spec",
+			fwd.installCaps)
+	}
+}
+
+// TestReconcileSystemPlugins_NoConfigStaysNoConfig: a host whose
+// rich specs carry no config_overrides (the most common path —
+// today's []string baseline lifted into minimal PluginSpec rows)
+// produces install requests with empty config_json. The legacy
+// install path stays bit-identical.
+func TestReconcileSystemPlugins_NoConfigStaysNoConfig(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, "system-plugins")
+	stagePublisherKey(t, root)
+	stageBundle(t, root, "com.platypus.sys-info", "2.0.0", []string{"sysinfo"})
+
+	specs := []storage.PluginSpec{
+		{PluginID: "com.platypus.sys-info"},
+	}
+	sess := &fakeSession{installedVersions: nil}
+	if err := reconcileSystemPluginsRich(
+		context.Background(), sess, "agent-1", specs, "linux", "amd64",
+		os.DirFS(filepath.Join(dataDir, "system-plugins")),
+	); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, c := range sess.calls {
+		if c.op == "install" && len(c.installConfigJSON) != 0 {
+			t.Fatalf("install of %s carried config_json=%q; expected empty",
+				c.pluginID, c.installConfigJSON)
+		}
 	}
 }
 
