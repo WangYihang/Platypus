@@ -478,6 +478,10 @@ func _hostFSListdir(pathPtr uint64) uint64
 
 // FSListEntry is the wire shape of one entry in a directory listing.
 // Mirrors fsListEntry in internal/agent/plugin/host_fs.go.
+//
+// Mode carries the POSIX mode bits stat(2) reports: low 9 bits are
+// the rwx perms, plus SUID (0o4000), SGID (0o2000), sticky (0o1000).
+// Mask with `& 0o777` for plain perms, or `& 0o4000` for setuid.
 type FSListEntry struct {
 	Name      string `json:"name"`
 	IsDir     bool   `json:"is_dir"`

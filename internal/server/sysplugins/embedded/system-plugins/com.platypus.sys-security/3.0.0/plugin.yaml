@@ -66,5 +66,5 @@ resources:
 
 signature:
   algo: minisign-ed25519
-  key_id: 5C9C41AD529D87AC
+  key_id: 130C1C9D9EFD8A97
   sig_file: sys_security.wasm.minisig

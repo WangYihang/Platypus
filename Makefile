@@ -184,10 +184,17 @@ stage-system-plugins:
 	@if command -v tinygo >/dev/null 2>&1; then \
 	  for d in example/plugins/system-go/*/go.mod; do \
 	    dir=$$(dirname $$d); entry=$$(awk '/^  entry:/ {print $$2}' $$dir/plugin.yaml); \
-	    echo "→ go:$$(basename $$dir) ($$entry)"; \
+	    echo "→ go:$$(basename $$dir) ($$entry, tinygo)"; \
 	    (cd $$dir && tinygo build -target wasi -o $$entry .) || exit 1; \
 	  done; \
-	else echo "warning: tinygo not on PATH — system-go/ plugins skipped"; fi
+	else \
+	  echo "→ go: tinygo not on PATH — falling back to stock Go (wasip1, c-shared reactor module)"; \
+	  for d in example/plugins/system-go/*/go.mod; do \
+	    dir=$$(dirname $$d); entry=$$(awk '/^  entry:/ {print $$2}' $$dir/plugin.yaml); \
+	    echo "→ go:$$(basename $$dir) ($$entry)"; \
+	    (cd $$dir && GOOS=wasip1 GOARCH=wasm $(GO) build -buildmode=c-shared -o $$entry .) || exit 1; \
+	  done; \
+	fi
 	$(GO) run ./hack/stage_system_plugins
 
 # ---------- Geo data ----------

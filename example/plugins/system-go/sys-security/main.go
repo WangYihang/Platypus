@@ -1,15 +1,29 @@
-// sys-security-go is the TinyGo port of example/plugins/system/sys-security.
-// Same v2 check set (kernel.version + ssh.config), same wire output
-// (protojson SecurityScanResponse / ListSecurityChecksResponse),
+//go:build wasip1
+
+// sys-security-go is the TinyGo / wasip1 port of
+// example/plugins/system/sys-security. Same v3 check set, same wire
+// output (protojson SecurityScanResponse / ListSecurityChecksResponse),
 // same per-check architecture so adding a check is a single struct
-// literal in the registry.
+// literal in registry().
+//
+// Coverage:
+//   - kernel.version       /proc/sys/kernel/osrelease vs 5.10 LTS floor
+//   - kernel.mitigations   /sys/devices/system/cpu/vulnerabilities/*
+//   - ssh.config           /etc/ssh/sshd_config risky directives
+//   - sysctl.posture       10 hardening sysctls
+//   - fs.path_writable     world-writable PATH dirs
+//   - fs.suid_outliers     setuid/setgid binaries off the allowlist
 //
 // Build: tinygo build -target wasi -o sys_security.wasm .
+//
+// Note: the build constraint is wasip1-only. The SDK (extism + the
+// platypus host bindings) emits //go:wasmimport directives that don't
+// compile under stock host GOOS. The pure decision-layer logic lives
+// in pure.go (no build tag) so `go test ./...` exercises it.
 package main
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
 
 	"github.com/extism/go-pdk"
@@ -17,89 +31,13 @@ import (
 	platypus "github.com/WangYihang/Platypus/sdk/go/platypus-plugin"
 )
 
-// ---- response shapes (mirrors v2pb encodings) -------------------
-
-type SecurityFinding struct {
-	ID          string   `json:"id"`
-	CheckID     string   `json:"checkId"`
-	Category    string   `json:"category"`
-	Severity    string   `json:"severity"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Evidence    string   `json:"evidence"`
-	Remediation string   `json:"remediation"`
-	References  []string `json:"references,omitempty"`
-}
-
-type CheckResult struct {
-	ID           string `json:"id"`
-	Category     string `json:"category"`
-	Status       string `json:"status"` // "ok" | "skipped" | "error"
-	Error        string `json:"error,omitempty"`
-	ElapsedMs    uint64 `json:"elapsedMs,omitempty"`
-	FindingCount uint32 `json:"findingCount,omitempty"`
-}
-
-type ScanResponse struct {
-	Findings      []SecurityFinding `json:"findings"`
-	Checks        []CheckResult     `json:"checks"`
-	StartedAtUnix int64             `json:"startedAtUnix,omitempty"`
-	ElapsedMs     uint64            `json:"elapsedMs,omitempty"`
-	Error         string            `json:"error,omitempty"`
-}
-
-type AvailableCheck struct {
-	ID          string   `json:"id"`
-	Category    string   `json:"category"`
-	Applicable  bool     `json:"applicable"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	References  []string `json:"references,omitempty"`
-}
-
-type ListResponse struct {
-	Checks []AvailableCheck `json:"checks"`
-	Error  string           `json:"error,omitempty"`
-}
-
-// ScanRequest accepts both `check_ids` (snake) and `checkIds`
-// (camel) keys — operators may hand-craft requests via the REST API
-// in either form, mirroring the Rust crate's serde alias setup.
-type ScanRequest struct {
-	CheckIDs       []string `json:"checkIds"`
-	CheckIDsSnake  []string `json:"check_ids"`
-	Categories    []string `json:"categories"`
-}
-
-// ---- registered checks ------------------------------------------
-
-type check struct {
-	id, category, title, description string
-	run                              func() ([]SecurityFinding, bool)
-}
-
-func registry() []check {
-	return []check{
-		{
-			id:          "kernel.version",
-			category:    "kernel",
-			title:       "Kernel version is recent",
-			description: "Hosts on a kernel older than 5.10 are missing several years of CVE fixes; long-term-support lines start at 5.10 (Mar 2021). This check parses /proc/sys/kernel/osrelease.",
-			run:         checkKernelVersion,
-		},
-		{
-			id:          "ssh.config",
-			category:    "ssh",
-			title:       "SSH server config posture",
-			description: "Reads /etc/ssh/sshd_config and flags risky settings: root login over SSH (PermitRootLogin yes) + password authentication (PasswordAuthentication yes — keys-only is the recommended posture).",
-			run:         checkSSHConfig,
-		},
-	}
-}
-
 // ---- entry points -----------------------------------------------
+//
+// //go:wasmexport is honored by both stock Go (1.21+) and TinyGo
+// 0.31+. Older `//export` only worked under TinyGo, which is why the
+// new directive is preferred here.
 
-//export list_security_checks
+//go:wasmexport list_security_checks
 func listSecurityChecks() int32 {
 	checks := registry()
 	out := ListResponse{Checks: make([]AvailableCheck, 0, len(checks))}
@@ -121,7 +59,7 @@ func listSecurityChecks() int32 {
 	return 0
 }
 
-//export security_scan
+//go:wasmexport security_scan
 func securityScan() int32 {
 	var req ScanRequest
 	if input := pdk.Input(); len(input) > 0 {
@@ -165,7 +103,61 @@ func securityScan() int32 {
 
 func main() {}
 
-// ---- check implementations --------------------------------------
+// ---- registered checks ------------------------------------------
+
+type check struct {
+	id, category, title, description string
+	run                              func() ([]SecurityFinding, bool)
+}
+
+func registry() []check {
+	return []check{
+		{
+			id:          "kernel.version",
+			category:    "kernel",
+			title:       "Kernel version is recent",
+			description: "Hosts on a kernel older than 5.10 are missing several years of CVE fixes; long-term-support lines start at 5.10 (Mar 2021). This check parses /proc/sys/kernel/osrelease.",
+			run:         checkKernelVersion,
+		},
+		{
+			id:          "kernel.mitigations",
+			category:    "kernel",
+			title:       "CPU vulnerability mitigations active",
+			description: "Reads each file under /sys/devices/system/cpu/vulnerabilities/ and flags any whose first token is not 'Mitigation:' or 'Not affected'. Catches Spectre/Meltdown/MDS/L1TF/etc. running with mitigations disabled (often via mitigations=off boot flag).",
+			run:         checkKernelMitigations,
+		},
+		{
+			id:          "ssh.config",
+			category:    "ssh",
+			title:       "SSH server config posture",
+			description: "Reads /etc/ssh/sshd_config and flags risky settings: PermitRootLogin yes, PasswordAuthentication yes, PermitEmptyPasswords yes, X11Forwarding yes.",
+			run:         checkSSHConfig,
+		},
+		{
+			id:          "sysctl.posture",
+			category:    "sysctl",
+			title:       "Sysctl hardening posture",
+			description: "Reads a curated set of /proc/sys keys (kptr_restrict, dmesg_restrict, unprivileged_bpf_disabled, rp_filter, accept_redirects, send_redirects, tcp_syncookies, fs.protected_hardlinks/symlinks, fs.suid_dumpable). One finding per misaligned key.",
+			run:         checkSysctlPosture,
+		},
+		{
+			id:          "fs.path_writable",
+			category:    "filesystem",
+			title:       "World-writable directories on PATH",
+			description: "Stats each PATH directory (plus the standard fallback set /usr/local/sbin, /usr/local/bin, /usr/sbin, /usr/bin, /sbin, /bin, /snap/bin) and flags any that are world-writable AND non-sticky — the textbook setup for an unprivileged user to swap out a binary that root will later invoke.",
+			run:         checkFSPathWritable,
+		},
+		{
+			id:          "fs.suid_outliers",
+			category:    "filesystem",
+			title:       "Unexpected setuid/setgid binaries",
+			description: "Lists /usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin, /bin, /sbin, /opt and flags setuid/setgid binaries not on the allowlist of well-known distro helpers. Capped at 20,000 visited entries.",
+			run:         checkFSSuidOutliers,
+		},
+	}
+}
+
+// ---- check runners (host-side I/O) ------------------------------
 
 func checkKernelVersion() ([]SecurityFinding, bool) {
 	raw, err := platypus.HostFSReadString("/proc/sys/kernel/osrelease")
@@ -175,47 +167,24 @@ func checkKernelVersion() ([]SecurityFinding, bool) {
 	return kernelFindings(strings.TrimSpace(raw)), true
 }
 
-// kernelFindings is the pure decision layer behind checkKernelVersion.
-// Parses an osrelease string, decides whether it predates the 5.10
-// LTS line, emits a SecurityFinding when it does. Pure so a host
-// build can unit-test it without host_fs_read.
-func kernelFindings(osrelease string) []SecurityFinding {
-	major, minor := parseKernelMajorMinor(osrelease)
-	if major > 5 || (major == 5 && minor >= 10) {
-		return nil
+func checkKernelMitigations() ([]SecurityFinding, bool) {
+	const root = "/sys/devices/system/cpu/vulnerabilities"
+	entries, err := platypus.HostFSListDir(root)
+	if err != nil {
+		return nil, false // /sys not exposed (containers)
 	}
-	return []SecurityFinding{{
-		ID:          "kernel.version.outdated",
-		CheckID:     "kernel.version",
-		Category:    "kernel",
-		Severity:    "medium",
-		Title:       "Kernel " + osrelease + " is older than 5.10",
-		Description: "Long-term-support kernel lines start at 5.10 (Mar 2021). Hosts on older kernels miss several years of CVE fixes.",
-		Evidence:    "/proc/sys/kernel/osrelease = " + osrelease,
-		Remediation: "Upgrade to a distribution release that ships a 5.10+ kernel; reboot.",
-	}}
-}
-
-func parseKernelMajorMinor(s string) (uint32, uint32) {
-	parts := strings.SplitN(s, ".", 3)
-	var major, minor uint32
-	if len(parts) >= 1 {
-		if v, err := strconv.ParseUint(parts[0], 10, 32); err == nil {
-			major = uint32(v)
+	var out []SecurityFinding
+	for _, e := range entries {
+		if e.IsDir {
+			continue
 		}
+		body, err := platypus.HostFSReadString(root + "/" + e.Name)
+		if err != nil {
+			continue
+		}
+		out = append(out, mitigationFindings(e.Name, body)...)
 	}
-	if len(parts) >= 2 {
-		// Trim non-numeric suffix from minor: "10-rc4" → "10".
-		minorRaw := parts[1]
-		end := 0
-		for end < len(minorRaw) && minorRaw[end] >= '0' && minorRaw[end] <= '9' {
-			end++
-		}
-		if v, err := strconv.ParseUint(minorRaw[:end], 10, 32); err == nil {
-			minor = uint32(v)
-		}
-	}
-	return major, minor
+	return out, true
 }
 
 func checkSSHConfig() ([]SecurityFinding, bool) {
@@ -226,56 +195,106 @@ func checkSSHConfig() ([]SecurityFinding, bool) {
 	return sshdConfigFindings(raw), true
 }
 
-// sshdConfigFindings walks an sshd_config-format string, strips
-// comments + whitespace, emits a SecurityFinding for each risky
-// directive (today: PermitRootLogin yes, PasswordAuthentication yes).
-func sshdConfigFindings(raw string) []SecurityFinding {
-	var findings []SecurityFinding
-	for _, line := range strings.Split(raw, "\n") {
-		if i := strings.Index(line, "#"); i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		switch {
-		case fields[0] == "PermitRootLogin" && fields[1] == "yes":
-			findings = append(findings, SecurityFinding{
-				ID:          "ssh.permit_root_login",
-				CheckID:     "ssh.config",
-				Category:    "ssh",
-				Severity:    "high",
-				Title:       "SSH server allows root login",
-				Description: "PermitRootLogin yes lets anyone with the root password (or root SSH key) authenticate as root directly. Best practice: log in as a non-root user + use sudo.",
-				Evidence:    "/etc/ssh/sshd_config: PermitRootLogin yes",
-				Remediation: `Set PermitRootLogin to "no" (or "prohibit-password") in /etc/ssh/sshd_config and restart sshd.`,
-			})
-		case fields[0] == "PasswordAuthentication" && fields[1] == "yes":
-			findings = append(findings, SecurityFinding{
-				ID:          "ssh.password_authentication",
-				CheckID:     "ssh.config",
-				Category:    "ssh",
-				Severity:    "medium",
-				Title:       "SSH server allows password authentication",
-				Description: "Password auth is brute-forceable. Public-key authentication has no such failure mode and is the recommended posture for production hosts.",
-				Evidence:    "/etc/ssh/sshd_config: PasswordAuthentication yes",
-				Remediation: `Distribute SSH keys to users, set PasswordAuthentication to "no" in /etc/ssh/sshd_config, restart sshd.`,
-			})
-		}
+func checkSysctlPosture() ([]SecurityFinding, bool) {
+	// Cheap applicability probe: if /proc/sys is not exposed (e.g.
+	// restricted container), skip the whole check.
+	if _, err := platypus.HostFSReadString("/proc/sys/kernel/osrelease"); err != nil {
+		return nil, false
 	}
-	return findings
+	var findings []SecurityFinding
+	for _, e := range sysctlExpectations() {
+		raw, err := platypus.HostFSReadString(sysctlPath(e.key))
+		if err != nil {
+			continue // missing keys are common on minimal containers
+		}
+		findings = append(findings, sysctlFinding(e, normalizeSysctl(raw))...)
+	}
+	return findings, true
 }
 
-func contains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
+func checkFSPathWritable() ([]SecurityFinding, bool) {
+	environ, _ := platypus.HostFSReadString("/proc/1/environ")
+	paths := parsePathEnv(environ)
+	for _, p := range pathFallback {
+		if !contains(paths, p) {
+			paths = append(paths, p)
 		}
 	}
-	return false
+
+	var findings []SecurityFinding
+	for _, d := range paths {
+		entry, ok := statViaParent(d)
+		if !ok {
+			continue
+		}
+		if !entry.IsDir {
+			continue
+		}
+		if entry.Mode&0o002 == 0 {
+			continue
+		}
+		// World-writable + sticky (1777) is the /tmp pattern and is
+		// intentional; flag only the non-sticky case.
+		if entry.Mode&0o1000 != 0 {
+			continue
+		}
+		findings = append(findings, pathWritableFinding(d, entry.Mode))
+	}
+	return findings, true
+}
+
+// statViaParent fetches a directory's listdir entry from its parent —
+// gets us mode bits without a separate stat host fn.
+func statViaParent(path string) (platypus.FSListEntry, bool) {
+	parent, name, ok := splitParent(path)
+	if !ok {
+		return platypus.FSListEntry{}, false
+	}
+	entries, err := platypus.HostFSListDir(parent)
+	if err != nil {
+		return platypus.FSListEntry{}, false
+	}
+	for _, e := range entries {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	return platypus.FSListEntry{}, false
+}
+
+func checkFSSuidOutliers() ([]SecurityFinding, bool) {
+	var findings []SecurityFinding
+	visited := 0
+
+	for _, root := range suidScanRoots {
+		stack := []string{root}
+		for len(stack) > 0 {
+			if visited >= suidScanCap {
+				return findings, true
+			}
+			dir := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			entries, err := platypus.HostFSListDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				visited++
+				if visited >= suidScanCap {
+					return findings, true
+				}
+				path := dir + "/" + e.Name
+				if e.IsDir {
+					if depthBelow(root, path) < 4 {
+						stack = append(stack, path)
+					}
+					continue
+				}
+				if f, ok := suidOutlierFinding(path, e.Name, e.Mode); ok {
+					findings = append(findings, f)
+				}
+			}
+		}
+	}
+	return findings, true
 }

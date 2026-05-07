@@ -21,6 +21,27 @@ import (
 //
 // Capability gate: CapFSRead (plus per-path manifest spec).
 
+// posixMode converts an os.FileMode into the POSIX mode bits the
+// kernel exposes via stat(2): the low 9 bits are rwx perms, plus
+// SUID (0o4000), SGID (0o2000), and sticky (0o1000). Go encodes
+// those three bits in non-POSIX positions (ModeSetuid<<23, etc.),
+// so we have to translate. Used by listdir + stat so plugins that
+// inspect special bits — sys-security's fs.suid_outliers — get the
+// shape they expect.
+func posixMode(m os.FileMode) uint32 {
+	out := uint32(m.Perm())
+	if m&os.ModeSetuid != 0 {
+		out |= 0o4000
+	}
+	if m&os.ModeSetgid != 0 {
+		out |= 0o2000
+	}
+	if m&os.ModeSticky != 0 {
+		out |= 0o1000
+	}
+	return out
+}
+
 // fsListEntry is the on-the-wire shape returned by host_fs_listdir
 // (one per entry) and host_fs_stat (single).
 type fsListEntry struct {
@@ -28,12 +49,14 @@ type fsListEntry struct {
 	IsDir   bool   `json:"is_dir"`
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"mtime_unix"`
-	// Mode carries the permission bits (low 9 of Unix mode). Added
-	// for the archive walker (sys-file-archive) so tar headers can
+	// Mode carries the POSIX mode bits the kernel exposes via stat:
+	// the low 9 are the rwx perms; the next 3 are SUID (0o4000),
+	// SGID (0o2000), sticky (0o1000). Added originally for the
+	// archive walker (sys-file-archive) so tar headers can
 	// round-trip executability + readability when an operator
-	// downloads a tree. Older plugins that ignore the field stay
-	// backward compatible — JSON unmarshal of an unknown field is a
-	// no-op on the rust side.
+	// downloads a tree. The SUID / SGID / sticky bits were folded in
+	// later for sys-security's fs.suid_outliers check; existing
+	// plugins that mask with `& 0o777` keep working.
 	Mode uint32 `json:"mode,omitempty"`
 }
 
@@ -200,7 +223,7 @@ func (pctx *pluginCtx) hostFSReadRange(_ context.Context, p *extism.CurrentPlugi
 		Data: buf[:n],
 		EOF:  eof,
 		Size: st.Size(),
-		Mode: uint32(st.Mode().Perm()),
+		Mode: posixMode(st.Mode()),
 	}
 	returnEnvelope(p, stack, okData(resp))
 }
@@ -236,7 +259,7 @@ func (pctx *pluginCtx) hostFSListdir(_ context.Context, p *extism.CurrentPlugin,
 			IsDir:   e.IsDir(),
 			Size:    info.Size(),
 			ModTime: info.ModTime().Unix(),
-			Mode:    uint32(info.Mode().Perm()),
+			Mode:    posixMode(info.Mode()),
 		})
 	}
 	returnEnvelope(p, stack, okData(out))
@@ -267,7 +290,7 @@ func (pctx *pluginCtx) hostFSStat(_ context.Context, p *extism.CurrentPlugin, st
 		IsDir:   st.IsDir(),
 		Size:    st.Size(),
 		ModTime: st.ModTime().Unix(),
-		Mode:    uint32(st.Mode().Perm()),
+		Mode:    posixMode(st.Mode()),
 	}))
 }
 
