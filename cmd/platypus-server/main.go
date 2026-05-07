@@ -395,6 +395,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	enrollSvc := enrollment.New(db).WithPKI(pkiSvc).WithSettings(settingsReg)
 	enrollTokensH := api.NewEnrollmentTokensHandler(db, enrollSvc)
 	enrollPresetsH := api.NewEnrollmentPresetsHandler(db)
+	projectSecretsH := api.NewProjectSecretsHandler(db)
 	accountPATH := api.NewAccountPATHandler(db, tokenVerifier)
 	adminRolesH := api.NewAdminRolesHandler(db)
 
@@ -462,6 +463,7 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	api.RegisterV1ProjectSessionsRoutes(rest, sessionsH, rbac)
 	api.RegisterV1EnrollmentTokenRoutes(rest, enrollTokensH, rbac)
 	api.RegisterV1EnrollmentPresetRoutes(rest, enrollPresetsH, rbac)
+	api.RegisterV1ProjectSecretRoutes(rest, projectSecretsH, rbac)
 	api.RegisterV1AccountPATRoutes(rest, accountPATH, rbac)
 	api.RegisterV1AdminRolesRoutes(rest, adminRolesH, rbac)
 	api.RegisterV1InstallTokenRoutes(rest, installH, rbac)
