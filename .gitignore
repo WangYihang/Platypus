@@ -111,3 +111,13 @@ config.yaml
 # file just means the next run of the staging helper mints a new
 # keypair and re-signs every staged plugin.
 hack/.system-signing.secret
+
+# Dev signing keypair for the local-dev release tree (`make releases`).
+# Auto-minted on first run; persists across runs so previously-enrolled
+# agents keep verifying upgrade manifests.
+hack/.agent-signing.*
+
+# Server runtime data (default --data-dir): SQLite DB, recordings,
+# release tree, optional TLS cert, dev CA KEK, bootstrap secret.
+# Wipe with `rm -rf data` to reset local state.
+data/

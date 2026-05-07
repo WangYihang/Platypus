@@ -196,6 +196,7 @@ builds:
       - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
       - -X "github.com/WangYihang/Platypus/pkg/version.Commit={{.Commit}}"
       - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/Platypus/internal/agent.SigningPublicKey={{ .Env.AGENT_SIGNING_PUBKEY_B64 }}"
 
 archives:
   - format: tar.gz

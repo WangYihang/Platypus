@@ -4,10 +4,29 @@ LDFLAGS    := -s -w
 BINS       := platypus-server platypus-agent platypus-cli
 BIN_PATHS  := $(addprefix $(BUILD_DIR)/,$(BINS))
 
-# Base64 Ed25519 pubkey baked into platypus-agent — the agent refuses
-# to self-update if empty (better than an unsigned channel).
-AGENT_SIGNING_PUBKEY ?=
-AGENT_LDFLAGS        := $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
+# Dev signing keypair for the local-dev release pipeline. Auto-minted
+# on first `make releases`; persists across runs so previously-enrolled
+# agents keep verifying upgrade manifests. AGENT_SIGNING_PUBKEY picks
+# up the dev pubkey automatically when present so `make build` and
+# `make releases` produce binaries with matching trust roots. CI /
+# production override AGENT_SIGNING_PUBKEY explicitly via env.
+DEV_SIGNING_KEY    := hack/.agent-signing.pem
+DEV_SIGNING_PUBKEY := hack/.agent-signing.pub.b64
+# `=` (deferred) so the shell read of the sentinel happens each time
+# AGENT_LDFLAGS expands — `make all` mints the keypair part-way through,
+# and the host build (later in the chain) needs to pick up the freshly-
+# minted pubkey. Immediate expansion (`:=`) would freeze the empty
+# parse-time value.
+AGENT_SIGNING_PUBKEY ?= $(shell [ -f $(DEV_SIGNING_PUBKEY) ] && cat $(DEV_SIGNING_PUBKEY))
+AGENT_LDFLAGS         = $(LDFLAGS) -X github.com/WangYihang/Platypus/internal/agent.SigningPublicKey=$(AGENT_SIGNING_PUBKEY)
+
+# Local-dev release tree: signed manifest + cross-platform agent
+# binaries that the enrollment download endpoint serves out of
+# <data-dir>/releases/. Without this tree every install link 404s.
+DATA_DIR          ?= data
+RELEASES_VERSION  ?= 0.0.0-dev
+RELEASES_CHANNEL  ?= stable
+RELEASES_MANIFEST := $(DATA_DIR)/releases/manifest/$(RELEASES_CHANNEL).json
 
 PROTO_V2_SRC := $(wildcard proto/v2/*.proto)
 PROTO_V2_OUT := pkg/proto/v2/common.pb.go
@@ -15,16 +34,19 @@ IP2REGION_V4 := internal/ipinfo/data/ip2region_v4.xdb
 
 .DEFAULT_GOAL := all
 .PHONY: all build proto test lint fmt vet tidy clean release snapshot help swag \
-        hooks pre-commit data data-v6 \
+        hooks pre-commit data data-v6 releases \
         example-plugins stage-system-plugins \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
         web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots \
         $(BIN_PATHS)
 
 # `make` after a fresh clone produces a fully-functioning ./build/*:
-# data fetched, web UI baked in, all binaries built. Everything is
-# file-tracked, so re-runs only redo stale artefacts.
-all: $(IP2REGION_V4) web-ui-embed build
+# data fetched, web UI baked in, signed cross-platform agent releases
+# staged, host binaries built. Everything is file-tracked, so re-runs
+# only redo stale artefacts. `releases` runs before `build` so the
+# host agent links against the same dev signing pubkey staged for
+# cross-platform downloads.
+all: $(IP2REGION_V4) web-ui-embed releases build
 
 help:
 	@echo "Quick start:"
@@ -39,6 +61,7 @@ help:
 	@echo "  swag                  Regenerate docs/swagger.{yaml,json}"
 	@echo "  snapshot / release    goreleaser builds"
 	@echo "  data / data-v6        Fetch ip2region xdb (v4 / v4+v6)"
+	@echo "  releases              Cross-compile + sign agent releases under data/releases/ (via goreleaser)"
 	@echo "  hooks / pre-commit    Install / run pre-commit hooks"
 	@echo "  clean                 Remove build artefacts"
 	@echo ""
@@ -144,6 +167,45 @@ data: $(IP2REGION_V4)
 
 data-v6:
 	./scripts/fetch-ip2region.sh --v6
+
+# ---------- Local-dev releases ----------
+# `releases` mints a dev Ed25519 keypair, runs goreleaser to cross-
+# compile platypus-agent for every supported GOOS/GOARCH, then signs
+# + lays out a release tree the server's enrollment endpoint serves
+# out of <data-dir>/releases/. Idempotent — sentinel files keep warm
+# runs cheap. Override RELEASES_VERSION / RELEASES_CHANNEL / DATA_DIR
+# via env to target a non-default tree.
+
+# Six-line openssl recipe lifted verbatim from
+# scripts/dev-publish-entrypoint.sh:28-37 (dev compose sidecar).
+$(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY):
+	@mkdir -p hack
+	@openssl genpkey -algorithm ED25519 -out $(DEV_SIGNING_KEY)
+	@openssl pkey -in $(DEV_SIGNING_KEY) -pubout -outform DER \
+	  | tail -c 32 | base64 -w0 > $(DEV_SIGNING_PUBKEY)
+	@chmod 0600 $(DEV_SIGNING_KEY)
+	@echo "→ minted dev signing keypair under hack/"
+
+# `--config .goreleaser.dev.yaml` selects a focused config that only
+# builds platypus-agent for the proven-compiling matrix (the production
+# .goreleaser.yaml promises broader targets that don't all build under
+# our pinned gopsutil version — that's a release-pipeline concern, not
+# a local-dev one). AGENT_SIGNING_PUBKEY_B64 feeds the ldflags entry
+# so installed agents trust the same dev key the manifest is signed
+# with.
+$(RELEASES_MANIFEST): $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY)
+	@echo "→ building cross-platform agents via goreleaser"
+	AGENT_SIGNING_PUBKEY_B64=$$(cat $(DEV_SIGNING_PUBKEY)) \
+	  goreleaser build --config .goreleaser.dev.yaml --snapshot --clean
+	@echo "→ staging + signing manifest"
+	@$(GO) run ./hack/stage_releases \
+	  --dist dist \
+	  --releases-dir $(DATA_DIR)/releases \
+	  --version $(RELEASES_VERSION) \
+	  --channel $(RELEASES_CHANNEL) \
+	  --privkey $(DEV_SIGNING_KEY)
+
+releases: $(RELEASES_MANIFEST)
 
 # ---------- Clean ----------
 # Strip the staged web bundle but keep the committed stub so a plain

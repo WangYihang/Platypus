@@ -1,0 +1,52 @@
+# Dev-only goreleaser config for `make releases`.
+#
+# Mirrors the agent build from .goreleaser.yaml but pins the platform
+# matrix to the subset that compiles under our pinned dependencies
+# (gopsutil/v4 in particular drops support for several non-amd64 BSDs).
+# The production config at .goreleaser.yaml is left untouched — it's
+# what `make snapshot` / `make release` use; this one targets local
+# dev / `make releases` only.
+#
+# Targets list mirrors scripts/dev-publish-entrypoint.sh:55-63 — the
+# matrix the docker compose sidecar has been smoke-testing daily.
+
+version: 2
+project_name: platypus
+
+builds:
+  - id: platypus-agent
+    main: cmd/platypus-agent/main.go
+    binary: platypus-agent
+    env:
+      - CGO_ENABLED=0
+    targets:
+      - linux_amd64
+      - linux_arm64
+      - linux_arm_6
+      - linux_386
+      - linux_riscv64
+      - linux_ppc64le
+      - linux_s390x
+      - linux_loong64
+      - linux_mips_softfloat
+      - linux_mipsle_softfloat
+      - linux_mips64_hardfloat
+      - linux_mips64le_hardfloat
+      - darwin_amd64
+      - darwin_arm64
+      - windows_amd64
+      - windows_arm64
+      - windows_386
+      - freebsd_amd64
+      - freebsd_arm64
+      - freebsd_386
+      - openbsd_amd64
+      - openbsd_arm64
+      - netbsd_amd64
+      - netbsd_arm64
+    ldflags:
+      - -s -w
+      - -X "github.com/WangYihang/Platypus/pkg/version.Version={{.Version}}"
+      - -X "github.com/WangYihang/Platypus/pkg/version.Commit={{.Commit}}"
+      - -X "github.com/WangYihang/Platypus/pkg/version.Date={{.Date}}"
+      - -X "github.com/WangYihang/Platypus/internal/agent.SigningPublicKey={{ .Env.AGENT_SIGNING_PUBKEY_B64 }}"
