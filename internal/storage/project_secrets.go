@@ -12,6 +12,13 @@ import (
 	"github.com/WangYihang/Platypus/internal/cryptobox"
 )
 
+// ErrSecretRevoked is returned by Reveal when the row exists but
+// has been marked revoked. Distinct from ErrNotFound so callers
+// can render a "rotate this plugin's config" message rather than
+// "secret never existed". Defined as a sentinel so resolver code
+// can errors.Is() it without string-matching.
+var ErrSecretRevoked = errors.New("project_secrets: secret revoked")
+
 // ProjectSecret is one row in project_secrets — a named, encrypted
 // value scoped to a project. The plaintext exists only in memory at
 // create time and during resolution; the row carries AES-256-GCM
@@ -167,7 +174,7 @@ func (r *ProjectSecretRepo) Reveal(ctx context.Context, secretID string) ([]byte
 		return nil, err
 	}
 	if s.Revoked {
-		return nil, errors.New("project_secrets: secret revoked")
+		return nil, ErrSecretRevoked
 	}
 	plaintext, err := cryptobox.Open(s.Nonce, s.Ciphertext)
 	if err != nil {
