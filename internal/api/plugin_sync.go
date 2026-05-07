@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/log"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -17,16 +18,18 @@ import (
 )
 
 // chooseCaps prefers the operator-authored grant set on a PluginSpec
-// over the manifest's full declared set. Returns the latter only
-// when the former is empty (un-migrated specs that came up through
-// a legacy []string baseline). Sharing one helper keeps the
-// "operator authority wins" rule in one place — and easy to audit
-// if it ever needs to flip.
-func chooseCaps(specGrants, manifestDeclared []string) []string {
-	if len(specGrants) > 0 {
-		return specGrants
+// over the manifest's full declared set, then projects to the
+// `[]string` shape protobuf's PluginInstallRequest expects. Sharing
+// one helper keeps the "operator authority wins" rule in one place
+// — and easy to audit if it ever needs to flip. The proto wire is
+// the only `[]string` consumer of capability lists; everywhere
+// else uses the typed CapabilityID.
+func chooseCaps(specGrants []agentplugin.CapabilityID, manifestDeclared []agentplugin.CapabilityID) []string {
+	chosen := specGrants
+	if len(chosen) == 0 {
+		chosen = manifestDeclared
 	}
-	return manifestDeclared
+	return agentplugin.CapabilityIDsToStrings(chosen)
 }
 
 // mandatorySystemPlugins is the set every host gets regardless of the

@@ -96,6 +96,40 @@ func ParseCapabilityID(s string) (CapabilityID, bool) {
 	return c, true
 }
 
+// CapabilityIDsFromStrings is the proto-side adapter: protobuf
+// generates `[]string` for repeated capability fields, and we
+// promote at the boundary to the typed slice every internal Go
+// caller works with. Unknown families are silently dropped — the
+// agent's separate ValidateGranted call surfaces the rejection
+// with a precise reason; this function is for "convert what came
+// off the wire".
+func CapabilityIDsFromStrings(in []string) []CapabilityID {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]CapabilityID, 0, len(in))
+	for _, s := range in {
+		if c, ok := ParseCapabilityID(s); ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// CapabilityIDsToStrings is the inverse adapter, used when
+// building a wire-shape `repeated string` for proto. The naming
+// mirrors CapabilityIDsFromStrings so call sites read symmetrically.
+func CapabilityIDsToStrings(in []CapabilityID) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for _, c := range in {
+		out = append(out, string(c))
+	}
+	return out
+}
+
 // Manifest is the plugin.yaml spec. See docs/plugins/AUTHORS.md for the
 // authoring side. Validation lives in manifest_validate.go so the
 // pure-data type definitions stay easy to skim.

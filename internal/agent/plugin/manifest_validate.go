@@ -342,19 +342,19 @@ func (m *Manifest) DeclaredCapabilities() []CapabilityID {
 // ValidateGranted ensures the granted set is a subset of the declared
 // set. Returns the unknown / overgranted entries (both as a single
 // error) so the caller can surface a precise install-rejection reason.
-func (m *Manifest) ValidateGranted(granted []string) error {
+func (m *Manifest) ValidateGranted(granted []CapabilityID) error {
 	declared := map[CapabilityID]bool{}
 	for _, c := range m.DeclaredCapabilities() {
 		declared[c] = true
 	}
 	var bad []string
 	for _, g := range granted {
-		if _, ok := allCapabilities[CapabilityID(g)]; !ok {
-			bad = append(bad, g+" (unknown)")
+		if _, ok := allCapabilities[g]; !ok {
+			bad = append(bad, string(g)+" (unknown)")
 			continue
 		}
-		if !declared[CapabilityID(g)] {
-			bad = append(bad, g+" (not requested by manifest)")
+		if !declared[g] {
+			bad = append(bad, string(g)+" (not requested by manifest)")
 		}
 	}
 	if len(bad) > 0 {

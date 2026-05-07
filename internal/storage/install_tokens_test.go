@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -122,7 +123,7 @@ func TestInstallTokens_PluginSpecs_RoundtripPreservesRichFields(t *testing.T) {
 			{
 				PluginID:            "com.example.syslog",
 				Version:             "1.4.0",
-				GrantedCapabilities: []string{"net.dial"},
+				GrantedCapabilities: []agentplugin.CapabilityID{"net.dial"},
 				ConfigOverrides:     []byte(`{"destination":"udp://10.0.0.1:514"}`),
 				SchemaVersion:       1,
 			},

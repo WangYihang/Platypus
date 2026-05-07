@@ -22,7 +22,7 @@ func (r *Registry) List() []*v2pb.PluginInfo {
 			Version:        l.entry.Version,
 			Author:         l.manifest.Author.Name,
 			Enabled:        l.entry.Enabled,
-			Capabilities:   l.entry.GrantedCapabilities,
+			Capabilities:   CapabilityIDsToStrings(l.entry.GrantedCapabilities),
 			InstallUnix:    uint64(l.entry.InstalledAt.Unix()),
 			SourceUrl:      l.entry.SourceURL,
 			PublisherKeyId: l.entry.PublisherKeyID,

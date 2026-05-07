@@ -3,6 +3,8 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
+
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 )
 
 // PluginSpec is the atomic deployment unit for a plugin: which plugin,
@@ -28,9 +30,15 @@ import (
 // valid JSON objects — so resolution status is an out-of-band fact
 // the caller tracks.
 type PluginSpec struct {
-	PluginID            string          `json:"plugin_id"`
-	Version             string          `json:"version,omitempty"`
-	GrantedCapabilities []string        `json:"granted_capabilities,omitempty"`
+	PluginID            string                     `json:"plugin_id"`
+	Version             string                     `json:"version,omitempty"`
+	// GrantedCapabilities uses the typed CapabilityID so the
+	// compiler catches unknown families everywhere a PluginSpec
+	// is constructed in Go. The on-the-wire JSON shape is the
+	// same `["fs.read", ...]` array — encoding/json marshals
+	// string-derived types as plain strings, so existing
+	// consumers see no diff.
+	GrantedCapabilities []agentplugin.CapabilityID `json:"granted_capabilities,omitempty"`
 	// ConfigOverrides holds the operator's deltas over the manifest's
 	// schema defaults. json.RawMessage so we never round-trip through
 	// a Go-typed AST: the schema is plugin-author-controlled, so the

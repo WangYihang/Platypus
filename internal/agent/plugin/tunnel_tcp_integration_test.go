@@ -77,7 +77,7 @@ func TestTunnelTCP_RustPluginRoundTrip(t *testing.T) {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"net.dial"},
+		GrantedCapabilities: []plugin.CapabilityID{"net.dial"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestTunnelTCP_DeniesUnlistedTarget(t *testing.T) {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"net.dial"},
+		GrantedCapabilities: []plugin.CapabilityID{"net.dial"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

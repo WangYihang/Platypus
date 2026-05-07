@@ -59,7 +59,7 @@ func installSysSystemd(t *testing.T) *plugin.Registry {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"exec"},
+		GrantedCapabilities: []plugin.CapabilityID{"exec"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

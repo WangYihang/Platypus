@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -27,7 +28,7 @@ type installRequest struct {
 	ManifestB64         string   `json:"manifest_b64" binding:"required"`
 	WasmB64             string   `json:"wasm_b64" binding:"required"`
 	SignatureB64        string   `json:"signature_b64" binding:"required"`
-	GrantedCapabilities []string `json:"granted_capabilities"`
+	GrantedCapabilities []agentplugin.CapabilityID `json:"granted_capabilities"`
 }
 
 // installProgressJSON is the per-frame progress shape rendered in the
@@ -88,7 +89,7 @@ func (h *AgentPluginsHandler) Install(c *gin.Context) {
 			Source: &v2pb.PluginInstallRequest_Inline{Inline: &v2pb.PluginInlineSource{
 				WasmSizeBytes: uint64(len(wasmBytes)),
 			}},
-			GrantedCapabilities: body.GrantedCapabilities,
+			GrantedCapabilities: agentplugin.CapabilityIDsToStrings(body.GrantedCapabilities),
 			Actor:               "user:" + claims.UserID,
 		}},
 	}

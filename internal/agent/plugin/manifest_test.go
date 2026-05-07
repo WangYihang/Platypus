@@ -101,12 +101,12 @@ func TestValidateGranted(t *testing.T) {
 	}
 	cases := []struct {
 		name    string
-		granted []string
+		granted []CapabilityID
 		wantErr string
 	}{
-		{"all-declared", []string{"kv", "exec", "fs.read"}, ""},
-		{"unknown cap", []string{"telekinesis"}, "unknown"},
-		{"overgrant", []string{"net.http"}, "not requested by manifest"},
+		{"all-declared", []CapabilityID{"kv", "exec", "fs.read"}, ""},
+		{"unknown cap", []CapabilityID{"telekinesis"}, "unknown"},
+		{"overgrant", []CapabilityID{"net.http"}, "not requested by manifest"},
 		{"empty", nil, ""},
 	}
 	for _, tc := range cases {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/storage"
 	"github.com/WangYihang/Platypus/internal/user"
 )
@@ -36,7 +37,7 @@ func TestHostPlugins_Upsert_Insert(t *testing.T) {
 		HostID:              h.ID,
 		PluginID:            "datadog-forwarder",
 		Version:             "1.2.0",
-		GrantedCapabilities: []string{"net.http", "fs.read"},
+		GrantedCapabilities: []agentplugin.CapabilityID{"net.http", "fs.read"},
 		ConfigResolved:      cfg,
 		SchemaVersion:       1,
 		State:               storage.HostPluginInstalled,

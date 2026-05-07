@@ -58,7 +58,7 @@ func installSysFilesWrite(t *testing.T) *plugin.Registry {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"fs.write"},
+		GrantedCapabilities: []plugin.CapabilityID{"fs.write"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

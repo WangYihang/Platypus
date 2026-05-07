@@ -19,7 +19,12 @@ type CatalogEntry struct {
 	Name                string    `json:"name"`
 	Author              string    `json:"author"`
 	Enabled             bool      `json:"enabled"`
-	GrantedCapabilities []string  `json:"granted_capabilities"`
+	// GrantedCapabilities uses the typed CapabilityID set so the
+	// loader / install path can't accidentally compare a typo'd
+	// raw string against the manifest's typed declaration. JSON
+	// shape stays as `["fs.read", ...]` since CapabilityID is a
+	// string-derived type.
+	GrantedCapabilities []CapabilityID `json:"granted_capabilities"`
 	InstalledAt         time.Time `json:"installed_at"`
 	SourceURL           string    `json:"source_url,omitempty"` // empty for inline installs
 	PublisherKeyID      string    `json:"publisher_key_id"`

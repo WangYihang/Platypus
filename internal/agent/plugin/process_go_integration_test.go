@@ -58,7 +58,7 @@ func installSysProcessGo(t *testing.T) *plugin.Registry {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"exec", "process"},
+		GrantedCapabilities: []plugin.CapabilityID{"exec", "process"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

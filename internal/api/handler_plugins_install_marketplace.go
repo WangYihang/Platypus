@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -29,7 +30,7 @@ import (
 type installMarketplaceRequest struct {
 	PluginID            string   `json:"plugin_id" binding:"required"`
 	Version             string   `json:"version" binding:"required"`
-	GrantedCapabilities []string `json:"granted_capabilities"`
+	GrantedCapabilities []agentplugin.CapabilityID `json:"granted_capabilities"`
 }
 
 // InstallFromMarketplace handles
@@ -120,7 +121,7 @@ func (h *AgentPluginsHandler) InstallFromMarketplace(c *gin.Context) {
 			Source: &v2pb.PluginInstallRequest_Inline{Inline: &v2pb.PluginInlineSource{
 				WasmSizeBytes: uint64(len(wasmBytes)),
 			}},
-			GrantedCapabilities: body.GrantedCapabilities,
+			GrantedCapabilities: agentplugin.CapabilityIDsToStrings(body.GrantedCapabilities),
 			Actor:               "user:" + claims.UserID,
 		}},
 	}

@@ -67,7 +67,7 @@ func TestProcessOpen_RustPluginNonPty(t *testing.T) {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"process"},
+		GrantedCapabilities: []plugin.CapabilityID{"process"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"process"},
+		GrantedCapabilities: []plugin.CapabilityID{"process"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

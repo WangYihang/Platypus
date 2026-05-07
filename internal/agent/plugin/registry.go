@@ -49,7 +49,7 @@ type AuditRecord struct {
 	PluginID            string
 	Method              string
 	CorrelationID       string
-	GrantedCapabilities []string
+	GrantedCapabilities []CapabilityID
 	FuelUsed            uint64
 	MemPeakBytes        uint64
 	ElapsedMS           int64

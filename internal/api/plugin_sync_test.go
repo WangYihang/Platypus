@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 	"github.com/WangYihang/Platypus/internal/link"
 	"github.com/WangYihang/Platypus/internal/server/sysplugins"
 	"github.com/WangYihang/Platypus/internal/storage"
@@ -560,7 +561,7 @@ func TestReconcileSystemPlugins_ForwardsConfigJsonFromHostSpecs(t *testing.T) {
 	specs := []storage.PluginSpec{
 		{
 			PluginID:            "com.platypus.syslog-fwd",
-			GrantedCapabilities: []string{"net.dial"},
+			GrantedCapabilities: []agentplugin.CapabilityID{"net.dial"},
 			ConfigOverrides:     []byte(`{"destination":"udp://10.0.0.1:514"}`),
 			SchemaVersion:       1,
 		},

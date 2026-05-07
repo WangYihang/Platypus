@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	agentplugin "github.com/WangYihang/Platypus/internal/agent/plugin"
 )
 
 // HostPlugin is one row in host_plugins — the authoritative record of
@@ -25,7 +27,7 @@ type HostPlugin struct {
 	HostID              string
 	PluginID            string
 	Version             string
-	GrantedCapabilities []string
+	GrantedCapabilities []agentplugin.CapabilityID
 	// ConfigResolved is the JSON object the agent received. Stored
 	// verbatim so the row faithfully represents what was deployed,
 	// not what was saved — those can diverge after secret rotations.
@@ -57,7 +59,7 @@ type HostPluginUpsert struct {
 	HostID              string
 	PluginID            string
 	Version             string
-	GrantedCapabilities []string
+	GrantedCapabilities []agentplugin.CapabilityID
 	ConfigResolved      json.RawMessage
 	SchemaVersion       int
 	State               HostPluginState
@@ -78,7 +80,7 @@ func (r *HostPluginRepo) Upsert(ctx context.Context, in HostPluginUpsert) error 
 	if in.HostID == "" || in.PluginID == "" {
 		return errors.New("host_plugins: host_id + plugin_id required")
 	}
-	caps, err := encodeStringSlice(in.GrantedCapabilities)
+	caps, err := encodeStringSlice(agentplugin.CapabilityIDsToStrings(in.GrantedCapabilities))
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func scanHostPlugin(row rowScanner) (*HostPlugin, error) {
 		if err != nil {
 			return nil, fmt.Errorf("host_plugins: decode caps: %w", err)
 		}
-		hp.GrantedCapabilities = ids
+		hp.GrantedCapabilities = agentplugin.CapabilityIDsFromStrings(ids)
 	}
 	if cfg.Valid && cfg.String != "" {
 		hp.ConfigResolved = json.RawMessage(cfg.String)

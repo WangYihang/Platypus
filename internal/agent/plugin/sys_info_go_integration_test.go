@@ -53,7 +53,7 @@ func installSysInfoGo(t *testing.T) *plugin.Registry {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"sysinfo", "fs.read"},
+		GrantedCapabilities: []plugin.CapabilityID{"sysinfo", "fs.read"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

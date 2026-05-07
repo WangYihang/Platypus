@@ -68,7 +68,7 @@ func installSysFilesRead(t *testing.T) *plugin.Registry {
 		Wasm:                wasm,
 		Signature:           []byte(plugin.EncodeSignature(sig)),
 		Actor:               "test",
-		GrantedCapabilities: []string{"fs.read"},
+		GrantedCapabilities: []plugin.CapabilityID{"fs.read"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

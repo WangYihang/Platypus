@@ -53,7 +53,13 @@ type systemPluginInfo struct {
 	Description  string   `json:"description,omitempty"`
 	Author       string   `json:"author,omitempty"`
 	License      string   `json:"license,omitempty"`
-	Capabilities []string `json:"capabilities"`
+	// Capabilities uses the typed CapabilityID (encodes as plain
+	// strings in JSON since CapabilityID is string-derived) so
+	// the reconciler — the only Go-side consumer — gets compile-
+	// time safety against unknown families. The TS-side
+	// SystemPlugin.capabilities continues to receive the same
+	// `["fs.read", ...]` shape.
+	Capabilities []plugin.CapabilityID `json:"capabilities"`
 	// Streams reflects which v2pb.StreamType values this plugin
 	// claims. Useful for the picker to surface "this plugin owns
 	// file_read" without needing the wizard to know the manifest
@@ -131,11 +137,10 @@ func enumerateSystemPlugins(fsys fs.FS) ([]systemPluginInfo, error) {
 			if err != nil {
 				continue
 			}
+			// DeclaredCapabilities is already typed; the systemPluginInfo
+			// struct now consumes the typed slice directly so the
+			// reconciler downstream gets compile-time safety.
 			caps := m.DeclaredCapabilities()
-			capStrs := make([]string, 0, len(caps))
-			for _, c := range caps {
-				capStrs = append(capStrs, string(c))
-			}
 			streams := make([]string, 0, len(m.Streams))
 			for _, s := range m.Streams {
 				if s.StreamType != "" {
@@ -149,7 +154,7 @@ func enumerateSystemPlugins(fsys fs.FS) ([]systemPluginInfo, error) {
 				Description:  m.Description,
 				Author:       m.Author.Name,
 				License:      m.License,
-				Capabilities: capStrs,
+				Capabilities: caps,
 				Streams:      streams,
 				OSTargets:    append([]string(nil), m.Runtime.OSTargets...),
 				ArchTargets:  append([]string(nil), m.Runtime.ArchTargets...),

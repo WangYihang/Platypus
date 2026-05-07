@@ -31,7 +31,7 @@ func TestCatalog_UpsertAndPersist(t *testing.T) {
 		Name:                "Foo",
 		Author:              "Jane",
 		Enabled:             true,
-		GrantedCapabilities: []string{"kv", "fs.read"},
+		GrantedCapabilities: []CapabilityID{"kv", "fs.read"},
 		InstalledAt:         time.Unix(1700000000, 0).UTC(),
 		PublisherKeyID:      "deadbeefdeadbeef",
 	}
@@ -106,7 +106,7 @@ func TestCatalog_ConfigJSON_Roundtrip(t *testing.T) {
 		Name:                "Syslog",
 		Author:              "Jane",
 		Enabled:             true,
-		GrantedCapabilities: []string{"net.dial"},
+		GrantedCapabilities: []CapabilityID{"net.dial"},
 		InstalledAt:         time.Unix(1700000000, 0).UTC(),
 		PublisherKeyID:      "deadbeefdeadbeef",
 		ConfigJSON:          []byte(`{"destination":"udp://10.0.0.1:514","tls":true}`),

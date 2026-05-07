@@ -16,7 +16,7 @@ import (
 // installSysProcess wires the freshly-built sys-process wasm into a
 // fresh registry. Caller picks which capabilities to grant (the
 // merged plugin declares both `exec` and `process` independently).
-func installSysProcess(t *testing.T, granted []string) *plugin.Registry {
+func installSysProcess(t *testing.T, granted []plugin.CapabilityID) *plugin.Registry {
 	t.Helper()
 	wasm, err := os.ReadFile(sysProcessWasmPath())
 	if err != nil {
@@ -77,7 +77,7 @@ func TestProcessExec_Stdout(t *testing.T) {
 	if _, err := os.Stat("/bin/echo"); err != nil {
 		t.Skipf("/bin/echo not present: %v", err)
 	}
-	reg := installSysProcess(t, []string{"exec"})
+	reg := installSysProcess(t, []plugin.CapabilityID{"exec"})
 
 	resp := bridge.Exec(reg)(context.Background(), &v2pb.ExecRequest{
 		Command:   "/bin/echo",
@@ -104,7 +104,7 @@ func TestProcessExec_NonZeroExit(t *testing.T) {
 	if _, err := os.Stat("/bin/sh"); err != nil {
 		t.Skipf("/bin/sh not present: %v", err)
 	}
-	reg := installSysProcess(t, []string{"exec"})
+	reg := installSysProcess(t, []plugin.CapabilityID{"exec"})
 
 	resp := bridge.Exec(reg)(context.Background(), &v2pb.ExecRequest{
 		Command:   "/bin/sh",
@@ -124,7 +124,7 @@ func TestProcessExec_DeniedWithoutCapability(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("/bin/echo not available on windows")
 	}
-	reg := installSysProcess(t, []string{"process"}) // exec NOT granted
+	reg := installSysProcess(t, []plugin.CapabilityID{"process"}) // exec NOT granted
 
 	resp := bridge.Exec(reg)(context.Background(), &v2pb.ExecRequest{
 		Command:   "/bin/echo",
@@ -149,7 +149,7 @@ func TestProcessExec_StderrCapture(t *testing.T) {
 	if _, err := os.Stat("/bin/sh"); err != nil {
 		t.Skipf("/bin/sh not present: %v", err)
 	}
-	reg := installSysProcess(t, []string{"exec"})
+	reg := installSysProcess(t, []plugin.CapabilityID{"exec"})
 
 	resp := bridge.Exec(reg)(context.Background(), &v2pb.ExecRequest{
 		Command:   "/bin/sh",

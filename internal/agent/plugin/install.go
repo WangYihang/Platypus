@@ -36,7 +36,7 @@ func (r *Registry) handleInstall(ctx context.Context, stream io.ReadWriteCloser,
 		Manifest:            manifestBytes,
 		Wasm:                wasmBytes,
 		Signature:           sigBytes,
-		GrantedCapabilities: req.GetGrantedCapabilities(),
+		GrantedCapabilities: CapabilityIDsFromStrings(req.GetGrantedCapabilities()),
 		Actor:               req.GetActor(),
 		ConfigJSON:          req.GetConfigJson(),
 		ConfigSchemaVersion: req.GetConfigSchemaVersion(),
@@ -65,7 +65,7 @@ type InstallParams struct {
 	Manifest            []byte
 	Wasm                []byte
 	Signature           []byte // raw .minisig file contents
-	GrantedCapabilities []string
+	GrantedCapabilities []CapabilityID
 	Actor               string
 
 	// SourceURL is recorded in the catalog for marketplace installs;

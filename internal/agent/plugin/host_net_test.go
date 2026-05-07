@@ -125,10 +125,10 @@ signature:
 		t.Errorf("CapNetListen missing from declared: %v", declared)
 	}
 
-	if err := m.ValidateGranted([]string{"net.listen"}); err != nil {
+	if err := m.ValidateGranted([]CapabilityID{"net.listen"}); err != nil {
 		t.Errorf("ValidateGranted(net.listen): %v", err)
 	}
-	if err := m.ValidateGranted([]string{"net.dial"}); err == nil {
+	if err := m.ValidateGranted([]CapabilityID{"net.dial"}); err == nil {
 		t.Errorf("ValidateGranted(net.dial) should fail — not requested")
 	}
 }

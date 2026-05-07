@@ -35,7 +35,7 @@ import (
 type installSystemRequest struct {
 	PluginID            string   `json:"plugin_id" binding:"required"`
 	Version             string   `json:"version" binding:"required"`
-	GrantedCapabilities []string `json:"granted_capabilities"`
+	GrantedCapabilities []plugin.CapabilityID `json:"granted_capabilities"`
 }
 
 // WithSystemBundle decorates the handler with the active system-plugins
@@ -104,7 +104,7 @@ func (h *AgentPluginsHandler) InstallFromSystem(c *gin.Context) {
 			Source: &v2pb.PluginInstallRequest_Inline{Inline: &v2pb.PluginInlineSource{
 				WasmSizeBytes: uint64(len(wasmBytes)),
 			}},
-			GrantedCapabilities: body.GrantedCapabilities,
+			GrantedCapabilities: plugin.CapabilityIDsToStrings(body.GrantedCapabilities),
 			Actor:               "user:" + claims.UserID,
 		}},
 	}
