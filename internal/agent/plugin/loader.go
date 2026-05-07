@@ -73,6 +73,17 @@ func (l *loaded) instanceOf(ctx context.Context) (*extism.Plugin, error) {
 		},
 		Timeout: l.manifest.Resources.MaxInvocationMS,
 	}
+	// Surface the operator's resolved config to the plugin via
+	// Extism's built-in config map. The plugin SDK's GetConfig
+	// helper wraps pdk.GetConfig("platypus_config") so plugin
+	// authors don't have to know the key. Skip the entry entirely
+	// when no config was supplied — the plugin SDK then returns
+	// "" and the plugin author can branch on it.
+	if len(l.entry.ConfigJSON) > 0 {
+		emanifest.Config = map[string]string{
+			"platypus_config": string(l.entry.ConfigJSON),
+		}
+	}
 
 	// EnableWasi=true gives us extism's stdlib (printf via WASI is
 	// useful for plugin development) but leaves filesystem / sockets

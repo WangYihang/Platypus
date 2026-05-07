@@ -30,6 +30,27 @@ type CatalogEntry struct {
 	// re-installs them on the next boot anyway, so a forced uninstall
 	// would be transient at best.
 	System bool `json:"system,omitempty"`
+
+	// ConfigJSON is the operator's resolved (post-secret-substitution)
+	// plugin config blob, persisted across agent restarts so a plugin
+	// re-instantiated on boot sees the same config it saw at install
+	// time. Stored as raw JSON bytes — encoding/json's
+	// json.RawMessage type round-trips without re-encoding, which
+	// keeps the bytes byte-identical (important if the operator
+	// later checksums their preset configurations).
+	//
+	// Empty when the plugin declares no config block, or when the
+	// operator installed it without overrides. The loader treats
+	// empty as "no config" and skips the platypus_config Manifest
+	// entry; the plugin's GetConfig helper returns "" in that case.
+	ConfigJSON json.RawMessage `json:"config_json,omitempty"`
+
+	// ConfigSchemaVersion pins the manifest's config.schema_version
+	// the ConfigJSON was authored against. Carried alongside the
+	// bytes so a future agent-side validator can refuse to apply
+	// a stale config when the on-disk manifest's schema_version
+	// has moved on.
+	ConfigSchemaVersion int32 `json:"config_schema_version,omitempty"`
 }
 
 // Catalog is the in-memory + on-disk view of installed plugins. All

@@ -26,6 +26,33 @@ rpc:
     request:  { proto: bytes }
     response: { proto: bytes }
 
+# Install-time configuration. The wizard renders this as a form:
+# "Greeting prefix" (string), "Shout" (boolean toggle). Operators
+# who don't override the defaults get "Hello, <name> from Go!" —
+# the plugin's historic behaviour. Operators who customise get
+# whatever they typed.
+#
+# This is the canonical example referenced from
+# docs/plugins/CONFIG_AUTHORING.md — keep it small + self-explanatory
+# so plugin authors can read it as a starting point.
+config:
+  schema_version: 1
+  schema:
+    type: object
+    properties:
+      greeting:
+        type: string
+        description: "Word prefixed before the name. Default: Hello"
+        default: "Hello"
+      shout:
+        type: boolean
+        description: "Uppercase the entire greeting. Useful for
+          excited deployments."
+        default: false
+  defaults:
+    greeting: "Hello"
+    shout: false
+
 # CapLog is implicit (every plugin gets it without a manifest entry).
 # No other capabilities needed.
 

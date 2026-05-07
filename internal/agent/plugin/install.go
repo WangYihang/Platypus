@@ -38,6 +38,8 @@ func (r *Registry) handleInstall(ctx context.Context, stream io.ReadWriteCloser,
 		Signature:           sigBytes,
 		GrantedCapabilities: req.GetGrantedCapabilities(),
 		Actor:               req.GetActor(),
+		ConfigJSON:          req.GetConfigJson(),
+		ConfigSchemaVersion: req.GetConfigSchemaVersion(),
 	}
 	if u := req.GetUrl(); u != nil {
 		params.SourceURL = u.GetWasmUrl()
@@ -79,6 +81,22 @@ type InstallParams struct {
 	// are auto-reinstalled on agent boot and refuse to uninstall via
 	// REST.
 	System bool
+
+	// ConfigJSON is the operator's resolved (post-secret-substitution)
+	// plugin config blob. Server populates it from the host's stored
+	// PluginSpec.ConfigOverrides before pushing the install request;
+	// the agent persists it on the catalog row so a re-instantiation
+	// after agent restart sees the same config the plugin was
+	// originally installed with. Empty when the plugin declares no
+	// config block — the loader's manifest gets no platypus_config
+	// entry in that case.
+	ConfigJSON []byte
+
+	// ConfigSchemaVersion pins which version of the manifest's
+	// config.schema this ConfigJSON was authored against. Stamped
+	// onto the catalog row alongside the bytes; reserved for the
+	// future agent-side schema-version refusal path.
+	ConfigSchemaVersion int32
 }
 
 // InstallFromBytes runs the verify → extract → load → register
@@ -159,6 +177,8 @@ func (r *Registry) InstallFromBytes(ctx context.Context, params InstallParams, p
 		PublisherKeyID:      keyID,
 		SourceURL:           params.SourceURL,
 		System:              params.System,
+		ConfigJSON:          params.ConfigJSON,
+		ConfigSchemaVersion: params.ConfigSchemaVersion,
 	}
 	loaded, err := r.hotLoad(ctx, entry, manifest, pk)
 	if err != nil {
