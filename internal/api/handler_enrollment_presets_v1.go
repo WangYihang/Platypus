@@ -30,17 +30,25 @@ func NewEnrollmentPresetsHandler(db *storage.DB) *EnrollmentPresetsHandler {
 // --- Request / Response shapes -------------------------------------------
 
 type upsertEnrollmentPresetRequest struct {
-	Name                string   `json:"name" binding:"required"`
-	Description         string   `json:"description"`
-	ServerEndpoint      string   `json:"server_endpoint"`
-	TargetOS            string   `json:"target_os"`
-	TargetArch          string   `json:"target_arch"`
-	TTLSeconds          *int     `json:"ttl_seconds"`
-	PATMaxUses          *int     `json:"pat_max_uses"`
-	AutoApprove         bool     `json:"auto_approve"`
-	SkipTLSVerification bool     `json:"skip_tls_verification"`
-	BaselinePluginIDs   []string `json:"baseline_plugin_ids"`
-	PATDescription      string   `json:"pat_description"`
+	Name                string `json:"name" binding:"required"`
+	Description         string `json:"description"`
+	ServerEndpoint      string `json:"server_endpoint"`
+	TargetOS            string `json:"target_os"`
+	TargetArch          string `json:"target_arch"`
+	TTLSeconds          *int   `json:"ttl_seconds"`
+	PATMaxUses          *int   `json:"pat_max_uses"`
+	AutoApprove         bool   `json:"auto_approve"`
+	SkipTLSVerification bool   `json:"skip_tls_verification"`
+	// PluginSpecs is the rich shape: the FE PR 4 swap will start
+	// sending this. When present (non-nil), it overrides
+	// BaselinePluginIDs entirely — the client that knows about
+	// PluginSpec gets exactly the storage shape it asked for.
+	PluginSpecs []storage.PluginSpec `json:"plugin_specs,omitempty"`
+	// BaselinePluginIDs is the legacy shape the current FE still
+	// sends. Translated to minimal PluginSpec rows when
+	// PluginSpecs is absent. Drops away in PR 4.
+	BaselinePluginIDs []string `json:"baseline_plugin_ids,omitempty"`
+	PATDescription    string   `json:"pat_description"`
 }
 
 type enrollmentPresetItem struct {
@@ -55,12 +63,16 @@ type enrollmentPresetItem struct {
 	PATMaxUses          *int      `json:"pat_max_uses,omitempty"`
 	AutoApprove         bool      `json:"auto_approve"`
 	SkipTLSVerification bool      `json:"skip_tls_verification"`
-	BaselinePluginIDs   []string  `json:"baseline_plugin_ids,omitempty"`
-	PATDescription      string    `json:"pat_description,omitempty"`
-	IsSeed              bool      `json:"is_seed"`
-	CreatedByUser       string    `json:"created_by_user,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	// Dual emit during the FE migration window: rich PluginSpecs
+	// for new consumers, projected []string of plugin ids for the
+	// legacy wizard. PR 4 deletes BaselinePluginIDs from this shape.
+	PluginSpecs       []storage.PluginSpec `json:"plugin_specs,omitempty"`
+	BaselinePluginIDs []string             `json:"baseline_plugin_ids,omitempty"`
+	PATDescription    string               `json:"pat_description,omitempty"`
+	IsSeed            bool                 `json:"is_seed"`
+	CreatedByUser     string               `json:"created_by_user,omitempty"`
+	CreatedAt         time.Time            `json:"created_at"`
+	UpdatedAt         time.Time            `json:"updated_at"`
 }
 
 func toEnrollmentPresetItem(p *storage.EnrollmentPreset) enrollmentPresetItem {
@@ -76,6 +88,7 @@ func toEnrollmentPresetItem(p *storage.EnrollmentPreset) enrollmentPresetItem {
 		PATMaxUses:          p.PATMaxUses,
 		AutoApprove:         p.AutoApprove,
 		SkipTLSVerification: p.SkipTLSVerification,
+		PluginSpecs:         p.PluginSpecs,
 		BaselinePluginIDs:   pluginIDsFromSpecs(p.PluginSpecs),
 		PATDescription:      p.PATDescription,
 		IsSeed:              p.IsSeed,
@@ -83,6 +96,19 @@ func toEnrollmentPresetItem(p *storage.EnrollmentPreset) enrollmentPresetItem {
 		CreatedAt:           p.CreatedAt,
 		UpdatedAt:           p.UpdatedAt,
 	}
+}
+
+// chosenSpecs returns the storage-shape PluginSpecs to persist for a
+// given upsert request. The rich PluginSpecs field wins when
+// supplied (non-nil) — the legacy BaselinePluginIDs is the
+// transitional path the current FE uses, and dropping it the
+// instant a richer shape arrives is what guarantees no silent
+// data loss.
+func chosenSpecs(req upsertEnrollmentPresetRequest) []storage.PluginSpec {
+	if req.PluginSpecs != nil {
+		return req.PluginSpecs
+	}
+	return specsFromPluginIDs(req.BaselinePluginIDs)
 }
 
 // pluginIDsFromSpecs / specsFromPluginIDs are the back-compat shim
@@ -148,7 +174,7 @@ func (h *EnrollmentPresetsHandler) Create(c *gin.Context) {
 		PATMaxUses:          req.PATMaxUses,
 		AutoApprove:         req.AutoApprove,
 		SkipTLSVerification: req.SkipTLSVerification,
-		PluginSpecs:         specsFromPluginIDs(req.BaselinePluginIDs),
+		PluginSpecs:         chosenSpecs(req),
 		PATDescription:      req.PATDescription,
 		CreatedByUser:       claims.UserID,
 		CreatedAt:           now,
@@ -243,7 +269,7 @@ func (h *EnrollmentPresetsHandler) Update(c *gin.Context) {
 	existing.PATMaxUses = req.PATMaxUses
 	existing.AutoApprove = req.AutoApprove
 	existing.SkipTLSVerification = req.SkipTLSVerification
-	existing.PluginSpecs = specsFromPluginIDs(req.BaselinePluginIDs)
+	existing.PluginSpecs = chosenSpecs(req)
 	existing.PATDescription = req.PATDescription
 	existing.UpdatedAt = time.Now().UTC()
 

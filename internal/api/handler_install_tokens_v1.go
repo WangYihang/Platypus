@@ -59,6 +59,17 @@ type issueInstallRequest struct {
 	// per-agent plugin REST surface with explicit capability
 	// authorization.
 	BaselinePluginIDs []string `json:"baseline_plugin_ids"`
+	// PluginSpecs is the rich shape PR 4 will start sending. When
+	// supplied, it overrides BaselinePluginIDs entirely. PR 3 plumbs
+	// PluginSpecs through enrollment.Service end-to-end; until then
+	// the handler projects to []string at the boundary so the
+	// enrollment service / storage layer keep their existing
+	// signatures. Rich fields (version, granted_capabilities,
+	// config_overrides, schema_version) are not lost — they're
+	// stored in the install_download_tokens.plugin_specs column —
+	// but the agent-side reconciler still keys on plugin_id alone
+	// in PR 2.
+	PluginSpecs []storage.PluginSpec `json:"plugin_specs,omitempty"`
 	// AutoApprove pre-authorizes the host that redeems this install
 	// link — the host enrolls straight to `approved` without a
 	// human-in-the-loop step. Used for automation flows. Default
@@ -127,14 +138,30 @@ type installListItem struct {
 	PATMaxUses          int        `json:"pat_max_uses"`
 	PATBindingMachineID string     `json:"pat_binding_machine_id,omitempty"`
 	PATDescription      string     `json:"pat_description,omitempty"`
-	BaselinePluginIDs   []string   `json:"baseline_plugin_ids,omitempty"`
-	ConsumedAt          *time.Time `json:"consumed_at,omitempty"`
+	BaselinePluginIDs []string `json:"baseline_plugin_ids,omitempty"`
+	// PluginSpecs is the dual-emit rich shape; PR 4 will read this
+	// instead of the legacy ID list and we'll drop
+	// BaselinePluginIDs from the response.
+	PluginSpecs []storage.PluginSpec `json:"plugin_specs,omitempty"`
+	ConsumedAt  *time.Time           `json:"consumed_at,omitempty"`
 	ConsumedIP          string     `json:"consumed_ip,omitempty"`
 	ConsumedPATID       string     `json:"consumed_pat_id,omitempty"`
 	AutoApprove         bool       `json:"auto_approve"`
 	Revoked             bool       `json:"revoked"`
 	RevokedAt           *time.Time `json:"revoked_at,omitempty"`
 	Status              string     `json:"status"`
+}
+
+// chosenInstallPluginIDs picks the storage-shape []string of plugin
+// ids to forward to the enrollment service. The rich PluginSpecs
+// field wins when supplied; otherwise the legacy BaselinePluginIDs
+// passes through. PR 3 will plumb the rich PluginSpec end-to-end
+// through enrollment.Service and this projection helper goes away.
+func chosenInstallPluginIDs(req issueInstallRequest) []string {
+	if len(req.PluginSpecs) > 0 {
+		return pluginIDsFromSpecs(req.PluginSpecs)
+	}
+	return req.BaselinePluginIDs
 }
 
 func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installListItem {
@@ -152,6 +179,7 @@ func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installLi
 		PATBindingMachineID: t.PATBindingMachineID,
 		PATDescription:      t.PATDescription,
 		BaselinePluginIDs:   t.BaselinePluginIDs,
+		PluginSpecs:         specsFromPluginIDs(t.BaselinePluginIDs),
 		ConsumedAt:          t.ConsumedAt,
 		ConsumedIP:          t.ConsumedIP,
 		ConsumedPATID:       t.ConsumedPATID,
@@ -189,7 +217,7 @@ func (h *InstallTokensHandler) Issue(c *gin.Context) {
 		PATBindingMachineID: req.PATBindingMachineID,
 		PATDescription:      req.PATDescription,
 		AutoApprove:         req.AutoApprove,
-		BaselinePluginIDs:   req.BaselinePluginIDs,
+		BaselinePluginIDs:   chosenInstallPluginIDs(req),
 	})
 	if err != nil {
 		h.audit(c, "install.issue", "install_download", "", projectID, req, "error", err.Error())

@@ -20,7 +20,15 @@ export interface InstallArtifactListItem {
     // Surfaces in the admin UI so reviewers can see which plugins
     // the agent created by this token will boot with. Omitted on
     // older rows.
+    //
+    // Dual-emit during the FE migration: `plugin_specs` carries
+    // the rich PluginSpec shape (plugin_id + version +
+    // granted_capabilities + config_overrides + schema_version);
+    // `baseline_plugin_ids` is the projected list of plugin ids
+    // for legacy consumers. PR 4 drops baseline_plugin_ids; new
+    // code should read plugin_specs.
     baseline_plugin_ids?: string[];
+    plugin_specs?: PluginSpecRef[];
     consumed_at?: string;
     consumed_ip?: string;
     consumed_pat_id?: string;
@@ -84,7 +92,33 @@ export interface IssueInstallRequest {
     // operators add plugins later from the per-host Plugins tab.
     // (Default secure: minimal-on-first-boot — see the wizard's
     // baseline_plugins step.)
+    //
+    // Dual-accept: `plugin_specs` is the rich shape (PR 4), and
+    // wins when both fields are present. Legacy callers that only
+    // know about `baseline_plugin_ids` keep working until then.
     baseline_plugin_ids?: string[];
+    plugin_specs?: PluginSpecRef[];
+}
+
+/**
+ * The atomic deployment unit for a plugin. Same shape across every
+ * layer that ships plugin deployment intent — saved presets,
+ * install bundles, host state, wire requests. PR 4 lands the
+ * schema-driven editor that produces these from the operator's
+ * inputs; for now the FE keeps emitting the legacy ID list and the
+ * server projects between the two.
+ *
+ * config_overrides is the operator's delta over the manifest's
+ * schema defaults. Values may be SecretRefs ({"$secret":"sec_..."})
+ * for fields marked sensitive in the manifest; the server resolves
+ * them before pushing to the agent.
+ */
+export interface PluginSpecRef {
+    plugin_id: string;
+    version?: string;
+    granted_capabilities?: string[];
+    config_overrides?: object;
+    schema_version?: number;
 }
 
 export async function listInstallArtifacts(
