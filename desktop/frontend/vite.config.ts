@@ -99,10 +99,13 @@ export default defineConfig(({ mode }) => {
                             return "vendor-graph";
                         }
                         // CodeMirror (editor + language modes) is ~300 KB
-                        // raw; only FileEditor uses it.
+                        // raw; only FileEditor uses it. `/@uiw/` (not just
+                        // /@uiw/react-codemirror/) catches the full kit
+                        // including codemirror-extensions-basic-setup
+                        // which ships ~390 KB on its own.
                         if (
                             id.includes("/@codemirror/") ||
-                            id.includes("/@uiw/react-codemirror/") ||
+                            id.includes("/@uiw/") ||
                             id.includes("/@lezer/") ||
                             id.includes("/style-mod/") ||
                             id.includes("/w3c-keyname/") ||
@@ -110,15 +113,56 @@ export default defineConfig(({ mode }) => {
                         ) {
                             return "vendor-editor";
                         }
-                        // pdfjs-dist's main lib (~600 KB) is route-lazy
-                        // (PdfViewer only). Splitting it out keeps it
-                        // off the always-on vendor-misc bundle.
-                        if (id.includes("/pdfjs-dist/")) return "vendor-pdf";
+                        // pdfjs-dist's main lib + the react-pdf wrapper
+                        // (~420 KB combined) are route-lazy via PdfViewer.
+                        // Pin both to vendor-pdf so they don't bleed into
+                        // the eager catch-all when the manualChunks
+                        // function force-attributes them.
+                        if (
+                            id.includes("/pdfjs-dist/") ||
+                            id.includes("/react-pdf/")
+                        ) {
+                            return "vendor-pdf";
+                        }
                         // Radix primitives are spread across ~30 packages
                         // that aggregate to ~250 KB. They're imported
                         // app-wide; pinning them to one chunk gives a
                         // stable filename + shrinks vendor-misc.
                         if (id.includes("/@radix-ui/")) return "vendor-radix";
+                        // Icons — per-icon imports tree-shake fine but
+                        // the survivors accumulate to ~150-300 KB across
+                        // 225+ import sites. One chunk = stable filename
+                        // (browser-cache-friendly across deploys that
+                        // don't touch icons) + identifiable on the
+                        // network panel.
+                        if (id.includes("/lucide-react/")) return "vendor-icons";
+                        // TanStack Query: singleton in main.tsx, used by
+                        // ~20 pages. Always-on but ~50-80 KB.
+                        if (
+                            id.includes("/@tanstack/react-query/") ||
+                            id.includes("/@tanstack/query-core/") ||
+                            id.includes("/@tanstack/react-query-devtools/")
+                        ) {
+                            return "vendor-query";
+                        }
+                        // i18next + locale loaders, bootstrapped before
+                        // render (must stay eager).
+                        if (
+                            id.includes("/i18next/") ||
+                            id.includes("/react-i18next/") ||
+                            id.includes("/i18next-browser-languagedetector/")
+                        ) {
+                            return "vendor-i18n";
+                        }
+                        // Form validation stack — Login (route-lazy) +
+                        // Add* dialogs (lazy via Suspense in ProjectShell).
+                        if (
+                            id.includes("/react-hook-form/") ||
+                            id.includes("/@hookform/resolvers/") ||
+                            id.includes("/zod/")
+                        ) {
+                            return "vendor-forms";
+                        }
                         if (
                             id.includes("/react/") ||
                             id.includes("/react-dom/") ||
@@ -126,18 +170,26 @@ export default defineConfig(({ mode }) => {
                         ) {
                             return "vendor-react";
                         }
-                        return "vendor-misc";
+                        // Default: let Vite decide. Returning undefined
+                        // means modules reachable only through lazy
+                        // routes ride along with those lazy chunks
+                        // instead of getting force-pulled into a
+                        // catch-all "vendor-misc" that ships eagerly.
+                        // The named splits above are libs we KNOW must
+                        // be eager (or want stable filenames for).
+                        return undefined;
                     },
                 },
             },
             // vendor-misc + vendor-editor are the natural ceilings here
             // after splitting out cytoscape (vendor-graph), pdfjs
-            // (vendor-pdf), and radix (vendor-radix). Both top out
-            // around ~700 KB raw / ~200 KB gzipped — anything bigger
-            // is a regression worth investigating. The pdf.worker.mjs
-            // chunk is a Web Worker (separate execution context), so
-            // its size doesn't count against the main bundle.
-            chunkSizeWarningLimit: 800,
+            // (vendor-pdf), radix (vendor-radix), icons (vendor-icons),
+            // query (vendor-query), i18n (vendor-i18n), and forms
+            // (vendor-forms). Anything above 600 KB raw is a regression
+            // worth investigating. The pdf.worker.mjs chunk is a Web
+            // Worker (separate execution context), so its size doesn't
+            // count against the main-bundle perf budget.
+            chunkSizeWarningLimit: 600,
         },
         // Build-time globals consumed by the status bar. Set GIT_COMMIT in
         // CI (or via the Makefile) to get a real short hash; falls back to

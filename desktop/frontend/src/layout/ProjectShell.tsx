@@ -1,6 +1,8 @@
 import {
     ReactNode,
+    Suspense,
     createContext,
+    lazy,
     useCallback,
     useContext,
     useEffect,
@@ -24,8 +26,14 @@ import {
     GlobalTerminalProvider,
     useGlobalTerminal,
 } from "../terminal/GlobalTerminalContext";
-import CommandPalette from "./CommandPalette";
-import AddServerDialog from "./AddServerDialog";
+// CommandPalette + AddServerDialog mount but don't render contents
+// until their `open` prop flips true — Cmd+K / "add server" click.
+// Code-split them so the always-on shell bundle drops cmdk + the
+// form stack + 12 lucide icons. Suspense fallback is null because
+// closed dialogs render nothing anyway; the chunk fetches in
+// parallel with the dialog's open animation on first use.
+const CommandPalette = lazy(() => import("./CommandPalette"));
+const AddServerDialog = lazy(() => import("./AddServerDialog"));
 import NavTabs from "./NavTabs";
 import TopBar from "./TopBar";
 import { palette } from "./theme";
@@ -218,11 +226,13 @@ function ShellChrome({
                 <MainColumn>{children}</MainColumn>
             </div>
             <StatusBar />
-            <CommandPalette
-                onAddServer={() => setAddOpen(true)}
-                onManageServers={goToServers}
-            />
-            <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
+            <Suspense fallback={null}>
+                <CommandPalette
+                    onAddServer={() => setAddOpen(true)}
+                    onManageServers={goToServers}
+                />
+                <AddServerDialog open={addOpen} onOpenChange={setAddOpen} />
+            </Suspense>
             <CreateProjectDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
