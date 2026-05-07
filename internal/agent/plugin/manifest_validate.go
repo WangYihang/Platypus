@@ -19,6 +19,36 @@ var idRegexp = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]
 // or build metadata). MVP keeps it tight; extensions can come later.
 var versionRegexp = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
+// ValidatePluginID is the public wrapper around idRegexp the
+// scaffolder CLI's huh.Validate callback calls. Returns nil for a
+// valid reverse-DNS id (lowercase, dot-separated segments, each
+// alphanumeric-or-hyphen) and a descriptive error otherwise.
+// Sharing one regex with the manifest validator means the wizard
+// never produces an id the server-side validator would reject.
+func ValidatePluginID(id string) error {
+	if id == "" {
+		return errors.New("plugin id is required")
+	}
+	if !idRegexp.MatchString(id) {
+		return fmt.Errorf("plugin id %q must be reverse-DNS (lowercase, dot-separated, e.g. com.example.my-plugin)", id)
+	}
+	return nil
+}
+
+// ValidateSemver is the public wrapper around versionRegexp. Same
+// posture as ValidatePluginID: identical regex to the manifest
+// validator so the scaffolder's wizard rejects bad versions before
+// the author hits save.
+func ValidateSemver(v string) error {
+	if v == "" {
+		return errors.New("version is required")
+	}
+	if !versionRegexp.MatchString(v) {
+		return fmt.Errorf("version %q must be strict semver MAJOR.MINOR.PATCH (no pre-release / build metadata)", v)
+	}
+	return nil
+}
+
 // ParseManifest unmarshals + validates a plugin.yaml. It does not touch
 // the filesystem; pass the raw bytes already loaded by the caller.
 func ParseManifest(data []byte) (*Manifest, error) {

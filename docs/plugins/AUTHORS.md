@@ -9,6 +9,32 @@ that take install-time configuration (endpoints, credentials,
 allowlists) declare it via the `config:` block — see
 [CONFIG_AUTHORING.md](CONFIG_AUTHORING.md).
 
+## Quick start
+
+```sh
+platypus-cli plugin new
+```
+
+The interactive wizard walks you through 5–6 questions (language,
+plugin id, capabilities, optional config block) and emits a
+buildable starter project. The generated `plugin.yaml` is
+guaranteed to pass `platypus-cli plugin validate-manifest`; the
+README inside the project carries the build / sign / install
+recipe parameterised on your inputs.
+
+For non-interactive use (CI / scripts), pass every required field
+via flags:
+
+```sh
+platypus-cli plugin new \
+    --lang rust --id com.example.my-plugin --name "My Plugin" \
+    --author-name "Jane" --author-email jane@example.com \
+    --capabilities log,sysinfo --with-config ./my-plugin
+```
+
+The rest of this document covers the underlying spec — read it
+when you outgrow the scaffold.
+
 ## TL;DR
 
 A Platypus plugin is a single **WebAssembly module** plus a

@@ -1,0 +1,85 @@
+# {{.Name}}
+
+{{.Description}}
+
+Plugin id: `{{.ID}}`. Scaffolded by `platypus-cli plugin new`.
+
+## Build
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo build --release --target wasm32-unknown-unknown
+# Output: target/wasm32-unknown-unknown/release/{{.CrateName}}.wasm
+```
+
+Copy the artefact next to `plugin.yaml` so the signer + the install
+pipeline find it:
+
+```sh
+cp target/wasm32-unknown-unknown/release/{{.CrateName}}.wasm {{.EntryWasm}}
+```
+
+## Sign
+
+```sh
+# One-time keygen (skip if you already have a publisher keypair):
+platypus-cli plugin keygen \
+    --out-secret ~/.platypus/publisher.secret \
+    --out-public ~/.platypus/publisher.pub
+
+# Sign this plugin:
+platypus-cli plugin sign \
+    --key ~/.platypus/publisher.secret \
+    --wasm {{.EntryWasm}}
+# Produces {{.EntryWasm}}.minisig.
+```
+
+Then update `plugin.yaml` so `signature.key_id` matches your
+publisher key id (printed by `keygen`).
+
+## Validate
+
+```sh
+platypus-cli plugin validate-manifest plugin.yaml
+```
+
+## Install
+
+Drop the public key on every agent that should accept plugins
+signed by you:
+
+```sh
+cp ~/.platypus/publisher.pub \
+    /etc/platypus/agent/plugins/publishers/<key-id>.pub
+```
+
+For dev / system-managed plugins, stage the bundle under the server's
+system-plugins directory and the agent picks it up on next reconcile.
+For marketplace-distributed plugins, publish to your index.
+{{- if .WithConfig }}
+
+## Configuration
+
+This plugin declares an install-time config schema (see `plugin.yaml`'s
+`config:` block). Operators see a form in the enroll wizard with two
+fields:
+
+- `greeting` — the word prefixed before the name (default `Hello`)
+- `shout` — uppercase the output (default `false`)
+
+See [docs/plugins/CONFIG_AUTHORING.md](https://github.com/WangYihang/Platypus/blob/main/docs/plugins/CONFIG_AUTHORING.md)
+for the deeper guide on adding more fields, marking secrets, and
+schema versioning.
+{{- end }}
+
+## Capabilities
+
+This plugin requests:
+{{.CapabilityList}}
+
+The agent enforces granted capabilities on every host-function call.
+Operators see and approve the requested set in the install dialog.
+
+## License
+
+{{.License}}

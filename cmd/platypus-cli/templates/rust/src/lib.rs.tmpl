@@ -1,0 +1,60 @@
+// {{.ID}} — scaffolded by `platypus-cli plugin new`.
+//
+// Build:
+//   cargo build --release --target wasm32-unknown-unknown
+//   # output: target/wasm32-unknown-unknown/release/{{.CrateName}}.wasm
+//
+// Sign + install: see README.md.
+
+use extism_pdk::*;
+{{- if .WithConfig }}
+use serde::Deserialize;
+{{- end }}
+{{- if .WithConfig }}
+
+/// helloConfig mirrors the manifest's config.schema. Fields default
+/// to their schema defaults via Default::default(); the plugin
+/// rebuilds the struct from JSON on each invocation.
+#[derive(Deserialize)]
+#[serde(default)]
+struct HelloConfig {
+    greeting: String,
+    shout:    bool,
+}
+
+impl Default for HelloConfig {
+    fn default() -> Self {
+        Self { greeting: "Hello".to_string(), shout: false }
+    }
+}
+{{- end }}
+
+#[plugin_fn]
+pub fn hello(name: String) -> FnResult<String> {
+    let name = if name.is_empty() { "world".to_string() } else { name };
+{{- if .WithConfig }}
+
+    // Read the operator's resolved config (post-secret-substitution).
+    // Absent → fall back to schema defaults.
+    let cfg: HelloConfig = match config::get("platypus_config")? {
+        Some(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+        None      => HelloConfig::default(),
+    };
+
+    let mut out = format!("{}, {} from {{.ID}}!", cfg.greeting, name);
+    if cfg.shout { out = out.to_uppercase(); }
+{{- else }}
+
+    let out = format!("Hello, {} from {{.ID}}!", name);
+{{- end }}
+
+    info!("{{.ID}} invoked name={} reply={}", name, out);
+    Ok(out)
+}
+{{- if .CapabilityHints }}
+
+// Capability scaffolds — uncomment and adapt as you implement
+// each granted capability. The manifest's allowlist is the
+// upper bound; whatever you call here must stay inside it.
+{{.CapabilityHints}}
+{{- end }}
