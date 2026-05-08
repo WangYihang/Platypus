@@ -49,5 +49,5 @@ resources:
 
 signature:
   algo: minisign-ed25519
-  key_id: 0FACCB2BC28AC155
+  key_id: 130C1C9D9EFD8A97
   sig_file: sys_procs_windows.wasm.minisig

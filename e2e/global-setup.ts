@@ -347,18 +347,85 @@ async function startBaselineAgent(
 
     // Block globalSetup until the host row shows up, so the first
     // spec already has its populated hosts view.
+    let agentID = "";
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
         const r = await fetch(`${backendURL}/api/v1/projects/${projectID}/hosts`, {
             headers: { Authorization: `Bearer ${adminToken}` },
         });
         if (r.ok) {
-            const { hosts } = (await r.json()) as { hosts?: unknown[] };
-            if (hosts && hosts.length > 0) return;
+            const { hosts } = (await r.json()) as {
+                hosts?: Array<{ agent_id?: string }>;
+            };
+            if (hosts && hosts.length > 0) {
+                agentID = hosts[0]?.agent_id ?? "";
+                break;
+            }
         }
         await new Promise((res) => setTimeout(res, 250));
     }
-    throw new Error("globalSetup: baseline agent did not register a host in 15s");
+    if (!agentID) {
+        throw new Error("globalSetup: baseline agent did not register a host in 15s");
+    }
+
+    // Install the file + process system plugins on the baseline agent
+    // so specs that exercise the Files / Terminal / Recordings flow
+    // (12-host-files, 11-host-terminal, 22-recording-playback,
+    // 40-files-chrome-contract, _demo/04-terminal-persistence) have
+    // the plugin prereqs in place. PAT enrollment by itself only
+    // installs `mandatorySystemPlugins` (sys-info), so without this
+    // step every Files / Terminal request 502s with
+    // plugin_not_installed.
+    await installSystemPlugin(projectID, agentID, adminToken, {
+        pluginID: "com.platypus.sys-files-read",
+        version: "1.0.1",
+        grantedCapabilities: ["fs.read"],
+    });
+    await installSystemPlugin(projectID, agentID, adminToken, {
+        pluginID: "com.platypus.sys-files-write",
+        version: "1.0.0",
+        grantedCapabilities: ["fs.write"],
+    });
+    await installSystemPlugin(projectID, agentID, adminToken, {
+        pluginID: "com.platypus.sys-process",
+        version: "1.0.0",
+        grantedCapabilities: ["process", "exec"],
+    });
+}
+
+async function installSystemPlugin(
+    projectID: string,
+    agentID: string,
+    adminToken: string,
+    spec: {
+        pluginID: string;
+        version: string;
+        grantedCapabilities: string[];
+    },
+): Promise<void> {
+    const r = await fetch(
+        `${backendURL}/api/v1/projects/${projectID}/agents/${agentID}/plugins/install_system`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({
+                plugin_id: spec.pluginID,
+                version: spec.version,
+                granted_capabilities: spec.grantedCapabilities,
+            }),
+        },
+    );
+    if (!r.ok) {
+        // Already-installed (409) is fine — globalSetup is idempotent
+        // across runs that reuse the same temp data dir.
+        if (r.status === 409) return;
+        throw new Error(
+            `globalSetup: install_system ${spec.pluginID}@${spec.version}: ${r.status} ${r.statusText}`,
+        );
+    }
 }
 
 // Re-export the backend handle for teardown via the env-passed PID.

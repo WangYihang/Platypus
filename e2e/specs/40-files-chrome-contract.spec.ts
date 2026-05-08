@@ -88,13 +88,18 @@ test.describe("host files chrome + right-click menu contract", () => {
         const row = page.getByText("etc", { exact: true });
         await row.click({ button: "right" });
 
-        // Some menu items render an inline shortcut suffix (Open
-        // Enter, Delete Del); match the prefix so the assertion
-        // doesn't depend on the keyboard hint copy.
-        for (const item of ["Open", "Copy path", "Delete"]) {
-            await expect(
-                page.getByRole("menuitem", { name: new RegExp(`^${item}\\b`) }),
-            ).toBeVisible();
+        // Each label is the FIRST visible word the menu item renders
+        // — the rest is either a keyboard hint suffix ("Open Enter",
+        // "Delete Del") or a longer descriptor ("Open in terminal
+        // here"). Anchor on `^<word> ?$` plus the optional shortcut
+        // suffix so the bare "Open" entry doesn't strict-mode-collide
+        // with sibling "Open in terminal here".
+        for (const item of [
+            /^Open(\s+\S+)?$/,
+            /^Copy path(\s+\S+)?$/,
+            /^Delete(\s+\S+)?$/,
+        ]) {
+            await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
         }
         await page.keyboard.press("Escape");
     });
