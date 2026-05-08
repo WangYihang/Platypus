@@ -11,7 +11,7 @@ test.describe("toggle-group active state contrast", () => {
     test("Fleet view-switcher 'Table' toggle has visible text", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
+        await page.getByRole("link", { name: /Hosts$/ }).click();
 
         const active = page.getByRole("radio", { name: /Table/ });
         await expect(active).toHaveAttribute("data-state", "on");

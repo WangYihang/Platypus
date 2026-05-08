@@ -1,15 +1,14 @@
 import { expect, test } from "../fixtures/test";
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
-// Hosts is now the default Table view of the Fleet page. Old
-// standalone /hosts route is gone; any navigation from the sidebar
-// lands on /fleet and the Table toggle is selected by default.
-test.describe("fleet · hosts (table view)", () => {
+// Hosts is the project's host inventory. Default lens is the table
+// (cards is the alternative); toggle is preserved per-user.
+test.describe("hosts · table view", () => {
     test("populated list shows the baseline agent's host", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
-        await expect(page).toHaveURL(/\/projects\/default\/fleet(?:\?.*)?$/);
+        await page.getByRole("link", { name: /Hosts$/ }).click();
+        await expect(page).toHaveURL(/\/projects\/default\/hosts(?:\?.*)?$/);
 
         // baseline agent registered in globalSetup → exactly 1 host row.
         // Scope to the Table panel — Timeline and Graph panels stay

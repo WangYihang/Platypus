@@ -14,8 +14,8 @@ test.describe("empty project", () => {
         await page.getByRole("button", { name: /Staging created/i }).click();
         await expect(page).toHaveURL(/\/projects\/staging\/overview$/);
 
-        await page.getByRole("link", { name: /Fleet$/ }).click();
-        await expect(page).toHaveURL(/\/projects\/staging\/fleet(?:\?.*)?$/);
+        await page.getByRole("link", { name: /Hosts$/ }).click();
+        await expect(page).toHaveURL(/\/projects\/staging\/hosts(?:\?.*)?$/);
 
         // The Fleet view ships two panels (cards + table) in the same
         // tree; both render the "No hosts yet" empty state when the

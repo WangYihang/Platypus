@@ -12,13 +12,6 @@ test("walk: switch between two servers from the rail", async ({ page }) => {
     await loginAsAdmin(page);
     await pause(page, 600);
 
-    // The sidebar collapses to an icon-only rail by default. Expand
-    // it once so the ServerSwitcher trigger renders inline (Cmd-K is
-    // the surface for collapsed-rail switching, but the demo narrates
-    // the visual switcher).
-    await page.getByRole("button", { name: /Expand sidebar/i }).click();
-    await pause(page, 400);
-
     await caption(
         page,
         "The rail shows one server right now — let's add a second.",

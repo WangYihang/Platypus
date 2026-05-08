@@ -17,11 +17,6 @@ test.describe("server switcher", () => {
     }) => {
         await loginAsAdmin(page);
         await expect(page).toHaveURL(/\/projects/);
-        // Sidebar collapses to an icon-only rail by default; the
-        // switcher trigger is hidden (Cmd-K is the surface for
-        // switching while collapsed). Expand once for this spec
-        // since it exercises the inline switcher UI.
-        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         // Switcher trigger renders the active server name; opening it
         // surfaces the per-profile rows.
         const trigger = page.getByTestId("server-switcher-trigger");

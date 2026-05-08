@@ -16,10 +16,11 @@ test.describe("sessions panel — no legacy 'listener' copy", () => {
     test("placeholder + empty state never mention 'listener'", async ({ page }) => {
         await loginAsAdmin(page);
 
-        // Drop into the default project's Fleet → Timeline view (the
-        // Sessions panel; the URL param is `timeline` even though the
-        // panel itself is the Sessions UI).
-        await page.goto("/projects/default/fleet?view=timeline");
+        // Drop into the default project's Activity → Sessions tab
+        // (the Sessions panel — what used to be Fleet's Timeline view
+        // before the Fleet → Hosts IA split promoted activity rollups
+        // into their own surface).
+        await page.goto("/projects/default/activity/sessions");
 
         // The search input's placeholder must not include "listener".
         const search = page.locator('input[placeholder*="Search session"]');

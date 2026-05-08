@@ -41,13 +41,14 @@ test.describe("icon registry adoption", () => {
         }
     });
 
-    test("sidebar nav items each render exactly one icon", async ({ page }) => {
+    test("nav items each render exactly one icon", async ({ page }) => {
         await loginAsAdmin(page);
         await page.goto("/projects/default/overview");
 
-        // The sidebar nav lives inside ProjectSidebar's <nav>. Each
-        // active or inactive NavLink renders text + an icon span.
-        const navLinks = page.locator(".pl-nav-link");
+        // 2026-05 IA pass: the sidebar collapsed into a horizontal
+        // top-bar tab strip (NavTabs.tsx). Each NavLink uses the
+        // `pl-top-tab` class and renders text + a single icon span.
+        const navLinks = page.locator(".pl-top-tab");
         const count = await navLinks.count();
         expect(count, "expected at least 4 nav links").toBeGreaterThanOrEqual(4);
 

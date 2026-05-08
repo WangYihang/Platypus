@@ -24,7 +24,7 @@ test.describe("no stale 'listeners' or 'dispatch' copy", () => {
     test("Fleet empty-state on a project with no agents", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Staging created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
+        await page.getByRole("link", { name: /Hosts$/ }).click();
         // Fleet ships two panels (cards + table), both render the
         // empty state — scope to the table panel so the assertion
         // doesn't strict-mode-fail on duplicate matches.

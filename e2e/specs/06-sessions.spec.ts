@@ -2,19 +2,15 @@ import { expect, test } from "../fixtures/test";
 
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
-// Sessions is now the Timeline view of the Fleet page. Toggling to
-// Timeline writes ?view=timeline and shows the Live/All filter chips.
-test.describe("fleet · sessions (timeline view)", () => {
-    test("Timeline view renders with Live / All filter chips", async ({ page }) => {
+// Sessions used to be the Fleet's Timeline view; the Fleet → Hosts IA
+// move promoted the project-wide rollups (Sessions / Events /
+// Recordings / Transfers) into their own /activity/<sub-tab>
+// surface. The Live / All filter chips moved with it.
+test.describe("activity · sessions (live timeline)", () => {
+    test("Sessions tab renders with Live / All filter chips", async ({ page }) => {
         await loginAsAdmin(page);
-        await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
-        await expect(page).toHaveURL(/\/projects\/default\/fleet(?:\?.*)?$/);
-
-        // Switch to Timeline. ToggleGroupItem renders a radio-role
-        // button with the label text.
-        await page.getByRole("radio", { name: /Timeline/ }).click();
-        await expect(page).toHaveURL(/\/projects\/default\/fleet\?view=timeline$/);
+        await page.goto("/projects/default/activity/sessions");
+        await expect(page).toHaveURL(/\/projects\/default\/activity\/sessions$/);
 
         // Filter chips always render regardless of rows.
         await expect(page.getByText("Live", { exact: true }).first()).toBeVisible();

@@ -6,7 +6,13 @@ import { caption, clearOverlays, highlight, pause } from "../../fixtures/demo";
 // 03-fleet-views — Fleet's three views (Table / Timeline / Graph)
 // share state via the Toggle group. Switching is one click; URL
 // reflects ?view= so views are shareable.
-test("walk: Table → Timeline → Graph in the Fleet view", async ({ page }) => {
+//
+// 2026-05 IA pass: the three-view toggle was retired — the legacy
+// Fleet split into Hosts (table/cards), Activity → Sessions
+// (timeline), and Hosts → Topology (graph) as separate routes. The
+// narrative no longer matches the UI; skip until we re-record the
+// demo around the new IA.
+test.skip("walk: Table → Timeline → Graph in the Fleet view", async ({ page }) => {
     await loginAsAdmin(page);
     await pause(page, 500);
 
@@ -14,8 +20,8 @@ test("walk: Table → Timeline → Graph in the Fleet view", async ({ page }) =>
     await pause(page, 600);
 
     await caption(page, "Fleet replaces the old Hosts / Sessions / Topology pages.", 1300);
-    await highlight(page, page.getByRole("link", { name: /Fleet$/ }));
-    await page.getByRole("link", { name: /Fleet$/ }).click();
+    await highlight(page, page.getByRole("link", { name: /Hosts$/ }));
+    await page.getByRole("link", { name: /Hosts$/ }).click();
     await pause(page, 800);
 
     await caption(page, "Default view: Table — the inventory.", 1100);

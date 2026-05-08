@@ -10,15 +10,9 @@ test("walk: terminal survives route changes", async ({ page }) => {
     await loginAsAdmin(page);
     await pause(page, 500);
 
-    // The sidebar collapses to an icon-only rail by default. Expand
-    // it so the demo's narrated Fleet / Audit / Settings clicks read
-    // visually.
-    await page.getByRole("button", { name: /Expand sidebar/i }).click();
-    await pause(page, 400);
-
     await page.getByRole("button", { name: /Default created/i }).click();
     await pause(page, 500);
-    await page.getByRole("link", { name: /Fleet$/ }).click();
+    await page.getByRole("link", { name: /Hosts$/ }).click();
     await pause(page, 500);
     await page
         .getByTestId("fleet-panel-table")
@@ -47,10 +41,10 @@ test("walk: terminal survives route changes", async ({ page }) => {
 
     await caption(
         page,
-        "Now navigate away — to Audit — without closing the shell.",
+        "Now navigate away — to Activity — without closing the shell.",
         1500,
     );
-    await page.getByRole("link", { name: /Audit$/ }).click();
+    await page.getByRole("link", { name: /Activity$/ }).click();
     await pause(page, 1100);
 
     await caption(

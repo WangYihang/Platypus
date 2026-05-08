@@ -9,21 +9,18 @@ import { loginAsAdmin } from "../fixtures/auth";
 // kills momentum at the only moment in the onboarding chain where
 // the user has done a correct thing on their own.
 //
-// We navigate to /fleet (not /overview) because Fleet is the next
+// We navigate to /hosts (not /overview) because Hosts is the next
 // concrete thing they should do (enrol an agent); /overview is a
 // dashboard that's empty until at least one agent exists.
 test.describe("project creation — navigates into the new project", () => {
-    test("after Create succeeds the user lands on /projects/<slug>/fleet", async ({
+    test("after Create succeeds the user lands on /projects/<slug>/hosts", async ({
         page,
     }) => {
         await loginAsAdmin(page);
         await page.goto("/projects");
 
-        // Sidebar collapses to an icon-only rail by default; the
-        // ProjectSwitcher (which hosts the "New project" footer
-        // action) is hidden in that mode. Expand the sidebar first so
-        // the switcher trigger lands in the DOM, then open the menu.
-        await page.getByRole("button", { name: /Expand sidebar/i }).click();
+        // ProjectSwitcher is in the top bar. Open the menu and click
+        // the "new project" footer action.
         await page.getByTestId("project-switcher-trigger").click();
         await page
             .getByRole("button", { name: /new project/i })
@@ -40,9 +37,9 @@ test.describe("project creation — navigates into the new project", () => {
         await dialog.getByLabel(/slug/i).fill(slug);
         await dialog.getByRole("button", { name: /^create$/i }).click();
 
-        // After creation we should be inside the new project, on Fleet.
+        // After creation we should be inside the new project, on Hosts.
         await expect(page).toHaveURL(
-            new RegExp(`/projects/${slug}/fleet(?:[?#]|$)`),
+            new RegExp(`/projects/${slug}/hosts(?:[?#]|$)`),
             { timeout: 10_000 },
         );
     });

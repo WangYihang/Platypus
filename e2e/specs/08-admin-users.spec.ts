@@ -5,11 +5,6 @@ import { loginAsAdmin, shotPath } from "../fixtures/auth";
 test.describe("admin users", () => {
     test("manage users via the user menu", async ({ page }) => {
         await loginAsAdmin(page);
-        // The sidebar collapses to an icon-only rail by default; the
-        // user pill at the bottom is then a tightly-packed row whose
-        // hit areas overlap. Expand the sidebar first so the User
-        // menu button is unambiguously clickable.
-        await page.getByRole("button", { name: /Expand sidebar/i }).click();
         await page.getByRole("button", { name: "User menu" }).click();
         await page.getByRole("button", { name: /Manage users/ }).click();
         await expect(page).toHaveURL(/\/admin\/users$/);

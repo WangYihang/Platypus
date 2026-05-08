@@ -27,7 +27,7 @@ test.describe("enrollment page — enrollment-tokens vocabulary", () => {
         page,
     }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects/default/fleet/enroll");
+        await page.goto("/projects/default/hosts/enroll");
 
         // Wait for the tabs to render so the page-level copy is mounted.
         const tokensTab = page.getByRole("tab", { name: /enrollment tokens/i });

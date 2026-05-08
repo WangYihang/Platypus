@@ -27,7 +27,7 @@ test.describe("HostsPanel — skeleton table while loading", () => {
             return route.continue();
         });
 
-        await page.goto("/projects/default/fleet");
+        await page.goto("/projects/default/hosts");
 
         // The skeleton should render at least 4 placeholder rows. We
         // mark each with data-testid="hosts-row-skeleton" so the test

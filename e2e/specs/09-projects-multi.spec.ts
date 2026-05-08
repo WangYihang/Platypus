@@ -9,12 +9,6 @@ test.describe("projects multi", () => {
         await page.getByRole("button", { name: /Default created/i }).click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Sidebar collapses to an icon-only rail by default and the
-        // ServerSwitcher / ProjectSwitcher are hidden in that mode
-        // (Cmd-K is the surface for switching while collapsed).
-        // Expand so the switcher trigger is in the DOM.
-        await page.getByRole("button", { name: /Expand sidebar/i }).click();
-
         // Click the project switcher in the sidebar. Scope to the
         // sidebar (`role=complementary`) so we don't pick up the
         // "Default" tile copy on the overview page.

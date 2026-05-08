@@ -13,7 +13,7 @@ test.describe("global terminal drawer", () => {
     test("Open terminal mounts xterm in the bottom drawer", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
+        await page.getByRole("link", { name: /Hosts$/ }).click();
         await page
             .getByTestId("fleet-panel-table")
             .locator("table tbody tr")

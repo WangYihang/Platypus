@@ -39,7 +39,12 @@ import { loginAsAdmin } from "../fixtures/auth";
 // We test for the GROUP HEADERS (so the visual grouping is intact)
 // and the order (so a future "let me reorder these" doesn't sneak
 // Settings above Fleet without anyone noticing).
-test.describe("project sidebar nav grouping", () => {
+// 2026-05 IA pass: the grouped sidebar described above was retired
+// in favour of a flat horizontal NavTabs strip (Overview · Hosts ·
+// Activity · Security · Enrollment · Members · Settings). The
+// nav-group-* testids no longer exist. Skip until / unless the
+// grouped sidebar comes back.
+test.describe.skip("project sidebar nav grouping", () => {
     test("renders WORK / ADMIN / AUDIT / PROJECT groups with correct items in order", async ({
         page,
     }) => {

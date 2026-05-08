@@ -7,8 +7,8 @@ test.describe("host view", () => {
     }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
-        await expect(page).toHaveURL(/\/projects\/default\/fleet(?:\?.*)?$/);
+        await page.getByRole("link", { name: /Hosts$/ }).click();
+        await expect(page).toHaveURL(/\/projects\/default\/hosts(?:\?.*)?$/);
 
         // Click into the host row — Fleet Table view routes into the
         // host's default tab (Files since 9748a49 made Files the

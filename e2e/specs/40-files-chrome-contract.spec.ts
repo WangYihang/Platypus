@@ -21,7 +21,7 @@ test.describe("host files chrome + right-click menu contract", () => {
     test.beforeEach(async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Fleet$/ }).click();
+        await page.getByRole("link", { name: /Hosts$/ }).click();
         await page
             .getByTestId("fleet-panel-table")
             .locator("table tbody tr")

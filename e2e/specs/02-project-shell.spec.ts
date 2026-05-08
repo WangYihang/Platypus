@@ -14,21 +14,25 @@ test.describe("project shell", () => {
             .click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Server switcher sits at the top of the sidebar (the
-        // standalone server rail column was retired in 2026-04 IA pass).
-        // Sidebar starts collapsed to an icon-only rail; click
-        // through the chevron so the text labels assertions below
-        // resolve.
-        await page.getByRole("button", { name: /Expand sidebar/i }).click();
+        // Server switcher lives in the top bar (the standalone server
+        // rail column was retired in 2026-04 IA pass).
         await expect(page.getByTestId("server-switcher-trigger")).toBeVisible();
         await expect(page.getByRole("link", { name: /Overview$/ })).toBeVisible({ timeout: 10_000 });
 
-        // Current nav surface (desktop/frontend/src/layout/ProjectSidebar.tsx).
-        // Activities + Recordings collapsed into a single Audit entry;
-        // Enrollment moved inside Fleet (it's how you grow the fleet);
-        // Settings is admin-only (we're logged in as admin so it
-        // renders).
-        for (const label of ["Overview", "Fleet", "Members", "Audit", "Settings"]) {
+        // Current nav surface (desktop/frontend/src/layout/NavTabs.tsx).
+        // Fleet was renamed to Hosts in the IA split that promoted
+        // Activity rollups into their own surface; Security is its own
+        // tab (was inside the project surface). Settings is
+        // admin-only (we're logged in as admin so it renders).
+        for (const label of [
+            "Overview",
+            "Hosts",
+            "Activity",
+            "Security",
+            "Enrollment",
+            "Members",
+            "Settings",
+        ]) {
             await expect(
                 page.getByRole("link", { name: new RegExp(`${label}$`) }),
             ).toBeVisible();

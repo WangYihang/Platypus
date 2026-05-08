@@ -25,7 +25,7 @@ import { loginAsAdmin } from "../fixtures/auth";
 test.describe("enrollment wait banner", () => {
     test("absent without ?await=enroll", async ({ page }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects/default/fleet");
+        await page.goto("/projects/default/hosts");
         await expect(
             page.getByTestId("enrollment-wait-banner"),
         ).toHaveCount(0);
@@ -33,7 +33,7 @@ test.describe("enrollment wait banner", () => {
 
     test("appears with ?await=enroll, dismiss strips the param", async ({ page }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects/default/fleet?await=enroll");
+        await page.goto("/projects/default/hosts?await=enroll");
 
         const banner = page.getByTestId("enrollment-wait-banner");
         await expect(banner).toBeVisible({ timeout: 10_000 });
@@ -48,6 +48,6 @@ test.describe("enrollment wait banner", () => {
         // Dismiss removes the param + unmounts the banner.
         await banner.getByRole("button", { name: /dismiss/i }).click();
         await expect(banner).toHaveCount(0);
-        await expect(page).toHaveURL(/\/projects\/default\/fleet$/);
+        await expect(page).toHaveURL(/\/projects\/default\/hosts$/);
     });
 });

@@ -8,23 +8,17 @@ test.describe("audit logs", () => {
     // validate that the page routes cleanly and the header renders,
     // so a regression in either layer is caught early.
     //
-    // 2026-04 IA pass: the three audit surfaces (Activities /
-    // Recordings / Transfers) consolidated under a single "Audit"
-    // sidebar entry that opens AuditPage with internal tabs. The
-    // canonical landing URL is now /projects/<slug>/audit/activities.
-    test("Audit route lands on Activities tab", async ({ page }) => {
+    // 2026-05 IA pass: the consolidated "Audit" entry split back
+    // out into a top-level "Activity" tab whose default sub-tab is
+    // "sessions" (live + closed). Activities / Recordings /
+    // Transfers are sibling sub-tabs at /activity/events,
+    // /activity/recordings, /activity/transfers.
+    test("Activity route defaults to Sessions tab", async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /^Audit$/ }).click();
-        await expect(page).toHaveURL(/\/projects\/default\/audit\/activities$/);
-        // The sidebar entry stays highlighted on every audit/* URL.
-        await expect(page.getByRole("link", { name: /^Audit$/ })).toBeVisible();
-        // The page-level header now reads "Audit"; the active tab
-        // reads "Activities" inside the right-aligned tab strip.
-        await expect(page.getByRole("tab", { name: /Activities/ })).toHaveAttribute(
-            "data-state",
-            "active",
-        );
+        await page.getByRole("link", { name: /^Activity$/ }).click();
+        await expect(page).toHaveURL(/\/projects\/default\/activity\/sessions$/);
+        await expect(page.getByRole("link", { name: /^Activity$/ })).toBeVisible();
 
         await page.screenshot({
             path: shotPath("23-activity-audit.png"),
