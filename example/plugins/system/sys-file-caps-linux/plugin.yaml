@@ -1,0 +1,59 @@
+api_version: 1
+id: com.platypus.sys-file-caps-linux
+name: File capabilities (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux file-capabilities inventory. Companion to sys-security's
+  fs.suid_outliers — SUID is the classic privileged-bit model;
+  modern distros increasingly replace it with finer-grained Linux
+  capabilities (cap_net_raw, cap_dac_read_search, cap_sys_admin,
+  …). The two surfaces are orthogonal forensics targets.
+
+  Implementation: shells `getcap -r <root> 2>/dev/null` for each of
+  the standard binary directories (/usr/bin, /usr/sbin,
+  /usr/local/bin, /usr/local/sbin, /bin, /sbin, /opt) and parses
+  the output. An allowlist of well-known cap'd binaries (ping, mtr,
+  traceroute, fping, dumpcap, …) is pre-tagged so operators see
+  outliers by default; pass include_allowlisted=true to see every
+  cap'd file.
+
+  Risk classification mirrors SUID outliers:
+    low    — cap_net_raw, cap_net_bind_service (most ping-class binaries)
+    medium — cap_net_admin, cap_sys_time, cap_chown
+    high   — cap_dac_*, cap_sys_admin, cap_sys_module, cap_sys_ptrace
+             (near-root capabilities; flag for human review)
+
+runtime:
+  type: wasm
+  entry: sys_file_caps_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_file_caps
+    request:  { proto: FileCapsListRequest }
+    response: { proto: FileCapsListResponse }
+
+# getcap on Debian/Ubuntu lives at /sbin/getcap; on RHEL/Fedora at
+# /usr/sbin/getcap. Both paths are allowlisted; the plugin probes
+# which one exists at request time and shells the first match.
+capabilities:
+  exec:
+    commands:
+      - "/bin/sh"
+      - "/sbin/getcap"
+      - "/usr/sbin/getcap"
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_file_caps_linux.wasm.minisig

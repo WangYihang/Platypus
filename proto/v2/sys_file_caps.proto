@@ -1,0 +1,61 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_file_caps.proto — Linux file capabilities (xattr
+// `security.capability`) inventory.
+//
+// Companion to sys-security's `fs.suid_outliers` check: SUID is the
+// classic privileged-binary bit, but modern distros increasingly
+// replace SUID with finer-grained Linux capabilities — `ping` no
+// longer carries SUID, it carries `cap_net_raw=ep`. The two are
+// orthogonal forensics surfaces. An attacker installing a binary
+// with `cap_dac_read_search` (read every file) or `cap_sys_admin`
+// (≈ root) is just as dangerous as a SUID outlier and won't be
+// caught by `fs.suid_outliers`.
+//
+// The plugin shells `getcap -r <root> 2>/dev/null` for each scan
+// root and parses the `<path> cap_x,cap_y=ep` lines. An allowlist
+// of well-known cap'd binaries (ping, mtr, traceroute, …) is
+// pre-marked so operators only see the outliers.
+
+message FileCapsListRequest {
+  // Roots to walk. Empty = the plugin's default
+  // (/usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin,
+  //  /bin, /sbin, /opt). Operator can narrow to /opt for a faster
+  // scan, or expand to /home for a paranoid sweep.
+  repeated string roots = 1;
+  // Hard cap on binaries reported. 0 = no cap. The plugin always
+  // walks every root in full (no early exit at the cap), so this
+  // only trims the response.
+  uint32 max_results    = 2;
+  // When true, allowlisted entries (ping, mtr, …) are ALSO returned
+  // with `allowlisted=true`. Defaults to false: operators usually
+  // want only the outliers.
+  bool include_allowlisted = 3;
+}
+
+message FileCapsListResponse {
+  repeated FileCap entries = 1;
+  // Set when at least one root was walked successfully. Empty
+  // string indicates a hard error (getcap missing, no roots
+  // accessible).
+  string backend           = 2;  // "getcap" | ""
+  string error             = 3;
+}
+
+// FileCap is one binary that carries Linux capabilities. caps is the
+// raw `cap_x,cap_y=flags` string from getcap (e.g. "cap_net_raw=ep",
+// "cap_dac_read_search,cap_net_admin=eip"). allowlisted=true means
+// the binary's basename is on a curated list of known-OK files.
+message FileCap {
+  string path        = 1;  // "/usr/bin/ping"
+  string caps        = 2;  // "cap_net_raw=ep"
+  bool   allowlisted = 3;
+  // Risk classification mirroring SUID outliers' severity ladder:
+  // "low" for narrow caps (cap_net_raw, cap_net_bind_service),
+  // "medium" for moderately powerful (cap_net_admin, cap_sys_time),
+  // "high" for near-root (cap_dac_read_search, cap_dac_override,
+  // cap_sys_admin, cap_sys_module, cap_sys_ptrace).
+  string risk        = 4;
+}
