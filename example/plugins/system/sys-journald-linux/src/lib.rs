@@ -101,6 +101,10 @@ struct QueryRequest {
     reverse: bool,
     #[serde(default)]
     boot: String,
+    #[serde(default, rename = "afterCursor", alias = "after_cursor")]
+    after_cursor: String,
+    #[serde(default, rename = "beforeCursor", alias = "before_cursor")]
+    before_cursor: String,
 }
 
 // ---------- response ----------
@@ -112,6 +116,10 @@ struct QueryResponse {
     truncated: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "prevCursor", skip_serializing_if = "String::is_empty")]
+    prev_cursor: String,
+    #[serde(rename = "nextCursor", skip_serializing_if = "String::is_empty")]
+    next_cursor: String,
 }
 
 #[derive(Serialize, Default)]
@@ -134,6 +142,11 @@ pub struct Entry {
     pub identifier: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub comm: String,
+    // journalctl __CURSOR — opaque, monotonic per journal. Pass back
+    // as JournalQueryRequest.after_cursor / before_cursor to resume
+    // listing strictly after / before this entry.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub cursor: String,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -229,6 +242,43 @@ pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
             args.push(r.boot);
         }
     }
+    // Cursor pagination. journalctl natively supports
+    // --after-cursor and --cursor (the latter is "show this entry
+    // and onward"); we use --after-cursor for newer-than and
+    // emulate before_cursor by --cursor + --reverse + post-trim
+    // (the boundary entry itself gets dropped client-side).
+    if !r.after_cursor.is_empty() && !r.before_cursor.is_empty() {
+        return Ok(serde_json::to_string(&QueryResponse {
+            error: "after_cursor and before_cursor are mutually exclusive".to_string(),
+            ..Default::default()
+        })?);
+    }
+    let mut drop_cursor: String = String::new();
+    if !r.after_cursor.is_empty() {
+        if let Err(e) = validate_cursor(&r.after_cursor) {
+            return Ok(serde_json::to_string(&QueryResponse {
+                error: format!("invalid after_cursor: {}", e),
+                ..Default::default()
+            })?);
+        }
+        args.push("--after-cursor".to_string());
+        args.push(r.after_cursor);
+    }
+    if !r.before_cursor.is_empty() {
+        if let Err(e) = validate_cursor(&r.before_cursor) {
+            return Ok(serde_json::to_string(&QueryResponse {
+                error: format!("invalid before_cursor: {}", e),
+                ..Default::default()
+            })?);
+        }
+        // journalctl --cursor positions AT the entry; we want
+        // strictly older. --reverse + dropping the boundary entry
+        // post-parse delivers that.
+        args.push("--cursor".to_string());
+        args.push(r.before_cursor.clone());
+        args.push("-r".to_string());
+        drop_cursor = r.before_cursor;
+    }
 
     let exec_resp = match run_journalctl(args, 25_000) {
         Ok(v) => v,
@@ -251,12 +301,63 @@ pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
             ..Default::default()
         })?);
     }
-    let (entries, truncated) = parse_json_lines(&exec_resp.stdout, lines as usize);
+    let (mut entries, truncated) = parse_json_lines(&exec_resp.stdout, lines as usize);
+    if !drop_cursor.is_empty() {
+        // journalctl --cursor includes the boundary entry; we want
+        // strictly before. Drop any entries whose cursor matches.
+        entries.retain(|e| e.cursor != drop_cursor);
+    }
+    let (prev_cursor, next_cursor) = boundary_cursors(&entries);
     Ok(serde_json::to_string(&QueryResponse {
         entries,
         truncated,
         error: String::new(),
+        prev_cursor,
+        next_cursor,
     })?)
+}
+
+// boundary_cursors returns (prev_cursor, next_cursor) for the
+// response. Convention: prev = oldest entry's cursor (use as
+// before_cursor to get more history), next = newest entry's cursor
+// (use as after_cursor to get newer entries).
+//
+// Plugin always returns oldest-first internally (we treat reverse=
+// true as a presentation-only flag — but the plugin hands back
+// whatever order journalctl produced, which IS reversed when
+// -r was passed). To stay correct in both orderings, look at the
+// min/max timestamp.
+pub fn boundary_cursors(entries: &[Entry]) -> (String, String) {
+    if entries.is_empty() {
+        return (String::new(), String::new());
+    }
+    let mut oldest = &entries[0];
+    let mut newest = &entries[0];
+    for e in entries.iter().skip(1) {
+        if e.timestamp_us < oldest.timestamp_us {
+            oldest = e;
+        }
+        if e.timestamp_us > newest.timestamp_us {
+            newest = e;
+        }
+    }
+    (oldest.cursor.clone(), newest.cursor.clone())
+}
+
+// validate_cursor rejects cursor strings carrying control
+// characters that could confuse the journalctl arg parser.
+// __CURSOR is opaque ASCII (s=...;i=...;b=...;m=...;t=...;x=...)
+// so we just bar NUL / newline / leading "-".
+fn validate_cursor(s: &str) -> Result<(), String> {
+    if s.starts_with('-') {
+        return Err("must not start with '-'".to_string());
+    }
+    for c in s.chars() {
+        if c == '\0' || c == '\n' {
+            return Err("contains forbidden character".to_string());
+        }
+    }
+    Ok(())
 }
 
 // parse_json_lines walks a chunk of `journalctl -o json` output. Each
@@ -302,6 +403,7 @@ pub fn extract_entry(raw: &serde_json::Value) -> Entry {
         uid: pick_u32(raw, "_UID"),
         identifier: pick_str(raw, "SYSLOG_IDENTIFIER"),
         comm: pick_str(raw, "_COMM"),
+        cursor: pick_str(raw, "__CURSOR"),
     }
 }
 
@@ -548,5 +650,67 @@ mod tests {
         assert!(validate_boot("0123456789abcdef0123456789abcdef").is_ok());
         assert!(validate_boot("garbage").is_err());
         assert!(validate_boot("").is_err());
+    }
+
+    #[test]
+    fn validate_cursor_rejects_dash_and_nul() {
+        assert!(validate_cursor("s=abc;i=42;b=ffff").is_ok());
+        assert!(validate_cursor("-evil").is_err());
+        assert!(validate_cursor("a\0b").is_err());
+        assert!(validate_cursor("a\nb").is_err());
+    }
+
+    #[test]
+    fn cursor_extracted_from_journal_record() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"__CURSOR":"s=abc;i=42","__REALTIME_TIMESTAMP":"1700000000000000","MESSAGE":"x"}"#,
+        )
+        .unwrap();
+        let e = extract_entry(&v);
+        assert_eq!(e.cursor, "s=abc;i=42");
+        assert_eq!(e.timestamp_us, 1_700_000_000_000_000);
+    }
+
+    #[test]
+    fn boundary_cursors_pick_oldest_and_newest() {
+        let entries = vec![
+            Entry {
+                timestamp_us: 1_700_000_000_000_000,
+                cursor: "old".to_string(),
+                ..Default::default()
+            },
+            Entry {
+                timestamp_us: 1_700_000_005_000_000,
+                cursor: "newest".to_string(),
+                ..Default::default()
+            },
+            Entry {
+                timestamp_us: 1_700_000_002_000_000,
+                cursor: "middle".to_string(),
+                ..Default::default()
+            },
+        ];
+        let (prev, next) = boundary_cursors(&entries);
+        assert_eq!(prev, "old");
+        assert_eq!(next, "newest");
+    }
+
+    #[test]
+    fn boundary_cursors_empty_returns_empty() {
+        let (p, n) = boundary_cursors(&[]);
+        assert!(p.is_empty());
+        assert!(n.is_empty());
+    }
+
+    #[test]
+    fn boundary_cursors_single_entry() {
+        let entries = vec![Entry {
+            timestamp_us: 1,
+            cursor: "only".to_string(),
+            ..Default::default()
+        }];
+        let (p, n) = boundary_cursors(&entries);
+        assert_eq!(p, "only");
+        assert_eq!(n, "only");
     }
 }

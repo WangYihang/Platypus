@@ -30,6 +30,33 @@ message JournalQueryRequest {
   // -b boot id selector. "0" = current boot, "-1" = previous, "" =
   // no boot filter.
   string boot     = 8;
+
+  // ---- cursor pagination -------------------------------------
+  //
+  // after_cursor and before_cursor are mutually exclusive. They
+  // bound the response to entries strictly newer / older than the
+  // referenced entry, so a UI doing "load more" never returns the
+  // boundary entry twice.
+  //
+  // Cursor encoding is per-OS but always opaque to the caller:
+  //   linux    journalctl __CURSOR (e.g. "s=abc;i=42;b=...;m=...")
+  //   windows  "<RecordId>@<LogName>" (e.g. "12345@System")
+  //   darwin   "<timestamp_us>@<short_hash>" (no stable cursor on
+  //            macOS; we synthesise one from the entry's timestamp
+  //            + an FNV hash of the eventMessage to dedup within
+  //            the same microsecond)
+  //
+  // The cursor is round-tripped back to the plugin verbatim — the
+  // server never parses it.
+
+  // Return entries strictly NEWER than after_cursor (oldest-first
+  // order, "load newer entries"). Empty = no lower bound from
+  // cursor.
+  string after_cursor  = 9;
+  // Return entries strictly OLDER than before_cursor (newest-first
+  // order, "load older history"). Empty = no upper bound from
+  // cursor.
+  string before_cursor = 10;
 }
 
 message JournalQueryResponse {
@@ -38,6 +65,14 @@ message JournalQueryResponse {
   // should narrow the filter or lift `lines` for completeness.
   bool   truncated              = 2;
   string error                  = 3;
+
+  // Cursor of the OLDEST entry in `entries` — pass back as
+  // before_cursor to load the next-older window. Empty when
+  // entries is empty or the OS doesn't support a stable cursor.
+  string prev_cursor            = 4;
+  // Cursor of the NEWEST entry in `entries` — pass back as
+  // after_cursor to load the next-newer window.
+  string next_cursor            = 5;
 }
 
 // JournalEntry is one record from journalctl. timestamp_us is the
@@ -56,4 +91,11 @@ message JournalEntry {
   string identifier   = 8;
   // _COMM — kernel-reported short process name.
   string comm         = 9;
+  // Per-entry cursor — pass as JournalQueryRequest.after_cursor to
+  // resume listing strictly after this entry, or as before_cursor
+  // to resume strictly before. Empty when the OS doesn't support a
+  // stable cursor for this record (unusual; only happens when the
+  // backend tooling failed to surface its native cursor for the
+  // entry).
+  string cursor       = 10;
 }

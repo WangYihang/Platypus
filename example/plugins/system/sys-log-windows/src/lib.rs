@@ -70,6 +70,10 @@ struct QueryRequest {
     reverse: bool,
     #[serde(default)]
     boot: String,
+    #[serde(default, rename = "afterCursor", alias = "after_cursor")]
+    after_cursor: String,
+    #[serde(default, rename = "beforeCursor", alias = "before_cursor")]
+    before_cursor: String,
 }
 
 #[derive(Serialize, Default)]
@@ -79,6 +83,10 @@ struct QueryResponse {
     truncated: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "prevCursor", skip_serializing_if = "String::is_empty")]
+    prev_cursor: String,
+    #[serde(rename = "nextCursor", skip_serializing_if = "String::is_empty")]
+    next_cursor: String,
 }
 
 #[derive(Serialize, Default, Debug, PartialEq)]
@@ -101,6 +109,10 @@ struct Entry {
     identifier: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     comm: String,
+    // Per-entry cursor encoded as "<RecordId>@<LogName>"; pass back
+    // as request.after_cursor / before_cursor to resume.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    cursor: String,
 }
 
 fn is_false(b: &bool) -> bool { !*b }
@@ -134,6 +146,10 @@ struct PsRecord {
     process_id: u32,
     #[serde(default, rename = "userId")]
     user_id: String,
+    // Get-WinEvent's RecordId — monotonic int64 per LogName,
+    // perfect cursor.
+    #[serde(default, rename = "recordId")]
+    record_id: i64,
 }
 
 // ---- entry point ----
@@ -167,7 +183,54 @@ pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
     } else {
         entries
     };
-    ok_response(QueryResponse { entries, truncated, error: String::new() })
+    let (prev_cursor, next_cursor) = boundary_cursors(&entries);
+    ok_response(QueryResponse {
+        entries,
+        truncated,
+        error: String::new(),
+        prev_cursor,
+        next_cursor,
+    })
+}
+
+// boundary_cursors — prev = oldest entry's cursor (use as
+// before_cursor for older history), next = newest entry's cursor
+// (use as after_cursor for newer entries). Operates on the
+// timestamp; entries with empty cursors (recordId missing) are
+// ignored as boundary candidates.
+fn boundary_cursors(entries: &[Entry]) -> (String, String) {
+    if entries.is_empty() {
+        return (String::new(), String::new());
+    }
+    let mut oldest: Option<&Entry> = None;
+    let mut newest: Option<&Entry> = None;
+    for e in entries {
+        if e.cursor.is_empty() {
+            continue;
+        }
+        if oldest.map(|o| e.timestamp_us < o.timestamp_us).unwrap_or(true) {
+            oldest = Some(e);
+        }
+        if newest.map(|n| e.timestamp_us > n.timestamp_us).unwrap_or(true) {
+            newest = Some(e);
+        }
+    }
+    (
+        oldest.map(|e| e.cursor.clone()).unwrap_or_default(),
+        newest.map(|e| e.cursor.clone()).unwrap_or_default(),
+    )
+}
+
+// parse_cursor splits "<recordId>@<logName>" → (recordId, logName).
+// Empty / malformed inputs return None.
+fn parse_cursor(s: &str) -> Option<(i64, String)> {
+    let at = s.rfind('@')?;
+    let id: i64 = s[..at].parse().ok()?;
+    let name = s[at + 1..].to_string();
+    if name.is_empty() {
+        return None;
+    }
+    Some((id, name))
 }
 
 fn ok_response(resp: QueryResponse) -> FnResult<String> {
@@ -186,11 +249,16 @@ fn effective_line_cap(requested: u32) -> u32 {
 fn build_ps_script(r: &QueryRequest, lines: u32) -> String {
     let mut filters: Vec<String> = Vec::new();
     // Default to the System log when no unit is given — most
-    // operator queries land there.
-    let log_name = if r.unit.contains('/') || r.unit.eq_ignore_ascii_case("System")
+    // operator queries land there. Cursor takes precedence: a
+    // cursor of "<id>@System" pins the LogName to System.
+    let cursor_log = parse_cursor(&r.after_cursor)
+        .or_else(|| parse_cursor(&r.before_cursor))
+        .map(|(_, log)| log);
+    let log_name = if let Some(log) = cursor_log.clone() {
+        log
+    } else if r.unit.contains('/') || r.unit.eq_ignore_ascii_case("System")
         || r.unit.eq_ignore_ascii_case("Application") || r.unit.eq_ignore_ascii_case("Security")
     {
-        // unit is itself a LogName.
         r.unit.clone()
     } else {
         "System".to_string()
@@ -211,14 +279,32 @@ fn build_ps_script(r: &QueryRequest, lines: u32) -> String {
         filters.push(format!("EndTime = (Get-Date '{}')", escape_ps_str(&r.until)));
     }
     let hashtable = format!("@{{ {} }}", filters.join("; "));
-    let grep_filter = if r.grep.is_empty() {
+
+    // Cursor filtering: FilterHashtable doesn't accept RecordId
+    // comparisons, so we apply the cursor as a Where-Object after
+    // Get-WinEvent. Since we still pass -MaxEvents, this can over-
+    // fetch slightly when many entries are filtered out — but
+    // FilterHashtable winnows by LogName/Level/StartTime/EndTime
+    // first, so the over-fetch is bounded.
+    let mut where_clauses: Vec<String> = Vec::new();
+    if let Some((id, _)) = parse_cursor(&r.after_cursor) {
+        where_clauses.push(format!("$_.RecordId -gt {}", id));
+    }
+    if let Some((id, _)) = parse_cursor(&r.before_cursor) {
+        where_clauses.push(format!("$_.RecordId -lt {}", id));
+    }
+    if !r.grep.is_empty() {
+        where_clauses.push(format!("$_.Message -match '{}'", escape_ps_regex(&r.grep)));
+    }
+    let where_filter = if where_clauses.is_empty() {
         String::new()
     } else {
-        format!("| Where-Object {{ $_.Message -match '{}' }}", escape_ps_regex(&r.grep))
+        format!("| Where-Object {{ {} }}", where_clauses.join(" -and "))
     };
+
     format!(
         r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
-$evts = Get-WinEvent -FilterHashtable {hashtable} -MaxEvents {lines} -ErrorAction SilentlyContinue {grep_filter}
+$evts = Get-WinEvent -FilterHashtable {hashtable} -MaxEvents {lines} -ErrorAction SilentlyContinue {where_filter}
 $out = $evts | Select-Object `
     @{{Name='providerName';      Expression={{[string]$_.ProviderName}}}}, `
     @{{Name='logName';           Expression={{[string]$_.LogName}}}}, `
@@ -228,7 +314,8 @@ $out = $evts | Select-Object `
     @{{Name='timestampMs';       Expression={{[int64]($_.TimeCreated.ToUniversalTime().Subtract([datetime]'1970-01-01').TotalMilliseconds)}}}}, `
     @{{Name='machineName';       Expression={{[string]$_.MachineName}}}}, `
     @{{Name='processId';         Expression={{[int]$_.ProcessId}}}}, `
-    @{{Name='userId';            Expression={{if ($_.UserId -ne $null) {{ [string]$_.UserId }} else {{ '' }}}}}}
+    @{{Name='userId';            Expression={{if ($_.UserId -ne $null) {{ [string]$_.UserId }} else {{ '' }}}}}}, `
+    @{{Name='recordId';          Expression={{[int64]$_.RecordId}}}}
 $out | ConvertTo-Json -Compress -Depth 4"#
     )
 }
@@ -281,6 +368,14 @@ fn record_to_entry(rec: PsRecord) -> Entry {
     } else {
         rec.log_name.clone()
     };
+    // Cursor: "<RecordId>@<LogName>" — both required. Skip if
+    // either is missing (rare; would mean Get-WinEvent omitted
+    // the field).
+    let cursor = if rec.record_id > 0 && !rec.log_name.is_empty() {
+        format!("{}@{}", rec.record_id, rec.log_name)
+    } else {
+        String::new()
+    };
     Entry {
         timestamp_us: rec.timestamp_ms.saturating_mul(1_000),
         unit,
@@ -290,6 +385,7 @@ fn record_to_entry(rec: PsRecord) -> Entry {
         pid: rec.process_id,
         identifier: rec.provider_name,
         comm: rec.user_id,
+        cursor,
         ..Default::default()
     }
 }
@@ -463,5 +559,108 @@ mod tests {
     #[test]
     fn escape_ps_str_doubles_quote() {
         assert_eq!(escape_ps_str("alice's"), "alice''s");
+    }
+
+    // ---- cursor pagination ----
+
+    #[test]
+    fn parse_cursor_basic() {
+        assert_eq!(parse_cursor("12345@System"), Some((12345, "System".to_string())));
+        assert_eq!(parse_cursor("0@Application"), Some((0, "Application".to_string())));
+    }
+
+    #[test]
+    fn parse_cursor_rejects_malformed() {
+        assert!(parse_cursor("").is_none());
+        assert!(parse_cursor("12345").is_none());
+        assert!(parse_cursor("notanumber@System").is_none());
+        assert!(parse_cursor("12345@").is_none());
+    }
+
+    #[test]
+    fn record_to_entry_cursor_format() {
+        let rec = PsRecord {
+            record_id: 12345,
+            log_name: "System".to_string(),
+            level: 4,
+            level_display_name: "Information".to_string(),
+            timestamp_ms: 1_700_000_000_000,
+            ..Default::default()
+        };
+        let e = record_to_entry(rec);
+        assert_eq!(e.cursor, "12345@System");
+    }
+
+    #[test]
+    fn record_to_entry_no_cursor_when_record_id_missing() {
+        let rec = PsRecord {
+            record_id: 0,
+            log_name: "System".to_string(),
+            ..Default::default()
+        };
+        assert!(record_to_entry(rec).cursor.is_empty());
+    }
+
+    #[test]
+    fn boundary_cursors_pick_oldest_newest() {
+        let entries = vec![
+            Entry { timestamp_us: 100, cursor: "1@System".to_string(), ..Default::default() },
+            Entry { timestamp_us: 300, cursor: "3@System".to_string(), ..Default::default() },
+            Entry { timestamp_us: 200, cursor: "2@System".to_string(), ..Default::default() },
+        ];
+        let (prev, next) = boundary_cursors(&entries);
+        assert_eq!(prev, "1@System");
+        assert_eq!(next, "3@System");
+    }
+
+    #[test]
+    fn boundary_cursors_skips_empty_cursors() {
+        let entries = vec![
+            Entry { timestamp_us: 100, cursor: "".to_string(), ..Default::default() },
+            Entry { timestamp_us: 200, cursor: "valid@System".to_string(), ..Default::default() },
+        ];
+        let (prev, next) = boundary_cursors(&entries);
+        assert_eq!(prev, "valid@System");
+        assert_eq!(next, "valid@System");
+    }
+
+    #[test]
+    fn boundary_cursors_empty_input() {
+        let (p, n) = boundary_cursors(&[]);
+        assert!(p.is_empty());
+        assert!(n.is_empty());
+    }
+
+    #[test]
+    fn build_script_with_after_cursor_filters_by_record_id() {
+        let r = QueryRequest {
+            after_cursor: "12345@System".to_string(),
+            ..Default::default()
+        };
+        let s = build_ps_script(&r, 100);
+        assert!(s.contains("Where-Object"));
+        assert!(s.contains("$_.RecordId -gt 12345"));
+        // Cursor pins LogName.
+        assert!(s.contains("LogName = 'System'"));
+    }
+
+    #[test]
+    fn build_script_with_before_cursor_filters_by_record_id() {
+        let r = QueryRequest {
+            before_cursor: "999@Application".to_string(),
+            ..Default::default()
+        };
+        let s = build_ps_script(&r, 100);
+        assert!(s.contains("$_.RecordId -lt 999"));
+        // Cursor LogName overrides the System default.
+        assert!(s.contains("LogName = 'Application'"));
+    }
+
+    #[test]
+    fn parse_record_includes_record_id() {
+        let json = r#"{"providerName":"x","logName":"System","level":4,"timestampMs":1700000000000,"recordId":42}"#;
+        let entries = parse_ps_output(json);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].cursor, "42@System");
     }
 }

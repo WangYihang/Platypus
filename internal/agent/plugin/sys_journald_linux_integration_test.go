@@ -209,6 +209,57 @@ func TestSysJournaldLinux_TypedBridge_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestSysJournaldLinux_Cursor_Pagination — when journalctl is
+// available, two paginated calls return non-overlapping windows.
+// When unavailable (CI containers), the test skips.
+func TestSysJournaldLinux_Cursor_Pagination(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-journald-linux is linux-only")
+	}
+	reg := installSysJournald(t)
+
+	page1 := bridge.JournalQuery(reg)(context.Background(),
+		&v2pb.JournalQueryRequest{Lines: 5})
+	if page1.GetError() != "" {
+		if journalEnvErr(page1.GetError()) {
+			t.Skipf("journalctl not available: %s", page1.GetError())
+		}
+		t.Fatalf("page1 error: %s", page1.GetError())
+	}
+	if len(page1.GetEntries()) == 0 {
+		t.Skip("no journal entries in test environment")
+	}
+	if page1.GetPrevCursor() == "" {
+		t.Fatal("expected non-empty prev_cursor on populated page")
+	}
+
+	// Use prev_cursor (oldest of page1) as before_cursor for page2:
+	// "give me older entries". Tolerate empty page2 (no more
+	// history available in the container's journal).
+	page2 := bridge.JournalQuery(reg)(context.Background(),
+		&v2pb.JournalQueryRequest{
+			Lines:        5,
+			BeforeCursor: page1.GetPrevCursor(),
+		})
+	if page2.GetError() != "" {
+		t.Fatalf("page2 error: %s", page2.GetError())
+	}
+
+	// Cursors of page2 must not collide with any cursor in page1
+	// — pagination guarantees no overlap.
+	page1Cursors := map[string]bool{}
+	for _, e := range page1.GetEntries() {
+		page1Cursors[e.GetCursor()] = true
+	}
+	for _, e := range page2.GetEntries() {
+		if page1Cursors[e.GetCursor()] {
+			t.Errorf("page2 entry cursor %q already appeared in page1", e.GetCursor())
+		}
+	}
+	t.Logf("page1=%d entries, page2=%d entries (no overlap)",
+		len(page1.GetEntries()), len(page2.GetEntries()))
+}
+
 // journalEnvErr returns true for "journalctl exited non-zero" /
 // "no journal files" / "Failed to add match" — environment errors
 // that don't indicate proto drift.

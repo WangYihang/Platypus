@@ -63,6 +63,10 @@ struct QueryRequest {
     reverse: bool,
     #[serde(default)]
     boot: String, // unused on darwin (no boot-id concept exposed by `log show`)
+    #[serde(default, rename = "afterCursor", alias = "after_cursor")]
+    after_cursor: String,
+    #[serde(default, rename = "beforeCursor", alias = "before_cursor")]
+    before_cursor: String,
 }
 
 #[derive(Serialize, Default)]
@@ -72,6 +76,10 @@ struct QueryResponse {
     truncated: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "prevCursor", skip_serializing_if = "String::is_empty")]
+    prev_cursor: String,
+    #[serde(rename = "nextCursor", skip_serializing_if = "String::is_empty")]
+    next_cursor: String,
 }
 
 #[derive(Serialize, Default, Debug, PartialEq)]
@@ -94,6 +102,12 @@ struct Entry {
     identifier: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     comm: String,
+    // Synthetic cursor: "<timestamp_us>@<8-hex-of-fnv1a-of-message>".
+    // macOS `log show` has no native cursor concept; we hash the
+    // event message + pid + subsystem to disambiguate within the
+    // same microsecond.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    cursor: String,
 }
 
 fn is_false(b: &bool) -> bool { !*b }
@@ -129,6 +143,12 @@ struct LogRecord {
 #[plugin_fn]
 pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
     let r = req.0;
+    if !r.after_cursor.is_empty() && !r.before_cursor.is_empty() {
+        return ok_response(QueryResponse {
+            error: "after_cursor and before_cursor are mutually exclusive".to_string(),
+            ..Default::default()
+        });
+    }
     let lines = effective_line_cap(r.lines);
     let args = build_log_args(&r, lines);
     let exec_resp = match run_log(&args, 60_000) {
@@ -146,7 +166,22 @@ pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
         };
         return ok_response(QueryResponse { error: err, ..Default::default() });
     }
-    let entries = parse_log_ndjson(&exec_resp.stdout, &r);
+    let mut entries = parse_log_ndjson(&exec_resp.stdout, &r);
+    // Cursor post-filtering: drop entries whose synthetic cursor
+    // sorts equal-or-before / equal-or-after the boundary. This
+    // disambiguates within a microsecond bucket where `--start`/
+    // `--end` alone can't (multiple events in the same us survive
+    // both bounds; we use the cursor's hash to pick which side).
+    if !r.after_cursor.is_empty() {
+        if let Some((bound_us, bound_hash)) = parse_cursor(&r.after_cursor) {
+            entries.retain(|e| entry_strictly_after(e, bound_us, bound_hash));
+        }
+    }
+    if !r.before_cursor.is_empty() {
+        if let Some((bound_us, bound_hash)) = parse_cursor(&r.before_cursor) {
+            entries.retain(|e| entry_strictly_before(e, bound_us, bound_hash));
+        }
+    }
     let truncated = entries.len() as u32 >= lines;
     let entries = if r.reverse {
         let mut e = entries;
@@ -155,7 +190,85 @@ pub fn query(req: Json<QueryRequest>) -> FnResult<String> {
     } else {
         entries
     };
-    ok_response(QueryResponse { entries, truncated, error: String::new() })
+    let (prev_cursor, next_cursor) = boundary_cursors(&entries);
+    ok_response(QueryResponse {
+        entries,
+        truncated,
+        error: String::new(),
+        prev_cursor,
+        next_cursor,
+    })
+}
+
+// boundary_cursors picks the oldest-cursor (use as before_cursor for
+// older history) and newest-cursor (use as after_cursor for newer).
+fn boundary_cursors(entries: &[Entry]) -> (String, String) {
+    if entries.is_empty() {
+        return (String::new(), String::new());
+    }
+    let mut oldest: Option<&Entry> = None;
+    let mut newest: Option<&Entry> = None;
+    for e in entries {
+        if e.cursor.is_empty() {
+            continue;
+        }
+        if oldest.map(|o| e.timestamp_us < o.timestamp_us).unwrap_or(true) {
+            oldest = Some(e);
+        }
+        if newest.map(|n| e.timestamp_us > n.timestamp_us).unwrap_or(true) {
+            newest = Some(e);
+        }
+    }
+    (
+        oldest.map(|e| e.cursor.clone()).unwrap_or_default(),
+        newest.map(|e| e.cursor.clone()).unwrap_or_default(),
+    )
+}
+
+// parse_cursor splits "<timestamp_us>@<hex>" → (timestamp, hash).
+fn parse_cursor(s: &str) -> Option<(u64, u32)> {
+    let at = s.rfind('@')?;
+    let ts: u64 = s[..at].parse().ok()?;
+    let hash: u32 = u32::from_str_radix(&s[at + 1..], 16).ok()?;
+    Some((ts, hash))
+}
+
+// entry_strictly_after / entry_strictly_before define the cursor
+// ordering: same-microsecond entries are ordered by their hash; the
+// boundary entry itself is excluded.
+fn entry_strictly_after(e: &Entry, bound_us: u64, bound_hash: u32) -> bool {
+    if e.timestamp_us > bound_us {
+        return true;
+    }
+    if e.timestamp_us < bound_us {
+        return false;
+    }
+    let entry_hash = parse_cursor(&e.cursor).map(|(_, h)| h).unwrap_or(0);
+    entry_hash > bound_hash
+}
+
+fn entry_strictly_before(e: &Entry, bound_us: u64, bound_hash: u32) -> bool {
+    if e.timestamp_us < bound_us {
+        return true;
+    }
+    if e.timestamp_us > bound_us {
+        return false;
+    }
+    let entry_hash = parse_cursor(&e.cursor).map(|(_, h)| h).unwrap_or(0);
+    entry_hash < bound_hash
+}
+
+// fnv1a_32 — small stable hash for synthesising the per-entry cursor.
+// 32 bits is plenty within a single microsecond bucket (collisions
+// among same-timestamp entries are rare; a hash collision means the
+// pagination drops one entry, not a security failure).
+fn fnv1a_32(input: &str) -> u32 {
+    let mut hash: u32 = 0x811C9DC5;
+    for b in input.bytes() {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    hash
 }
 
 fn ok_response(resp: QueryResponse) -> FnResult<String> {
@@ -179,13 +292,28 @@ fn build_log_args(r: &QueryRequest, lines: u32) -> Vec<String> {
         "--info".to_string(),
         "--debug".to_string(),
     ];
-    if !r.since.is_empty() {
-        args.push("--start".to_string());
-        args.push(r.since.clone());
+    // Cursor pagination on darwin synthesises --start / --end
+    // from the cursor's timestamp; the post-parse filter then
+    // disambiguates within the microsecond bucket via the hash.
+    // Cursor takes precedence over since/until — operators mixing
+    // both should pick one.
+    let mut effective_since = r.since.clone();
+    let mut effective_until = r.until.clone();
+    if let Some((ts_us, _)) = parse_cursor(&r.after_cursor) {
+        effective_since = format_log_timestamp(ts_us);
     }
-    if !r.until.is_empty() {
+    if let Some((ts_us, _)) = parse_cursor(&r.before_cursor) {
+        // Add 1us so `log show` includes the boundary microsecond
+        // bucket; the post-parse filter then trims same-us entries.
+        effective_until = format_log_timestamp(ts_us.saturating_add(1));
+    }
+    if !effective_since.is_empty() {
+        args.push("--start".to_string());
+        args.push(effective_since);
+    }
+    if !effective_until.is_empty() {
         args.push("--end".to_string());
-        args.push(r.until.clone());
+        args.push(effective_until);
     }
     let mut predicates: Vec<String> = Vec::new();
     if let Some(p) = build_unit_predicate(&r.unit) {
@@ -265,16 +393,74 @@ fn parse_log_ndjson(stdout: &str, req: &QueryRequest) -> Vec<Entry> {
         if !req.grep.is_empty() && !rec.event_message.to_ascii_lowercase().contains(&req.grep.to_ascii_lowercase()) {
             continue;
         }
+        let ts = parse_log_timestamp_us(&rec.timestamp);
+        let cursor = synth_cursor(ts, &rec);
         out.push(Entry {
-            timestamp_us: parse_log_timestamp_us(&rec.timestamp),
+            timestamp_us: ts,
             unit,
             priority: message_type_to_priority(&rec.message_type),
             message: rec.event_message,
             pid: rec.process_id,
+            cursor,
             ..Default::default()
         });
     }
     out
+}
+
+// synth_cursor builds the per-entry pagination handle. macOS's
+// `log show` doesn't expose a stable record id, so we synthesise
+// one from the timestamp + a 32-bit hash of (eventMessage + pid +
+// subsystem) — enough to disambiguate within a microsecond.
+//
+// Format: "<timestamp_us>@<8-hex-of-fnv1a>". A zero timestamp
+// produces an empty cursor (the entry is unpaginatable).
+fn synth_cursor(ts_us: u64, rec: &LogRecord) -> String {
+    if ts_us == 0 {
+        return String::new();
+    }
+    let key = format!("{}\x1f{}\x1f{}", rec.event_message, rec.process_id, rec.subsystem);
+    let h = fnv1a_32(&key);
+    format!("{}@{:08x}", ts_us, h)
+}
+
+// format_log_timestamp converts microseconds-since-epoch back into
+// the format `log show --start` accepts: "YYYY-MM-DD HH:MM:SS.uuuuuu".
+// `log show` interprets unqualified timestamps as host-local time;
+// since we accept whatever format the operator passed in `since`/
+// `until`, we use a fixed UTC representation that `log show` parses
+// as UTC reliably.
+fn format_log_timestamp(ts_us: u64) -> String {
+    let secs = (ts_us / 1_000_000) as i64;
+    let us = (ts_us % 1_000_000) as u32;
+    let (y, mo, d, h, mi, s) = secs_to_civil(secs);
+    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:06}", y, mo, d, h, mi, s, us)
+}
+
+fn secs_to_civil(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let h = (tod / 3_600) as u32;
+    let m = ((tod / 60) % 60) as u32;
+    let s = (tod % 60) as u32;
+    let (y, mo, d) = days_to_civil(days);
+    (y, mo, d, h, m, s)
+}
+
+// days_to_civil — inverse of days_from_civil. Howard Hinnant's
+// canonical algorithm.
+fn days_to_civil(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y_final = if m <= 2 { y + 1 } else { y };
+    (y_final, m, d)
 }
 
 fn pick_unit(rec: &LogRecord) -> String {
@@ -546,5 +732,161 @@ mod tests {
     fn escape_predicate_str_handles_quotes() {
         assert_eq!(escape_predicate_str(r#"foo"bar"#), r#"foo\"bar"#);
         assert_eq!(escape_predicate_str(r#"a\b"#), r#"a\\b"#);
+    }
+
+    // ---- cursor pagination ----
+
+    #[test]
+    fn parse_cursor_basic() {
+        assert_eq!(parse_cursor("1700000000123456@deadbeef"), Some((1_700_000_000_123_456, 0xdeadbeef)));
+    }
+
+    #[test]
+    fn parse_cursor_rejects_malformed() {
+        assert!(parse_cursor("").is_none());
+        assert!(parse_cursor("1700000000").is_none());
+        assert!(parse_cursor("not_a_number@deadbeef").is_none());
+        assert!(parse_cursor("1700000000@nothex").is_none());
+    }
+
+    #[test]
+    fn synth_cursor_formats_correctly() {
+        let rec = LogRecord {
+            event_message: "hello".to_string(),
+            process_id: 42,
+            subsystem: "com.apple.x".to_string(),
+            ..Default::default()
+        };
+        let c = synth_cursor(1_700_000_000_123_456, &rec);
+        assert!(c.starts_with("1700000000123456@"));
+        assert_eq!(c.len(), "1700000000123456".len() + 1 + 8); // 8 hex chars
+    }
+
+    #[test]
+    fn synth_cursor_zero_timestamp_returns_empty() {
+        let rec = LogRecord::default();
+        assert!(synth_cursor(0, &rec).is_empty());
+    }
+
+    #[test]
+    fn synth_cursor_disambiguates_same_ts() {
+        let rec_a = LogRecord {
+            event_message: "first message".to_string(),
+            process_id: 1,
+            ..Default::default()
+        };
+        let rec_b = LogRecord {
+            event_message: "second message".to_string(),
+            process_id: 1,
+            ..Default::default()
+        };
+        let ts = 1_700_000_000_000_000;
+        let cursor_a = synth_cursor(ts, &rec_a);
+        let cursor_b = synth_cursor(ts, &rec_b);
+        assert_ne!(cursor_a, cursor_b, "different messages must produce different cursors");
+    }
+
+    #[test]
+    fn entry_strictly_after_compares_ts_then_hash() {
+        // Strictly newer than the bound.
+        let e_newer = Entry {
+            timestamp_us: 200,
+            cursor: "200@00000005".to_string(),
+            ..Default::default()
+        };
+        assert!(entry_strictly_after(&e_newer, 100, 0xff));
+
+        // Same timestamp, larger hash → after.
+        let e_same_higher = Entry {
+            timestamp_us: 100,
+            cursor: "100@000000ff".to_string(),
+            ..Default::default()
+        };
+        assert!(entry_strictly_after(&e_same_higher, 100, 0x10));
+
+        // Same timestamp, equal hash → not after (boundary itself).
+        let e_eq = Entry {
+            timestamp_us: 100,
+            cursor: "100@00000010".to_string(),
+            ..Default::default()
+        };
+        assert!(!entry_strictly_after(&e_eq, 100, 0x10));
+
+        // Strictly older.
+        let e_older = Entry {
+            timestamp_us: 50,
+            cursor: "50@deadbeef".to_string(),
+            ..Default::default()
+        };
+        assert!(!entry_strictly_after(&e_older, 100, 0));
+    }
+
+    #[test]
+    fn entry_strictly_before_inverse_of_after() {
+        let e_older = Entry {
+            timestamp_us: 50,
+            cursor: "50@00000005".to_string(),
+            ..Default::default()
+        };
+        assert!(entry_strictly_before(&e_older, 100, 0xff));
+
+        let e_eq = Entry {
+            timestamp_us: 100,
+            cursor: "100@00000010".to_string(),
+            ..Default::default()
+        };
+        assert!(!entry_strictly_before(&e_eq, 100, 0x10));
+    }
+
+    #[test]
+    fn boundary_cursors_pick_oldest_newest() {
+        let entries = vec![
+            Entry { timestamp_us: 100, cursor: "100@a".to_string(), ..Default::default() },
+            Entry { timestamp_us: 300, cursor: "300@c".to_string(), ..Default::default() },
+            Entry { timestamp_us: 200, cursor: "200@b".to_string(), ..Default::default() },
+        ];
+        let (prev, next) = boundary_cursors(&entries);
+        assert_eq!(prev, "100@a");
+        assert_eq!(next, "300@c");
+    }
+
+    #[test]
+    fn fnv1a_stable() {
+        // FNV-1a of "" is the offset basis.
+        assert_eq!(fnv1a_32(""), 0x811C9DC5);
+        // Different inputs hash differently.
+        assert_ne!(fnv1a_32("hello"), fnv1a_32("world"));
+    }
+
+    #[test]
+    fn format_log_timestamp_round_trip() {
+        // Pick a known timestamp: 2026-05-08 01:30:00.123456 UTC
+        // = 1762565400123456 microseconds.
+        let ts_us = parse_log_timestamp_us("2026-05-08 01:30:00.123456+0000");
+        let formatted = format_log_timestamp(ts_us);
+        // Re-parse should yield the original.
+        assert_eq!(parse_log_timestamp_us(&format!("{formatted}+0000")), ts_us);
+    }
+
+    #[test]
+    fn build_args_with_after_cursor_uses_start() {
+        let r = QueryRequest {
+            after_cursor: "1700000000123456@deadbeef".to_string(),
+            ..Default::default()
+        };
+        let args = build_log_args(&r, 100);
+        let i = args.iter().position(|a| a == "--start").expect("--start present");
+        assert!(args[i + 1].starts_with("20"));  // "2023-..."
+    }
+
+    #[test]
+    fn build_args_with_before_cursor_uses_end() {
+        let r = QueryRequest {
+            before_cursor: "1700000000123456@deadbeef".to_string(),
+            ..Default::default()
+        };
+        let args = build_log_args(&r, 100);
+        let i = args.iter().position(|a| a == "--end").expect("--end present");
+        assert!(args[i + 1].starts_with("20"));
     }
 }

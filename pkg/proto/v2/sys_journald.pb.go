@@ -41,7 +41,15 @@ type JournalQueryRequest struct {
 	Reverse bool `protobuf:"varint,7,opt,name=reverse,proto3" json:"reverse,omitempty"`
 	// -b boot id selector. "0" = current boot, "-1" = previous, "" =
 	// no boot filter.
-	Boot          string `protobuf:"bytes,8,opt,name=boot,proto3" json:"boot,omitempty"`
+	Boot string `protobuf:"bytes,8,opt,name=boot,proto3" json:"boot,omitempty"`
+	// Return entries strictly NEWER than after_cursor (oldest-first
+	// order, "load newer entries"). Empty = no lower bound from
+	// cursor.
+	AfterCursor string `protobuf:"bytes,9,opt,name=after_cursor,json=afterCursor,proto3" json:"after_cursor,omitempty"`
+	// Return entries strictly OLDER than before_cursor (newest-first
+	// order, "load older history"). Empty = no upper bound from
+	// cursor.
+	BeforeCursor  string `protobuf:"bytes,10,opt,name=before_cursor,json=beforeCursor,proto3" json:"before_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -132,13 +140,34 @@ func (x *JournalQueryRequest) GetBoot() string {
 	return ""
 }
 
+func (x *JournalQueryRequest) GetAfterCursor() string {
+	if x != nil {
+		return x.AfterCursor
+	}
+	return ""
+}
+
+func (x *JournalQueryRequest) GetBeforeCursor() string {
+	if x != nil {
+		return x.BeforeCursor
+	}
+	return ""
+}
+
 type JournalQueryResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Entries []*JournalEntry        `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
 	// True when the journalctl output filled the line cap; the caller
 	// should narrow the filter or lift `lines` for completeness.
-	Truncated     bool   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Truncated bool   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Error     string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	// Cursor of the OLDEST entry in `entries` — pass back as
+	// before_cursor to load the next-older window. Empty when
+	// entries is empty or the OS doesn't support a stable cursor.
+	PrevCursor string `protobuf:"bytes,4,opt,name=prev_cursor,json=prevCursor,proto3" json:"prev_cursor,omitempty"`
+	// Cursor of the NEWEST entry in `entries` — pass back as
+	// after_cursor to load the next-newer window.
+	NextCursor    string `protobuf:"bytes,5,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,6 +223,20 @@ func (x *JournalQueryResponse) GetError() string {
 	return ""
 }
 
+func (x *JournalQueryResponse) GetPrevCursor() string {
+	if x != nil {
+		return x.PrevCursor
+	}
+	return ""
+}
+
+func (x *JournalQueryResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
 // JournalEntry is one record from journalctl. timestamp_us is the
 // monotonic-source __REALTIME_TIMESTAMP, microseconds since epoch.
 // Optional fields are zero/empty when journalctl didn't report them.
@@ -210,7 +253,14 @@ type JournalEntry struct {
 	// SYSLOG_IDENTIFIER — tag the writer set, often the program name.
 	Identifier string `protobuf:"bytes,8,opt,name=identifier,proto3" json:"identifier,omitempty"`
 	// _COMM — kernel-reported short process name.
-	Comm          string `protobuf:"bytes,9,opt,name=comm,proto3" json:"comm,omitempty"`
+	Comm string `protobuf:"bytes,9,opt,name=comm,proto3" json:"comm,omitempty"`
+	// Per-entry cursor — pass as JournalQueryRequest.after_cursor to
+	// resume listing strictly after this entry, or as before_cursor
+	// to resume strictly before. Empty when the OS doesn't support a
+	// stable cursor for this record (unusual; only happens when the
+	// backend tooling failed to surface its native cursor for the
+	// entry).
+	Cursor        string `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,11 +358,18 @@ func (x *JournalEntry) GetComm() string {
 	return ""
 }
 
+func (x *JournalEntry) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
 var File_sys_journald_proto protoreflect.FileDescriptor
 
 const file_sys_journald_proto_rawDesc = "" +
 	"\n" +
-	"\x12sys_journald.proto\x12\vplatypus.v2\"\xc9\x01\n" +
+	"\x12sys_journald.proto\x12\vplatypus.v2\"\x91\x02\n" +
 	"\x13JournalQueryRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x1a\n" +
 	"\bpriority\x18\x02 \x01(\tR\bpriority\x12\x14\n" +
@@ -321,11 +378,18 @@ const file_sys_journald_proto_rawDesc = "" +
 	"\x04grep\x18\x05 \x01(\tR\x04grep\x12\x14\n" +
 	"\x05lines\x18\x06 \x01(\rR\x05lines\x12\x18\n" +
 	"\areverse\x18\a \x01(\bR\areverse\x12\x12\n" +
-	"\x04boot\x18\b \x01(\tR\x04boot\"\x7f\n" +
+	"\x04boot\x18\b \x01(\tR\x04boot\x12!\n" +
+	"\fafter_cursor\x18\t \x01(\tR\vafterCursor\x12#\n" +
+	"\rbefore_cursor\x18\n" +
+	" \x01(\tR\fbeforeCursor\"\xc1\x01\n" +
 	"\x14JournalQueryResponse\x123\n" +
 	"\aentries\x18\x01 \x03(\v2\x19.platypus.v2.JournalEntryR\aentries\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xef\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x1f\n" +
+	"\vprev_cursor\x18\x04 \x01(\tR\n" +
+	"prevCursor\x12\x1f\n" +
+	"\vnext_cursor\x18\x05 \x01(\tR\n" +
+	"nextCursor\"\x87\x02\n" +
 	"\fJournalEntry\x12!\n" +
 	"\ftimestamp_us\x18\x01 \x01(\x04R\vtimestampUs\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x1a\n" +
@@ -337,7 +401,9 @@ const file_sys_journald_proto_rawDesc = "" +
 	"\n" +
 	"identifier\x18\b \x01(\tR\n" +
 	"identifier\x12\x12\n" +
-	"\x04comm\x18\t \x01(\tR\x04commB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x04comm\x18\t \x01(\tR\x04comm\x12\x16\n" +
+	"\x06cursor\x18\n" +
+	" \x01(\tR\x06cursorB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_sys_journald_proto_rawDescOnce sync.Once
