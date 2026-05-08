@@ -1,7 +1,6 @@
 package webui
 
 import (
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,13 +13,16 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func TestIndexHTMLIsEmbedded(t *testing.T) {
-	info, err := fs.Stat(distFS, "dist/index.html")
-	if err != nil {
-		t.Fatalf("dist/index.html not embedded: %v", err)
+// TestStubHTMLIsEmbedded pins the fallback embed: stub.html must be
+// present with non-empty content so a fresh checkout's `go build`
+// (no `make web-ui-embed`, dist/ holds only .gitkeep) still serves
+// a useful "UI not embedded" page at /.
+func TestStubHTMLIsEmbedded(t *testing.T) {
+	if len(stubHTML) == 0 {
+		t.Fatalf("stub.html is empty")
 	}
-	if info.Size() == 0 {
-		t.Fatalf("dist/index.html is empty")
+	if !strings.Contains(string(stubHTML), "<html") {
+		t.Fatalf("stub.html missing <html: %q", stubHTML)
 	}
 }
 

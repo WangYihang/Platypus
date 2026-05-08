@@ -239,14 +239,14 @@ $(RELEASES_MANIFEST): $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY)
 releases: $(RELEASES_MANIFEST)
 
 # ---------- Clean ----------
-# Strip the staged web bundle but keep the committed stub so a plain
-# `go build` still works without re-running web-ui-embed.
+# Strip the staged web bundle so a plain `go build` falls back to the
+# committed stub.html via internal/webui's separate embed.
 
 clean:
 	rm -rf $(BUILD_DIR) dist
 	rm -rf desktop/build/bin desktop/frontend/dist desktop/frontend/wailsjs
 	@find internal/webui/dist -mindepth 1 \
-	  ! -name index.html ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
+	  ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
 
 # ---------- Desktop app ----------
 # webkit2_41 is a no-op on macOS / Windows, required on Linux (only
@@ -275,7 +275,8 @@ web-ui:
 	cd desktop/frontend && pnpm install && pnpm run build:web
 
 # rsync --delete drops stale files from a previous build; the
-# excludes preserve the committed stub + .gitignore.
+# excludes preserve the .gitkeep marker + .gitignore so the directory
+# remains in a state //go:embed all:dist accepts.
 web-ui-embed: web-ui
 	@$(call require-bin,rsync,apt install rsync  /  brew install rsync)
 	@mkdir -p internal/webui/dist

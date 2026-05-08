@@ -1,15 +1,17 @@
 // Package webui serves the embedded React frontend bundle at the root
 // of the platypus-server gin engine. The bundle is produced by
 // `pnpm run build:web` (under desktop/frontend/) and staged into
-// internal/webui/dist/ by `make web-ui-embed` before `go build`. A
-// committed stub index.html lives in dist/ so a fresh checkout still
-// compiles without a Node toolchain — the stub renders a "UI not
-// embedded" message that points contributors at the right Make target.
+// internal/webui/dist/ by `make web-ui-embed` before `go build`. The
+// dist/ tree is a build product — gitignored end-to-end. A committed
+// stub.html sibling to this file is embedded as a separate fallback,
+// so a fresh checkout still compiles without a Node toolchain and the
+// resulting binary serves a "UI not embedded" page that points
+// contributors at the right Make target.
 //
 // Routing layout (Gin matches explicit routes first, NoRoute is the
 // last-resort fallback):
 //
-//	GET /                     → dist/index.html (no-cache)
+//	GET /                     → dist/index.html or stub.html (no-cache)
 //	GET /favicon.ico          → dist/favicon.ico
 //	GET /assets/*filepath     → dist/assets/...    (immutable, 1y cache)
 //	NoRoute                   → JSON 404 under /api/, /swagger/, etc.;
@@ -33,6 +35,12 @@ import (
 //go:embed all:dist
 var distFS embed.FS
 
+// stubHTML is the fallback served when dist/ holds only the .gitkeep
+// marker — i.e. nobody ran `make web-ui-embed` before `go build`.
+//
+//go:embed stub.html
+var stubHTML []byte
+
 // apiPrefixes lists the path prefixes owned by the API/WebSocket layer.
 // A NoRoute miss under any of these returns a JSON 404 so curl clients
 // don't get an HTML body for a missing /api/v1/foo. Keep this list in
@@ -53,7 +61,7 @@ func RegisterRoutes(engine *gin.Engine) {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		// Build-time invariant: //go:embed all:dist guarantees the dist
-		// directory and at least the committed stub exist. A failure
+		// directory exists (the .gitkeep marker is committed). A failure
 		// here means the package was built in a way that broke the
 		// embed (e.g. dist/ was deleted between codegen and `go build`).
 		panic(err)
@@ -100,14 +108,16 @@ func RegisterRoutes(engine *gin.Engine) {
 }
 
 func spaIndex(sub fs.FS) gin.HandlerFunc {
+	// Resolve once at registration. The choice between real bundle and
+	// stub is fixed by what go:embed captured at build time; no point
+	// paying for the lookup on every request.
+	body, err := fs.ReadFile(sub, "index.html")
+	if err != nil {
+		body = stubHTML
+	}
 	return func(c *gin.Context) {
-		data, err := fs.ReadFile(sub, "index.html")
-		if err != nil {
-			c.Status(http.StatusInternalServerError)
-			return
-		}
 		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", body)
 	}
 }
 

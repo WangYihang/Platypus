@@ -1,7 +1,7 @@
 # Real frontend bundle is produced by `make web-ui-embed` (rsync from
-# desktop/frontend/dist-web/). Only the committed stub `index.html` and
-# the directory marker survive a fresh checkout so `go build` works
-# without a Node toolchain.
+# desktop/frontend/dist-web/). dist/ is fully a build product — only
+# the .gitkeep marker is tracked so //go:embed all:dist still finds the
+# directory in a fresh checkout. The fallback served when dist/ is
+# empty lives in ../stub.html (committed, embedded separately).
 dist/*
-!dist/index.html
 !dist/.gitkeep
