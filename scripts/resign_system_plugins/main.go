@@ -1,6 +1,6 @@
 // resign_system_plugins re-signs every staged plugin .wasm under
 // internal/server/sysplugins/embedded/system-plugins/<id>/<ver>/
-// with the current hack/.system-signing.secret. Unlike
+// with the current scripts/.system-signing.secret. Unlike
 // stage_system_plugins it does NOT rebuild wasm bytes — it just
 // mints fresh .minisig files matching the current publisher.pub
 // key id, and patches each staged plugin.yaml's signature.key_id
@@ -13,7 +13,7 @@
 //
 // Run from the repo root:
 //
-//	go run ./hack/resign_system_plugins
+//	go run ./scripts/resign_system_plugins
 package main
 
 import (
@@ -29,7 +29,7 @@ import (
 
 const (
 	stagedRoot = "internal/server/sysplugins/embedded/system-plugins"
-	secretPath = "hack/.system-signing.secret"
+	secretPath = "scripts/.system-signing.secret"
 )
 
 var keyIDRe = regexp.MustCompile(`(?m)^(\s*key_id:\s*)\S+`)
