@@ -7,22 +7,24 @@ share the same `platypus` host-fn namespace, and use the same JSON
 envelope wire format — the agent has no idea which source language
 produced any given `.wasm` it loads.
 
-Reference implementations:
+Reference implementation:
 
 - `example/plugins/system-go/hello/` — minimal smoke-test plugin
   (~30 LoC).  Reads stdin via `pdk.Input()`, calls `HostLog`, writes
   output via `pdk.OutputString()`.
-- `example/plugins/system-go/sys-info/` — TinyGo port of the Rust
-  sys-info plugin.  Same wire output (`v2pb.SysInfoResponse`-shaped
-  protojson), same /proc + /etc parsing strategy, ~270 LoC.
 
 The Go SDK lives at `sdk/go/platypus-plugin/` and wraps host
 functions on top of `github.com/extism/go-pdk`'s `Memory`
 primitives.  Coverage today: `HostLog`, `HostUname`,
 `HostFSRead` / `HostFSReadString` / `HostFSListDir`, `KVGet` /
-`KVPut`.  Add more bindings as you port plugins; they're 1:1 with
-the Rust extern declarations under
+`KVPut`.  Add more bindings as you write Go plugins; they're 1:1
+with the Rust extern declarations under
 `example/plugins/system/<plugin>/src/lib.rs`.
+
+Note: the canonical system-plugin set is the Rust crates under
+`example/plugins/system/`. Go is supported as a secondary path for
+operators who prefer it for marketplace plugins; we no longer ship
+Go ports of the system plugins themselves.
 
 ## Toolchain
 
@@ -101,53 +103,11 @@ match the arity declared in
 
 ## Binary size
 
-TinyGo wasm modules are heftier than Rust:
-
-| Plugin           | Rust    | TinyGo | Notes                                  |
-|------------------|---------|--------|----------------------------------------|
-| hello (smoke)    | -       | 260 KiB | no dependencies pulled in              |
-| sys-info         | 205 KiB | 1.0 MiB | encoding/json + strconv + reflect      |
-
-The cost comes from TinyGo's runtime, `encoding/json`, and
-`strconv` reflection.  Acceptable for system plugins (well under
-the manifest's `max_memory_mb` runtime budget); marketplace plugins
-that ship over slow uplinks may prefer Rust.
-
-## Adding more system-plugin Go ports
-
-Pattern from G1 (`sys-info-go`):
-
-1. Read the Rust source at `example/plugins/system/<name>/src/lib.rs`.
-2. Translate to Go under `example/plugins/system-go/<name>/main.go`,
-   keeping function shapes 1:1 so the parity matrix is greppable.
-3. Add any host-fn bindings the plugin needs to
-   `sdk/go/platypus-plugin/host.go` (one wasmimport + a Go
-   wrapper, mirroring the Rust extern block).
-4. Drop a `plugin.yaml` next to `main.go`.  Plugin id is
-   `<original>-go` (e.g. `com.platypus.sys-procs-linux-go`).
-5. `tinygo build -target wasi -o <entry>.wasm .`
-6. `go run ./hack/stage_system_plugins` from repo root.
-7. Add an integration test under
-   `internal/agent/plugin/<name>_go_integration_test.go` modeled
-   after `sys_info_go_integration_test.go`.
-
-Status of the system-plugin port matrix (May 2026):
-
-| Plugin            | Rust   | Go (G phase) |
-|-------------------|--------|--------------|
-| sys-info          | 2.0.0  | 1.0.0 (G1)   |
-| sys-procs-linux   | 2.0.0  | 1.0.0 (G2; renamed M0) |
-| sys-security      | 2.0.0  | pending (G3) |
-| sys-config-audit  | 2.0.0  | pending (G4) |
-| sys-tunnel-pull   | 1.0.0  | pending (G5) |
-| sys-process       | 1.0.0  | pending (G6) |
-| sys-files-write   | 1.0.0  | pending (G7) |
-| sys-files-read    | 1.0.1  | pending (G8) |
-
-Each pending port is mechanical (~30 min once familiar with the
-SDK).  The streaming plugins (G5-G8) need the `host_stream_*` SDK
-binding as well — pattern from `host_link_write_frame` in the Rust
-crates becomes a `HostStreamWrite` wrapper on the Go side.
+TinyGo wasm modules are heftier than Rust. The hello smoke plugin
+weighs in at ~260 KiB with no dependencies pulled in; anything
+that touches `encoding/json`, `strconv`, or reflect runs closer to
+1 MiB. Acceptable for low-volume operator plugins; marketplace
+plugins that ship over slow uplinks generally prefer Rust.
 
 ## Capabilities — same surface, same enforcement
 
@@ -157,11 +117,12 @@ crates becomes a `HostStreamWrite` wrapper on the Go side.
 | `sysinfo`   | `HostUname`                                  | `capabilities.sysinfo: true`         |
 | `kv`        | `KVGet`, `KVPut`                             | `capabilities.kv: true`              |
 | `fs.read`   | `HostFSRead`, `HostFSReadString`, `HostFSListDir` | `capabilities.fs.read.paths: [...]` |
-| `fs.write`  | (TBD — pending G7)                           | `capabilities.fs.write.paths: [...]` |
-| `exec`      | (TBD — pending G6)                           | `capabilities.exec.commands: [...]`  |
-| `net.http`  | (TBD — host-side stub)                       | `capabilities.net.http.hosts: [...]` |
-| `net.dial`  | (TBD — pending G5)                           | `capabilities.net.dial.targets: [...]` |
-| `process`   | (TBD — pending G6)                           | `capabilities.process.commands: [...]` |
+
+Other capabilities (`fs.write`, `exec`, `net.http`, `net.dial`,
+`process`) are implemented host-side and exposed to Rust today; add
+the matching Go binding in `sdk/go/platypus-plugin/host.go` (one
+`wasmimport` + a wrapper, mirroring the Rust extern block) when you
+need them.
 
 The manifest schema accepts globs (`*`, `**`, `?`) in path/command
 allowlist entries — see `docs/plugins/SECURITY.md` for the syntax;
