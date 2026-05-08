@@ -20,9 +20,14 @@
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
+    AlarmClock,
     AppWindow,
+    CalendarClock,
     Cog,
     File,
+    Fingerprint,
+    Flame,
+    FolderTree,
     HardDrive,
     Info,
     KeyRound,
@@ -31,6 +36,7 @@ import {
     Plug,
     ScrollText,
     ShieldCheck,
+    Users as UsersIcon,
     Wrench,
 } from "lucide-react";
 
@@ -45,7 +51,13 @@ import { Filesystems } from "./sys-disk/Filesystems";
 import { Network as NetworkTab } from "./sys-net/Network";
 import { Packages } from "./sys-pkg/Packages";
 import { Services as ServicesTab } from "./sys-services/Services";
-import { JournaldLogs } from "./sys-journald-linux/Logs";
+import { SystemLogs } from "./sys-journald-linux/Logs";
+import { Firewall } from "./sys-firewall/Firewall";
+import { Users as UsersTab } from "./sys-users/Users";
+import { Mounts as MountsTab } from "./sys-mounts/Mounts";
+import { CronJobs } from "./sys-cron-linux/CronJobs";
+import { Tasks as TasksTab } from "./sys-tasks-windows/Tasks";
+import { FileCaps } from "./sys-file-caps-linux/FileCaps";
 
 /**
  * Props every plugin tab component receives. Plumbed by HostView's
@@ -359,15 +371,134 @@ export const PLUGIN_UI_REGISTRY: ReadonlyArray<PluginUIEntry> = [
         component: withPluginID(Packages, "com.platypus.sys-pkg-windows"),
     },
 
-    // ---- Logs (linux-only journald; darwin / windows variants are
-    // intentionally not in v1 — log show / Get-WinEvent need their
-    // own plugin shape; deferred). ----
+    // ---- Logs (per-OS unified log query — journald on linux,
+    // `log show` on darwin, Get-WinEvent on windows. All three
+    // share the JournalEntry wire shape so one component covers
+    // the family). ----
     {
         pluginID: "com.platypus.sys-journald-linux",
         title: "Logs",
         icon: ScrollText,
         osTargets: ["linux"],
-        component: JournaldLogs,
+        component: withPluginID(SystemLogs, "com.platypus.sys-journald-linux"),
+    },
+    {
+        pluginID: "com.platypus.sys-log-darwin",
+        title: "Logs",
+        icon: ScrollText,
+        osTargets: ["darwin"],
+        component: withPluginID(SystemLogs, "com.platypus.sys-log-darwin"),
+    },
+    {
+        pluginID: "com.platypus.sys-log-windows",
+        title: "Logs",
+        icon: ScrollText,
+        osTargets: ["windows"],
+        component: withPluginID(SystemLogs, "com.platypus.sys-log-windows"),
+    },
+
+    // ---- Firewall rules (per-OS backend: iptables / nftables /
+    // ufw / firewalld on linux, pf on darwin, Get-NetFirewallRule
+    // on windows). One component, three pluginIDs. ----
+    {
+        pluginID: "com.platypus.sys-firewall-linux",
+        title: "Firewall",
+        icon: Flame,
+        osTargets: ["linux"],
+        component: withPluginID(Firewall, "com.platypus.sys-firewall-linux"),
+    },
+    {
+        pluginID: "com.platypus.sys-firewall-darwin",
+        title: "Firewall",
+        icon: Flame,
+        osTargets: ["darwin"],
+        component: withPluginID(Firewall, "com.platypus.sys-firewall-darwin"),
+    },
+    {
+        pluginID: "com.platypus.sys-firewall-windows",
+        title: "Firewall",
+        icon: Flame,
+        osTargets: ["windows"],
+        component: withPluginID(Firewall, "com.platypus.sys-firewall-windows"),
+    },
+
+    // ---- Users / groups / sudoers (per-OS source: /etc/passwd
+    // on linux, dscl on darwin, Get-LocalUser on windows). One
+    // component renders all three sub-views (segmented toggle). ----
+    {
+        pluginID: "com.platypus.sys-users-linux",
+        title: "Users",
+        icon: UsersIcon,
+        osTargets: ["linux"],
+        component: withPluginID(UsersTab, "com.platypus.sys-users-linux"),
+    },
+    {
+        pluginID: "com.platypus.sys-users-darwin",
+        title: "Users",
+        icon: UsersIcon,
+        osTargets: ["darwin"],
+        component: withPluginID(UsersTab, "com.platypus.sys-users-darwin"),
+    },
+    {
+        pluginID: "com.platypus.sys-users-windows",
+        title: "Users",
+        icon: UsersIcon,
+        osTargets: ["windows"],
+        component: withPluginID(UsersTab, "com.platypus.sys-users-windows"),
+    },
+
+    // ---- Mounts (topology + options; companion to sys-disk
+    // which reports usage). Linux populates fstab; darwin /
+    // windows return an empty fstab list. ----
+    {
+        pluginID: "com.platypus.sys-mounts-linux",
+        title: "Mounts",
+        icon: FolderTree,
+        osTargets: ["linux"],
+        component: withPluginID(MountsTab, "com.platypus.sys-mounts-linux"),
+    },
+    {
+        pluginID: "com.platypus.sys-mounts-darwin",
+        title: "Mounts",
+        icon: FolderTree,
+        osTargets: ["darwin"],
+        component: withPluginID(MountsTab, "com.platypus.sys-mounts-darwin"),
+    },
+    {
+        pluginID: "com.platypus.sys-mounts-windows",
+        title: "Mounts",
+        icon: FolderTree,
+        osTargets: ["windows"],
+        component: withPluginID(MountsTab, "com.platypus.sys-mounts-windows"),
+    },
+
+    // ---- Cron / scheduled tasks. Linux + windows are siblings;
+    // darwin's launchd is already covered by sys-services-darwin so
+    // there's no sys-cron-darwin plugin to surface. ----
+    {
+        pluginID: "com.platypus.sys-cron-linux",
+        title: "Cron",
+        icon: AlarmClock,
+        osTargets: ["linux"],
+        component: CronJobs,
+    },
+    {
+        pluginID: "com.platypus.sys-tasks-windows",
+        title: "Scheduled tasks",
+        icon: CalendarClock,
+        osTargets: ["windows"],
+        component: TasksTab,
+    },
+
+    // ---- File capabilities (linux only; companion to
+    // sys-security's SUID outliers — modern distros increasingly
+    // replace SUID with finer-grained Linux capabilities). ----
+    {
+        pluginID: "com.platypus.sys-file-caps-linux",
+        title: "File caps",
+        icon: Fingerprint,
+        osTargets: ["linux"],
+        component: FileCaps,
     },
 ];
 

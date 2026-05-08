@@ -1,6 +1,13 @@
-// Logs tab — sys-journald-linux. Single RPC `query` with a rich
-// request form (priority / unit / since / grep / lines / boot).
-// No row-actions; the rendering is read-only inspection.
+// Logs tab — shared across sys-journald-linux / sys-log-darwin /
+// sys-log-windows. All three plugins implement `query` with the
+// same JournalQueryRequest / JournalQueryResponse shape so one
+// component covers the family. Per-OS variants only differ in
+// the pluginID passed in by the registry.
+//
+// The form's "Unit" knob maps to the source filter (--unit on
+// linux journalctl, process== on darwin `log show`, -ProviderName
+// on windows Get-WinEvent). Priority is the journald 0..7 ladder
+// (windows levels are pre-mapped by the plugin).
 
 import RPCTable, { type Column } from "../shared/RPCTable";
 import { palette } from "../../../../layout/theme";
@@ -124,16 +131,17 @@ const PRIORITY_OPTIONS = [
     { value: "7", label: "Debug" },
 ];
 
-export function JournaldLogs({
+export function SystemLogs({
+    pluginID,
     projectID,
     agentID,
     active,
-}: PluginUIProps) {
+}: PluginUIProps & { pluginID: string }) {
     return (
         <RPCTable<QueryResponse, Entry>
             projectID={projectID}
             agentID={agentID}
-            pluginID="com.platypus.sys-journald-linux"
+            pluginID={pluginID}
             method="query"
             active={active}
             requestForm={[

@@ -439,6 +439,25 @@ describe("registry helpers", () => {
             "com.platypus.sys-pkg-windows",
             // Logs
             "com.platypus.sys-journald-linux",
+            "com.platypus.sys-log-darwin",
+            "com.platypus.sys-log-windows",
+            // Firewall
+            "com.platypus.sys-firewall-linux",
+            "com.platypus.sys-firewall-darwin",
+            "com.platypus.sys-firewall-windows",
+            // Users
+            "com.platypus.sys-users-linux",
+            "com.platypus.sys-users-darwin",
+            "com.platypus.sys-users-windows",
+            // Mounts
+            "com.platypus.sys-mounts-linux",
+            "com.platypus.sys-mounts-darwin",
+            "com.platypus.sys-mounts-windows",
+            // Cron / Scheduled tasks
+            "com.platypus.sys-cron-linux",
+            "com.platypus.sys-tasks-windows",
+            // File capabilities
+            "com.platypus.sys-file-caps-linux",
         ];
 
         it("contains every expected M-phase plugin id", () => {
