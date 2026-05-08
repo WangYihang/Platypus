@@ -1,0 +1,89 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_mounts.proto — wire shape for the per-OS mount-point plugins
+// (com.platypus.sys-mounts-{linux,darwin,windows}).
+//
+// Companion to sys-disk: sys-disk reports usage (sizes), sys-mounts
+// reports topology + options. The two are intentionally split — usage
+// queries are frequent and want to be cheap; mount audits are rarer
+// and benefit from a richer per-mount surface (mount options,
+// fstab-configured-but-not-mounted entries).
+//
+// On Linux the response carries both a `mounts` list (currently
+// mounted) and an `fstab` list (configured-but-not-yet-mounted, plus
+// every fstab line for cross-reference). macOS has no fstab; the
+// `fstab` list is empty there. Windows has Get-Volume + Get-Partition
+// — no fstab, no Unix-style mount options, but still drive layout +
+// filesystem type + read-only flag.
+
+message MountListRequest {
+  // When false (default), pseudo / tmpfs / devtmpfs / overlay /
+  // squashfs entries are excluded. Set true to see container layer
+  // mounts, the sysfs hierarchy, and other kernel-tracked virtual
+  // mounts.
+  bool include_pseudo = 1;
+  // When true (linux only), the response includes an entry for every
+  // /etc/fstab row even if it's already mounted (i.e. shows up in the
+  // `mounts` list too). Default false: we trim down to fstab rows
+  // that aren't currently active so the operator sees "configured
+  // but missing" mounts at a glance.
+  bool include_active_fstab = 2;
+}
+
+message MountListResponse {
+  // Live mounts as reported by the kernel (Linux: /proc/mounts,
+  // macOS: `mount`, Windows: Get-Volume / Get-Partition).
+  repeated Mount mounts = 1;
+  // /etc/fstab entries (Linux only). Populated for the fstab rows
+  // not currently mounted, unless include_active_fstab=true.
+  repeated FstabEntry fstab = 2;
+  string error = 3;
+}
+
+// Mount is one currently-active mount.
+message Mount {
+  // Backing device or volume identifier ("/dev/sda1", "tmpfs",
+  // "//server/share", "C:\\", "/dev/disk1s5s1").
+  string source     = 1;
+  string mountpoint = 2;
+  // Filesystem type ("ext4", "xfs", "apfs", "NTFS", "tmpfs",
+  // "smbfs", "FAT32").
+  string fstype     = 3;
+  // Raw mount options string ("rw,relatime,errors=remount-ro" on
+  // Linux; "local,nodev,nosuid,journaled" on macOS). Empty on
+  // Windows where the concept doesn't apply.
+  string options    = 4;
+  // Pre-parsed convenience flags. The plugin scans `options` for
+  // "ro"/"nosuid"/"nodev"/"noexec" tokens (Linux/macOS) or sets
+  // read_only from Get-Volume's read-only attribute on Windows.
+  bool   read_only  = 5;
+  bool   nosuid     = 6;
+  bool   nodev      = 7;
+  bool   noexec     = 8;
+  // Volume UUID or label, when available. Helpful for identifying
+  // mounts whose `source` is a non-stable /dev/disk*.
+  string fs_id      = 9;
+  // True for kernel-tracked virtual filesystems (sysfs / proc /
+  // tmpfs / devtmpfs / overlay / squashfs / cgroup …). Operators
+  // hide these by default via include_pseudo=false.
+  bool   pseudo     = 10;
+}
+
+// FstabEntry is one /etc/fstab row. Linux-only; empty on darwin /
+// windows. The dump + pass columns are the legacy fsck columns
+// (`man fstab`), preserved verbatim so the UI can render the file
+// faithfully.
+message FstabEntry {
+  string source     = 1;
+  string mountpoint = 2;
+  string fstype     = 3;
+  string options    = 4;
+  uint32 dump       = 5;
+  uint32 pass       = 6;
+  // True when this fstab row is also currently mounted (the same
+  // mountpoint appears in `mounts`). Operators looking for
+  // "configured but missing" mounts filter to mounted=false.
+  bool   mounted    = 7;
+}

@@ -1,0 +1,47 @@
+api_version: 1
+id: com.platypus.sys-mounts-linux
+name: Mounts and fstab (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux mount-point inventory. Reads /proc/mounts for the live
+  mount table and /etc/fstab for the configured-at-boot table,
+  pre-parses the common option flags (ro / nosuid / nodev /
+  noexec) for each mount, and cross-references the two so the
+  operator sees "configured-but-not-mounted" entries at a glance.
+
+  Live mounts come from /proc/mounts (no shell-out). The fstab
+  parser tolerates per-line errors silently — a malformed row
+  doesn't kill the whole response.
+
+runtime:
+  type: wasm
+  entry: sys_mounts_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_mounts
+    request:  { proto: MountListRequest }
+    response: { proto: MountListResponse }
+
+capabilities:
+  fs.read:
+    paths:
+      - /proc/mounts
+      - /proc/self/mounts
+      - /etc/fstab
+      - /etc/mtab
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 130C1C9D9EFD8A97
+  sig_file: sys_mounts_linux.wasm.minisig

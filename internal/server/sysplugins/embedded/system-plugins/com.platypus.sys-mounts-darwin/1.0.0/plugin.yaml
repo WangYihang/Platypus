@@ -1,0 +1,44 @@
+api_version: 1
+id: com.platypus.sys-mounts-darwin
+name: Mounts (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS mount-point inventory. Shells `/sbin/mount` and parses its
+  one-line-per-mount output:
+
+      /dev/disk1s5s1 on / (apfs, sealed, local, read-only, journaled)
+
+  Pre-parses ro / nodev / nosuid / noexec from the option list so
+  the typed-bridge UI shows the same boolean flags as
+  sys-mounts-linux. macOS has no fstab; the response's `fstab`
+  list is always empty.
+
+runtime:
+  type: wasm
+  entry: sys_mounts_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_mounts
+    request:  { proto: MountListRequest }
+    response: { proto: MountListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/sbin/mount"
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 130C1C9D9EFD8A97
+  sig_file: sys_mounts_darwin.wasm.minisig

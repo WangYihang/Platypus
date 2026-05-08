@@ -1,0 +1,48 @@
+api_version: 1
+id: com.platypus.sys-mounts-windows
+name: Volumes (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows volume / drive inventory. Shells PowerShell:
+
+      Get-Volume |
+        Select-Object DriveLetter, FileSystemLabel, FileSystem,
+                      DriveType, OperationalStatus, Path |
+        ConvertTo-Json
+
+  Returns each volume as a Mount row mapping to the proto's
+  cross-OS shape — DriveLetter+":\\" → mountpoint, FileSystem →
+  fstype, OperationalStatus's read-only attribute → read_only.
+  Windows has no fstab, no Unix mount-option model, so nosuid /
+  nodev / noexec are always false. The `fstab` list in the
+  response is empty.
+
+runtime:
+  type: wasm
+  entry: sys_mounts_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_mounts
+    request:  { proto: MountListRequest }
+    response: { proto: MountListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 130C1C9D9EFD8A97
+  sig_file: sys_mounts_windows.wasm.minisig
