@@ -44,8 +44,8 @@ dist/
 
 # Cargo build output for example plugins. The .wasm artefacts are
 # build outputs; we don't commit them. System plugin bundles under
-# internal/agent/plugin/system/embedded/ are signed + checked in
-# deliberately and not affected by this rule.
+# internal/server/sysplugins/embedded/system-plugins/ are signed +
+# checked in deliberately and not affected by this rule.
 #
 # Cargo.lock files ARE checked in even though they're build artefacts:
 # the publisher container bind-mounts /workspace read-only + cargo
