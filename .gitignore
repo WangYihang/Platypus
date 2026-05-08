@@ -100,12 +100,12 @@ config.yaml
 # codex
 .codex
 
-# System-plugin signing secret minted by scripts/stage_system_plugins.
+# System-plugin signing secret minted by hack/stage_system_plugins.
 # The matching publisher.pub IS committed under
 # internal/server/sysplugins/embedded/system-plugins/. Losing this
 # file just means the next run of the staging helper mints a new
 # keypair and re-signs every staged plugin.
-scripts/.system-signing.secret
+hack/.system-signing.secret
 
 # Dev signing keypair for the local-dev release tree (`make releases`).
 # Auto-minted on first run; persists across runs so previously-enrolled
