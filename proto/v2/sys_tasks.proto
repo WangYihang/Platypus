@@ -1,0 +1,74 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_tasks.proto — Windows Scheduled Tasks inventory.
+//
+// Linux sibling lives in sys_cron.proto; macOS sibling — should it
+// land — uses launchd (already covered by sys-services-darwin).
+// On Windows the natural surface is Get-ScheduledTask; this plugin
+// shells PowerShell to enumerate it and returns each task with the
+// information operators most often need (state, last/next run,
+// what command it runs).
+
+message TasksListRequest {
+  // When false (default), only enabled tasks are returned. When
+  // true, tasks in the Disabled state are also included.
+  bool include_disabled = 1;
+  // Substring match against TaskName (case-insensitive). Empty =
+  // no filter.
+  string filter         = 2;
+  // Substring match against TaskPath (the namespace the task lives
+  // under, e.g. "\Microsoft\Windows\UpdateOrchestrator"). Empty =
+  // no filter.
+  string path_prefix    = 3;
+}
+
+message TasksListResponse {
+  repeated ScheduledTask tasks = 1;
+  string error                 = 2;
+}
+
+// ScheduledTask is one row from Get-ScheduledTask. Some fields
+// (last_run_time, last_result, next_run_time) come from
+// Get-ScheduledTaskInfo, which the plugin queries in the same
+// PowerShell pipeline so a single round trip covers both.
+message ScheduledTask {
+  // "Update Tracker" etc.
+  string task_name      = 1;
+  // Namespace the task lives under, e.g.
+  // "\Microsoft\Windows\Maintenance\". Always starts with "\".
+  string task_path      = 2;
+  // "Ready" | "Running" | "Disabled" | "Queued" | "Unknown"
+  string state          = 3;
+  string author         = 4;
+  string description    = 5;
+  // Trigger summaries — one entry per Trigger object on the task.
+  // Format is human-readable, e.g. "Daily at 03:00", "AtLogOn",
+  // "AtStartup". Operators picking through hundreds of tasks scan
+  // these to find the one they want; full structured trigger data
+  // is out of scope for v1.
+  repeated string triggers           = 6;
+  // Actions are what the task runs. Most tasks have exactly one
+  // action; some have multiple (run a script then log a result).
+  repeated ScheduledTaskAction actions = 7;
+  // Unix timestamp seconds; 0 when never run yet.
+  int64  last_run_unix  = 8;
+  // Win32 HRESULT from the last run (0 = success).
+  int32  last_result    = 9;
+  // Unix timestamp seconds for the next scheduled run; 0 when
+  // there's no upcoming trigger.
+  int64  next_run_unix  = 10;
+  // The principal that runs the task ("SYSTEM", "DOMAIN\\alice").
+  string run_as_user    = 11;
+}
+
+// ScheduledTaskAction is one Execute / ComObject / Email entry on a
+// task. v1 only models the Execute action shape — that's the vast
+// majority of tasks and the only one operators usually want to
+// audit. Other action types surface as execute="<other-type>".
+message ScheduledTaskAction {
+  string execute     = 1;  // "powershell.exe", "C:\\path\\to\\script.bat"
+  string arguments   = 2;
+  string working_dir = 3;
+}

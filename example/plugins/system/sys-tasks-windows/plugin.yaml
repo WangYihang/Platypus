@@ -1,0 +1,46 @@
+api_version: 1
+id: com.platypus.sys-tasks-windows
+name: Scheduled tasks (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apple-2.0
+description: |
+  Windows Scheduled Tasks inventory. Shells PowerShell:
+
+      Get-ScheduledTask | ForEach-Object {
+        $info = Get-ScheduledTaskInfo -TaskPath $_.TaskPath -TaskName $_.TaskName
+        ...
+      } | ConvertTo-Json
+
+  Returns each task with name, path, state, author, description,
+  trigger summaries, the actions it runs, last/next run times, and
+  the principal it runs as. Sibling of sys-cron-linux for the
+  Windows side of "what's scheduled to fire on this host".
+
+runtime:
+  type: wasm
+  entry: sys_tasks_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_tasks
+    request:  { proto: TasksListRequest }
+    response: { proto: TasksListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_tasks_windows.wasm.minisig

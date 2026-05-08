@@ -1,0 +1,66 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_cron.proto — Linux cron + at queue inventory.
+//
+// Reads the standard cron sources directly via host_fs_*:
+//
+//   /etc/crontab                       system-wide root crontab (with user field)
+//   /etc/cron.d/*                      drop-in fragments (with user field)
+//   /var/spool/cron/crontabs/<user>    per-user crontabs (Debian/Ubuntu)
+//   /var/spool/cron/<user>             per-user crontabs (RHEL/Fedora)
+//   /etc/cron.{hourly,daily,weekly,monthly}/*  anacron-style script directories
+//
+// Systemd timers are out of scope — they're covered by sys-systemd-
+// linux's list_units (filter unit_type=timer). Anacron's
+// /etc/anacrontab is read alongside the script directories so the
+// operator sees both sides of the run.
+
+message CronListRequest {
+  // When false (default), only enabled / runnable jobs are returned.
+  // When true, commented-out jobs and run-parts directory entries
+  // are also included so an operator auditing for "jobs that USED to
+  // run" can find them.
+  bool include_disabled = 1;
+}
+
+message CronListResponse {
+  repeated CronJob jobs = 1;
+  string error          = 2;
+}
+
+// CronJob is one scheduled-execution row. The fields cover both
+// crontab-format entries and run-parts directory scripts; not every
+// field applies to every kind:
+//
+//   kind="crontab" / "system_crontab" / "cron_d" — full schedule
+//   kind="run_parts" — schedule is the directory's cadence
+//                      ("hourly"/"daily"/"weekly"/"monthly"),
+//                      command is the script path. user is "root".
+//   kind="anacron" — anacrontab entry. user is "root".
+message CronJob {
+  // Where the entry came from. One of:
+  //   "/etc/crontab", "/etc/cron.d/<file>",
+  //   "/var/spool/cron/crontabs/<user>", "/var/spool/cron/<user>",
+  //   "/etc/cron.daily" (and friends),
+  //   "/etc/anacrontab".
+  string source      = 1;
+  // The user that owns the schedule. Empty when the source doesn't
+  // carry a user field and we couldn't infer one.
+  string user        = 2;
+  // The schedule expression as it appears in the source. Five
+  // tokens for cron format; "@reboot"/"@daily"/etc. for shorthand;
+  // the directory cadence for run_parts; the period+delay for
+  // anacron.
+  string schedule    = 3;
+  // The command to run.
+  string command     = 4;
+  // "crontab" | "system_crontab" | "cron_d" | "run_parts" | "anacron"
+  string kind        = 5;
+  // 1-based line number within `source` (0 for run_parts).
+  uint32 line_no     = 6;
+  // True when the line was uncommented in the source. Hidden by
+  // default (include_disabled=false).
+  bool   enabled     = 7;
+}

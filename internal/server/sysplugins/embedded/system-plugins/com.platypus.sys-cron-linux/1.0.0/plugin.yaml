@@ -1,0 +1,59 @@
+api_version: 1
+id: com.platypus.sys-cron-linux
+name: Cron jobs (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux cron + anacron + run-parts inventory. Walks the standard
+  cron sources directly via host_fs_*:
+
+    /etc/crontab                  system-wide root crontab (with user field)
+    /etc/cron.d/*                 drop-in fragments (with user field)
+    /var/spool/cron/crontabs/*    per-user crontabs (Debian/Ubuntu)
+    /var/spool/cron/*             per-user crontabs (RHEL/Fedora)
+    /etc/cron.{hourly,daily,weekly,monthly}/*  run-parts script dirs
+    /etc/anacrontab               anacron schedule
+
+  Returns each scheduled job as a CronJob row with source, user,
+  schedule, command, kind, and enabled. Pass include_disabled=true
+  to also surface commented-out lines (forensic interest: "this job
+  used to run before someone disabled it").
+
+  Out of scope:
+    - systemd timers — covered by sys-systemd-linux's list_units
+      with unit_type=timer.
+    - at(1) queue — niche; can be added as a follow-up RPC.
+
+runtime:
+  type: wasm
+  entry: sys_cron_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_cron_jobs
+    request:  { proto: CronListRequest }
+    response: { proto: CronListResponse }
+
+# Per-user crontabs at /var/spool/cron/{,crontabs}/* are typically
+# mode 1730 (sticky, group cron) — readable by root or the cron
+# group. The plugin tolerates per-file permission denied and
+# returns only what it could read.
+capabilities:
+  fs.read:
+    paths:
+      - /etc
+      - /var/spool/cron
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 130C1C9D9EFD8A97
+  sig_file: sys_cron_linux.wasm.minisig
