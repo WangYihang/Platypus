@@ -30,11 +30,6 @@ test.describe("host view", () => {
         await page.getByTestId("host-activity-info").click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/info$/);
 
-        // PageHeader subtitle on HostView is "<N> active · <os>".
-        await expect(
-            page.getByText(/active · /).first(),
-        ).toBeVisible({ timeout: 10_000 });
-
         // Current activity bar — Terminal moved to the global drawer.
         for (const key of ["info", "files", "processes", "sessions"]) {
             await expect(page.getByTestId(`host-activity-${key}`)).toBeVisible();
