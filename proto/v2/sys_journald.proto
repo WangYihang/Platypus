@@ -1,0 +1,59 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_journald.proto — wire shape for the systemd-journal log query
+// plugin (com.platypus.sys-journald-linux).
+//
+// query shells `journalctl -o json` with a curated set of filter
+// flags and parses each line into a structured Entry. A future
+// macOS sibling (sys-log-darwin via `log show`) and Windows sibling
+// (sys-log-windows via Get-WinEvent) will share this Entry shape.
+
+message JournalQueryRequest {
+  // --unit filter, e.g. "ssh.service". Empty = all units.
+  string unit     = 1;
+  // --priority filter. Accepts symbolic ("err", "warn") or numeric
+  // ("0".."7"). Empty = all.
+  string priority = 2;
+  // --since (RFC3339 or relative like "2 hours ago"). Empty = no
+  // lower bound.
+  string since    = 3;
+  // --until same format. Empty = no upper bound.
+  string until    = 4;
+  // --grep regex. Empty = no message-text filter.
+  string grep     = 5;
+  // -n line cap. 0 uses plugin default (200).
+  uint32 lines    = 6;
+  // -r reverse (newest-first). Default false (oldest-first).
+  bool   reverse  = 7;
+  // -b boot id selector. "0" = current boot, "-1" = previous, "" =
+  // no boot filter.
+  string boot     = 8;
+}
+
+message JournalQueryResponse {
+  repeated JournalEntry entries = 1;
+  // True when the journalctl output filled the line cap; the caller
+  // should narrow the filter or lift `lines` for completeness.
+  bool   truncated              = 2;
+  string error                  = 3;
+}
+
+// JournalEntry is one record from journalctl. timestamp_us is the
+// monotonic-source __REALTIME_TIMESTAMP, microseconds since epoch.
+// Optional fields are zero/empty when journalctl didn't report them.
+message JournalEntry {
+  uint64 timestamp_us = 1;
+  string unit         = 2;
+  // syslog priority 0..7 (emerg..debug).
+  uint32 priority     = 3;
+  string message      = 4;
+  string hostname     = 5;
+  uint32 pid          = 6;
+  uint32 uid          = 7;
+  // SYSLOG_IDENTIFIER — tag the writer set, often the program name.
+  string identifier   = 8;
+  // _COMM — kernel-reported short process name.
+  string comm         = 9;
+}

@@ -1,0 +1,56 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_pkg.proto — wire shape for the per-OS package-manager plugins
+// (com.platypus.sys-pkg-{linux,darwin,windows}).
+//
+// list_installed walks the host's installed packages via the
+// detected backend (Linux: apt/dnf/yum/zypper/pacman, macOS: brew,
+// Windows: Get-Package / winget). list_upgradable returns packages
+// with a newer version available. Both responses include the
+// detected backend name so the UI can show "this fleet is mostly
+// Debian" at a glance.
+
+// PkgListInstalledRequest filters and caps the response. query is a
+// substring match against package name. max_results=0 uses the
+// plugin's default (5000).
+message PkgListInstalledRequest {
+  string query       = 1;
+  uint32 max_results = 2;
+}
+
+message PkgListInstalledResponse {
+  repeated Package packages = 1;
+  // "apt" | "dnf" | "yum" | "zypper" | "pacman" | "brew" | "winget" | ""
+  string backend            = 2;
+  // 0 if the plugin returned every package; otherwise the cap that
+  // was applied (UI shows "showing 5000 of N").
+  uint32 truncated_at       = 3;
+  string error              = 4;
+}
+
+message PkgListUpgradableRequest {}
+
+message PkgListUpgradableResponse {
+  repeated Update updates = 1;
+  string backend          = 2;
+  string error            = 3;
+}
+
+// Package is one installed entry. arch is best-effort — empty when
+// the backend doesn't surface it (e.g. brew bottles on macOS).
+message Package {
+  string name    = 1;
+  string version = 2;
+  string arch    = 3;
+}
+
+// Update is one row from the per-backend "what can be upgraded"
+// query. current_version may be empty when the backend's diff format
+// only carries the new version (e.g. older apt list output).
+message Update {
+  string name              = 1;
+  string current_version   = 2;
+  string available_version = 3;
+}

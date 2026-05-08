@@ -1,0 +1,53 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_disk.proto — wire shape for the per-OS filesystem-listing
+// plugins (com.platypus.sys-disk-{linux,darwin,windows}).
+//
+// list_filesystems walks the host's mounted filesystems via the
+// native tool (`df` on linux/darwin, Get-PSDrive on windows) and
+// reports per-filesystem usage. The response is intentionally
+// "mounted right now" — fstab-style configured-but-not-mounted
+// volumes belong to sys-mounts (Tier 1).
+
+message FilesystemListRequest {
+  // When true (default), pseudo / tmpfs / devtmpfs / overlay /
+  // squashfs filesystems are excluded from the response. Set false
+  // to see every kernel-tracked mount, including container layer
+  // bind mounts.
+  bool skip_pseudo            = 1;
+
+  // When non-empty, only filesystems whose mountpoint is in this
+  // list are returned. Useful for "give me /var and /tmp only"
+  // queries from a UI.
+  repeated string only_mountpoints = 2;
+
+  // Filter out filesystems whose total size is below this many bytes.
+  // Defaults to 0 (no lower bound). Useful for excluding tiny boot
+  // partitions from a usage dashboard.
+  uint64 min_size_bytes       = 3;
+}
+
+message FilesystemListResponse {
+  repeated Filesystem filesystems = 1;
+  string error                    = 2;
+}
+
+// Filesystem is one mount as reported by the OS.
+message Filesystem {
+  // Backing device or volume identifier ("/dev/sda1", "tmpfs",
+  // "C:\\", "/dev/disk1s5s1").
+  string source           = 1;
+  // Filesystem type ("ext4", "xfs", "apfs", "NTFS", "tmpfs").
+  string fstype           = 2;
+  // Mount path ("/", "/var", "C:\\Users").
+  string mountpoint       = 3;
+  uint64 size_bytes       = 4;
+  uint64 used_bytes       = 5;
+  uint64 available_bytes  = 6;
+  // 0..100. Cached agent-side as `100 * used / size`; reported
+  // separately because some kernels expose a different ratio for
+  // root vs non-root reservations (df -P).
+  uint32 percent_used     = 7;
+}

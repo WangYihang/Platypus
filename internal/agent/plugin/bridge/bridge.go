@@ -23,6 +23,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
@@ -51,6 +54,44 @@ func invokeJSON(ctx context.Context, reg *plugin.Registry, pluginID, method stri
 	}
 	if err := json.Unmarshal(r.GetPayload(), resp); err != nil {
 		return "", fmt.Errorf("bridge: unmarshal response: %w", err)
+	}
+	return "", nil
+}
+
+// invokeProto is the typed-message variant of invokeJSON. It uses
+// protojson with UseProtoNames=true so the request goes out as the
+// proto field's snake_case name — which matches what every Rust
+// plugin's serde-default Deserialize expects (the plugins were
+// authored against the snake_case JSON shape long before we added
+// proto definitions for them). The response is decoded with default
+// protojson Unmarshal which accepts both snake_case and lowerCamelCase
+// — so a plugin emitting `currentVersion` and a plugin emitting
+// `current_version` both round-trip into the same proto field.
+//
+// Use this for any plugin where you've defined a real proto message
+// (sys-pkg, sys-disk, sys-net, sys-services, sys-journald, sys-info,
+// sys-procs, sys-security, sys-config-audit). Use invokeJSON only
+// for ad-hoc payloads that don't have a proto.
+var (
+	protoMarshalSnakeCase  = protojson.MarshalOptions{UseProtoNames: true}
+	protoUnmarshalLenient  = protojson.UnmarshalOptions{DiscardUnknown: true}
+)
+
+func invokeProto(ctx context.Context, reg *plugin.Registry, pluginID, method string, req, resp proto.Message) (string, error) {
+	payload, err := protoMarshalSnakeCase.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("bridge: marshal protojson request: %w", err)
+	}
+	r := reg.Invoke(ctx, &v2pb.PluginCallRequest{
+		PluginId: pluginID,
+		Method:   method,
+		Payload:  payload,
+	})
+	if errStr := r.GetError(); errStr != "" {
+		return errStr, nil
+	}
+	if err := protoUnmarshalLenient.Unmarshal(r.GetPayload(), resp); err != nil {
+		return "", fmt.Errorf("bridge: unmarshal protojson response: %w", err)
 	}
 	return "", nil
 }

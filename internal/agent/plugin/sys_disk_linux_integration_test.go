@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
+	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -165,5 +166,34 @@ func TestSysDiskLinux_ListFilesystems_SkipPseudoOff(t *testing.T) {
 	}
 	if !hasTmpfs {
 		t.Logf("no tmpfs reported with skip_pseudo=false; environment may not have one (rare)")
+	}
+}
+
+// TestSysDiskLinux_TypedBridge_RoundTrip exercises bridge.FilesystemList.
+// Fails if proto/v2/sys_disk.proto drifts from the JSON shape the
+// plugin actually emits.
+func TestSysDiskLinux_TypedBridge_RoundTrip(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-disk-linux is linux-only")
+	}
+	reg := installSysDiskLinux(t)
+
+	resp := bridge.FilesystemList(reg)(context.Background(),
+		&v2pb.FilesystemListRequest{SkipPseudo: true})
+	if resp.GetError() != "" {
+		t.Fatalf("typed bridge returned error: %s", resp.GetError())
+	}
+	if len(resp.GetFilesystems()) == 0 {
+		t.Fatalf("expected at least one mounted filesystem")
+	}
+	for i, fs := range resp.GetFilesystems() {
+		if fs.GetMountpoint() == "" {
+			t.Errorf("filesystems[%d] empty mountpoint: %+v", i, fs)
+		}
+		if fs.GetSizeBytes() == 0 && fs.GetMountpoint() != "" {
+			// /proc and similar pseudo fs have size 0 — but skip_pseudo
+			// should have filtered them. Real fs always has non-zero.
+			t.Logf("filesystems[%d] %s has size 0 (filtered by skip_pseudo?)", i, fs.GetMountpoint())
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
+	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -224,4 +225,37 @@ func TestSysSystemd_UnitAction_Rejects_LeadingDash(t *testing.T) {
 	if decoded.Ok || decoded.Error == "" {
 		t.Errorf("expected rejection of -evil; got ok=%v err=%q", decoded.Ok, decoded.Error)
 	}
+}
+
+// TestSysSystemdLinux_TypedBridge_RoundTrip exercises bridge.SystemdListUnits.
+// Tolerates "no systemctl" when running in a container without systemd.
+func TestSysSystemdLinux_TypedBridge_RoundTrip(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-systemd-linux is linux-only")
+	}
+	reg := installSysSystemd(t)
+
+	resp := bridge.SystemdListUnits(reg)(context.Background(),
+		&v2pb.SystemdListUnitsRequest{})
+	got := resp.GetError()
+	if got != "" && !contains(got, "systemctl") {
+		t.Fatalf("typed bridge unexpected error: %s", got)
+	}
+	for i, u := range resp.GetUnits() {
+		if u.GetName() == "" {
+			t.Errorf("unit[%d] empty name", i)
+		}
+	}
+	if got != "" {
+		t.Logf("bridge returned %q (expected in non-systemd containers)", got)
+	}
+}
+
+func contains(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
 }

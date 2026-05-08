@@ -1,0 +1,128 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_services.proto — wire shape for the three service-management
+// plugins:
+//
+//   com.platypus.sys-systemd-linux       systemctl
+//   com.platypus.sys-services-darwin     launchctl
+//   com.platypus.sys-services-windows    Get-Service
+//
+// The three platforms have genuinely different mental models — a
+// systemd unit, a launchd LaunchDaemon, and a Windows service expose
+// different identifiers and lifecycle states. Rather than force a
+// lossy unified abstraction, this file defines three separate
+// "list entry" message types alongside the shared request /
+// action plumbing.
+
+// ---- list_units ---------------------------------------------------
+
+// systemctl filter knobs. All optional; empty = no restriction.
+message SystemdListUnitsRequest {
+  // systemctl --state=<x>. Multiple states comma-separated.
+  string state     = 1;
+  // systemctl --type=<x>. Defaults to "service" plugin-side; pass
+  // "*" or "all" to disable.
+  string unit_type = 2;
+  // Glob pattern passed positionally to systemctl.
+  string pattern   = 3;
+}
+
+message SystemdListUnitsResponse {
+  repeated SystemdUnitEntry units = 1;
+  string error                    = 2;
+}
+
+// SystemdUnitEntry mirrors `systemctl list-units` columns.
+message SystemdUnitEntry {
+  string name        = 1;  // "ssh.service", "cron.timer", ...
+  string load        = 2;  // "loaded" | "not-found" | "masked"
+  string active      = 3;  // "active" | "inactive" | "failed"
+  string sub         = 4;  // "running" | "exited" | "dead" | ...
+  string description = 5;
+}
+
+// launchctl filter knobs.
+message LaunchdListUnitsRequest {
+  // Substring match on label. Empty = all.
+  string filter = 1;
+}
+
+message LaunchdListUnitsResponse {
+  repeated LaunchdJobEntry units = 1;
+  string error                   = 2;
+}
+
+// LaunchdJobEntry mirrors `launchctl list` columns. pid=0 means the
+// job is not currently running; status is the last exit code.
+message LaunchdJobEntry {
+  string label  = 1;   // "com.apple.cloudd", ...
+  uint32 pid    = 2;
+  int32  status = 3;
+  // "active" if pid > 0, else "inactive". Pre-computed plugin-side
+  // so the UI can render a unified active/inactive pill across all
+  // three platforms.
+  string active = 4;
+}
+
+// Get-Service filter knobs.
+message WindowsListServicesRequest {
+  // Substring match on name. Empty = all.
+  string filter = 1;
+}
+
+message WindowsListServicesResponse {
+  repeated WindowsServiceEntry units = 1;
+  string error                       = 2;
+}
+
+// WindowsServiceEntry mirrors `Get-Service` columns + StartType.
+message WindowsServiceEntry {
+  string name         = 1;  // "Spooler", "wuauserv", ...
+  string display_name = 2;
+  // PowerShell Status enum int rendered as string: "Running" |
+  // "Stopped" | "Paused" | "StartPending" | "StopPending" | ...
+  string status       = 3;
+  // PowerShell StartType enum int rendered as string: "Automatic" |
+  // "Manual" | "Disabled" | "AutomaticDelayedStart" | ...
+  string start_type   = 4;
+}
+
+// ---- show_unit (systemd-linux only — `systemctl show`) -----------
+
+message SystemdShowUnitRequest {
+  string name = 1;
+}
+
+message SystemdShowUnitResponse {
+  // Flat key=value map, one entry per `systemctl show` line.
+  // Multi-line values (rare) are not supported; trailing lines for
+  // such properties are silently dropped.
+  map<string, string> properties = 1;
+  string error                   = 2;
+}
+
+// ---- unit_action --------------------------------------------------
+//
+// Shared shape across all three plugins. The `action` strings are
+// per-platform: systemd accepts "start"/"stop"/"restart"/"reload"/
+// "enable"/"disable"/"is-active"/"is-enabled"/"is-failed";
+// launchd accepts "start"/"stop"/"kickstart"/"enable"/"disable"/
+// "load"/"unload"; Windows Get-Service accepts "start"/"stop"/
+// "restart"/"pause"/"continue".
+
+message UnitActionRequest {
+  string name   = 1;
+  string action = 2;
+}
+
+message UnitActionResponse {
+  bool   ok        = 1;
+  int32  exit_code = 2;
+  // stdout of the underlying tool, captured verbatim for "is-active"
+  // / "is-enabled" / "is-failed" queries that carry their answer in
+  // the output rather than the exit code.
+  string output    = 3;
+  string error     = 4;
+}

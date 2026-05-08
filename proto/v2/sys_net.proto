@@ -1,0 +1,53 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_net.proto — wire shape for the per-OS network-state plugins
+// (com.platypus.sys-net-{linux,darwin,windows}).
+//
+// Two RPCs share the same plugin:
+//   list_listeners    every TCP/UDP socket in LISTEN state
+//   list_connections  every active TCP connection (with state filter)
+//
+// Source on Linux is /proc/net/{tcp,tcp6,udp,udp6}; macOS shells
+// `netstat -anv -p tcp/udp`; Windows shells Get-NetTCPConnection /
+// Get-NetUDPEndpoint. All three normalise to the same wire shape.
+
+message ListListenersRequest {}
+
+message ListListenersResponse {
+  repeated NetListener listeners = 1;
+  string error                   = 2;
+}
+
+// NetListener is one socket bound to a local address. proto is "tcp"
+// or "udp"; address families collapse — IPv4-mapped IPv6 listeners
+// are reported as their canonical IPv6 form.
+message NetListener {
+  string proto      = 1;  // "tcp" | "udp"
+  string local_addr = 2;  // "0.0.0.0", "::", "127.0.0.1", ...
+  uint32 local_port = 3;
+}
+
+message ListConnectionsRequest {
+  // Filter by TCP state name (case-insensitive). Empty = all.
+  // Examples: "ESTABLISHED", "TIME_WAIT", "CLOSE_WAIT", "SYN_SENT".
+  string state = 1;
+}
+
+message ListConnectionsResponse {
+  repeated NetConnection connections = 1;
+  string error                       = 2;
+}
+
+// NetConnection is one TCP connection. Both ends are in canonical
+// IP form (no name resolution agent-side; the UI may resolve on
+// hover). state is upper-case, e.g. "ESTABLISHED".
+message NetConnection {
+  string proto      = 1;  // always "tcp" today; udp is connectionless
+  string local_addr = 2;
+  uint32 local_port = 3;
+  string peer_addr  = 4;
+  uint32 peer_port  = 5;
+  string state      = 6;
+}

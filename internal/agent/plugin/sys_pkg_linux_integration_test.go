@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
+	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -115,6 +116,38 @@ func TestSysPkgLinux_ListInstalled_RoundTrip(t *testing.T) {
 	for i, p := range decoded.Packages {
 		if p.Name == "" {
 			t.Errorf("package[%d] has empty name: %+v", i, p)
+		}
+	}
+}
+
+// TestSysPkgLinux_TypedBridge_RoundTrip exercises the typed bridge
+// (bridge.PkgListInstalled). The point of this test is to fail loudly
+// if proto/v2/sys_pkg.proto drifts from the JSON shape the plugin
+// actually emits — protojson.Unmarshal would surface a "proto:
+// (line 1:N): unknown field …" error in that case.
+//
+// Linux-only because the bridge dispatches on runtime.GOOS, and we
+// only stage the linux variant here.
+func TestSysPkgLinux_TypedBridge_RoundTrip(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-pkg-linux is linux-only")
+	}
+	reg := installSysPkgLinux(t)
+
+	resp := bridge.PkgListInstalled(reg)(context.Background(),
+		&v2pb.PkgListInstalledRequest{MaxResults: 50})
+	if got := resp.GetError(); got != "" && got != "no_supported_package_manager" {
+		t.Fatalf("typed bridge returned error: %s", got)
+	}
+	if resp.GetError() == "no_supported_package_manager" {
+		t.Skip("no package manager in this environment")
+	}
+	if resp.GetBackend() == "" {
+		t.Errorf("expected non-empty backend in typed response")
+	}
+	for i, p := range resp.GetPackages() {
+		if p.GetName() == "" {
+			t.Errorf("package[%d] has empty name", i)
 		}
 	}
 }

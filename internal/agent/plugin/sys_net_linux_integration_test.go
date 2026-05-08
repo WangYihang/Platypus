@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
+	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -149,6 +150,37 @@ func TestSysNetLinux_ListConnections_StateFilter(t *testing.T) {
 	for i, c := range decoded.Connections {
 		if c.State != "LISTEN" {
 			t.Errorf("connection[%d].state = %q, want LISTEN (filter ignored?)", i, c.State)
+		}
+	}
+}
+
+// TestSysNetLinux_TypedBridge_RoundTrip exercises bridge.ListListeners
+// + bridge.ListConnections. Fails if proto/v2/sys_net.proto drifts
+// from the JSON the plugin emits.
+func TestSysNetLinux_TypedBridge_RoundTrip(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-net-linux is linux-only")
+	}
+	reg := installSysNetLinux(t)
+
+	listeners := bridge.ListListeners(reg)(context.Background(), &v2pb.ListListenersRequest{})
+	if listeners.GetError() != "" {
+		t.Fatalf("ListListeners typed bridge: %s", listeners.GetError())
+	}
+	for i, l := range listeners.GetListeners() {
+		if l.GetProto() == "" {
+			t.Errorf("listener[%d] empty proto", i)
+		}
+	}
+
+	conns := bridge.ListConnections(reg)(context.Background(),
+		&v2pb.ListConnectionsRequest{})
+	if conns.GetError() != "" {
+		t.Fatalf("ListConnections typed bridge: %s", conns.GetError())
+	}
+	for i, c := range conns.GetConnections() {
+		if c.GetProto() == "" || c.GetState() == "" {
+			t.Errorf("connection[%d] missing proto or state: %+v", i, c)
 		}
 	}
 }

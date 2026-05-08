@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
+	"github.com/WangYihang/Platypus/internal/agent/plugin/bridge"
 	v2pb "github.com/WangYihang/Platypus/pkg/proto/v2"
 )
 
@@ -182,4 +183,42 @@ func TestSysJournald_Query_RejectsBadBoot(t *testing.T) {
 	if decoded.Error == "" {
 		t.Errorf("expected boot validation error; got empty")
 	}
+}
+
+// TestSysJournaldLinux_TypedBridge_RoundTrip exercises bridge.JournalQuery.
+// Tolerates "no journalctl" / unreadable journal in containers.
+func TestSysJournaldLinux_TypedBridge_RoundTrip(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sys-journald-linux is linux-only")
+	}
+	reg := installSysJournald(t)
+
+	resp := bridge.JournalQuery(reg)(context.Background(),
+		&v2pb.JournalQueryRequest{Lines: 10})
+	got := resp.GetError()
+	if got != "" && !journalEnvErr(got) {
+		t.Fatalf("typed bridge unexpected error: %s", got)
+	}
+	for i, e := range resp.GetEntries() {
+		if e.GetMessage() == "" && e.GetTimestampUs() == 0 {
+			t.Errorf("entry[%d] has neither message nor timestamp: %+v", i, e)
+		}
+	}
+	if got != "" {
+		t.Logf("bridge returned %q (expected in containers without journald)", got)
+	}
+}
+
+// journalEnvErr returns true for "journalctl exited non-zero" /
+// "no journal files" / "Failed to add match" — environment errors
+// that don't indicate proto drift.
+func journalEnvErr(s string) bool {
+	for _, hint := range []string{"journalctl", "No journal", "no_supported", "exit"} {
+		for i := 0; i+len(hint) <= len(s); i++ {
+			if s[i:i+len(hint)] == hint {
+				return true
+			}
+		}
+	}
+	return false
 }
