@@ -21,9 +21,8 @@ message Event {
 
   oneof payload {
     ProcessExited process_exited = 10;
-    TunnelClosed  tunnel_closed  = 11;
-    SysMetrics    sys_metrics    = 12;
-    Log           log            = 13;
+    SysMetrics    sys_metrics    = 11;
+    Log           log            = 12;
   }
 }
 
@@ -33,15 +32,6 @@ message ProcessExited {
   int64  pid       = 1;
   int32  exit_code = 2;
   string signal    = 3; // non-empty if killed by signal
-}
-
-// TunnelClosed is emitted for both pull and push tunnels when the
-// underlying TCP conn is torn down.
-message TunnelClosed {
-  // Not the stream id — this is the operator-visible tunnel id
-  // (e.g. from Socks5CtlRequest.tunnel_id).
-  string tunnel_id = 1;
-  string reason    = 2;
 }
 
 // SysMetrics is periodic system telemetry. Cadence is agent-side

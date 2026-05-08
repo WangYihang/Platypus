@@ -44,7 +44,6 @@ import {
     useInstalledPluginIDs,
     useNewPluginActivities,
 } from "../lib/activityPlugins";
-import TunnelsTab from "./host/TunnelsTab";
 import PluginsTab from "./host/PluginsTab";
 
 import { Button } from "@/components/ui/button";
@@ -59,13 +58,12 @@ interface Props {
 //   · HostHeaderBar — back link + identity pills + actions
 //   · ActivityBar (44 px) — vertical icons for the 6 activities
 //   · ActivityPane     — renders the active activity body
-//   · BottomPanel (collapsible) — Processes / Tunnels for "peek
-//     while editing"; defaults collapsed.
+//   · BottomPanel (collapsible) — Processes for "peek while editing";
+//     defaults collapsed.
 //
 // URL-driven activity selection so deep links (`/hosts/<id>/files`)
 // keep working — the slugs match the legacy tab keys (files / info /
-// sessions / processes / security / tunnels) so existing bookmarks
-// resolve.
+// sessions / processes / security) so existing bookmarks resolve.
 
 export default function HostView({ projectID, hostID }: Props) {
     const queryClient = useQueryClient();
@@ -367,7 +365,7 @@ export default function HostView({ projectID, hostID }: Props) {
                         }}
                     >
                         {/* Q2-Q4 moved Files / Info / Sessions /
-                            Processes / Security / Config / Tunnels into
+                            Processes / Security / Config into
                             PLUGIN_UI_REGISTRY. The pluginEntries.map
                             block below renders them via activityKey
                             lookup, with adapters reading host / sysInfo
@@ -455,11 +453,6 @@ export default function HostView({ projectID, hostID }: Props) {
                                     hostID={hostID}
                                     active={bottomOpen && bottomTab === "processes"}
                                 />
-                            </div>
-                        )}
-                        {bottomTab === "tunnels" && (
-                            <div style={{ padding: space[3], height: "100%" }}>
-                                <TunnelsTab projectID={projectID} hostID={hostID} />
                             </div>
                         )}
                     </BottomPanel>

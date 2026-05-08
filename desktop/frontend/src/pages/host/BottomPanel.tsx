@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 
 import { palette, space } from "../../layout/theme";
 
-export type BottomTab = "processes" | "tunnels";
+export type BottomTab = "processes";
 
 interface Props {
     open: boolean;
@@ -22,9 +22,9 @@ const MAX_FRACTION = 0.7;
 
 // BottomPanel is the VSCode-style "peek-while-editing" surface inside
 // HostView. Default collapsed; click the header or press a future
-// keybind to expand. Tabs inside it (Processes, Tunnels) mirror the
-// activities of the same name — same data, but framed for a quick
-// glance rather than a full-pane focus.
+// keybind to expand. Tab inside it (Processes) mirrors the activity
+// of the same name — same data, but framed for a quick glance rather
+// than a full-pane focus.
 //
 // We deliberately do NOT host a Terminal tab here; the existing
 // global TerminalDrawer (mounted at the shell level via
@@ -73,14 +73,6 @@ export default function BottomPanel({
                 onClick={() => {
                     if (!open) onToggle();
                     onActiveTabChange("processes");
-                }}
-            />
-            <PanelTab
-                label="Tunnels"
-                active={open && activeTab === "tunnels"}
-                onClick={() => {
-                    if (!open) onToggle();
-                    onActiveTabChange("tunnels");
                 }}
             />
             <span style={{ flex: 1 }} />

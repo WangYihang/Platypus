@@ -35,37 +35,28 @@ const (
 	// (see internal/protocol/v2/process): 0=stdin, 1=stdout, 2=stderr,
 	// 3=resize, 4=exit.
 	StreamType_STREAM_TYPE_PROCESS_OPEN StreamType = 1
-	// Local-to-remote forwarding (pull). server->agent.
-	// Payload after header is raw TCP bytes, bidirectional.
-	StreamType_STREAM_TYPE_TUNNEL_PULL StreamType = 2
-	// Remote-to-local forwarding (push). agent->server.
-	// Agent accepted an inbound TCP conn; server dials a local target.
-	StreamType_STREAM_TYPE_TUNNEL_PUSH StreamType = 3
-	// Dynamic SOCKS5 proxy control. server->agent.
-	// Agent starts/stops a local SOCKS5 listener on behalf of server.
-	StreamType_STREAM_TYPE_SOCKS5_CTL StreamType = 4
 	// Streaming file read. server->agent (agent is file source).
-	StreamType_STREAM_TYPE_FILE_READ StreamType = 5
+	StreamType_STREAM_TYPE_FILE_READ StreamType = 2
 	// Streaming file write. server->agent (agent is file sink).
-	StreamType_STREAM_TYPE_FILE_WRITE StreamType = 6
+	StreamType_STREAM_TYPE_FILE_WRITE StreamType = 3
 	// One-shot RPCs. Request message first, response message back,
 	// stream closes immediately after. Which RPC is in the metadata
 	// field of StreamHeader.
-	StreamType_STREAM_TYPE_RPC StreamType = 7
+	StreamType_STREAM_TYPE_RPC StreamType = 4
 	// Async events from agent->server. Opened by agent on demand
-	// (process_exited, tunnel_closed, sys_metrics, etc.).
-	StreamType_STREAM_TYPE_EVENT StreamType = 8
+	// (process_exited, sys_metrics, log).
+	StreamType_STREAM_TYPE_EVENT StreamType = 5
 	// Walks the requested paths and reports counts (files, total
 	// bytes) without transferring any payload. Used to size a
 	// progress bar before opening STREAM_TYPE_FILE_ARCHIVE.
 	// server->agent.
-	StreamType_STREAM_TYPE_FILE_SCAN StreamType = 9
+	StreamType_STREAM_TYPE_FILE_SCAN StreamType = 6
 	// Streaming archive build. The agent walks the given paths,
 	// packs them into the requested archive format (tar / tar.gz /
 	// zip), and streams the bytes back as FileChunk frames. Saves
 	// the per-chunk HTTP roundtrip the legacy
 	// read-offset-by-offset path pays. server->agent.
-	StreamType_STREAM_TYPE_FILE_ARCHIVE StreamType = 10
+	StreamType_STREAM_TYPE_FILE_ARCHIVE StreamType = 7
 	// server->agent. Command-only; the agent is told which manifest
 	// version to install on which channel and goes off to fetch the
 	// signed binary from the distributor over HTTPS. Header metadata
@@ -79,7 +70,7 @@ const (
 	// binary at build time (internal/agent.SigningPublicKey, set by
 	// -ldflags). mTLS to the distributor is incidental — the
 	// signature is the source of trust, not the transport.
-	StreamType_STREAM_TYPE_AGENT_UPGRADE StreamType = 11
+	StreamType_STREAM_TYPE_AGENT_UPGRADE StreamType = 8
 	// server->agent. Plugin lifecycle management: install, uninstall,
 	// list, enable/disable, get logs. Header metadata is
 	// PluginMgmtRequest. For install the stream stays open and carries
@@ -93,7 +84,7 @@ const (
 	// agent's bundled SigningPublicKey. The bundled key only protects
 	// the agent's own self-update path; plugins are a separate trust
 	// domain so rotating one doesn't compromise the other.
-	StreamType_STREAM_TYPE_PLUGIN_MGMT StreamType = 12
+	StreamType_STREAM_TYPE_PLUGIN_MGMT StreamType = 9
 	// server->agent. Wasm-mediated stream IO. Header metadata is
 	// PluginStreamRequest (plugin.proto). After StreamAccept,
 	// PluginStreamFrame frames flow in both directions until either
@@ -104,12 +95,12 @@ const (
 	//
 	// Distinct from STREAM_TYPE_PLUGIN_MGMT — that's lifecycle
 	// (install/uninstall); this one is "actual workload" the
-	// operator drives (pty / file / tunnel). Today every stream
-	// type still flows through the legacy host-provider claim model
-	// (sys-streams plugin claims them with host_handler="agent.X");
-	// streams whose manifest declares host_handler="wasm:<method>"
-	// route through this type instead.
-	StreamType_STREAM_TYPE_PLUGIN_STREAM StreamType = 13
+	// operator drives (pty / file). Today every stream type still
+	// flows through the legacy host-provider claim model (sys-streams
+	// plugin claims them with host_handler="agent.X"); streams whose
+	// manifest declares host_handler="wasm:<method>" route through
+	// this type instead.
+	StreamType_STREAM_TYPE_PLUGIN_STREAM StreamType = 10
 )
 
 // Enum value maps for StreamType.
@@ -117,34 +108,28 @@ var (
 	StreamType_name = map[int32]string{
 		0:  "STREAM_TYPE_UNSPECIFIED",
 		1:  "STREAM_TYPE_PROCESS_OPEN",
-		2:  "STREAM_TYPE_TUNNEL_PULL",
-		3:  "STREAM_TYPE_TUNNEL_PUSH",
-		4:  "STREAM_TYPE_SOCKS5_CTL",
-		5:  "STREAM_TYPE_FILE_READ",
-		6:  "STREAM_TYPE_FILE_WRITE",
-		7:  "STREAM_TYPE_RPC",
-		8:  "STREAM_TYPE_EVENT",
-		9:  "STREAM_TYPE_FILE_SCAN",
-		10: "STREAM_TYPE_FILE_ARCHIVE",
-		11: "STREAM_TYPE_AGENT_UPGRADE",
-		12: "STREAM_TYPE_PLUGIN_MGMT",
-		13: "STREAM_TYPE_PLUGIN_STREAM",
+		2:  "STREAM_TYPE_FILE_READ",
+		3:  "STREAM_TYPE_FILE_WRITE",
+		4:  "STREAM_TYPE_RPC",
+		5:  "STREAM_TYPE_EVENT",
+		6:  "STREAM_TYPE_FILE_SCAN",
+		7:  "STREAM_TYPE_FILE_ARCHIVE",
+		8:  "STREAM_TYPE_AGENT_UPGRADE",
+		9:  "STREAM_TYPE_PLUGIN_MGMT",
+		10: "STREAM_TYPE_PLUGIN_STREAM",
 	}
 	StreamType_value = map[string]int32{
 		"STREAM_TYPE_UNSPECIFIED":   0,
 		"STREAM_TYPE_PROCESS_OPEN":  1,
-		"STREAM_TYPE_TUNNEL_PULL":   2,
-		"STREAM_TYPE_TUNNEL_PUSH":   3,
-		"STREAM_TYPE_SOCKS5_CTL":    4,
-		"STREAM_TYPE_FILE_READ":     5,
-		"STREAM_TYPE_FILE_WRITE":    6,
-		"STREAM_TYPE_RPC":           7,
-		"STREAM_TYPE_EVENT":         8,
-		"STREAM_TYPE_FILE_SCAN":     9,
-		"STREAM_TYPE_FILE_ARCHIVE":  10,
-		"STREAM_TYPE_AGENT_UPGRADE": 11,
-		"STREAM_TYPE_PLUGIN_MGMT":   12,
-		"STREAM_TYPE_PLUGIN_STREAM": 13,
+		"STREAM_TYPE_FILE_READ":     2,
+		"STREAM_TYPE_FILE_WRITE":    3,
+		"STREAM_TYPE_RPC":           4,
+		"STREAM_TYPE_EVENT":         5,
+		"STREAM_TYPE_FILE_SCAN":     6,
+		"STREAM_TYPE_FILE_ARCHIVE":  7,
+		"STREAM_TYPE_AGENT_UPGRADE": 8,
+		"STREAM_TYPE_PLUGIN_MGMT":   9,
+		"STREAM_TYPE_PLUGIN_STREAM": 10,
 	}
 )
 
@@ -183,8 +168,8 @@ type StreamHeader struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Type  StreamType             `protobuf:"varint,1,opt,name=type,proto3,enum=platypus.v2.StreamType" json:"type,omitempty"`
 	// Service-specific request, marshalled. The schema is decided by
-	// `type`: e.g. ProcessOpenRequest, TunnelPullRequest, RpcRequest.
-	// The receiver must attempt to unmarshal and reject on parse error.
+	// `type`: e.g. ProcessOpenRequest, RpcRequest. The receiver must
+	// attempt to unmarshal and reject on parse error.
 	Metadata []byte `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	// Correlation id for logging; opaque to the protocol. The server
 	// will echo this in any resulting Event.correlation_id so
@@ -371,24 +356,21 @@ const file_common_proto_rawDesc = "" +
 	"\fStreamAccept\"<\n" +
 	"\fStreamReject\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\x94\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xbe\x02\n" +
 	"\n" +
 	"StreamType\x12\x1b\n" +
 	"\x17STREAM_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18STREAM_TYPE_PROCESS_OPEN\x10\x01\x12\x1b\n" +
-	"\x17STREAM_TYPE_TUNNEL_PULL\x10\x02\x12\x1b\n" +
-	"\x17STREAM_TYPE_TUNNEL_PUSH\x10\x03\x12\x1a\n" +
-	"\x16STREAM_TYPE_SOCKS5_CTL\x10\x04\x12\x19\n" +
-	"\x15STREAM_TYPE_FILE_READ\x10\x05\x12\x1a\n" +
-	"\x16STREAM_TYPE_FILE_WRITE\x10\x06\x12\x13\n" +
-	"\x0fSTREAM_TYPE_RPC\x10\a\x12\x15\n" +
-	"\x11STREAM_TYPE_EVENT\x10\b\x12\x19\n" +
-	"\x15STREAM_TYPE_FILE_SCAN\x10\t\x12\x1c\n" +
-	"\x18STREAM_TYPE_FILE_ARCHIVE\x10\n" +
-	"\x12\x1d\n" +
-	"\x19STREAM_TYPE_AGENT_UPGRADE\x10\v\x12\x1b\n" +
-	"\x17STREAM_TYPE_PLUGIN_MGMT\x10\f\x12\x1d\n" +
-	"\x19STREAM_TYPE_PLUGIN_STREAM\x10\rB2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
+	"\x18STREAM_TYPE_PROCESS_OPEN\x10\x01\x12\x19\n" +
+	"\x15STREAM_TYPE_FILE_READ\x10\x02\x12\x1a\n" +
+	"\x16STREAM_TYPE_FILE_WRITE\x10\x03\x12\x13\n" +
+	"\x0fSTREAM_TYPE_RPC\x10\x04\x12\x15\n" +
+	"\x11STREAM_TYPE_EVENT\x10\x05\x12\x19\n" +
+	"\x15STREAM_TYPE_FILE_SCAN\x10\x06\x12\x1c\n" +
+	"\x18STREAM_TYPE_FILE_ARCHIVE\x10\a\x12\x1d\n" +
+	"\x19STREAM_TYPE_AGENT_UPGRADE\x10\b\x12\x1b\n" +
+	"\x17STREAM_TYPE_PLUGIN_MGMT\x10\t\x12\x1d\n" +
+	"\x19STREAM_TYPE_PLUGIN_STREAM\x10\n" +
+	"B2Z0github.com/WangYihang/Platypus/pkg/proto/v2;v2pbb\x06proto3"
 
 var (
 	file_common_proto_rawDescOnce sync.Once

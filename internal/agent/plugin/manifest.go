@@ -28,20 +28,20 @@ const (
 	// the install dialog can ask separately.
 	CapProcess CapabilityID = "process"
 	// CapNetDial gates outbound TCP dial — host_net_dial / _relay /
-	// _close — used by the wasm replacement for the legacy
-	// STREAM_TYPE_TUNNEL_PULL handler. Distinct from CapNetHTTP
-	// because the blast radius is fundamentally different: HTTP is a
-	// scoped request/response with declared hosts, whereas net.dial
-	// gives the wasm a raw bidirectional byte pipe to anywhere on the
-	// agent's network — effectively SSRF capability if granted to
-	// "*". The install dialog flags this prominently.
+	// _close. Distinct from CapNetHTTP because the blast radius is
+	// fundamentally different: HTTP is a scoped request/response with
+	// declared hosts, whereas net.dial gives the wasm a raw
+	// bidirectional byte pipe to anywhere on the agent's network —
+	// effectively SSRF capability if granted to "*". The install
+	// dialog flags this prominently. No system plugin currently
+	// declares it; reserved as an extension point for future port-
+	// forward / proxy plugins.
 	CapNetDial CapabilityID = "net.dial"
 	// CapNetListen gates inbound TCP listen — host_net_listen /
 	// _accept. Distinct from CapNetDial because listening on a port
 	// is a different threat model (anyone on the network can connect
 	// to a bound port; operator should authorize binds explicitly).
-	// Used by the new sys-tunnel-tcp / sys-tunnel-socks5 plugin
-	// family for case 2 (reverse port forward) + case 3-4 (SOCKS).
+	// Same "extension-point-only" status as CapNetDial.
 	CapNetListen CapabilityID = "net.listen"
 )
 
@@ -317,11 +317,8 @@ type CapProcessSpec struct {
 
 // CapNetDialSpec.Targets is the exact "host:port" allowlist for
 // outbound TCP dial. Each entry is a literal target ("10.0.0.5:22",
-// "internal-svc:8080") or "*" for unrestricted. The legacy
-// STREAM_TYPE_TUNNEL_PULL handler had implicit any-target authority,
-// so the system bundle's sys-tunnel-tcp uses "*"; a third-party
-// replacement should narrow to a literal list and the install
-// dialog flags "*" prominently.
+// "internal-svc:8080") or "*" for unrestricted. "*" is effectively
+// SSRF authority and the install dialog flags it prominently.
 type CapNetDialSpec struct {
 	Targets []string `yaml:"targets"`
 }

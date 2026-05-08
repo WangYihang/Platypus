@@ -45,9 +45,9 @@ func LogDebugf(format string, args ...any) { HostLog(LogDebug, sprintf(format, a
 // ---- host_stream_* — streaming plugin primitives -------------------
 //
 // In raw-wire mode (DispatchLegacyWasmStream — typed stream types
-// like FILE_READ/WRITE/PROCESS_OPEN/TUNNEL_PULL) host_stream_write
-// emits one length-prefixed frame straight to the wire and
-// host_stream_read pulls the next length-prefixed frame off the wire.
+// like FILE_READ/WRITE/PROCESS_OPEN) host_stream_write emits one
+// length-prefixed frame straight to the wire and host_stream_read
+// pulls the next length-prefixed frame off the wire.
 //
 // In pump mode (DispatchPluginStream) the same fns enqueue/dequeue
 // against the dispatcher's PluginStreamFrame envelope pumps; the

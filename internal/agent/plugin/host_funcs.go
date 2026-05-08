@@ -119,8 +119,8 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostHTTP),
 
 		// Wasm-streaming primitives (groundwork for migrating
-		// PROCESS_OPEN / FILE_* / TUNNEL_PULL off the legacy host-
-		// provider claim path). Today no plugin manifest references
+		// PROCESS_OPEN / FILE_* off the legacy host-provider claim
+		// path). Today no plugin manifest references
 		// "wasm:" host_handler markers, so the dispatch path that
 		// allocates per-stream channels + populates pctx.streams
 		// hasn't been wired yet — the primitives return
@@ -149,8 +149,11 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 		newHostFunc("host_process_kill", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostProcessKill),
 
-		// Outbound TCP dial — wasm migration target for the legacy
-		// STREAM_TYPE_TUNNEL_PULL handler. Gated by CapNetDial.
+		// Outbound TCP dial — framework primitive for plugins that
+		// need a raw bidirectional byte pipe to a host:port target.
+		// Currently no system plugin claims it; preserved as an
+		// extension point for future port-forward / proxy plugins.
+		// Gated by CapNetDial.
 		newHostFunc("host_net_dial", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetDial),
 		newHostFunc("host_net_relay", []api.ValueType{api.ValueTypeI64},
@@ -158,9 +161,11 @@ func (pctx *pluginCtx) buildHostFunctions() []extism.HostFunction {
 		newHostFunc("host_net_close", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetClose),
 
-		// Inbound TCP listen — case 2 (reverse port forward) + the
-		// SOCKS5 server modes. Gated by CapNetListen + manifest's
-		// net.listen.binds allowlist (glob-matched).
+		// Inbound TCP listen — framework primitive paired with
+		// host_net_dial for plugins that need to bind a port.
+		// Same "no current consumer; reserved for future port-
+		// forward / proxy plugins" status. Gated by CapNetListen +
+		// manifest's net.listen.binds allowlist (glob-matched).
 		newHostFunc("host_net_listen", []api.ValueType{api.ValueTypeI64},
 			[]api.ValueType{api.ValueTypeI64}, pctx.hostNetListen),
 		newHostFunc("host_net_accept", []api.ValueType{api.ValueTypeI64},

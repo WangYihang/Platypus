@@ -2,7 +2,7 @@
 // wizard's plugin picker. Operators rarely want to think in terms
 // of individual plugin ids; they want to think in terms of intent
 // ("I need to inspect this host", "I need to manage files",
-// "I need shell + tunnels"). Presets map intent → plugin IDs.
+// "I need shell"). Presets map intent → plugin IDs.
 //
 // Conventions:
 //   · IDs are full reverse-DNS form so they round-trip into the
@@ -29,7 +29,6 @@
 //                           (declares both `exec` and `process` caps)
 //   · sys-security        — security scan RPCs
 //   · sys-config-audit    — config-audit RPCs
-//   · sys-tunnel-tcp     — outbound TCP relay stream
 
 export interface BaselinePreset {
     id: string;
@@ -108,7 +107,6 @@ export const BASELINE_PRESETS: BaselinePreset[] = [
             "com.platypus.sys-process",
             "com.platypus.sys-security",
             "com.platypus.sys-config-audit",
-            "com.platypus.sys-tunnel-tcp",
         ],
     },
 ];

@@ -73,7 +73,7 @@ func (x Log_Level) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Log_Level.Descriptor instead.
 func (Log_Level) EnumDescriptor() ([]byte, []int) {
-	return file_event_proto_rawDescGZIP(), []int{4, 0}
+	return file_event_proto_rawDescGZIP(), []int{3, 0}
 }
 
 // Event is the payload carried on a STREAM_TYPE_EVENT stream.
@@ -94,7 +94,6 @@ type Event struct {
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*Event_ProcessExited
-	//	*Event_TunnelClosed
 	//	*Event_SysMetrics
 	//	*Event_Log
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
@@ -169,15 +168,6 @@ func (x *Event) GetProcessExited() *ProcessExited {
 	return nil
 }
 
-func (x *Event) GetTunnelClosed() *TunnelClosed {
-	if x != nil {
-		if x, ok := x.Payload.(*Event_TunnelClosed); ok {
-			return x.TunnelClosed
-		}
-	}
-	return nil
-}
-
 func (x *Event) GetSysMetrics() *SysMetrics {
 	if x != nil {
 		if x, ok := x.Payload.(*Event_SysMetrics); ok {
@@ -204,21 +194,15 @@ type Event_ProcessExited struct {
 	ProcessExited *ProcessExited `protobuf:"bytes,10,opt,name=process_exited,json=processExited,proto3,oneof"`
 }
 
-type Event_TunnelClosed struct {
-	TunnelClosed *TunnelClosed `protobuf:"bytes,11,opt,name=tunnel_closed,json=tunnelClosed,proto3,oneof"`
-}
-
 type Event_SysMetrics struct {
-	SysMetrics *SysMetrics `protobuf:"bytes,12,opt,name=sys_metrics,json=sysMetrics,proto3,oneof"`
+	SysMetrics *SysMetrics `protobuf:"bytes,11,opt,name=sys_metrics,json=sysMetrics,proto3,oneof"`
 }
 
 type Event_Log struct {
-	Log *Log `protobuf:"bytes,13,opt,name=log,proto3,oneof"`
+	Log *Log `protobuf:"bytes,12,opt,name=log,proto3,oneof"`
 }
 
 func (*Event_ProcessExited) isEvent_Payload() {}
-
-func (*Event_TunnelClosed) isEvent_Payload() {}
 
 func (*Event_SysMetrics) isEvent_Payload() {}
 
@@ -286,62 +270,6 @@ func (x *ProcessExited) GetSignal() string {
 	return ""
 }
 
-// TunnelClosed is emitted for both pull and push tunnels when the
-// underlying TCP conn is torn down.
-type TunnelClosed struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Not the stream id — this is the operator-visible tunnel id
-	// (e.g. from Socks5CtlRequest.tunnel_id).
-	TunnelId      string `protobuf:"bytes,1,opt,name=tunnel_id,json=tunnelId,proto3" json:"tunnel_id,omitempty"`
-	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TunnelClosed) Reset() {
-	*x = TunnelClosed{}
-	mi := &file_event_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TunnelClosed) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TunnelClosed) ProtoMessage() {}
-
-func (x *TunnelClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_event_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TunnelClosed.ProtoReflect.Descriptor instead.
-func (*TunnelClosed) Descriptor() ([]byte, []int) {
-	return file_event_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *TunnelClosed) GetTunnelId() string {
-	if x != nil {
-		return x.TunnelId
-	}
-	return ""
-}
-
-func (x *TunnelClosed) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
 // SysMetrics is periodic system telemetry. Cadence is agent-side
 // policy (currently 1/s); operators should rate-limit ingestion.
 type SysMetrics struct {
@@ -357,7 +285,7 @@ type SysMetrics struct {
 
 func (x *SysMetrics) Reset() {
 	*x = SysMetrics{}
-	mi := &file_event_proto_msgTypes[3]
+	mi := &file_event_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +297,7 @@ func (x *SysMetrics) String() string {
 func (*SysMetrics) ProtoMessage() {}
 
 func (x *SysMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_event_proto_msgTypes[3]
+	mi := &file_event_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +310,7 @@ func (x *SysMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SysMetrics.ProtoReflect.Descriptor instead.
 func (*SysMetrics) Descriptor() ([]byte, []int) {
-	return file_event_proto_rawDescGZIP(), []int{3}
+	return file_event_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SysMetrics) GetCpuPercent() float64 {
@@ -433,7 +361,7 @@ type Log struct {
 
 func (x *Log) Reset() {
 	*x = Log{}
-	mi := &file_event_proto_msgTypes[4]
+	mi := &file_event_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +373,7 @@ func (x *Log) String() string {
 func (*Log) ProtoMessage() {}
 
 func (x *Log) ProtoReflect() protoreflect.Message {
-	mi := &file_event_proto_msgTypes[4]
+	mi := &file_event_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +386,7 @@ func (x *Log) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Log.ProtoReflect.Descriptor instead.
 func (*Log) Descriptor() ([]byte, []int) {
-	return file_event_proto_rawDescGZIP(), []int{4}
+	return file_event_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Log) GetLevel() Log_Level {
@@ -486,25 +414,21 @@ var File_event_proto protoreflect.FileDescriptor
 
 const file_event_proto_rawDesc = "" +
 	"\n" +
-	"\vevent.proto\x12\vplatypus.v2\"\xe2\x02\n" +
+	"\vevent.proto\x12\vplatypus.v2\"\xa0\x02\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
 	"\x13timestamp_unix_nano\x18\x02 \x01(\x03R\x11timestampUnixNano\x12%\n" +
 	"\x0ecorrelation_id\x18\x03 \x01(\tR\rcorrelationId\x12C\n" +
 	"\x0eprocess_exited\x18\n" +
-	" \x01(\v2\x1a.platypus.v2.ProcessExitedH\x00R\rprocessExited\x12@\n" +
-	"\rtunnel_closed\x18\v \x01(\v2\x19.platypus.v2.TunnelClosedH\x00R\ftunnelClosed\x12:\n" +
-	"\vsys_metrics\x18\f \x01(\v2\x17.platypus.v2.SysMetricsH\x00R\n" +
+	" \x01(\v2\x1a.platypus.v2.ProcessExitedH\x00R\rprocessExited\x12:\n" +
+	"\vsys_metrics\x18\v \x01(\v2\x17.platypus.v2.SysMetricsH\x00R\n" +
 	"sysMetrics\x12$\n" +
-	"\x03log\x18\r \x01(\v2\x10.platypus.v2.LogH\x00R\x03logB\t\n" +
+	"\x03log\x18\f \x01(\v2\x10.platypus.v2.LogH\x00R\x03logB\t\n" +
 	"\apayload\"V\n" +
 	"\rProcessExited\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x03R\x03pid\x12\x1b\n" +
 	"\texit_code\x18\x02 \x01(\x05R\bexitCode\x12\x16\n" +
-	"\x06signal\x18\x03 \x01(\tR\x06signal\"C\n" +
-	"\fTunnelClosed\x12\x1b\n" +
-	"\ttunnel_id\x18\x01 \x01(\tR\btunnelId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xa1\x01\n" +
+	"\x06signal\x18\x03 \x01(\tR\x06signal\"\xa1\x01\n" +
 	"\n" +
 	"SysMetrics\x12\x1f\n" +
 	"\vcpu_percent\x18\x01 \x01(\x01R\n" +
@@ -544,28 +468,26 @@ func file_event_proto_rawDescGZIP() []byte {
 }
 
 var file_event_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_event_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_event_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_event_proto_goTypes = []any{
 	(Log_Level)(0),        // 0: platypus.v2.Log.Level
 	(*Event)(nil),         // 1: platypus.v2.Event
 	(*ProcessExited)(nil), // 2: platypus.v2.ProcessExited
-	(*TunnelClosed)(nil),  // 3: platypus.v2.TunnelClosed
-	(*SysMetrics)(nil),    // 4: platypus.v2.SysMetrics
-	(*Log)(nil),           // 5: platypus.v2.Log
-	nil,                   // 6: platypus.v2.Log.FieldsEntry
+	(*SysMetrics)(nil),    // 3: platypus.v2.SysMetrics
+	(*Log)(nil),           // 4: platypus.v2.Log
+	nil,                   // 5: platypus.v2.Log.FieldsEntry
 }
 var file_event_proto_depIdxs = []int32{
 	2, // 0: platypus.v2.Event.process_exited:type_name -> platypus.v2.ProcessExited
-	3, // 1: platypus.v2.Event.tunnel_closed:type_name -> platypus.v2.TunnelClosed
-	4, // 2: platypus.v2.Event.sys_metrics:type_name -> platypus.v2.SysMetrics
-	5, // 3: platypus.v2.Event.log:type_name -> platypus.v2.Log
-	0, // 4: platypus.v2.Log.level:type_name -> platypus.v2.Log.Level
-	6, // 5: platypus.v2.Log.fields:type_name -> platypus.v2.Log.FieldsEntry
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	3, // 1: platypus.v2.Event.sys_metrics:type_name -> platypus.v2.SysMetrics
+	4, // 2: platypus.v2.Event.log:type_name -> platypus.v2.Log
+	0, // 3: platypus.v2.Log.level:type_name -> platypus.v2.Log.Level
+	5, // 4: platypus.v2.Log.fields:type_name -> platypus.v2.Log.FieldsEntry
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_event_proto_init() }
@@ -575,7 +497,6 @@ func file_event_proto_init() {
 	}
 	file_event_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_ProcessExited)(nil),
-		(*Event_TunnelClosed)(nil),
 		(*Event_SysMetrics)(nil),
 		(*Event_Log)(nil),
 	}
@@ -585,7 +506,7 @@ func file_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_event_proto_rawDesc), len(file_event_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

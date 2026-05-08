@@ -16,45 +16,33 @@ enum StreamType {
   // 3=resize, 4=exit.
   STREAM_TYPE_PROCESS_OPEN = 1;
 
-  // Local-to-remote forwarding (pull). server->agent.
-  // Payload after header is raw TCP bytes, bidirectional.
-  STREAM_TYPE_TUNNEL_PULL = 2;
-
-  // Remote-to-local forwarding (push). agent->server.
-  // Agent accepted an inbound TCP conn; server dials a local target.
-  STREAM_TYPE_TUNNEL_PUSH = 3;
-
-  // Dynamic SOCKS5 proxy control. server->agent.
-  // Agent starts/stops a local SOCKS5 listener on behalf of server.
-  STREAM_TYPE_SOCKS5_CTL = 4;
-
   // Streaming file read. server->agent (agent is file source).
-  STREAM_TYPE_FILE_READ = 5;
+  STREAM_TYPE_FILE_READ = 2;
 
   // Streaming file write. server->agent (agent is file sink).
-  STREAM_TYPE_FILE_WRITE = 6;
+  STREAM_TYPE_FILE_WRITE = 3;
 
   // One-shot RPCs. Request message first, response message back,
   // stream closes immediately after. Which RPC is in the metadata
   // field of StreamHeader.
-  STREAM_TYPE_RPC = 7;
+  STREAM_TYPE_RPC = 4;
 
   // Async events from agent->server. Opened by agent on demand
-  // (process_exited, tunnel_closed, sys_metrics, etc.).
-  STREAM_TYPE_EVENT = 8;
+  // (process_exited, sys_metrics, log).
+  STREAM_TYPE_EVENT = 5;
 
   // Walks the requested paths and reports counts (files, total
   // bytes) without transferring any payload. Used to size a
   // progress bar before opening STREAM_TYPE_FILE_ARCHIVE.
   // server->agent.
-  STREAM_TYPE_FILE_SCAN = 9;
+  STREAM_TYPE_FILE_SCAN = 6;
 
   // Streaming archive build. The agent walks the given paths,
   // packs them into the requested archive format (tar / tar.gz /
   // zip), and streams the bytes back as FileChunk frames. Saves
   // the per-chunk HTTP roundtrip the legacy
   // read-offset-by-offset path pays. server->agent.
-  STREAM_TYPE_FILE_ARCHIVE = 10;
+  STREAM_TYPE_FILE_ARCHIVE = 7;
 
   // server->agent. Command-only; the agent is told which manifest
   // version to install on which channel and goes off to fetch the
@@ -69,7 +57,7 @@ enum StreamType {
   // binary at build time (internal/agent.SigningPublicKey, set by
   // -ldflags). mTLS to the distributor is incidental — the
   // signature is the source of trust, not the transport.
-  STREAM_TYPE_AGENT_UPGRADE = 11;
+  STREAM_TYPE_AGENT_UPGRADE = 8;
 
   // server->agent. Plugin lifecycle management: install, uninstall,
   // list, enable/disable, get logs. Header metadata is
@@ -84,7 +72,7 @@ enum StreamType {
   // agent's bundled SigningPublicKey. The bundled key only protects
   // the agent's own self-update path; plugins are a separate trust
   // domain so rotating one doesn't compromise the other.
-  STREAM_TYPE_PLUGIN_MGMT = 12;
+  STREAM_TYPE_PLUGIN_MGMT = 9;
 
   // server->agent. Wasm-mediated stream IO. Header metadata is
   // PluginStreamRequest (plugin.proto). After StreamAccept,
@@ -96,12 +84,12 @@ enum StreamType {
   //
   // Distinct from STREAM_TYPE_PLUGIN_MGMT — that's lifecycle
   // (install/uninstall); this one is "actual workload" the
-  // operator drives (pty / file / tunnel). Today every stream
-  // type still flows through the legacy host-provider claim model
-  // (sys-streams plugin claims them with host_handler="agent.X");
-  // streams whose manifest declares host_handler="wasm:<method>"
-  // route through this type instead.
-  STREAM_TYPE_PLUGIN_STREAM = 13;
+  // operator drives (pty / file). Today every stream type still
+  // flows through the legacy host-provider claim model (sys-streams
+  // plugin claims them with host_handler="agent.X"); streams whose
+  // manifest declares host_handler="wasm:<method>" route through
+  // this type instead.
+  STREAM_TYPE_PLUGIN_STREAM = 10;
 }
 
 // StreamHeader is the first protobuf message on every new yamux
@@ -112,8 +100,8 @@ message StreamHeader {
   StreamType type = 1;
 
   // Service-specific request, marshalled. The schema is decided by
-  // `type`: e.g. ProcessOpenRequest, TunnelPullRequest, RpcRequest.
-  // The receiver must attempt to unmarshal and reject on parse error.
+  // `type`: e.g. ProcessOpenRequest, RpcRequest. The receiver must
+  // attempt to unmarshal and reject on parse error.
   bytes metadata = 2;
 
   // Correlation id for logging; opaque to the protocol. The server

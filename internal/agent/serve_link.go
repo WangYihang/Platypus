@@ -22,14 +22,14 @@ import (
 //   - PluginStream — pre-dispatch hook owned by the plugin runtime
 //
 // Every other stream type (file_read, file_write, file_scan,
-// file_archive, process_open, tunnel_pull) is owned by a system
-// wasm plugin: the plugin's manifest claims the stream type, the
-// runtime registers the claim with the registry, and PluginStream
-// dispatches the wire frames straight into the wasm sandbox. The
-// previous Go-resident handlers (HandleFileReadStream et al.) are
-// gone — their byte-for-byte wire equivalents now live inside
-// example/plugins/system/sys-{file,process,tunnel}-* and are
-// delivered to the agent via the system-plugin bundle.
+// file_archive, process_open) is owned by a system wasm plugin: the
+// plugin's manifest claims the stream type, the runtime registers
+// the claim with the registry, and PluginStream dispatches the wire
+// frames straight into the wasm sandbox. The previous Go-resident
+// handlers (HandleFileReadStream et al.) are gone — their
+// byte-for-byte wire equivalents now live inside
+// example/plugins/system/sys-{file,process}-* and are delivered to
+// the agent via the system-plugin bundle.
 type AgentHandlerDeps struct {
 	RPC        AgentRPCHandlers
 	Upgrade    UpgradeHandler

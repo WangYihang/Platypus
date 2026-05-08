@@ -85,8 +85,8 @@ func (s *Session) Close() error {
 
 // Open initiates a new yamux stream and writes a StreamHeader
 // carrying the supplied type, correlation id, and pre-marshalled
-// service-specific metadata (often a ProcessOpenRequest,
-// TunnelPullRequest, etc. — the caller marshals with marshalMeta).
+// service-specific metadata (often a ProcessOpenRequest, RpcRequest,
+// etc. — the caller marshals with marshalMeta).
 // The per-link logging id is taken off the Session itself so every
 // stream over the same session inherits the same value without the
 // caller threading it through.
@@ -138,8 +138,8 @@ func (s *Session) Accept() (*v2pb.StreamHeader, io.ReadWriteCloser, error) {
 	// we see one. Lets the agent side learn its server-assigned id
 	// from the very first stream the server opens — typically the
 	// initial sysinfo refresh, fired right after link.connected
-	// — so subsequent agent-initiated streams (events, push tunnels)
-	// carry it too without a dedicated Hello frame.
+	// — so subsequent agent-initiated streams (events) carry it too
+	// without a dedicated Hello frame.
 	if id := hdr.GetLinkSessionId(); id != "" && s.LinkSessionID() == "" {
 		s.SetLinkSessionID(id)
 	}

@@ -12,8 +12,10 @@ import (
 	extism "github.com/extism/go-sdk"
 )
 
-// host_net_* gives plugins outbound TCP — the wasm migration target
-// for the legacy STREAM_TYPE_TUNNEL_PULL handler. Three host fns:
+// host_net_* gives plugins raw outbound TCP. Framework primitive
+// reserved as an extension point for future port-forward / proxy
+// plugins; no system plugin currently declares CapNetDial. Three
+// host fns:
 //
 //   host_net_dial(spec_json) -> {handle, resolved_addr}
 //     Validates the requested target against the manifest's
@@ -24,10 +26,10 @@ import (
 //
 //   host_net_relay(handle) -> ok|error
 //     Splices the dialed conn ↔ the active stream's wire raw bytes
-//     until either side closes. No framing — tunnel_pull's wire
-//     after the ack is plain TCP both ways. Blocks for the connection's
-//     lifetime; extism's per-plugin call serialisation guarantees no
-//     other host fn races.
+//     until either side closes. No framing — the wire after the ack
+//     is plain TCP both ways. Blocks for the connection's lifetime;
+//     extism's per-plugin call serialisation guarantees no other
+//     host fn races.
 //
 //   host_net_close(handle) -> ok|error
 //     Best-effort close. Used by plugin shutdown paths so a mid-flight
@@ -35,8 +37,7 @@ import (
 //
 // All three require CapNetDial in the granted set.
 
-// netDialRequest is the JSON arg for host_net_dial. Mirrors
-// v2pb.TunnelPullRequest's two fields.
+// netDialRequest is the JSON arg for host_net_dial.
 type netDialRequest struct {
 	Target        string `json:"target"`
 	DialTimeoutMS uint32 `json:"dial_timeout_ms,omitempty"`
@@ -132,16 +133,13 @@ func (pctx *pluginCtx) hostNetDial(ctx context.Context, p *extism.CurrentPlugin,
 	}))
 }
 
-// defaultNetDialTimeout matches the legacy
-// internal/agent/tunnel_pull_stream.go's
-// defaultTunnelDialTimeout — kept consistent so a
-// migration-day cutover doesn't change the apparent dial behaviour.
+// defaultNetDialTimeout is the dial deadline applied when the plugin
+// doesn't request a specific value. Picked to be permissive enough
+// for cross-region links while still bounding a stuck SYN.
 const defaultNetDialTimeout = 10 * time.Second
 
 // hostNetRelay splices the dialed conn ↔ the active stream's wire
 // raw bytes until either side closes. Pure byte splice — no framing.
-// Mirrors the io.Copy pair in
-// internal/agent/tunnel_pull_stream.go's spliceBidirectional.
 func (pctx *pluginCtx) hostNetRelay(_ context.Context, p *extism.CurrentPlugin, stack []uint64) {
 	if !pctx.granted[CapNetDial] {
 		returnEnvelope(p, stack, denied("net.dial"))
