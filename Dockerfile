@@ -101,7 +101,7 @@ RUN apt-get update \
         python3 python3-yaml \
     && rm -rf /var/lib/apt/lists/*
 # Rust toolchain for compiling the example wasm plugins. The publisher
-# script `cargo build`s every plugin under example/plugins/ for
+# script `cargo build`s every plugin under examples/plugins/ for
 # wasm32-unknown-unknown. Pinned to stable; bumping rustup just to
 # chase a nightly is rarely worth it.
 #

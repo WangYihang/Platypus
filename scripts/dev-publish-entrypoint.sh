@@ -144,11 +144,11 @@ build_and_sign_plugin() {
     echo "$wasm"
 }
 
-# Marketplace plugins: every example/plugins/*/ that has a Cargo.toml,
+# Marketplace plugins: every examples/plugins/*/ that has a Cargo.toml,
 # excluding the system/ subtree (those get their own pass below). Each
 # bundle ships into MARKETPLACE_OUT/plugins/<id>/<version>/ for the
 # operator to pick up via the marketplace UI.
-for plugin_dir in example/plugins/*/; do
+for plugin_dir in examples/plugins/*/; do
     plugin_dir="${plugin_dir%/}"
     [ -f "$plugin_dir/Cargo.toml" ] || continue
     wasm=$(build_and_sign_plugin "$plugin_dir") || exit 1
@@ -164,7 +164,7 @@ done
 
 echo "→ staged plugin bundle under $MARKETPLACE_OUT"
 
-# System plugins: example/plugins/system/*/ holds the wasm
+# System plugins: examples/plugins/system/*/ holds the wasm
 # replacements for the legacy Go stream handlers (file_read,
 # file_write, file_scan, file_archive, process_open, tunnel_pull).
 # These are NOT marketplace plugins — they're meant to be installed
@@ -183,7 +183,7 @@ rm -rf "$SYSTEM_OUT"
 mkdir -p "$SYSTEM_OUT"
 cp "$PLUGIN_KEY_PUBLIC" "$SYSTEM_OUT/publisher.pub"
 
-for plugin_dir in example/plugins/system/*/; do
+for plugin_dir in examples/plugins/system/*/; do
     plugin_dir="${plugin_dir%/}"
     [ -f "$plugin_dir/Cargo.toml" ] || continue
     wasm=$(build_and_sign_plugin "$plugin_dir") || exit 1

@@ -13,7 +13,7 @@ import (
 // CI failure (was a silent t.Skipf before D-tests).
 //
 // Refresh via `go run ./scripts/stage_system_plugins` from the repo root
-// after editing rust source under example/plugins/system/.
+// after editing rust source under examples/plugins/system/.
 const stagedSystemRoot = "../../../internal/server/sysplugins/embedded/system-plugins"
 
 // stagedWasmBytes reads the .wasm artefact for the given (plugin id,

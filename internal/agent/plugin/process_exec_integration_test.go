@@ -20,7 +20,7 @@ func installSysProcess(t *testing.T, granted []plugin.CapabilityID) *plugin.Regi
 	t.Helper()
 	wasm, err := os.ReadFile(sysProcessWasmPath())
 	if err != nil {
-		t.Skipf("sys_process.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/system/sys-process/", err)
+		t.Skipf("sys_process.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in examples/plugins/system/sys-process/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..",
 		"example", "plugins", "system", "sys-process", "plugin.yaml"))

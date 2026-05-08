@@ -28,7 +28,7 @@ import (
 // frames straight into the wasm sandbox. The previous Go-resident
 // handlers (HandleFileReadStream et al.) are gone — their
 // byte-for-byte wire equivalents now live inside
-// example/plugins/system/sys-{file,process}-* and are delivered to
+// examples/plugins/system/sys-{file,process}-* and are delivered to
 // the agent via the system-plugin bundle.
 type AgentHandlerDeps struct {
 	RPC        AgentRPCHandlers

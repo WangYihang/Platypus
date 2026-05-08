@@ -269,13 +269,13 @@ end-to-end via integration tests:
 
 | Stream type | Plugin | Status |
 |---|---|---|
-| `PLUGIN_STREAM` (echo demo) | `example/plugins/echo-stream` | Shipping. Pump-mode dispatch. |
-| `FILE_READ` | `example/plugins/sys-file-read` | Plugin + e2e test ready. Cutover blocked on system signing key. |
-| `FILE_SCAN` | `example/plugins/sys-file-scan` | Plugin + e2e test ready. Cutover blocked on system signing key. |
-| `FILE_WRITE` | `example/plugins/sys-file-write` | Plugin + e2e test ready. Cutover blocked on system signing key. |
-| `FILE_ARCHIVE` | `example/plugins/sys-file-archive` | TAR + TAR_GZ supported via flate2; ZIP intentionally omitted (parity gap, see plugin README). Cutover blocked on system signing key. |
-| `PROCESS_OPEN` | `example/plugins/sys-process-open` | Plugin + e2e test ready (happy path + policy denial). Uses spawn+host-relay architecture; wasm owns spawn policy, host owns the bidirectional PTY/pipes pump. Cutover blocked on system signing key. |
-| `TUNNEL_PULL` | `example/plugins/sys-tunnel-pull` | Plugin + e2e test ready (echo round-trip + policy denial). Uses dial+host-relay architecture; wasm owns dial policy, host owns the raw byte splice. Cutover blocked on system signing key. |
+| `PLUGIN_STREAM` (echo demo) | `examples/plugins/echo-stream` | Shipping. Pump-mode dispatch. |
+| `FILE_READ` | `examples/plugins/sys-file-read` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_SCAN` | `examples/plugins/sys-file-scan` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_WRITE` | `examples/plugins/sys-file-write` | Plugin + e2e test ready. Cutover blocked on system signing key. |
+| `FILE_ARCHIVE` | `examples/plugins/sys-file-archive` | TAR + TAR_GZ supported via flate2; ZIP intentionally omitted (parity gap, see plugin README). Cutover blocked on system signing key. |
+| `PROCESS_OPEN` | `examples/plugins/sys-process-open` | Plugin + e2e test ready (happy path + policy denial). Uses spawn+host-relay architecture; wasm owns spawn policy, host owns the bidirectional PTY/pipes pump. Cutover blocked on system signing key. |
+| `TUNNEL_PULL` | `examples/plugins/sys-tunnel-pull` | Plugin + e2e test ready (echo round-trip + policy denial). Uses dial+host-relay architecture; wasm owns dial policy, host owns the raw byte splice. Cutover blocked on system signing key. |
 
 ### Architecture for bidirectional long-lived streams
 
@@ -312,7 +312,7 @@ production traffic until:
    out-of-repo) and staged under
    `internal/agent/plugin/system/embedded/<id>/<version>/`.
 2. The matching entry is removed from
-   `example/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
+   `examples/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
    sys-streams is rebuilt + re-signed (`make sign-system-plugins`).
 3. `internal/agent/<type>_stream.go` and the matching adapter line
    in `cmd/platypus-agent/stream_adapters.go` are deleted.
@@ -322,7 +322,7 @@ its legacy stream-type switch entirely — every stream type then
 flows through the unified `Registry.DispatchStream`.
 
 Until then the legacy handler keeps serving — the wasm replacement
-sits in `example/plugins/` as proof the migration mechanically
+sits in `examples/plugins/` as proof the migration mechanically
 works, with the integration test under
 `internal/agent/plugin/<type>_integration_test.go` as the canonical
 end-to-end coverage.
@@ -342,13 +342,13 @@ production traffic until:
    out-of-repo) and staged under
    `internal/agent/plugin/system/embedded/<id>/<version>/`.
 2. The matching entry is removed from
-   `example/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
+   `examples/plugins/sys-streams/plugin.yaml`'s `streams:` list, and
    sys-streams is rebuilt + re-signed (`make sign-system-plugins`).
 3. `internal/agent/<type>_stream.go` and the matching adapter line
    in `cmd/platypus-agent/stream_adapters.go` are deleted.
 
 Until then the legacy handler keeps serving — the wasm replacement
-sits in `example/plugins/` as proof the migration mechanically
+sits in `examples/plugins/` as proof the migration mechanically
 works, with the integration test under
 `internal/agent/plugin/<type>_integration_test.go` as the canonical
 end-to-end coverage.

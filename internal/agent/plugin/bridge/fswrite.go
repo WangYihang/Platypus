@@ -89,7 +89,7 @@ func Rename(reg *plugin.Registry) func(ctx context.Context, req *v2pb.RenameRequ
 }
 
 // JSON request shapes the Rust side decodes via serde. Names + tags
-// match example/plugins/sys-fs-write/src/lib.rs.
+// match examples/plugins/sys-fs-write/src/lib.rs.
 type mkdirJSON struct {
 	Path   string `json:"path"`
 	Mode   uint32 `json:"mode,omitempty"`

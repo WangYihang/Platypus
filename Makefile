@@ -97,7 +97,7 @@ help:
 	@echo "  clean                 Remove build artefacts"
 	@echo ""
 	@echo "Plugins:"
-	@echo "  example-plugins       Build + sign every plugin under example/plugins/"
+	@echo "  example-plugins       Build + sign every plugin under examples/plugins/"
 	@echo "  stage-system-plugins  Build + sign + stage plugins into the server embed"
 	@echo ""
 	@echo "Desktop app:"
@@ -164,7 +164,7 @@ example-plugins:
 	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
 	@: $${PLATYPUS_PUBLISHER_KEY:?required: path to a plugin keygen secret}
 	@test -x $(BUILD_DIR)/platypus-cli || { echo "run \`make build\` first"; exit 1; }
-	@for d in example/plugins/*/Cargo.toml; do \
+	@for d in examples/plugins/*/Cargo.toml; do \
 	  dir=$$(dirname $$d); echo "→ $$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	  wasm=$$(ls -1 $$dir/target/wasm32-unknown-unknown/release/*.wasm 2>/dev/null); \
@@ -174,7 +174,7 @@ example-plugins:
 
 stage-system-plugins:
 	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
-	@for d in example/plugins/system/*/Cargo.toml; do \
+	@for d in examples/plugins/system/*/Cargo.toml; do \
 	  dir=$$(dirname $$d); echo "→ $$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done

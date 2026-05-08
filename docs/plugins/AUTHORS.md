@@ -46,13 +46,13 @@ Plugins are written in **Rust** against the
 [Extism PDK](https://extism.org/docs/concepts/pdk) — smallest
 binaries, fastest startup, strongest type system. The scaffolder
 (`platypus-cli plugin new`) and every shipped example
-(`example/plugins/echo/`, `example/plugins/system/*`) target Rust;
+(`examples/plugins/echo/`, `examples/plugins/system/*`) target Rust;
 the bundled toolchain expects a `cargo build --release --target
 wasm32-unknown-unknown` artefact.
 
 ## 1. Scaffold the project
 
-Easiest: copy `example/plugins/echo/`. The structure for a Rust
+Easiest: copy `examples/plugins/echo/`. The structure for a Rust
 plugin is:
 
 ```
@@ -272,6 +272,6 @@ reconnect.
   shell-out + column parsing (M4a `sys-services-darwin`),
   `host_fs_read` + structured-text parsing (M3a `sys-net-linux`),
   and PowerShell injection-safe string builders (M4b `sys-services-windows`)
-- `example/plugins/echo/` — minimal complete reference
+- `examples/plugins/echo/` — minimal complete reference
 - [Extism Rust PDK](https://extism.org/docs/concepts/pdk) — PDK
   reference for the toolchain

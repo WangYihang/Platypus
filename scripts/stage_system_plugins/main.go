@@ -1,6 +1,6 @@
 // stage_system_plugins is a one-shot helper used to populate
 // internal/server/sysplugins/embedded/ from the rust artefacts under
-// example/plugins/system/. Run via:
+// examples/plugins/system/. Run via:
 //
 //	go run ./scripts/stage_system_plugins
 //
@@ -13,7 +13,7 @@
 //     at internal/server/sysplugins/embedded/system-plugins/publisher.pub.
 //     The secret is gitignored — losing it just means the next run
 //     mints a new one and re-signs every plugin.
-//  2. For each plugin under example/plugins/system/<dir>/:
+//  2. For each plugin under examples/plugins/system/<dir>/:
 //     - rewrites its plugin.yaml signature.key_id to match the
 //     system key,
 //     - locates target/wasm32-unknown-unknown/release/<entry>.wasm,
@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	pluginsRoot   = "example/plugins/system"
+	pluginsRoot   = "examples/plugins/system"
 	stagedRoot    = "internal/server/sysplugins/embedded/system-plugins"
 	secretPath    = "scripts/.system-signing.secret"
 	publisherName = "untrusted comment: Platypus system publisher"

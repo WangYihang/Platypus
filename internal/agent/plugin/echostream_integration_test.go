@@ -17,7 +17,7 @@ import (
 
 // TestEchoStream_RustExamplePluginRoundTrip drives the wasm-streaming
 // path end-to-end using the real Rust example plugin from
-// example/plugins/echo-stream/. Same skip semantics as the RPC echo
+// examples/plugins/echo-stream/. Same skip semantics as the RPC echo
 // integration test next door — without the .wasm built we can't
 // exercise the runtime, so we skip rather than fail.
 //
@@ -32,7 +32,7 @@ func TestEchoStream_RustExamplePluginRoundTrip(t *testing.T) {
 	wasmPath := echoStreamWasmPath(t)
 	wasm, err := os.ReadFile(wasmPath)
 	if err != nil {
-		t.Skipf("echo_stream.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/echo-stream/", err)
+		t.Skipf("echo_stream.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in examples/plugins/echo-stream/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..", "example", "plugins", "echo-stream", "plugin.yaml"))
 	if err != nil {

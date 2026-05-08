@@ -5,7 +5,7 @@
 //
 // The bundles themselves are produced by `go run
 // ./scripts/stage_system_plugins` from the rust artefacts under
-// example/plugins/system/; that helper writes
+// examples/plugins/system/; that helper writes
 //
 //	embedded/system-plugins/
 //	  publisher.pub

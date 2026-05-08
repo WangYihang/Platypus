@@ -11,7 +11,7 @@ import (
 )
 
 // TestEcho_RustExamplePluginRoundTrip drives the runtime through the
-// real Rust example plugin from example/plugins/echo/. Skipped when
+// real Rust example plugin from examples/plugins/echo/. Skipped when
 // the .wasm hasn't been built (so CI without rustup still passes —
 // the canonical "does the runtime accept a real Rust extism plugin"
 // answer comes from running this locally after `cargo build` in the
@@ -23,12 +23,12 @@ import (
 //   - install pipeline accepts a freshly-signed real plugin
 //   - Invoke routes input bytes to the plugin and echoes them back
 //
-// To run: see example/plugins/echo/README.md.
+// To run: see examples/plugins/echo/README.md.
 func TestEcho_RustExamplePluginRoundTrip(t *testing.T) {
 	wasmPath := echoWasmPath(t)
 	wasm, err := os.ReadFile(wasmPath)
 	if err != nil {
-		t.Skipf("echo.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in example/plugins/echo/", err)
+		t.Skipf("echo.wasm not built (%v) — run `cargo build --release --target wasm32-unknown-unknown` in examples/plugins/echo/", err)
 	}
 	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "..", "example", "plugins", "echo", "plugin.yaml"))
 	if err != nil {
