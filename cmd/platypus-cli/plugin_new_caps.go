@@ -40,12 +40,12 @@ var capYAMLEntries = map[agentplugin.CapabilityID]string{
 	agentplugin.CapNetListen: "  net.listen:\n    binds:\n      - 127.0.0.1:1080",
 }
 
-// capHintsRust is the per-family commented-out example snippet the
+// capHints is the per-family commented-out example snippet the
 // Rust scaffold drops into lib.rs so authors have a one-line lift
 // from "I picked fs.read" to "here's how to call it". CapLog has
 // no hint — the scaffold's main RPC already calls info!() so log
 // is exercised by default.
-var capHintsRust = map[agentplugin.CapabilityID]string{
+var capHints = map[agentplugin.CapabilityID]string{
 	agentplugin.CapLog:       "",
 	agentplugin.CapKV:        "// kv: var::set(\"counter\", 1)?;  let v: Option<i64> = var::get(\"counter\")?;",
 	agentplugin.CapSysInfo:   "// sysinfo: let info = host::get_sys_info()?;  // os, arch fields",
@@ -56,23 +56,6 @@ var capHintsRust = map[agentplugin.CapabilityID]string{
 	agentplugin.CapProcess:   "// process: let pid = host::process_spawn(\"/bin/sh\", &[\"-c\", \"echo hi\"])?;",
 	agentplugin.CapNetDial:   "// net.dial: let conn = host::net_dial(\"127.0.0.1:8080\")?;",
 	agentplugin.CapNetListen: "// net.listen: let lst = host::net_listen(\"127.0.0.1:1080\")?;",
-}
-
-// capHintsGo is the parallel snippet for the Go (TinyGo) scaffold.
-// Emitted inside a /* ... */ block in main.go so the example
-// compiles cleanly without the author having imported the host
-// helpers — they uncomment as they reach for each capability.
-var capHintsGo = map[agentplugin.CapabilityID]string{
-	agentplugin.CapLog:       "",
-	agentplugin.CapKV:        "platypus.HostKVSet(\"counter\", []byte(\"1\"))\nv, _ := platypus.HostKVGet(\"counter\")",
-	agentplugin.CapSysInfo:   "info, _ := platypus.HostSysInfo()  // info.OS, info.Arch",
-	agentplugin.CapExec:      "out, _ := platypus.HostExec(\"/usr/bin/echo\", []string{\"hello\"})",
-	agentplugin.CapFSRead:    "bytes, _ := platypus.HostFSRead(\"/etc/hostname\")",
-	agentplugin.CapFSWrite:   "platypus.HostFSWrite(\"/tmp/scratch/x\", []byte(\"hi\"))",
-	agentplugin.CapNetHTTP:   "resp, _ := platypus.HostHTTP(\"GET\", \"https://example.com/\", nil)",
-	agentplugin.CapProcess:   "pid, _ := platypus.HostProcessSpawn(\"/bin/sh\", []string{\"-c\", \"echo hi\"})",
-	agentplugin.CapNetDial:   "conn, _ := platypus.HostNetDial(\"127.0.0.1:8080\")",
-	agentplugin.CapNetListen: "lst, _ := platypus.HostNetListen(\"127.0.0.1:1080\")",
 }
 
 // capDescriptions mirrors the operator-facing copy in
@@ -106,8 +89,7 @@ func init() {
 		m    map[agentplugin.CapabilityID]string
 	}{
 		{"capYAMLEntries", capYAMLEntries},
-		{"capHintsRust", capHintsRust},
-		{"capHintsGo", capHintsGo},
+		{"capHints", capHints},
 		{"capDescriptions", capDescriptions},
 	}
 	var missing []string
@@ -143,22 +125,11 @@ func renderCapabilitiesYAML(families []agentplugin.CapabilityID) string {
 
 // renderCapHints joins the per-family hint snippets, prefixed
 // with the family name as a comment so the author can scan to the
-// one they're implementing. Lang selects between the Rust and Go
-// SDK syntaxes; an unknown lang falls through to no hints (the
-// scaffolder's caller validates lang upstream).
-func renderCapHints(families []agentplugin.CapabilityID, lang pluginLang) string {
-	var registry map[agentplugin.CapabilityID]string
-	switch lang {
-	case langRust:
-		registry = capHintsRust
-	case langGo:
-		registry = capHintsGo
-	default:
-		return ""
-	}
+// one they're implementing.
+func renderCapHints(families []agentplugin.CapabilityID) string {
 	var parts []string
 	for _, f := range families {
-		snippet := registry[f]
+		snippet := capHints[f]
 		if snippet == "" {
 			continue
 		}

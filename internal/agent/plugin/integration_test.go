@@ -16,8 +16,8 @@ import (
 
 // noopWasm is the minimal valid WebAssembly module exporting one
 // function `noop` that takes no params, returns nothing, and just
-// executes `end`. Hand-assembled to avoid pulling TinyGo / Rust into
-// the integration test toolchain.
+// executes `end`. Hand-assembled to avoid pulling Rust into the
+// integration test toolchain.
 //
 // Layout (per WebAssembly Core 1 spec):
 //   magic + version (8 bytes)

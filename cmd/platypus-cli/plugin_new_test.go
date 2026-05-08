@@ -15,10 +15,9 @@ import (
 // scaffoldArgs centralises the non-interactive flag set used by the
 // happy-path tests so the individual cases focus on what they're
 // pinning rather than re-spelling defaults.
-func scaffoldArgs(dir, lang, id string) pluginNewCmd {
+func scaffoldArgs(dir, id string) pluginNewCmd {
 	return pluginNewCmd{
 		Dir:          dir,
-		Lang:         lang,
 		ID:           id,
 		Name:         "Smoke",
 		Version:      "1.0.0",
@@ -39,14 +38,14 @@ func runScaffold(t *testing.T, c pluginNewCmd) {
 	}
 }
 
-// TestPluginNew_Rust_GeneratesValidProject: the scaffolder produces
-// a Rust project whose plugin.yaml round-trips through the actual
+// TestPluginNew_GeneratesValidProject: the scaffolder produces a
+// Rust project whose plugin.yaml round-trips through the actual
 // manifest validator. If the validator accepts our scaffold, every
 // author's first attempt will too — no surprise rejections after
 // they've copy-pasted the build commands.
-func TestPluginNew_Rust_GeneratesValidProject(t *testing.T) {
+func TestPluginNew_GeneratesValidProject(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "smoke")
-	runScaffold(t, scaffoldArgs(dir, "rust", "com.example.smoke"))
+	runScaffold(t, scaffoldArgs(dir, "com.example.smoke"))
 
 	for _, want := range []string{
 		"plugin.yaml", "Cargo.toml", "src/lib.rs", "README.md", ".gitignore",
@@ -65,26 +64,6 @@ func TestPluginNew_Rust_GeneratesValidProject(t *testing.T) {
 	}
 }
 
-// TestPluginNew_Go_GeneratesValidProject: same shape against the Go
-// template. Go projects use TinyGo + sdk/go/platypus-plugin, which
-// the README walks the author through.
-func TestPluginNew_Go_GeneratesValidProject(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "smoke")
-	runScaffold(t, scaffoldArgs(dir, "go", "com.example.smoke"))
-
-	for _, want := range []string{
-		"plugin.yaml", "go.mod", "main.go", "README.md", ".gitignore",
-	} {
-		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
-			t.Fatalf("missing %s: %v", want, err)
-		}
-	}
-	manifestBytes, _ := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
-	if _, err := agentplugin.ParseManifest(manifestBytes); err != nil {
-		t.Fatalf("scaffolded manifest fails validator: %v", err)
-	}
-}
-
 // TestPluginNew_WithConfig_ProducesValidSchema: the canonical
 // `greeting + shout` config block must validate against itself —
 // passing the schema's own defaults to the validator is the
@@ -93,7 +72,7 @@ func TestPluginNew_Go_GeneratesValidProject(t *testing.T) {
 // install path uses.
 func TestPluginNew_WithConfig_ProducesValidSchema(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "smoke")
-	args := scaffoldArgs(dir, "rust", "com.example.smoke")
+	args := scaffoldArgs(dir, "com.example.smoke")
 	args.WithConfig = true
 	runScaffold(t, args)
 
@@ -126,7 +105,7 @@ func TestPluginNew_WithConfig_ProducesValidSchema(t *testing.T) {
 // matches).
 func TestPluginNew_WithoutConfig_OmitsConfigBlock(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "smoke")
-	args := scaffoldArgs(dir, "rust", "com.example.smoke")
+	args := scaffoldArgs(dir, "com.example.smoke")
 	args.WithConfig = false
 	runScaffold(t, args)
 
@@ -170,7 +149,7 @@ func TestPluginNew_WithCapabilities_RendersAllowlists(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.family, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "smoke")
-			args := scaffoldArgs(dir, "rust", "com.example.smoke")
+			args := scaffoldArgs(dir, "com.example.smoke")
 			args.Capabilities = []string{c.family}
 			runScaffold(t, args)
 			yaml, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
@@ -199,7 +178,7 @@ func TestPluginNew_RefusesOverwrite(t *testing.T) {
 		[]byte("hello"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	args := scaffoldArgs(dir, "rust", "com.example.smoke")
+	args := scaffoldArgs(dir, "com.example.smoke")
 	if err := args.Run(&runContext{Context: context.Background()}); err == nil {
 		t.Fatalf("expected refusal on non-empty dir, got nil")
 	}
@@ -230,7 +209,7 @@ func TestPluginNew_PluginIDValidation(t *testing.T) {
 	}
 	for _, bad := range cases {
 		t.Run(bad, func(t *testing.T) {
-			args := scaffoldArgs(dir, "rust", bad)
+			args := scaffoldArgs(dir, bad)
 			if err := args.Run(&runContext{Context: context.Background()}); err == nil {
 				t.Fatalf("expected failure for id=%q", bad)
 			}
@@ -252,8 +231,7 @@ func TestPluginNew_PluginIDValidation(t *testing.T) {
 func TestPluginNew_CapabilityRegistries_CoverAllFamilies(t *testing.T) {
 	registries := map[string]map[agentplugin.CapabilityID]string{
 		"capYAMLEntries":  capYAMLEntries,
-		"capHintsRust":    capHintsRust,
-		"capHintsGo":      capHintsGo,
+		"capHints":        capHints,
 		"capDescriptions": capDescriptions,
 	}
 	for name, m := range registries {
@@ -274,7 +252,7 @@ func TestPluginNew_CapabilityRegistries_CoverAllFamilies(t *testing.T) {
 // later rejects mysteriously.
 func TestPluginNew_RejectsUnknownCapability(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "smoke")
-	args := scaffoldArgs(dir, "rust", "com.example.smoke")
+	args := scaffoldArgs(dir, "com.example.smoke")
 	args.Capabilities = []string{"log", "fs.write-but-typoed"}
 	err := args.Run(&runContext{Context: context.Background()})
 	if err == nil {
@@ -285,22 +263,6 @@ func TestPluginNew_RejectsUnknownCapability(t *testing.T) {
 	}
 	if _, statErr := os.Stat(dir); statErr == nil {
 		t.Fatalf("dir should not exist after capability rejection")
-	}
-}
-
-// TestPluginNew_RejectsUnknownLang pins the typed-Lang behaviour:
-// a wire string that isn't one of the known languages fails at
-// parse time with the valid set listed.
-func TestPluginNew_RejectsUnknownLang(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "smoke")
-	args := scaffoldArgs(dir, "python", "com.example.smoke")
-	err := args.Run(&runContext{Context: context.Background()})
-	if err == nil {
-		t.Fatalf("expected unknown-lang rejection")
-	}
-	if !strings.Contains(err.Error(), "python") ||
-		!strings.Contains(err.Error(), "valid:") {
-		t.Fatalf("err should name the bad lang AND list valid: %v", err)
 	}
 }
 
@@ -315,7 +277,7 @@ func TestPluginNew_DefaultsDirToPluginID(t *testing.T) {
 	if err := os.Chdir(tmp); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
-	args := scaffoldArgs("", "rust", "com.example.my-plugin")
+	args := scaffoldArgs("", "com.example.my-plugin")
 	runScaffold(t, args)
 	if _, err := os.Stat(filepath.Join(tmp, "my-plugin", "plugin.yaml")); err != nil {
 		t.Fatalf("default dir not used: %v", err)

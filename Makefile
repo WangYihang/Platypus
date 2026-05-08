@@ -68,8 +68,7 @@ check-deps:
 	@printf "\nOptional:\n"
 	@$(call check-bin,upx,apt install upx-ucl  /  brew install upx  (halves the agent binary size))
 	@$(call check-bin,protoc,apt install protobuf-compiler  /  brew install protobuf  (only when proto sources change))
-	@$(call check-bin,tinygo,https://tinygo.org/getting-started/install/  (only for Go-based system plugins))
-	@$(call check-bin,cargo,https://rustup.rs/  (only for Rust-based plugins))
+	@$(call check-bin,cargo,https://rustup.rs/  (only for plugin authoring))
 
 # `make` after a fresh clone produces a fully-functioning ./build/*:
 # data fetched, web UI baked in, signed cross-platform agent releases
@@ -160,8 +159,6 @@ swag:
 # ---------- Plugins ----------
 # Both targets need rustup + wasm32-unknown-unknown. example-plugins
 # also needs PLATYPUS_PUBLISHER_KEY (from `platypus-cli plugin keygen`).
-# stage-system-plugins picks up TinyGo plugins too, but skips them
-# (with a warning) when tinygo isn't on PATH.
 
 example-plugins:
 	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
@@ -178,23 +175,9 @@ example-plugins:
 stage-system-plugins:
 	@$(call require-bin,cargo,https://rustup.rs/  +  rustup target add wasm32-unknown-unknown)
 	@for d in example/plugins/system/*/Cargo.toml; do \
-	  dir=$$(dirname $$d); echo "→ rust:$$(basename $$dir)"; \
+	  dir=$$(dirname $$d); echo "→ $$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done
-	@if command -v tinygo >/dev/null 2>&1; then \
-	  for d in example/plugins/system-go/*/go.mod; do \
-	    dir=$$(dirname $$d); entry=$$(awk '/^  entry:/ {print $$2}' $$dir/plugin.yaml); \
-	    echo "→ go:$$(basename $$dir) ($$entry, tinygo)"; \
-	    (cd $$dir && tinygo build -target wasi -o $$entry .) || exit 1; \
-	  done; \
-	else \
-	  echo "→ go: tinygo not on PATH — falling back to stock Go (wasip1, c-shared reactor module)"; \
-	  for d in example/plugins/system-go/*/go.mod; do \
-	    dir=$$(dirname $$d); entry=$$(awk '/^  entry:/ {print $$2}' $$dir/plugin.yaml); \
-	    echo "→ go:$$(basename $$dir) ($$entry)"; \
-	    (cd $$dir && GOOS=wasip1 GOARCH=wasm $(GO) build -buildmode=c-shared -o $$entry .) || exit 1; \
-	  done; \
-	fi
 	$(GO) run ./hack/stage_system_plugins
 
 # ---------- Geo data ----------

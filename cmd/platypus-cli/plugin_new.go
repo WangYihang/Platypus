@@ -18,43 +18,6 @@ import (
 	tmpls "github.com/WangYihang/Platypus/cmd/platypus-cli/templates"
 )
 
-// pluginLang is the closed set of languages the scaffolder
-// templates support. Defined as a string-derived type so it
-// composes cleanly with kong's string-flag parsing while every
-// switch / map lookup downstream gets the compiler's "is this
-// the right type" check rather than relying on a free-form
-// string. Adding a third language means adding a constant here
-// AND a templates/<name>/ directory; parseLang catches the
-// "constant added but not parsed" hole at the CLI boundary.
-type pluginLang string
-
-const (
-	langRust pluginLang = "rust"
-	langGo   pluginLang = "go"
-)
-
-// allLangs is the canonical authority — used by parseLang and
-// the help text below. Slice rather than map because order
-// matters (templates render error messages in this order).
-var allLangs = []pluginLang{langRust, langGo}
-
-// parseLang lifts a wire-string into the typed enum or returns a
-// helpful "unknown lang, valid options: ..." error. Centralising
-// parsing means a typo at the CLI boundary fails before any
-// file is written, with the full set of valid options listed.
-func parseLang(s string) (pluginLang, error) {
-	for _, l := range allLangs {
-		if string(l) == s {
-			return l, nil
-		}
-	}
-	options := make([]string, len(allLangs))
-	for i, l := range allLangs {
-		options[i] = string(l)
-	}
-	return "", fmt.Errorf("unknown language %q (valid: %s)", s, strings.Join(options, ", "))
-}
-
 // parseCapabilities lifts the kong []string into typed
 // []CapabilityID, refusing unknown families before any file is
 // written. The parser is the single place a typo or removed
@@ -81,21 +44,15 @@ func parseCapabilities(in []string) ([]agentplugin.CapabilityID, error) {
 	return out, nil
 }
 
-// pluginNewCmd scaffolds a fresh plugin project. Two paths share
+// pluginNewCmd scaffolds a fresh Rust plugin project. Two paths share
 // the same renderer:
 //
 //   - non-interactive: every required field arrives via flags. Tests
 //     and CI use this path. Skips huh entirely.
-//   - interactive: missing flags trigger a huh form (PR 6.2). The
-//     answered struct then drives the same renderer.
-//
-// Lang and Capabilities arrive as strings (kong parses CLI
-// arguments into stringly-typed struct fields) and are parsed
-// into typed values at the top of Run() — the typed values are
-// what everything downstream operates on.
+//   - interactive: missing flags trigger a huh form. The answered
+//     struct then drives the same renderer.
 type pluginNewCmd struct {
 	Dir          string   `arg:"" optional:"" help:"Output directory. Default: ./<rightmost-id-segment>."`
-	Lang         string   `help:"Plugin language. One of: rust, go. Prompts interactively when omitted."`
 	ID           string   `help:"Plugin id, reverse-DNS style (com.example.my-plugin)."`
 	Name         string   `help:"Display name."`
 	Version      string   `name:"plugin-version" default:"1.0.0" help:"Strict semver MAJOR.MINOR.PATCH for the new plugin."`
@@ -113,17 +70,16 @@ type pluginNewCmd struct {
 // inline (CrateName from the id, EntryWasm filename, the rendered
 // YAML / hint blocks) so each .tmpl stays declarative.
 type templateContext struct {
-	ID              string
-	Name            string
-	Version         string
-	AuthorName      string
-	AuthorEmail     string
-	License         string
-	Description     string
-	WithConfig      bool
-	CrateName       string // hyphenated lowercase, derived from the rightmost id segment
-	GoModule        string // "github.com/<author-name-slug>/<rightmost-id-segment>" guess; author edits
-	EntryWasm       string // "<crate-name>.wasm" — matches both Rust crate output and TinyGo -o flag
+	ID               string
+	Name             string
+	Version          string
+	AuthorName       string
+	AuthorEmail      string
+	License          string
+	Description      string
+	WithConfig       bool
+	CrateName        string // hyphenated lowercase, derived from the rightmost id segment
+	EntryWasm        string // "<crate-name>.wasm" — matches the cargo crate output
 	CapabilitiesYAML string
 	CapabilityHints  string
 	CapabilityList   string
@@ -137,15 +93,11 @@ type templateContext struct {
 func (c *pluginNewCmd) Run(_ *runContext) error {
 	if c.needsWizard() {
 		if !isInteractive() {
-			return errors.New("required flags missing (--lang, --id, --name) and stdin is not a tty; pass them explicitly or run interactively")
+			return errors.New("required flags missing (--id, --name) and stdin is not a tty; pass them explicitly or run interactively")
 		}
 		if err := c.runWizard(); err != nil {
 			return err
 		}
-	}
-	lang, err := parseLang(c.Lang)
-	if err != nil {
-		return err
 	}
 	caps, err := parseCapabilities(c.Capabilities)
 	if err != nil {
@@ -174,14 +126,14 @@ func (c *pluginNewCmd) Run(_ *runContext) error {
 		return fmt.Errorf("refusing to write into non-empty %q (pass --force to override)", dir)
 	}
 
-	ctx := c.buildContext(lang, caps)
-	return render(lang, dir, ctx)
+	ctx := c.buildContext(caps)
+	return render(dir, ctx)
 }
 
 // buildContext fills the templateContext from the kong struct +
-// the typed values parsed in Run. Pure function: every input is
-// on the receiver or passed in by the caller.
-func (c *pluginNewCmd) buildContext(lang pluginLang, caps []agentplugin.CapabilityID) templateContext {
+// the typed capabilities parsed in Run. Pure function: every input
+// is on the receiver or passed in by the caller.
+func (c *pluginNewCmd) buildContext(caps []agentplugin.CapabilityID) templateContext {
 	crate := strings.ReplaceAll(rightmostSegment(c.ID), ".", "-")
 	authorName := c.AuthorName
 	if authorName == "" {
@@ -190,15 +142,6 @@ func (c *pluginNewCmd) buildContext(lang pluginLang, caps []agentplugin.Capabili
 	authorEmail := c.AuthorEmail
 	if authorEmail == "" {
 		authorEmail = "you@example.com"
-	}
-	// GoModule is a best-effort guess based on the plugin id.
-	// Authors who push to a real github repo edit go.mod by hand —
-	// the value here is only a starting point that compiles.
-	goModule := "example.com/" + crate
-	if seg := strings.Split(c.ID, "."); len(seg) >= 2 {
-		// Reverse the reverse-DNS to a Go-style module path:
-		// com.example.foo → example.com/foo (best-effort guess).
-		goModule = strings.Join(reverseStrings(seg[:len(seg)-1]), ".") + "/" + crate
 	}
 
 	return templateContext{
@@ -211,24 +154,23 @@ func (c *pluginNewCmd) buildContext(lang pluginLang, caps []agentplugin.Capabili
 		Description:      c.Description,
 		WithConfig:       c.WithConfig,
 		CrateName:        crate,
-		GoModule:         goModule,
 		EntryWasm:        crate + ".wasm",
 		CapabilitiesYAML: renderCapabilitiesYAML(caps),
-		CapabilityHints:  renderCapHints(caps, lang),
+		CapabilityHints:  renderCapHints(caps),
 		CapabilityList:   renderCapabilityList(caps),
 	}
 }
 
-// render walks the embedded template tree for the chosen language
-// and writes each file to the output directory with the .tmpl
-// suffix stripped. Existing non-template files in dir are
-// preserved (the --force gate already let the author through).
-func render(lang pluginLang, dir string, ctx templateContext) error {
+// render walks the embedded rust/ template tree and writes each file
+// to the output directory with the .tmpl suffix stripped. Existing
+// non-template files in dir are preserved (the --force gate already
+// let the author through).
+func render(dir string, ctx templateContext) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
-	root := string(lang)
+	const root = "rust"
 	written := []string{}
 	walkErr := fs.WalkDir(tmpls.FS, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -275,7 +217,7 @@ func render(lang pluginLang, dir string, ctx templateContext) error {
 	}
 
 	sort.Strings(written)
-	printSummary(dir, ctx, lang, written)
+	printSummary(dir, ctx, written)
 	return nil
 }
 
@@ -283,7 +225,7 @@ func render(lang pluginLang, dir string, ctx templateContext) error {
 // (no styling) so test output stays clean and the message works
 // over a non-tty pipe; the interactive wizard gets its own coloured
 // preamble.
-func printSummary(dir string, ctx templateContext, lang pluginLang, written []string) {
+func printSummary(dir string, ctx templateContext, written []string) {
 	fmt.Printf("Scaffolded %s in %s\n\n", ctx.ID, dir)
 	for _, f := range written {
 		fmt.Printf("  %s\n", f)
@@ -291,12 +233,8 @@ func printSummary(dir string, ctx templateContext, lang pluginLang, written []st
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", dir)
-	if lang == langRust {
-		fmt.Println("  cargo build --release --target wasm32-unknown-unknown")
-		fmt.Printf("  cp target/wasm32-unknown-unknown/release/%s.wasm %s\n", ctx.CrateName, ctx.EntryWasm)
-	} else {
-		fmt.Printf("  tinygo build -target wasi -o %s .\n", ctx.EntryWasm)
-	}
+	fmt.Println("  cargo build --release --target wasm32-unknown-unknown")
+	fmt.Printf("  cp target/wasm32-unknown-unknown/release/%s.wasm %s\n", ctx.CrateName, ctx.EntryWasm)
 	fmt.Println("  platypus-cli plugin keygen --out-secret ~/.platypus/publisher.secret \\")
 	fmt.Println("                              --out-public ~/.platypus/publisher.pub")
 	fmt.Printf("  platypus-cli plugin sign --key ~/.platypus/publisher.secret --wasm %s\n", ctx.EntryWasm)
@@ -313,16 +251,6 @@ func rightmostSegment(id string) string {
 		return id
 	}
 	return id[i+1:]
-}
-
-// reverseStrings reverses a slice. Used to flip reverse-DNS into a
-// Go-module-style path.
-func reverseStrings(in []string) []string {
-	out := make([]string, len(in))
-	for i, s := range in {
-		out[len(in)-1-i] = s
-	}
-	return out
 }
 
 // gitConfigOrDefault returns `git config --get <key>` if available,
@@ -343,10 +271,10 @@ func gitConfigOrDefault(key, def string) string {
 
 // needsWizard reports whether the kong-supplied flags carry enough
 // to scaffold without prompting. The minimum non-interactive
-// trigger set is {Lang, ID, Name} — everything else has a sensible
+// trigger set is {ID, Name} — everything else has a sensible
 // default (Version=1.0.0, License=Apache-2.0, etc.).
 func (c *pluginNewCmd) needsWizard() bool {
-	return c.Lang == "" || c.ID == "" || c.Name == ""
+	return c.ID == "" || c.Name == ""
 }
 
 // isInteractive reports whether stdin is a tty. Goes through the
@@ -362,8 +290,8 @@ func isInteractive() bool {
 
 // runWizard mutates the receiver in-place with answers from a
 // huh form. Each prompt is gated behind "field is empty" so an
-// operator who supplied --lang and --id (but not --name, say) only
-// gets prompted for the missing pieces.
+// operator who supplied --id (but not --name, say) only gets
+// prompted for the missing pieces.
 func (c *pluginNewCmd) runWizard() error {
 	// Defaults seeded from git config so the form already has
 	// reasonable starting values for author-* and from the kong
@@ -399,16 +327,6 @@ func (c *pluginNewCmd) runWizard() error {
 	}
 
 	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Plugin language").
-				Description("Pick the language toolchain to scaffold.").
-				Options(
-					huh.NewOption("Rust (cargo + extism-pdk)", "rust"),
-					huh.NewOption("Go (TinyGo + sdk/go/platypus-plugin)", "go"),
-				).
-				Value(&c.Lang),
-		),
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Plugin id").

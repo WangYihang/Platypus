@@ -42,11 +42,13 @@ A Platypus plugin is a single **WebAssembly module** plus a
 artefact runs on every supported agent platform (linux/darwin/windows
 × amd64/arm64/arm/mips/...) — no per-target builds.
 
-Pick a language with an [Extism PDK](https://extism.org/docs/concepts/pdk):
-Rust, Go (TinyGo), JavaScript (QuickJS), Python (py2wasm), C/C++,
-AssemblyScript, Zig. Rust is the recommended first-class option —
-smallest binaries, fastest startup, strongest type system. The
-reference `example/plugins/echo/` is in Rust.
+Plugins are written in **Rust** against the
+[Extism PDK](https://extism.org/docs/concepts/pdk) — smallest
+binaries, fastest startup, strongest type system. The scaffolder
+(`platypus-cli plugin new`) and every shipped example
+(`example/plugins/echo/`, `example/plugins/system/*`) target Rust;
+the bundled toolchain expects a `cargo build --release --target
+wasm32-unknown-unknown` artefact.
 
 ## 1. Scaffold the project
 
@@ -270,7 +272,6 @@ reconnect.
   shell-out + column parsing (M4a `sys-services-darwin`),
   `host_fs_read` + structured-text parsing (M3a `sys-net-linux`),
   and PowerShell injection-safe string builders (M4b `sys-services-windows`)
-- [GO_PLUGINS.md](GO_PLUGINS.md) — TinyGo SDK + Rust ↔ Go parity matrix
 - `example/plugins/echo/` — minimal complete reference
-- [Extism docs](https://extism.org/docs/) — PDK references for every
-  supported language
+- [Extism Rust PDK](https://extism.org/docs/concepts/pdk) — PDK
+  reference for the toolchain
