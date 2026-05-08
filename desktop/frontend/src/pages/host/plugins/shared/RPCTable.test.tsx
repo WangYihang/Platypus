@@ -375,6 +375,352 @@ describe("<RPCTable>", () => {
         expect(mocked.invokePluginRPC).not.toHaveBeenCalled();
     });
 
+    // -----------------------------------------------------------------------
+    // Pagination — offset/limit (sys-net, sys-services, sys-firewall, ...)
+    // -----------------------------------------------------------------------
+
+    it("offset pagination: injects offset+limit into the request and renders the footer", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            ...stubUnits,
+            totalCount: 312,
+            hasMore: true,
+        });
+
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    pagination={{ kind: "offset", pageSize: 50 }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+
+        // Initial call carries offset=0 + limit=50 — the operator
+        // didn't have to wire those into buildRequest manually.
+        expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+            "proj1",
+            "agent-a1",
+            "com.platypus.sys-systemd-linux",
+            "list_units",
+            { offset: 0, limit: 50 },
+            expect.anything(),
+        );
+
+        // Footer summary uses totalCount from the response.
+        expect(screen.getByText(/showing 1.*3 of 312/i)).toBeInTheDocument();
+    });
+
+    it("offset pagination: Next button advances offset; Prev returns to offset 0", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            ...stubUnits,
+            totalCount: 312,
+            hasMore: true,
+        });
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    pagination={{ kind: "offset", pageSize: 50 }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+
+        // Prev disabled at offset 0; Next enabled (hasMore=true).
+        const prev = screen.getByRole("button", { name: /previous page/i });
+        const next = screen.getByRole("button", { name: /next page/i });
+        expect(prev).toBeDisabled();
+        expect(next).toBeEnabled();
+
+        await user.click(next);
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-systemd-linux",
+                "list_units",
+                { offset: 50, limit: 50 },
+                expect.anything(),
+            );
+        });
+
+        // Now Prev is enabled.
+        await waitFor(() => {
+            expect(
+                screen.getByRole("button", { name: /previous page/i }),
+            ).toBeEnabled();
+        });
+
+        await user.click(screen.getByRole("button", { name: /previous page/i }));
+        await waitFor(() => {
+            const calls = mocked.invokePluginRPC.mock.calls.filter(
+                (c) =>
+                    c[3] === "list_units" &&
+                    JSON.stringify(c[4]) === JSON.stringify({ offset: 0, limit: 50 }),
+            );
+            // First load + post-Prev = at least 2.
+            expect(calls.length).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    it("offset pagination: Next is disabled when hasMore is false", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            ...stubUnits,
+            totalCount: 3,
+            hasMore: false,
+        });
+
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    pagination={{ kind: "offset", pageSize: 50 }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+        expect(screen.getByRole("button", { name: /next page/i })).toBeDisabled();
+        expect(screen.getByText(/showing 1.*3 of 3/i)).toBeInTheDocument();
+    });
+
+    it("offset pagination: changing the page-size selector resets offset to 0 and refetches", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            ...stubUnits,
+            totalCount: 312,
+            hasMore: true,
+        });
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    pagination={{
+                        kind: "offset",
+                        pageSize: 50,
+                        pageSizeOptions: [25, 50, 100],
+                    }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+
+        // Walk to page 2 first.
+        await user.click(screen.getByRole("button", { name: /next page/i }));
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-systemd-linux",
+                "list_units",
+                { offset: 50, limit: 50 },
+                expect.anything(),
+            );
+        });
+
+        // Bump page size — should snap back to offset 0.
+        await user.selectOptions(
+            screen.getByRole("combobox", { name: /page size/i }),
+            "100",
+        );
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-systemd-linux",
+                "list_units",
+                { offset: 0, limit: 100 },
+                expect.anything(),
+            );
+        });
+    });
+
+    it("offset pagination: form-driven request changes reset offset to 0", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            ...stubUnits,
+            totalCount: 312,
+            hasMore: true,
+        });
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    requestForm={[
+                        {
+                            field: "state",
+                            kind: "select",
+                            label: "State",
+                            options: [
+                                { value: "", label: "All" },
+                                { value: "failed", label: "Failed" },
+                            ],
+                            default: "",
+                        },
+                    ]}
+                    buildRequest={(form) =>
+                        form.state ? { state: form.state } : {}
+                    }
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    pagination={{ kind: "offset", pageSize: 50 }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+        await user.click(screen.getByRole("button", { name: /next page/i }));
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenLastCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-systemd-linux",
+                "list_units",
+                { offset: 50, limit: 50 },
+                expect.anything(),
+            );
+        });
+
+        // Pick a filter — paging state should snap to offset 0 since
+        // the dataset effectively changed.
+        await user.selectOptions(
+            screen.getByRole("combobox", { name: /state/i }),
+            "failed",
+        );
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenLastCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-systemd-linux",
+                "list_units",
+                { state: "failed", offset: 0, limit: 50 },
+                expect.anything(),
+            );
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // Pagination — cursor (sys-journald-linux + sys-log-{darwin,windows})
+    // -----------------------------------------------------------------------
+
+    it("cursor pagination: Older button fires beforeCursor, Newer fires afterCursor", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            entries: [
+                { timestampUs: 5, message: "five" },
+                { timestampUs: 4, message: "four" },
+            ],
+            prevCursor: "cur-old",
+            nextCursor: "cur-new",
+        });
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<{ entries: Array<{ message: string }> }, { message: string }>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-journald-linux"
+                    method="query"
+                    rowsFrom={(r) => r.entries}
+                    rowKey={(row, idx) => `${row.message}-${idx}`}
+                    columns={[
+                        { field: "message", label: "Message", primary: true },
+                    ]}
+                    pagination={{ kind: "cursor" }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("five"));
+
+        await user.click(screen.getByRole("button", { name: /older/i }));
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-journald-linux",
+                "query",
+                { beforeCursor: "cur-old" },
+                expect.anything(),
+            );
+        });
+
+        await user.click(screen.getByRole("button", { name: /newer/i }));
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC).toHaveBeenCalledWith(
+                "proj1",
+                "agent-a1",
+                "com.platypus.sys-journald-linux",
+                "query",
+                { afterCursor: "cur-new" },
+                expect.anything(),
+            );
+        });
+    });
+
+    it("cursor pagination: Older is disabled when no prevCursor in response", async () => {
+        mocked.invokePluginRPC.mockResolvedValue({
+            entries: [{ timestampUs: 1, message: "only" }],
+            // No prevCursor / nextCursor — single-page result.
+        });
+
+        render(
+            <Wrapper>
+                <RPCTable<{ entries: Array<{ message: string }> }, { message: string }>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-journald-linux"
+                    method="query"
+                    rowsFrom={(r) => r.entries}
+                    rowKey={(row, idx) => `${row.message}-${idx}`}
+                    columns={[
+                        { field: "message", label: "Message", primary: true },
+                    ]}
+                    pagination={{ kind: "cursor" }}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("only"));
+        expect(screen.getByRole("button", { name: /older/i })).toBeDisabled();
+    });
+
     it("primary column gets a bolder font weight than the rest", async () => {
         mocked.invokePluginRPC.mockResolvedValueOnce(stubUnits);
 

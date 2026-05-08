@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -124,6 +124,79 @@ export interface Column<TRow> {
     render?: (row: TRow) => ReactNode;
 }
 
+/**
+ * Pagination behaviour for plugin RPCs that return list slices.
+ *
+ * Two flavours map to the two pagination styles used by our system
+ * plugins (see commits 675d1f7 + f784aab):
+ *
+ *   - "offset" — sys-net, sys-services, sys-systemd-linux, sys-firewall,
+ *                sys-tasks-windows. Request carries `offset` + `limit`;
+ *                response carries `totalCount` + `hasMore`. Operators
+ *                see "Showing 1–50 of 312" + Prev/Next + page-size knob.
+ *
+ *   - "cursor" — sys-journald-linux + sys-log-darwin + sys-log-windows.
+ *                Request carries `afterCursor` xor `beforeCursor`;
+ *                response carries `prevCursor` (oldest) + `nextCursor`
+ *                (newest). UI exposes Older / Newer buttons; "Older"
+ *                fires `beforeCursor: prevCursor`, "Newer" fires
+ *                `afterCursor: nextCursor`.
+ *
+ * Both flavours reset to the first page whenever the request body
+ * changes (the operator typed in the search box, flipped a toggle,
+ * etc.) — paging through stale-filter results would be confusing.
+ */
+export type PaginationConfig =
+    | {
+          kind: "offset";
+          /** Default page size (rows per page). Defaults to 50. */
+          pageSize?: number;
+          /** Optional dropdown values for the page-size selector. */
+          pageSizeOptions?: ReadonlyArray<number>;
+          /** Read total count from response. Defaults to `totalCount`. */
+          totalCountFrom?: (resp: unknown) => number | undefined;
+          /** Read has-more flag from response. Defaults to `hasMore`. */
+          hasMoreFrom?: (resp: unknown) => boolean | undefined;
+      }
+    | {
+          kind: "cursor";
+          /** Read newer-end cursor. Defaults to `nextCursor`. */
+          nextCursorFrom?: (resp: unknown) => string | undefined;
+          /** Read older-end cursor. Defaults to `prevCursor`. */
+          prevCursorFrom?: (resp: unknown) => string | undefined;
+          /** Label for "go to older entries" button. Default "Older". */
+          olderLabel?: string;
+          /** Label for "go to newer entries" button. Default "Newer". */
+          newerLabel?: string;
+      };
+
+const DEFAULT_OFFSET_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
+
+function readNumberField(resp: unknown, key: string): number | undefined {
+    if (resp && typeof resp === "object" && key in resp) {
+        const v = (resp as Record<string, unknown>)[key];
+        if (typeof v === "number") return v;
+    }
+    return undefined;
+}
+
+function readBoolField(resp: unknown, key: string): boolean | undefined {
+    if (resp && typeof resp === "object" && key in resp) {
+        const v = (resp as Record<string, unknown>)[key];
+        if (typeof v === "boolean") return v;
+    }
+    return undefined;
+}
+
+function readStringField(resp: unknown, key: string): string | undefined {
+    if (resp && typeof resp === "object" && key in resp) {
+        const v = (resp as Record<string, unknown>)[key];
+        if (typeof v === "string" && v !== "") return v;
+    }
+    return undefined;
+}
+
 export interface RowAction<TRow> {
     /** Stable id used for the menu item key. */
     id: string;
@@ -180,6 +253,14 @@ export interface RPCTableProps<TResponse, TRow> {
     active?: boolean;
     /** Empty-state body when rowsFrom returns []. */
     emptyText?: string;
+    /**
+     * Opt-in pagination footer. When set, the table merges `offset`+
+     * `limit` (offset mode) or `afterCursor`/`beforeCursor` (cursor
+     * mode) into the request, reads pagination metadata off the
+     * response, and renders Prev/Next controls below the rows.
+     * Resets to page 1 whenever the form-driven request changes.
+     */
+    pagination?: PaginationConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,6 +284,7 @@ export default function RPCTable<TResponse, TRow>(
         refreshMs = 0,
         active = true,
         emptyText,
+        pagination,
     } = props;
 
     // ----- form state -----
@@ -232,12 +314,56 @@ export default function RPCTable<TResponse, TRow>(
         return () => clearTimeout(t);
     }, [form, debounceMs]);
 
-    // ----- RPC query -----
-    const requestPayload = useMemo(
+    // ----- pagination state -----
+    // Two flavours, see PaginationConfig docs. Each branch carries its
+    // own state; only one is active per render. The third branch
+    // (no pagination) keeps everything as it was pre-feature.
+    const initialPageSize =
+        pagination?.kind === "offset"
+            ? (pagination.pageSize ?? DEFAULT_OFFSET_PAGE_SIZE)
+            : DEFAULT_OFFSET_PAGE_SIZE;
+    const [offset, setOffset] = useState(0);
+    const [pageSize, setPageSize] = useState(initialPageSize);
+    // Cursor mode: null = first page; otherwise we carry whichever
+    // direction we last navigated. The response's prev/nextCursor
+    // dictates whether the corresponding button stays enabled.
+    const [cursorReq, setCursorReq] = useState<
+        { afterCursor: string } | { beforeCursor: string } | null
+    >(null);
+
+    // Form-driven request body (the plugin-specific bit).
+    const baseRequest = useMemo(
         () =>
             buildRequest ? buildRequest(debouncedForm) : { ...debouncedForm },
         [buildRequest, debouncedForm],
     );
+
+    // Reset paging whenever the form changes. Browsing page 7 of a
+    // stale filter would be confusing — every form change effectively
+    // starts a new dataset.
+    const baseRequestKey = useMemo(
+        () => JSON.stringify(baseRequest ?? {}),
+        [baseRequest],
+    );
+    useEffect(() => {
+        setOffset(0);
+        setCursorReq(null);
+    }, [baseRequestKey]);
+
+    // ----- RPC query -----
+    const requestPayload = useMemo(() => {
+        const base =
+            baseRequest && typeof baseRequest === "object"
+                ? { ...(baseRequest as Record<string, unknown>) }
+                : {};
+        if (pagination?.kind === "offset") {
+            base.offset = offset;
+            base.limit = pageSize;
+        } else if (pagination?.kind === "cursor" && cursorReq) {
+            Object.assign(base, cursorReq);
+        }
+        return base;
+    }, [baseRequest, pagination, offset, pageSize, cursorReq]);
 
     const queryClient = useQueryClient();
     const queryKey = [
@@ -306,6 +432,32 @@ export default function RPCTable<TResponse, TRow>(
         if (!query.data) return [];
         return rowsFrom(query.data);
     }, [query.data, rowsFrom]);
+
+    // ----- pagination metadata extraction -----
+    const totalCount =
+        pagination?.kind === "offset"
+            ? (pagination.totalCountFrom?.(query.data) ??
+                  readNumberField(query.data, "totalCount"))
+            : undefined;
+    const hasMore =
+        pagination?.kind === "offset"
+            ? (pagination.hasMoreFrom?.(query.data) ??
+                  readBoolField(query.data, "hasMore") ??
+                  // Fall back to inferring from total + offset + rows.
+                  (typeof totalCount === "number"
+                      ? offset + rows.length < totalCount
+                      : false))
+            : false;
+    const nextCursor =
+        pagination?.kind === "cursor"
+            ? (pagination.nextCursorFrom?.(query.data) ??
+                  readStringField(query.data, "nextCursor"))
+            : undefined;
+    const prevCursor =
+        pagination?.kind === "cursor"
+            ? (pagination.prevCursorFrom?.(query.data) ??
+                  readStringField(query.data, "prevCursor"))
+            : undefined;
 
     return (
         <div
@@ -423,6 +575,57 @@ export default function RPCTable<TResponse, TRow>(
                 </Table>
             )}
 
+            {pagination?.kind === "offset" &&
+                !query.isLoading &&
+                !query.error && (
+                    <OffsetPaginationFooter
+                        offset={offset}
+                        pageSize={pageSize}
+                        rowsOnPage={rows.length}
+                        totalCount={totalCount}
+                        hasMore={hasMore}
+                        pageSizeOptions={
+                            pagination.pageSizeOptions ??
+                            DEFAULT_PAGE_SIZE_OPTIONS
+                        }
+                        onPrev={() =>
+                            setOffset((o) => Math.max(0, o - pageSize))
+                        }
+                        onNext={() => setOffset((o) => o + pageSize)}
+                        onPageSizeChange={(n) => {
+                            setPageSize(n);
+                            setOffset(0);
+                        }}
+                    />
+                )}
+
+            {pagination?.kind === "cursor" &&
+                !query.isLoading &&
+                !query.error &&
+                (rows.length > 0 || cursorReq !== null) && (
+                    <CursorPaginationFooter
+                        olderLabel={pagination.olderLabel ?? "Older"}
+                        newerLabel={pagination.newerLabel ?? "Newer"}
+                        canGoOlder={Boolean(prevCursor)}
+                        canGoNewer={Boolean(nextCursor) || cursorReq !== null}
+                        atFirstPage={cursorReq === null}
+                        onOlder={() => {
+                            if (prevCursor)
+                                setCursorReq({ beforeCursor: prevCursor });
+                        }}
+                        onNewer={() => {
+                            if (nextCursor) {
+                                setCursorReq({ afterCursor: nextCursor });
+                            } else {
+                                // No newer entries returned this round —
+                                // ratchet back to "live" (latest) view.
+                                setCursorReq(null);
+                            }
+                        }}
+                        onLatest={() => setCursorReq(null)}
+                    />
+                )}
+
             <AlertDialog
                 open={pendingAction !== null}
                 onOpenChange={(open) => {
@@ -500,6 +703,180 @@ function defaultCell(v: unknown): ReactNode {
         return String(v);
     }
     return JSON.stringify(v);
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponent: OffsetPaginationFooter
+// ---------------------------------------------------------------------------
+
+function OffsetPaginationFooter({
+    offset,
+    pageSize,
+    rowsOnPage,
+    totalCount,
+    hasMore,
+    pageSizeOptions,
+    onPrev,
+    onNext,
+    onPageSizeChange,
+}: {
+    offset: number;
+    pageSize: number;
+    rowsOnPage: number;
+    totalCount: number | undefined;
+    hasMore: boolean;
+    pageSizeOptions: ReadonlyArray<number>;
+    onPrev: () => void;
+    onNext: () => void;
+    onPageSizeChange: (n: number) => void;
+}) {
+    const start = rowsOnPage === 0 ? 0 : offset + 1;
+    const end = offset + rowsOnPage;
+    const total =
+        typeof totalCount === "number"
+            ? totalCount
+            : // No totalCount in response (older plugin or filter that
+              // skips the count) — show "≥ end" as a lower bound.
+              undefined;
+    const summary =
+        rowsOnPage === 0
+            ? "No results"
+            : total !== undefined
+              ? `Showing ${start}–${end} of ${total}`
+              : `Showing ${start}–${end}`;
+
+    return (
+        <div
+            data-testid="rpc-pagination-footer"
+            style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: space[3],
+                paddingTop: space[2],
+                fontSize: 12,
+                color: palette.textMuted,
+            }}
+        >
+            <span>{summary}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+                <Label
+                    htmlFor="rpc-page-size"
+                    style={{ fontSize: 11, color: palette.textMuted }}
+                >
+                    Page size
+                </Label>
+                <select
+                    id="rpc-page-size"
+                    aria-label="Page size"
+                    value={String(pageSize)}
+                    onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                    style={{
+                        height: 28,
+                        padding: "0 6px",
+                        background: palette.surface,
+                        color: palette.textPrimary,
+                        border: `1px solid ${palette.border}`,
+                        borderRadius: 6,
+                    }}
+                >
+                    {pageSizeOptions.map((n) => (
+                        <option key={n} value={String(n)}>
+                            {n}
+                        </option>
+                    ))}
+                </select>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onPrev}
+                    disabled={offset === 0}
+                    aria-label="Previous page"
+                >
+                    <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onNext}
+                    disabled={!hasMore}
+                    aria-label="Next page"
+                >
+                    <ChevronRight className="size-4" />
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponent: CursorPaginationFooter
+// ---------------------------------------------------------------------------
+
+function CursorPaginationFooter({
+    olderLabel,
+    newerLabel,
+    canGoOlder,
+    canGoNewer,
+    atFirstPage,
+    onOlder,
+    onNewer,
+    onLatest,
+}: {
+    olderLabel: string;
+    newerLabel: string;
+    canGoOlder: boolean;
+    canGoNewer: boolean;
+    atFirstPage: boolean;
+    onOlder: () => void;
+    onNewer: () => void;
+    onLatest: () => void;
+}) {
+    return (
+        <div
+            data-testid="rpc-pagination-footer"
+            style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: space[2],
+                paddingTop: space[2],
+                fontSize: 12,
+                color: palette.textMuted,
+            }}
+        >
+            {!atFirstPage && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onLatest}
+                    aria-label="Jump to latest"
+                >
+                    Latest
+                </Button>
+            )}
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={onNewer}
+                disabled={atFirstPage && !canGoNewer}
+                aria-label={newerLabel}
+            >
+                <ChevronLeft className="size-4" />
+                {newerLabel}
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={onOlder}
+                disabled={!canGoOlder}
+                aria-label={olderLabel}
+            >
+                {olderLabel}
+                <ChevronRight className="size-4" />
+            </Button>
+        </div>
+    );
 }
 
 // ---------------------------------------------------------------------------

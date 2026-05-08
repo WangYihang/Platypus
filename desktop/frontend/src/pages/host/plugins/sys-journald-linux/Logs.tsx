@@ -23,12 +23,15 @@ interface Entry {
     uid?: number;
     identifier?: string;
     comm?: string;
+    cursor?: string;
 }
 
 interface QueryResponse {
     entries?: Entry[];
     truncated?: boolean;
     error?: string;
+    prevCursor?: string;
+    nextCursor?: string;
 }
 
 const PRIORITY_COLOR: Record<number, string> = {
@@ -192,10 +195,11 @@ export function SystemLogs({
                 lines: Number(form.lines) || 200,
             })}
             rowsFrom={(r) => r.entries ?? []}
-            rowKey={(e, idx) => `${e.timestampUs ?? idx}-${idx}`}
+            rowKey={(e, idx) => e.cursor ?? `${e.timestampUs ?? idx}-${idx}`}
             columns={COLUMNS}
             refreshMs={0}
             emptyText="No matching journal entries."
+            pagination={{ kind: "cursor" }}
         />
     );
 }

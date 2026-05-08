@@ -29,11 +29,15 @@ interface Connection {
 interface ListenersResponse {
     listeners?: Listener[];
     error?: string;
+    totalCount?: number;
+    hasMore?: boolean;
 }
 
 interface ConnectionsResponse {
     connections?: Connection[];
     error?: string;
+    totalCount?: number;
+    hasMore?: boolean;
 }
 
 const LISTENER_COLUMNS: ReadonlyArray<Column<Listener>> = [
@@ -111,6 +115,7 @@ export function Network({
                     columns={LISTENER_COLUMNS}
                     refreshMs={15000}
                     emptyText="No listening sockets."
+                    pagination={{ kind: "offset" }}
                 />
             ) : (
                 <RPCTable<ConnectionsResponse, Connection>
@@ -138,6 +143,7 @@ export function Network({
                     columns={CONNECTION_COLUMNS}
                     refreshMs={15000}
                     emptyText="No connections match."
+                    pagination={{ kind: "offset" }}
                 />
             )}
         </div>

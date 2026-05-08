@@ -21,6 +21,8 @@ interface Unit {
 interface ListUnitsResponse {
     units?: Unit[];
     error?: string;
+    totalCount?: number;
+    hasMore?: boolean;
 }
 
 const STATE_COLOR: Record<string, string> = {
@@ -134,6 +136,7 @@ export function Services({
             actions={ACTIONS}
             refreshMs={30000}
             emptyText="No services match."
+            pagination={{ kind: "offset" }}
         />
     );
 }

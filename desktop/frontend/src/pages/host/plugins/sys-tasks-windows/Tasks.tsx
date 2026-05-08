@@ -171,15 +171,6 @@ export function Tasks({ projectID, agentID, active }: PluginUIProps) {
                     label: "Include disabled",
                     default: false,
                 },
-                {
-                    field: "limit",
-                    kind: "number",
-                    label: "Limit",
-                    default: 200,
-                    min: 50,
-                    max: 2000,
-                    step: 50,
-                },
             ]}
             buildRequest={(form) => ({
                 ...(form.filter ? { filter: form.filter } : {}),
@@ -187,7 +178,6 @@ export function Tasks({ projectID, agentID, active }: PluginUIProps) {
                     ? { path_prefix: form.path_prefix }
                     : {}),
                 include_disabled: Boolean(form.include_disabled),
-                limit: Number(form.limit) || 200,
             })}
             rowsFrom={(r) => r.tasks ?? []}
             rowKey={(t, idx) =>
@@ -196,6 +186,7 @@ export function Tasks({ projectID, agentID, active }: PluginUIProps) {
             columns={COLUMNS}
             refreshMs={0}
             emptyText="No scheduled tasks match."
+            pagination={{ kind: "offset", pageSizeOptions: [50, 100, 200, 500] }}
         />
     );
 }

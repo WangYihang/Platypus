@@ -17,6 +17,8 @@ interface Unit {
 interface ListUnitsResponse {
     units?: Unit[];
     error?: string;
+    totalCount?: number;
+    hasMore?: boolean;
 }
 
 const PLUGIN_ID = "com.platypus.sys-systemd-linux";
@@ -139,6 +141,7 @@ export function SystemdServices({ projectID, agentID, active }: PluginUIProps) {
             actions={ACTIONS}
             refreshMs={30000}
             emptyText="No services match the current filters."
+            pagination={{ kind: "offset" }}
         />
     );
 }

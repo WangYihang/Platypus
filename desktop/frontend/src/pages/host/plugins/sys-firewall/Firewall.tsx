@@ -150,20 +150,10 @@ export function Firewall({
                     label: "Include disabled",
                     default: false,
                 },
-                {
-                    field: "limit",
-                    kind: "number",
-                    label: "Limit",
-                    default: 200,
-                    min: 50,
-                    max: 5000,
-                    step: 50,
-                },
             ]}
             buildRequest={(form) => ({
                 ...(form.filter ? { filter: form.filter } : {}),
                 include_disabled: Boolean(form.include_disabled),
-                limit: Number(form.limit) || 200,
             })}
             rowsFrom={(r) => r.rules ?? []}
             rowKey={(r, idx) =>
@@ -172,6 +162,7 @@ export function Firewall({
             columns={COLUMNS}
             refreshMs={0}
             emptyText="No firewall rules detected (or backend unavailable)."
+            pagination={{ kind: "offset", pageSizeOptions: [50, 100, 200, 500] }}
         />
     );
 }
