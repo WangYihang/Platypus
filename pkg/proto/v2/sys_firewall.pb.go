@@ -32,7 +32,11 @@ type FirewallListRequest struct {
 	// Substring match on rule name / display name (case-insensitive).
 	// Empty = no filter. Useful for finding "Skype" or "Docker" rules
 	// among the hundreds Windows ships with by default.
-	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// Offset/limit pagination over the post-filter list. 0 limit =
+	// plugin default (200); hard cap 5000.
+	Offset        uint32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +85,20 @@ func (x *FirewallListRequest) GetFilter() string {
 	return ""
 }
 
+func (x *FirewallListRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *FirewallListRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type FirewallListResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Rules []*FirewallRule        `protobuf:"bytes,1,rep,name=rules,proto3" json:"rules,omitempty"`
@@ -89,6 +107,8 @@ type FirewallListResponse struct {
 	// backend was usable on this host.
 	Backend       string `protobuf:"bytes,2,opt,name=backend,proto3" json:"backend,omitempty"`
 	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool   `protobuf:"varint,5,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +162,20 @@ func (x *FirewallListResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *FirewallListResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *FirewallListResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // FirewallRule is one rule in the host's firewall configuration.
@@ -328,14 +362,19 @@ var File_sys_firewall_proto protoreflect.FileDescriptor
 
 const file_sys_firewall_proto_rawDesc = "" +
 	"\n" +
-	"\x12sys_firewall.proto\x12\vplatypus.v2\"X\n" +
+	"\x12sys_firewall.proto\x12\vplatypus.v2\"\x86\x01\n" +
 	"\x13FirewallListRequest\x12)\n" +
 	"\x10include_disabled\x18\x01 \x01(\bR\x0fincludeDisabled\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"w\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"\xb3\x01\n" +
 	"\x14FirewallListResponse\x12/\n" +
 	"\x05rules\x18\x01 \x03(\v2\x19.platypus.v2.FirewallRuleR\x05rules\x12\x18\n" +
 	"\abackend\x18\x02 \x01(\tR\abackend\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xd9\x02\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x04 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x05 \x01(\bR\ahasMore\"\xd9\x02\n" +
 	"\fFirewallRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +

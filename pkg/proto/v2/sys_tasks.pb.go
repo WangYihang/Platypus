@@ -32,7 +32,11 @@ type TasksListRequest struct {
 	// Substring match against TaskPath (the namespace the task lives
 	// under, e.g. "\Microsoft\Windows\UpdateOrchestrator"). Empty =
 	// no filter.
-	PathPrefix    string `protobuf:"bytes,3,opt,name=path_prefix,json=pathPrefix,proto3" json:"path_prefix,omitempty"`
+	PathPrefix string `protobuf:"bytes,3,opt,name=path_prefix,json=pathPrefix,proto3" json:"path_prefix,omitempty"`
+	// Offset/limit pagination over the post-filter list. 0 limit =
+	// plugin default (200); hard cap 2000.
+	Offset        uint32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -88,10 +92,26 @@ func (x *TasksListRequest) GetPathPrefix() string {
 	return ""
 }
 
+func (x *TasksListRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *TasksListRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type TasksListResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tasks         []*ScheduledTask       `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,6 +158,20 @@ func (x *TasksListResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *TasksListResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *TasksListResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // ScheduledTask is one row from Get-ScheduledTask. Some fields
@@ -352,15 +386,20 @@ var File_sys_tasks_proto protoreflect.FileDescriptor
 
 const file_sys_tasks_proto_rawDesc = "" +
 	"\n" +
-	"\x0fsys_tasks.proto\x12\vplatypus.v2\"v\n" +
+	"\x0fsys_tasks.proto\x12\vplatypus.v2\"\xa4\x01\n" +
 	"\x10TasksListRequest\x12)\n" +
 	"\x10include_disabled\x18\x01 \x01(\bR\x0fincludeDisabled\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12\x1f\n" +
 	"\vpath_prefix\x18\x03 \x01(\tR\n" +
-	"pathPrefix\"[\n" +
+	"pathPrefix\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\rR\x05limit\"\x97\x01\n" +
 	"\x11TasksListResponse\x120\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x1a.platypus.v2.ScheduledTaskR\x05tasks\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xfa\x02\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"\xfa\x02\n" +
 	"\rScheduledTask\x12\x1b\n" +
 	"\ttask_name\x18\x01 \x01(\tR\btaskName\x12\x1b\n" +
 	"\ttask_path\x18\x02 \x01(\tR\btaskPath\x12\x14\n" +

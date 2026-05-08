@@ -59,6 +59,10 @@ struct ListUnitsRequest {
     /// Optional substring filter applied to label. Empty = all.
     #[serde(default)]
     filter: String,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -66,6 +70,31 @@ struct ListUnitsResponse {
     units: Vec<UnitListEntry>,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
+}
+
+fn is_zero_u32(n: &u32) -> bool { *n == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+const DEFAULT_LIMIT: u32 = 200;
+const HARD_LIMIT: u32 = 5_000;
+
+fn effective_limit(requested: u32) -> u32 {
+    let n = if requested == 0 { DEFAULT_LIMIT } else { requested };
+    n.min(HARD_LIMIT)
+}
+
+fn paginate<T>(items: Vec<T>, offset: u32, limit: u32) -> (Vec<T>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = effective_limit(limit) as usize;
+    let end = (off + lim).min(items.len());
+    let slice: Vec<T> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
 }
 
 #[derive(Serialize, Default)]
@@ -90,6 +119,7 @@ pub fn list_units(req: Json<ListUnitsRequest>) -> FnResult<String> {
             return Ok(serde_json::to_string(&ListUnitsResponse {
                 units: Vec::new(),
                 error: e,
+                ..Default::default()
             })?)
         }
     };
@@ -101,15 +131,19 @@ pub fn list_units(req: Json<ListUnitsRequest>) -> FnResult<String> {
                 exec_resp.exit_code,
                 exec_resp.stderr.trim()
             ),
+            ..Default::default()
         })?);
     }
     let mut units = parse_launchctl_list(&exec_resp.stdout);
     if !r.filter.is_empty() {
         units.retain(|u| u.label.contains(&r.filter));
     }
+    let (sliced, total, has_more) = paginate(units, r.offset, r.limit);
     Ok(serde_json::to_string(&ListUnitsResponse {
-        units,
+        units: sliced,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 

@@ -133,6 +133,7 @@ func configAudit() int32 {
 		})
 		resp.Leaks = append(resp.Leaks, found...)
 	}
+	resp.Leaks, resp.TotalCount, resp.HasMore = paginateLeaks(resp.Leaks, req.Offset, req.Limit)
 	body, err := json.Marshal(resp)
 	if err != nil {
 		platypus.LogErrorf("sys-config-audit-go: marshal: %s", err.Error())

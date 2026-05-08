@@ -41,6 +41,8 @@ type AuditResponse struct {
 	StartedAtUnix int64           `json:"startedAtUnix,omitempty"`
 	ElapsedMs     uint64          `json:"elapsedMs,omitempty"`
 	Error         string          `json:"error,omitempty"`
+	TotalCount    uint32          `json:"totalCount,omitempty"`
+	HasMore       bool            `json:"hasMore,omitempty"`
 }
 
 type AvailableAuditor struct {
@@ -63,6 +65,40 @@ type AuditRequest struct {
 	AuditorIDsCamel []string `json:"auditorIds"`
 	AuditorIDsSnake []string `json:"auditor_ids"`
 	Categories      []string `json:"categories"`
+	Offset          uint32   `json:"offset,omitempty"`
+	Limit           uint32   `json:"limit,omitempty"`
+}
+
+// Pagination ceiling: a leaky host may surface thousands of leaks;
+// the cap keeps the wasm-output buffer bounded. limit=0 means
+// "no per-call cap", subject to the hard ceiling.
+const HardLeakLimit uint32 = 5_000
+
+// paginateLeaks slices leaks to (offset, offset+limit) and reports
+// (slice, total_before_slice, has_more). Mirrors the Rust crate's
+// paginate_leaks for cross-language wire equivalence.
+func paginateLeaks(items []ConfigLeak, offset, limit uint32) ([]ConfigLeak, uint32, bool) {
+	total := uint32(len(items))
+	off := uint32(0)
+	if offset < total {
+		off = offset
+	} else {
+		off = total
+	}
+	end := total
+	if limit > 0 {
+		lim := limit
+		if lim > HardLeakLimit {
+			lim = HardLeakLimit
+		}
+		end = off + lim
+		if end > total {
+			end = total
+		}
+	}
+	slice := items[off:end]
+	hasMore := end < total
+	return slice, total, hasMore
 }
 
 // ============================================================

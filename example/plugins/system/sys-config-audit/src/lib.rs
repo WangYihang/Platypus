@@ -114,6 +114,10 @@ struct AuditResponse {
     elapsed_ms: u64,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
 }
 
 #[derive(Serialize)]
@@ -134,17 +138,36 @@ struct ListResponse {
     error: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct AuditRequest {
     #[serde(default, rename = "auditorIds", alias = "auditor_ids")]
     auditor_ids: Vec<String>,
     #[serde(default)]
     categories: Vec<String>,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 fn is_zero_u32(x: &u32) -> bool { *x == 0 }
 fn is_zero_u64(x: &u64) -> bool { *x == 0 }
 fn is_zero_i64(x: &i64) -> bool { *x == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+// Hard cap on returned leaks. 0 = unlimited (default), but the
+// hard ceiling stops a leaky host from sending megabytes per query.
+const HARD_LIMIT: u32 = 5_000;
+
+fn paginate_leaks(items: Vec<ConfigLeak>, offset: u32, limit: u32) -> (Vec<ConfigLeak>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = if limit == 0 { items.len().saturating_sub(off) } else { limit.min(HARD_LIMIT) as usize };
+    let end = (off + lim).min(items.len());
+    let slice: Vec<ConfigLeak> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
+}
 
 // ---- registered auditors ----------------------------------------
 
@@ -251,12 +274,15 @@ pub fn config_audit(req: Json<AuditRequest>) -> FnResult<String> {
         });
         leaks.append(&mut found);
     }
+    let (sliced, total, has_more) = paginate_leaks(leaks, req.0.offset, req.0.limit);
     Ok(serde_json::to_string(&AuditResponse {
-        leaks,
+        leaks: sliced,
         auditors: results,
         started_at_unix: 0,
         elapsed_ms: 0,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 

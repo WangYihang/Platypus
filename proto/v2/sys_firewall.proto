@@ -31,6 +31,10 @@ message FirewallListRequest {
   // Empty = no filter. Useful for finding "Skype" or "Docker" rules
   // among the hundreds Windows ships with by default.
   string filter         = 2;
+  // Offset/limit pagination over the post-filter list. 0 limit =
+  // plugin default (200); hard cap 5000.
+  uint32 offset         = 3;
+  uint32 limit          = 4;
 }
 
 message FirewallListResponse {
@@ -40,6 +44,8 @@ message FirewallListResponse {
   // backend was usable on this host.
   string backend              = 2;
   string error                = 3;
+  uint32 total_count          = 4;
+  bool   has_more             = 5;
 }
 
 // FirewallRule is one rule in the host's firewall configuration.

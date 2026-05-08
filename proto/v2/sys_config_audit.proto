@@ -30,6 +30,12 @@ message ConfigAuditRequest {
   // Per-auditor soft deadline in milliseconds; 0 = no per-auditor
   // deadline beyond the parent context.
   uint32 per_auditor_timeout_ms     = 3;
+  // Offset/limit pagination on the response's `leaks` list. The
+  // auditors themselves always run in full (it's cheap relative
+  // to network round-trips); only the leak rows are sliced.
+  // 0 limit = no cap; hard ceiling 5000.
+  uint32 offset                     = 4;
+  uint32 limit                      = 5;
 }
 
 // ConfigLeak is one hit produced by one auditor. The match field is
@@ -70,6 +76,12 @@ message ConfigAuditResponse {
   int64  started_at_unix          = 3;
   uint64 elapsed_ms               = 4;
   string error                    = 5;
+  // Total leak count before offset/limit slicing. Same as
+  // len(leaks) when no pagination was applied.
+  uint32 total_count              = 6;
+  // True when more leaks exist after the returned slice
+  // (offset + len(leaks) < total_count).
+  bool   has_more                 = 7;
 }
 
 // --- Enumerate registered configuration auditors ---

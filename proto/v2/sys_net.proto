@@ -13,11 +13,25 @@ option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
 // `netstat -anv -p tcp/udp`; Windows shells Get-NetTCPConnection /
 // Get-NetUDPEndpoint. All three normalise to the same wire shape.
 
-message ListListenersRequest {}
+message ListListenersRequest {
+  // Skip the first N listeners (post-filter). 0 = start from the
+  // beginning. Page size is `limit`; together they implement
+  // simple offset pagination.
+  uint32 offset = 1;
+  // Max listeners to return. 0 = use the plugin default (200).
+  // Hard cap is enforced plugin-side at 5000 to bound payload size.
+  uint32 limit  = 2;
+}
 
 message ListListenersResponse {
   repeated NetListener listeners = 1;
   string error                   = 2;
+  // Total listener count before offset/limit slicing — useful for
+  // a UI showing "showing 50 of 312".
+  uint32 total_count             = 3;
+  // True when more listeners exist after the returned slice
+  // (offset + len(listeners) < total_count).
+  bool   has_more                = 4;
 }
 
 // NetListener is one socket bound to a local address. proto is "tcp"
@@ -33,11 +47,15 @@ message ListConnectionsRequest {
   // Filter by TCP state name (case-insensitive). Empty = all.
   // Examples: "ESTABLISHED", "TIME_WAIT", "CLOSE_WAIT", "SYN_SENT".
   string state = 1;
+  uint32 offset = 2;
+  uint32 limit  = 3;
 }
 
 message ListConnectionsResponse {
   repeated NetConnection connections = 1;
   string error                       = 2;
+  uint32 total_count                 = 3;
+  bool   has_more                    = 4;
 }
 
 // NetConnection is one TCP connection. Both ends are in canonical

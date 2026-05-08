@@ -22,7 +22,14 @@ const (
 )
 
 type ListListenersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Skip the first N listeners (post-filter). 0 = start from the
+	// beginning. Page size is `limit`; together they implement
+	// simple offset pagination.
+	Offset uint32 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Max listeners to return. 0 = use the plugin default (200).
+	// Hard cap is enforced plugin-side at 5000 to bound payload size.
+	Limit         uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -57,10 +64,30 @@ func (*ListListenersRequest) Descriptor() ([]byte, []int) {
 	return file_sys_net_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *ListListenersRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListListenersRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListListenersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Listeners     []*NetListener         `protobuf:"bytes,1,rep,name=listeners,proto3" json:"listeners,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Listeners []*NetListener         `protobuf:"bytes,1,rep,name=listeners,proto3" json:"listeners,omitempty"`
+	Error     string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	// Total listener count before offset/limit slicing — useful for
+	// a UI showing "showing 50 of 312".
+	TotalCount uint32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// True when more listeners exist after the returned slice
+	// (offset + len(listeners) < total_count).
+	HasMore       bool `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -107,6 +134,20 @@ func (x *ListListenersResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *ListListenersResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *ListListenersResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // NetListener is one socket bound to a local address. proto is "tcp"
@@ -177,6 +218,8 @@ type ListConnectionsRequest struct {
 	// Filter by TCP state name (case-insensitive). Empty = all.
 	// Examples: "ESTABLISHED", "TIME_WAIT", "CLOSE_WAIT", "SYN_SENT".
 	State         string `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	Offset        uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,10 +261,26 @@ func (x *ListConnectionsRequest) GetState() string {
 	return ""
 }
 
+func (x *ListConnectionsRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListConnectionsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListConnectionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connections   []*NetConnection       `protobuf:"bytes,1,rep,name=connections,proto3" json:"connections,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,6 +327,20 @@ func (x *ListConnectionsResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *ListConnectionsResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *ListConnectionsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // NetConnection is one TCP connection. Both ends are in canonical
@@ -361,22 +434,32 @@ var File_sys_net_proto protoreflect.FileDescriptor
 
 const file_sys_net_proto_rawDesc = "" +
 	"\n" +
-	"\rsys_net.proto\x12\vplatypus.v2\"\x16\n" +
-	"\x14ListListenersRequest\"e\n" +
+	"\rsys_net.proto\x12\vplatypus.v2\"D\n" +
+	"\x14ListListenersRequest\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"\xa1\x01\n" +
 	"\x15ListListenersResponse\x126\n" +
 	"\tlisteners\x18\x01 \x03(\v2\x18.platypus.v2.NetListenerR\tlisteners\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"a\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"a\n" +
 	"\vNetListener\x12\x14\n" +
 	"\x05proto\x18\x01 \x01(\tR\x05proto\x12\x1d\n" +
 	"\n" +
 	"local_addr\x18\x02 \x01(\tR\tlocalAddr\x12\x1d\n" +
 	"\n" +
-	"local_port\x18\x03 \x01(\rR\tlocalPort\".\n" +
+	"local_port\x18\x03 \x01(\rR\tlocalPort\"\\\n" +
 	"\x16ListConnectionsRequest\x12\x14\n" +
-	"\x05state\x18\x01 \x01(\tR\x05state\"m\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\xa9\x01\n" +
 	"\x17ListConnectionsResponse\x12<\n" +
 	"\vconnections\x18\x01 \x03(\v2\x1a.platypus.v2.NetConnectionR\vconnections\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xb3\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"\xb3\x01\n" +
 	"\rNetConnection\x12\x14\n" +
 	"\x05proto\x18\x01 \x01(\tR\x05proto\x12\x1d\n" +
 	"\n" +

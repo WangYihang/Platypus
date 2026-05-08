@@ -50,6 +50,10 @@ struct ListRequest {
     include_disabled: bool,
     #[serde(default)]
     filter: String,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -58,6 +62,31 @@ struct ListResponse {
     backend: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
+}
+
+fn is_zero_u32(n: &u32) -> bool { *n == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+const DEFAULT_LIMIT: u32 = 200;
+const HARD_LIMIT: u32 = 5_000;
+
+fn effective_limit(requested: u32) -> u32 {
+    let n = if requested == 0 { DEFAULT_LIMIT } else { requested };
+    n.min(HARD_LIMIT)
+}
+
+fn paginate<T>(items: Vec<T>, offset: u32, limit: u32) -> (Vec<T>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = effective_limit(limit) as usize;
+    let end = (off + lim).min(items.len());
+    let slice: Vec<T> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
@@ -130,6 +159,7 @@ pub fn list_firewall_rules(req: Json<ListRequest>) -> FnResult<String> {
                 rules: Vec::new(),
                 backend: String::new(),
                 error: e,
+                ..Default::default()
             })?)
         }
     };
@@ -142,14 +172,18 @@ pub fn list_firewall_rules(req: Json<ListRequest>) -> FnResult<String> {
                 exec_resp.exit_code,
                 exec_resp.stderr.trim()
             ),
+            ..Default::default()
         })?);
     }
     let parsed = parse_powershell_output(&exec_resp.stdout);
-    let rules = filter_rules(parsed, &r);
+    let filtered = filter_rules(parsed, &r);
+    let (sliced, total, has_more) = paginate(filtered, r.offset, r.limit);
     Ok(serde_json::to_string(&ListResponse {
-        rules,
+        rules: sliced,
         backend: "windows-firewall".to_string(),
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 
@@ -276,7 +310,7 @@ mod tests {
             FirewallRule { name: "Docker Desktop".to_string(), enabled: true, ..Default::default() },
             FirewallRule { id: "DOCKER-USER".to_string(), name: "".to_string(), enabled: true, ..Default::default() },
         ];
-        let req = ListRequest { filter: "docker".to_string(), include_disabled: false };
+        let req = ListRequest { filter: "docker".to_string(), include_disabled: false, offset: 0, limit: 0 };
         let out = filter_rules(rules, &req);
         assert_eq!(out.len(), 2);
     }

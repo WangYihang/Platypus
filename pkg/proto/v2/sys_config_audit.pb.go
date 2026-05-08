@@ -33,8 +33,14 @@ type ConfigAuditRequest struct {
 	// Per-auditor soft deadline in milliseconds; 0 = no per-auditor
 	// deadline beyond the parent context.
 	PerAuditorTimeoutMs uint32 `protobuf:"varint,3,opt,name=per_auditor_timeout_ms,json=perAuditorTimeoutMs,proto3" json:"per_auditor_timeout_ms,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Offset/limit pagination on the response's `leaks` list. The
+	// auditors themselves always run in full (it's cheap relative
+	// to network round-trips); only the leak rows are sliced.
+	// 0 limit = no cap; hard ceiling 5000.
+	Offset        uint32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfigAuditRequest) Reset() {
@@ -84,6 +90,20 @@ func (x *ConfigAuditRequest) GetCategories() []string {
 func (x *ConfigAuditRequest) GetPerAuditorTimeoutMs() uint32 {
 	if x != nil {
 		return x.PerAuditorTimeoutMs
+	}
+	return 0
+}
+
+func (x *ConfigAuditRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ConfigAuditRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
 	}
 	return 0
 }
@@ -312,6 +332,12 @@ type ConfigAuditResponse struct {
 	StartedAtUnix int64                  `protobuf:"varint,3,opt,name=started_at_unix,json=startedAtUnix,proto3" json:"started_at_unix,omitempty"`
 	ElapsedMs     uint64                 `protobuf:"varint,4,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
 	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	// Total leak count before offset/limit slicing. Same as
+	// len(leaks) when no pagination was applied.
+	TotalCount uint32 `protobuf:"varint,6,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// True when more leaks exist after the returned slice
+	// (offset + len(leaks) < total_count).
+	HasMore       bool `protobuf:"varint,7,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,6 +405,20 @@ func (x *ConfigAuditResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *ConfigAuditResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *ConfigAuditResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 type ListConfigAuditorsRequest struct {
@@ -557,14 +597,16 @@ var File_sys_config_audit_proto protoreflect.FileDescriptor
 
 const file_sys_config_audit_proto_rawDesc = "" +
 	"\n" +
-	"\x16sys_config_audit.proto\x12\vplatypus.v2\"\x8a\x01\n" +
+	"\x16sys_config_audit.proto\x12\vplatypus.v2\"\xb8\x01\n" +
 	"\x12ConfigAuditRequest\x12\x1f\n" +
 	"\vauditor_ids\x18\x01 \x03(\tR\n" +
 	"auditorIds\x12\x1e\n" +
 	"\n" +
 	"categories\x18\x02 \x03(\tR\n" +
 	"categories\x123\n" +
-	"\x16per_auditor_timeout_ms\x18\x03 \x01(\rR\x13perAuditorTimeoutMs\"\xb1\x02\n" +
+	"\x16per_auditor_timeout_ms\x18\x03 \x01(\rR\x13perAuditorTimeoutMs\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\rR\x05limit\"\xb1\x02\n" +
 	"\n" +
 	"ConfigLeak\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
@@ -590,14 +632,17 @@ const file_sys_config_audit_proto_rawDesc = "" +
 	"\n" +
 	"elapsed_ms\x18\x05 \x01(\x04R\telapsedMs\x12\x1d\n" +
 	"\n" +
-	"leak_count\x18\x06 \x01(\rR\tleakCount\"\xd9\x01\n" +
+	"leak_count\x18\x06 \x01(\rR\tleakCount\"\x95\x02\n" +
 	"\x13ConfigAuditResponse\x12-\n" +
 	"\x05leaks\x18\x01 \x03(\v2\x17.platypus.v2.ConfigLeakR\x05leaks\x126\n" +
 	"\bauditors\x18\x02 \x03(\v2\x1a.platypus.v2.AuditorResultR\bauditors\x12&\n" +
 	"\x0fstarted_at_unix\x18\x03 \x01(\x03R\rstartedAtUnix\x12\x1d\n" +
 	"\n" +
 	"elapsed_ms\x18\x04 \x01(\x04R\telapsedMs\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error\"\x1b\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x06 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\a \x01(\bR\ahasMore\"\x1b\n" +
 	"\x19ListConfigAuditorsRequest\"\xb6\x01\n" +
 	"\x10AvailableAuditor\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +

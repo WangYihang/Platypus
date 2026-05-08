@@ -50,12 +50,21 @@ struct ExecResponse {
 }
 
 #[derive(Deserialize, Default)]
-struct ListListenersRequest {}
+struct ListListenersRequest {
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
+}
 
 #[derive(Deserialize, Default)]
 struct ListConnectionsRequest {
     #[serde(default)]
     state: String,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -86,6 +95,10 @@ struct ListListenersResponse {
     listeners: Vec<Listener>,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
 }
 
 #[derive(Serialize, Default)]
@@ -93,6 +106,31 @@ struct ListConnectionsResponse {
     connections: Vec<Connection>,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
+}
+
+fn is_zero_u32(n: &u32) -> bool { *n == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+const DEFAULT_LIMIT: u32 = 200;
+const HARD_LIMIT: u32 = 5_000;
+
+fn effective_limit(requested: u32) -> u32 {
+    let n = if requested == 0 { DEFAULT_LIMIT } else { requested };
+    n.min(HARD_LIMIT)
+}
+
+fn paginate<T>(items: Vec<T>, offset: u32, limit: u32) -> (Vec<T>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = effective_limit(limit) as usize;
+    let end = (off + lim).min(items.len());
+    let slice: Vec<T> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
 }
 
 const PS_SCRIPT: &str = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
@@ -102,13 +140,15 @@ const PS_SCRIPT: &str = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF
 
 #[cfg(target_arch = "wasm32")]
 #[plugin_fn]
-pub fn list_listeners(_: Json<ListListenersRequest>) -> FnResult<String> {
+pub fn list_listeners(req: Json<ListListenersRequest>) -> FnResult<String> {
+    let r = req.0;
     let exec_resp = match run_powershell(12_000) {
         Ok(v) => v,
         Err(e) => {
             return Ok(serde_json::to_string(&ListListenersResponse {
                 listeners: Vec::new(),
                 error: e,
+                ..Default::default()
             })?)
         }
     };
@@ -120,6 +160,7 @@ pub fn list_listeners(_: Json<ListListenersRequest>) -> FnResult<String> {
                 exec_resp.exit_code,
                 exec_resp.stderr.trim()
             ),
+            ..Default::default()
         })?);
     }
     let rows = parse_powershell_json(&exec_resp.stdout);
@@ -132,22 +173,27 @@ pub fn list_listeners(_: Json<ListListenersRequest>) -> FnResult<String> {
             local_port: r.local_port,
         })
         .collect();
+    let (sliced, total, has_more) = paginate(listeners, r.offset, r.limit);
     Ok(serde_json::to_string(&ListListenersResponse {
-        listeners,
+        listeners: sliced,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[plugin_fn]
 pub fn list_connections(req: Json<ListConnectionsRequest>) -> FnResult<String> {
-    let want_state = req.0.state.to_uppercase();
+    let r = req.0;
+    let want_state = r.state.to_uppercase();
     let exec_resp = match run_powershell(12_000) {
         Ok(v) => v,
         Err(e) => {
             return Ok(serde_json::to_string(&ListConnectionsResponse {
                 connections: Vec::new(),
                 error: e,
+                ..Default::default()
             })?)
         }
     };
@@ -159,6 +205,7 @@ pub fn list_connections(req: Json<ListConnectionsRequest>) -> FnResult<String> {
                 exec_resp.exit_code,
                 exec_resp.stderr.trim()
             ),
+            ..Default::default()
         })?);
     }
     let rows = parse_powershell_json(&exec_resp.stdout);
@@ -174,9 +221,12 @@ pub fn list_connections(req: Json<ListConnectionsRequest>) -> FnResult<String> {
             state: r.state,
         })
         .collect();
+    let (sliced, total, has_more) = paginate(conns, r.offset, r.limit);
     Ok(serde_json::to_string(&ListConnectionsResponse {
-        connections: conns,
+        connections: sliced,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 

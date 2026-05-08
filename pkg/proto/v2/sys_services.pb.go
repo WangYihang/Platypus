@@ -30,7 +30,11 @@ type SystemdListUnitsRequest struct {
 	// "*" or "all" to disable.
 	UnitType string `protobuf:"bytes,2,opt,name=unit_type,json=unitType,proto3" json:"unit_type,omitempty"`
 	// Glob pattern passed positionally to systemctl.
-	Pattern       string `protobuf:"bytes,3,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Pattern string `protobuf:"bytes,3,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	// Offset/limit pagination over the post-filter list. 0 limit =
+	// plugin default (200); hard cap 5000.
+	Offset        uint32 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -86,10 +90,26 @@ func (x *SystemdListUnitsRequest) GetPattern() string {
 	return ""
 }
 
+func (x *SystemdListUnitsRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *SystemdListUnitsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type SystemdListUnitsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Units         []*SystemdUnitEntry    `protobuf:"bytes,1,rep,name=units,proto3" json:"units,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,6 +156,20 @@ func (x *SystemdListUnitsResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *SystemdListUnitsResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *SystemdListUnitsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // SystemdUnitEntry mirrors `systemctl list-units` columns.
@@ -220,6 +254,8 @@ type LaunchdListUnitsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Substring match on label. Empty = all.
 	Filter        string `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	Offset        uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -261,10 +297,26 @@ func (x *LaunchdListUnitsRequest) GetFilter() string {
 	return ""
 }
 
+func (x *LaunchdListUnitsRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *LaunchdListUnitsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type LaunchdListUnitsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Units         []*LaunchdJobEntry     `protobuf:"bytes,1,rep,name=units,proto3" json:"units,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -311,6 +363,20 @@ func (x *LaunchdListUnitsResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *LaunchdListUnitsResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *LaunchdListUnitsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // LaunchdJobEntry mirrors `launchctl list` columns. pid=0 means the
@@ -391,6 +457,8 @@ type WindowsListServicesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Substring match on name. Empty = all.
 	Filter        string `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	Offset        uint32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,10 +500,26 @@ func (x *WindowsListServicesRequest) GetFilter() string {
 	return ""
 }
 
+func (x *WindowsListServicesRequest) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *WindowsListServicesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type WindowsListServicesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Units         []*WindowsServiceEntry `protobuf:"bytes,1,rep,name=units,proto3" json:"units,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	HasMore       bool                   `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -482,6 +566,20 @@ func (x *WindowsListServicesResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *WindowsListServicesResponse) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *WindowsListServicesResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // WindowsServiceEntry mirrors `Get-Service` columns + StartType.
@@ -783,35 +881,50 @@ var File_sys_services_proto protoreflect.FileDescriptor
 
 const file_sys_services_proto_rawDesc = "" +
 	"\n" +
-	"\x12sys_services.proto\x12\vplatypus.v2\"f\n" +
+	"\x12sys_services.proto\x12\vplatypus.v2\"\x94\x01\n" +
 	"\x17SystemdListUnitsRequest\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x1b\n" +
 	"\tunit_type\x18\x02 \x01(\tR\bunitType\x12\x18\n" +
-	"\apattern\x18\x03 \x01(\tR\apattern\"e\n" +
+	"\apattern\x18\x03 \x01(\tR\apattern\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\rR\x05limit\"\xa1\x01\n" +
 	"\x18SystemdListUnitsResponse\x123\n" +
 	"\x05units\x18\x01 \x03(\v2\x1d.platypus.v2.SystemdUnitEntryR\x05units\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\x86\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"\x86\x01\n" +
 	"\x10SystemdUnitEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04load\x18\x02 \x01(\tR\x04load\x12\x16\n" +
 	"\x06active\x18\x03 \x01(\tR\x06active\x12\x10\n" +
 	"\x03sub\x18\x04 \x01(\tR\x03sub\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\"1\n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\"_\n" +
 	"\x17LaunchdListUnitsRequest\x12\x16\n" +
-	"\x06filter\x18\x01 \x01(\tR\x06filter\"d\n" +
+	"\x06filter\x18\x01 \x01(\tR\x06filter\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\xa0\x01\n" +
 	"\x18LaunchdListUnitsResponse\x122\n" +
 	"\x05units\x18\x01 \x03(\v2\x1c.platypus.v2.LaunchdJobEntryR\x05units\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"i\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"i\n" +
 	"\x0fLaunchdJobEntry\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\rR\x03pid\x12\x16\n" +
 	"\x06status\x18\x03 \x01(\x05R\x06status\x12\x16\n" +
-	"\x06active\x18\x04 \x01(\tR\x06active\"4\n" +
+	"\x06active\x18\x04 \x01(\tR\x06active\"b\n" +
 	"\x1aWindowsListServicesRequest\x12\x16\n" +
-	"\x06filter\x18\x01 \x01(\tR\x06filter\"k\n" +
+	"\x06filter\x18\x01 \x01(\tR\x06filter\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\xa7\x01\n" +
 	"\x1bWindowsListServicesResponse\x126\n" +
 	"\x05units\x18\x01 \x03(\v2 .platypus.v2.WindowsServiceEntryR\x05units\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\x83\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\rR\n" +
+	"totalCount\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"\x83\x01\n" +
 	"\x13WindowsServiceEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x16\n" +

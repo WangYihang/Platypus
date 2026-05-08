@@ -22,11 +22,17 @@ message TasksListRequest {
   // under, e.g. "\Microsoft\Windows\UpdateOrchestrator"). Empty =
   // no filter.
   string path_prefix    = 3;
+  // Offset/limit pagination over the post-filter list. 0 limit =
+  // plugin default (200); hard cap 2000.
+  uint32 offset         = 4;
+  uint32 limit          = 5;
 }
 
 message TasksListResponse {
   repeated ScheduledTask tasks = 1;
   string error                 = 2;
+  uint32 total_count           = 3;
+  bool   has_more              = 4;
 }
 
 // ScheduledTask is one row from Get-ScheduledTask. Some fields

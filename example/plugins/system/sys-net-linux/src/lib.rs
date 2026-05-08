@@ -38,7 +38,12 @@ struct Envelope {
 // ---------- request / response shapes ----------
 
 #[derive(Deserialize, Default)]
-struct ListListenersRequest {}
+struct ListListenersRequest {
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
+}
 
 #[derive(Deserialize, Default)]
 struct ListConnectionsRequest {
@@ -46,6 +51,10 @@ struct ListConnectionsRequest {
     /// Examples: "ESTABLISHED", "TIME_WAIT", "CLOSE_WAIT".
     #[serde(default)]
     state: String,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -76,6 +85,10 @@ struct ListListenersResponse {
     listeners: Vec<Listener>,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
 }
 
 #[derive(Serialize, Default)]
@@ -83,13 +96,44 @@ struct ListConnectionsResponse {
     connections: Vec<Connection>,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
+}
+
+fn is_zero_u32(n: &u32) -> bool { *n == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+// Default page size + hard cap. 200 matches the operator's typical
+// "what's listening" view; the cap bounds wasm output size on hosts
+// with thousands of connections.
+const DEFAULT_LIMIT: u32 = 200;
+const HARD_LIMIT: u32 = 5_000;
+
+fn effective_limit(requested: u32) -> u32 {
+    let n = if requested == 0 { DEFAULT_LIMIT } else { requested };
+    n.min(HARD_LIMIT)
+}
+
+// paginate slices `items` to (offset, offset+limit) and returns
+// (slice, total_before_slice, has_more).
+fn paginate<T>(items: Vec<T>, offset: u32, limit: u32) -> (Vec<T>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = effective_limit(limit) as usize;
+    let end = (off + lim).min(items.len());
+    let slice: Vec<T> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
 }
 
 // ---------- entry points ----------
 
 #[cfg(target_arch = "wasm32")]
 #[plugin_fn]
-pub fn list_listeners(_: Json<ListListenersRequest>) -> FnResult<String> {
+pub fn list_listeners(req: Json<ListListenersRequest>) -> FnResult<String> {
+    let r = req.0;
     let mut listeners = Vec::new();
 
     if let Ok(text) = read_proc("/proc/net/tcp") {
@@ -115,9 +159,12 @@ pub fn list_listeners(_: Json<ListListenersRequest>) -> FnResult<String> {
         }
     }
 
+    let (sliced, total, has_more) = paginate(listeners, r.offset, r.limit);
     Ok(serde_json::to_string(&ListListenersResponse {
-        listeners,
+        listeners: sliced,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 
@@ -158,9 +205,12 @@ pub fn list_connections(req: Json<ListConnectionsRequest>) -> FnResult<String> {
         }
     }
 
+    let (sliced, total, has_more) = paginate(connections, req.0.offset, req.0.limit);
     Ok(serde_json::to_string(&ListConnectionsResponse {
-        connections,
+        connections: sliced,
         error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 

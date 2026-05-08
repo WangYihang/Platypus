@@ -55,6 +55,10 @@ struct ListRequest {
     include_disabled: bool,
     #[serde(default)]
     filter: String,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    limit: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -63,6 +67,31 @@ struct ListResponse {
     backend: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     error: String,
+    #[serde(rename = "totalCount", skip_serializing_if = "is_zero_u32")]
+    total_count: u32,
+    #[serde(rename = "hasMore", skip_serializing_if = "is_false")]
+    has_more: bool,
+}
+
+fn is_zero_u32(n: &u32) -> bool { *n == 0 }
+fn is_false(b: &bool) -> bool { !*b }
+
+const DEFAULT_LIMIT: u32 = 200;
+const HARD_LIMIT: u32 = 5_000;
+
+fn effective_limit(requested: u32) -> u32 {
+    let n = if requested == 0 { DEFAULT_LIMIT } else { requested };
+    n.min(HARD_LIMIT)
+}
+
+fn paginate<T>(items: Vec<T>, offset: u32, limit: u32) -> (Vec<T>, u32, bool) {
+    let total = items.len() as u32;
+    let off = (offset as usize).min(items.len());
+    let lim = effective_limit(limit) as usize;
+    let end = (off + lim).min(items.len());
+    let slice: Vec<T> = items.into_iter().skip(off).take(end - off).collect();
+    let has_more = (off + slice.len()) < total as usize;
+    (slice, total, has_more)
 }
 
 #[derive(Serialize, Default, Debug, PartialEq)]
@@ -102,39 +131,29 @@ struct FirewallRule {
 #[plugin_fn]
 pub fn list_firewall_rules(req: Json<ListRequest>) -> FnResult<String> {
     let r = req.0;
-    // Try backends in priority order.
-    if let Some((rules, backend)) = try_iptables() {
-        return Ok(serde_json::to_string(&ListResponse {
-            rules: filter_rules(rules, &r),
-            backend,
-            error: String::new(),
-        })?);
-    }
-    if let Some((rules, backend)) = try_nftables() {
-        return Ok(serde_json::to_string(&ListResponse {
-            rules: filter_rules(rules, &r),
-            backend,
-            error: String::new(),
-        })?);
-    }
-    if let Some((rules, backend)) = try_ufw() {
-        return Ok(serde_json::to_string(&ListResponse {
-            rules: filter_rules(rules, &r),
-            backend,
-            error: String::new(),
-        })?);
-    }
-    if let Some((rules, backend)) = try_firewalld() {
-        return Ok(serde_json::to_string(&ListResponse {
-            rules: filter_rules(rules, &r),
-            backend,
-            error: String::new(),
-        })?);
-    }
+    let chosen: Option<(Vec<FirewallRule>, String)> = try_iptables()
+        .or_else(try_nftables)
+        .or_else(try_ufw)
+        .or_else(try_firewalld);
+    let (rules, backend) = match chosen {
+        Some(v) => v,
+        None => {
+            return Ok(serde_json::to_string(&ListResponse {
+                rules: Vec::new(),
+                backend: String::new(),
+                error: "no_supported_firewall_backend".to_string(),
+                ..Default::default()
+            })?)
+        }
+    };
+    let filtered = filter_rules(rules, &r);
+    let (sliced, total, has_more) = paginate(filtered, r.offset, r.limit);
     Ok(serde_json::to_string(&ListResponse {
-        rules: Vec::new(),
-        backend: String::new(),
-        error: "no_supported_firewall_backend".to_string(),
+        rules: sliced,
+        backend,
+        error: String::new(),
+        total_count: total,
+        has_more,
     })?)
 }
 
@@ -849,7 +868,7 @@ Status: active
             FirewallRule { name: "A".to_string(), enabled: true, ..Default::default() },
             FirewallRule { name: "B".to_string(), enabled: false, ..Default::default() },
         ];
-        let req = ListRequest { include_disabled: true, filter: String::new() };
+        let req = ListRequest { include_disabled: true, filter: String::new(), offset: 0, limit: 0 };
         assert_eq!(filter_rules(rules.clone(), &req).len(), 2);
         let req = ListRequest::default();
         assert_eq!(filter_rules(rules, &req).len(), 1);
@@ -862,7 +881,7 @@ Status: active
             FirewallRule { raw: "DOCKER-USER stuff".to_string(), enabled: true, ..Default::default() },
             FirewallRule { name: "Skype".to_string(), enabled: true, ..Default::default() },
         ];
-        let req = ListRequest { filter: "docker".to_string(), include_disabled: false };
+        let req = ListRequest { filter: "docker".to_string(), include_disabled: false, offset: 0, limit: 0 };
         let out = filter_rules(rules, &req);
         assert_eq!(out.len(), 2);
     }

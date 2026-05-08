@@ -27,11 +27,17 @@ message SystemdListUnitsRequest {
   string unit_type = 2;
   // Glob pattern passed positionally to systemctl.
   string pattern   = 3;
+  // Offset/limit pagination over the post-filter list. 0 limit =
+  // plugin default (200); hard cap 5000.
+  uint32 offset    = 4;
+  uint32 limit     = 5;
 }
 
 message SystemdListUnitsResponse {
   repeated SystemdUnitEntry units = 1;
   string error                    = 2;
+  uint32 total_count              = 3;
+  bool   has_more                 = 4;
 }
 
 // SystemdUnitEntry mirrors `systemctl list-units` columns.
@@ -47,11 +53,15 @@ message SystemdUnitEntry {
 message LaunchdListUnitsRequest {
   // Substring match on label. Empty = all.
   string filter = 1;
+  uint32 offset = 2;
+  uint32 limit  = 3;
 }
 
 message LaunchdListUnitsResponse {
   repeated LaunchdJobEntry units = 1;
   string error                   = 2;
+  uint32 total_count             = 3;
+  bool   has_more                = 4;
 }
 
 // LaunchdJobEntry mirrors `launchctl list` columns. pid=0 means the
@@ -70,11 +80,15 @@ message LaunchdJobEntry {
 message WindowsListServicesRequest {
   // Substring match on name. Empty = all.
   string filter = 1;
+  uint32 offset = 2;
+  uint32 limit  = 3;
 }
 
 message WindowsListServicesResponse {
   repeated WindowsServiceEntry units = 1;
   string error                       = 2;
+  uint32 total_count                 = 3;
+  bool   has_more                    = 4;
 }
 
 // WindowsServiceEntry mirrors `Get-Service` columns + StartType.
