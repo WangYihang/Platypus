@@ -11,10 +11,9 @@ test.describe("host view", () => {
         await expect(page).toHaveURL(/\/projects\/default\/fleet(?:\?.*)?$/);
 
         // Click into the host row — Fleet Table view routes into the
-        // host's default tab. After 9748a49 (`feat(host): Files
-        // default + Tunnels tab on HostView`) the default landed on
-        // /hosts/:id/files. Scope the selector to the Table panel so
-        // the Timeline panel's hidden session table doesn't resolve
+        // host's default tab (Files since 9748a49 made Files the
+        // landing tab). Scope the selector to the Table panel so the
+        // Timeline panel's hidden session table doesn't resolve
         // first.
         const row = page
             .getByTestId("fleet-panel-table")
@@ -35,8 +34,7 @@ test.describe("host view", () => {
         ).toBeVisible({ timeout: 10_000 });
 
         // Current tab strip — Terminal moved to the global drawer.
-        // Tunnels was added in 9748a49.
-        for (const label of ["Info", "Files", "Processes", "Tunnels"]) {
+        for (const label of ["Info", "Files", "Processes"]) {
             await expect(page.getByRole("tab", { name: label })).toBeVisible();
         }
         // Sessions tab renders with a count suffix, match the prefix.
