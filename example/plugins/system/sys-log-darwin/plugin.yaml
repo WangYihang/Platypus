@@ -1,0 +1,54 @@
+api_version: 1
+id: com.platypus.sys-log-darwin
+name: System logs (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS system log query via the Apple Unified Logging System
+  (`log show`). Sibling of sys-journald-linux (which queries
+  systemd's journal) and sys-log-windows (Get-WinEvent). All
+  three return the same JournalEntry shape so a fleet-wide
+  "search logs across the fleet" UI works against any host.
+
+  Maps the journald-style filter knobs to `log show` predicates:
+    unit       → process == "<unit>"
+    priority   → messageType <= <level>
+    since      → --start "<date>"
+    until      → --end "<date>"
+    grep       → --predicate 'eventMessage CONTAINS[c] "<grep>"'
+    lines      → --max <n> (default 200)
+    reverse    → entries are sorted oldest→newest by `log show`
+                 anyway; reverse=true post-sorts newest→oldest
+
+  `log show` is unprivileged for most subsystems but some
+  (e.g. com.apple.system.opendirectoryd) require root and the
+  plugin returns a permission_denied-style error.
+
+runtime:
+  type: wasm
+  entry: sys_log_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: query
+    request:  { proto: JournalQueryRequest }
+    response: { proto: JournalQueryResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/usr/bin/log"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_log_darwin.wasm.minisig

@@ -1,0 +1,51 @@
+api_version: 1
+id: com.platypus.sys-log-windows
+name: System logs (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows Event Log query via Get-WinEvent. Sibling of
+  sys-journald-linux + sys-log-darwin — all three return the same
+  JournalEntry shape so a fleet-wide "search logs across the
+  fleet" UI works against any host.
+
+  Maps the journald-style filter knobs:
+    unit       → -ProviderName <unit> (or -LogName when contains '/')
+    priority   → -Level <n> (windows level: 1=critical 2=error
+                  3=warning 4=info 5=verbose)
+    since      → -StartTime <date>
+    until      → -EndTime <date>
+    grep       → -FilterHashtable + -Message-side post-filter
+    lines      → -MaxEvents <n> (default 200)
+
+  Returns LevelDisplayName mapped to syslog priority for the
+  cross-OS UI.
+
+runtime:
+  type: wasm
+  entry: sys_log_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: query
+    request:  { proto: JournalQueryRequest }
+    response: { proto: JournalQueryResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_log_windows.wasm.minisig
