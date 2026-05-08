@@ -15,7 +15,12 @@ export default function SecurityActivity({
             agentID={agentID}
             activity="security"
         >
-            <SecurityTab projectID={projectID} hostID={hostID} active={active} />
+            <SecurityTab
+                projectID={projectID}
+                hostID={hostID}
+                agentID={agentID}
+                active={active}
+            />
         </RequiresPlugins>
     );
 }

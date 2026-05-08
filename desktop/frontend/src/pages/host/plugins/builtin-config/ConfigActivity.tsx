@@ -15,7 +15,12 @@ export default function ConfigActivity({
             agentID={agentID}
             activity="config"
         >
-            <ConfigTab projectID={projectID} hostID={hostID} active={active} />
+            <ConfigTab
+                projectID={projectID}
+                hostID={hostID}
+                agentID={agentID}
+                active={active}
+            />
         </RequiresPlugins>
     );
 }

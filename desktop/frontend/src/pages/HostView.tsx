@@ -451,6 +451,7 @@ export default function HostView({ projectID, hostID }: Props) {
                                 <ProcessesTab
                                     projectID={projectID}
                                     hostID={hostID}
+                                    agentID={agentID}
                                     active={bottomOpen && bottomTab === "processes"}
                                 />
                             </div>

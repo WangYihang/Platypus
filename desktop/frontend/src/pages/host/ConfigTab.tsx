@@ -20,12 +20,22 @@ import { qk } from "../../lib/queryKeys";
 import CoveragePanel from "./config/CoveragePanel";
 import Header from "./config/Header";
 import LeaksList from "./config/LeaksList";
+import {
+    MetaStrip,
+    useRefreshInterval,
+} from "./plugins/shared/MetaStrip";
 
 interface Props {
     projectID: string;
     hostID: string;
+    agentID: string;
     active: boolean;
 }
+
+// Persistence key for the audit-refresh-interval picker. Default
+// "Off" since rescans are explicit; operator can opt into polling
+// when watching for a rescan triggered from elsewhere.
+const CONFIG_REFRESH_KEY = "builtin-config";
 
 // ConfigTab is the host-level entrypoint for the sensitive-information
 // audit. It wires three data sources together:
@@ -44,8 +54,17 @@ interface Props {
 //      that one auditor (the server merges with the prior audit).
 //
 // Both queries are gated on `active` so a hidden tab does no work.
-export function ConfigTab({ projectID, hostID, active }: Props) {
+export function ConfigTab({ projectID, hostID, agentID, active }: Props) {
     const queryClient = useQueryClient();
+
+    // Off by default — auditQuery is just a DB fetch of the cached
+    // result. Operators who care about a rescan triggered elsewhere
+    // can flip the interval picker on.
+    const { effectiveMs, chooseInterval } = useRefreshInterval(
+        CONFIG_REFRESH_KEY,
+        agentID,
+        0,
+    );
 
     const auditorsQuery = useQuery({
         queryKey: qk.hostConfigAuditors(projectID, hostID),
@@ -62,6 +81,8 @@ export function ConfigTab({ projectID, hostID, active }: Props) {
         queryFn: () => getHostConfigAudit(projectID, hostID),
         enabled: active,
         refetchOnWindowFocus: false,
+        refetchInterval:
+            active && effectiveMs > 0 ? effectiveMs : false,
     });
 
     // Track which auditor ids are mid-rerun so the per-row spinner
@@ -113,6 +134,14 @@ export function ConfigTab({ projectID, hostID, active }: Props) {
                 audit={audit}
                 isAnyRunning={isAnyRunning}
                 onReauditAll={() => reaudit.mutate({})}
+            />
+
+            <MetaStrip
+                dataUpdatedAt={auditQuery.dataUpdatedAt}
+                isFetching={auditQuery.isFetching}
+                onRefresh={() => void auditQuery.refetch()}
+                intervalMs={effectiveMs}
+                onIntervalChange={chooseInterval}
             />
 
             {auditQuery.error && (

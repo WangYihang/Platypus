@@ -34,13 +34,23 @@ import { fromNow } from "../../lib/time";
 
 import { severityTone } from "../fleet/cards/SecurityBadge";
 
+import {
+    MetaStrip,
+    useRefreshInterval,
+} from "./plugins/shared/MetaStrip";
+
 import { Button } from "@/components/ui/button";
 
 interface Props {
     projectID: string;
     hostID: string;
+    agentID: string;
     active: boolean;
 }
+
+// Persistence key for the scan-refetch-interval picker. Default
+// "Off"; rescans are explicit so we don't poll by default.
+const SECURITY_REFRESH_KEY = "builtin-security";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 
@@ -88,9 +98,20 @@ interface RowModel {
 //
 // While a mutation is in flight we mark only the *targeted* rows as
 // "running" so the operator sees per-check spinners on partial reruns.
-export default function SecurityTab({ projectID, hostID, active }: Props) {
+export default function SecurityTab({
+    projectID,
+    hostID,
+    agentID,
+    active,
+}: Props) {
     const { t } = useTranslation("security");
     const queryClient = useQueryClient();
+
+    const { effectiveMs, chooseInterval } = useRefreshInterval(
+        SECURITY_REFRESH_KEY,
+        agentID,
+        0,
+    );
 
     const checksQuery = useQuery({
         queryKey: qk.hostSecurityChecks(projectID, hostID),
@@ -104,6 +125,8 @@ export default function SecurityTab({ projectID, hostID, active }: Props) {
         queryFn: () => getHostSecurityScan(projectID, hostID),
         enabled: active,
         refetchOnWindowFocus: false,
+        refetchInterval:
+            active && effectiveMs > 0 ? effectiveMs : false,
     });
 
     // Track which check ids are currently running so the per-row
@@ -159,6 +182,14 @@ export default function SecurityTab({ projectID, hostID, active }: Props) {
                 counts={counts}
                 isAnyRunning={isAnyRunning}
                 onRescanAll={() => rescan.mutate({})}
+            />
+
+            <MetaStrip
+                dataUpdatedAt={scanQuery.dataUpdatedAt}
+                isFetching={scanQuery.isFetching}
+                onRefresh={() => void scanQuery.refetch()}
+                intervalMs={effectiveMs}
+                onIntervalChange={chooseInterval}
             />
 
             {scanQuery.error && (

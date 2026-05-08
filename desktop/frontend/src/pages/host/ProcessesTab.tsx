@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import Mono from "../../components/Mono";
-import RefreshButton from "../../components/RefreshButton";
 import { palette, space } from "../../layout/theme";
 import {
     HostProcess,
@@ -12,6 +11,10 @@ import {
 import { humanizeError } from "../../lib/humanizeError";
 import { qk } from "../../lib/queryKeys";
 import { fromNow } from "../../lib/time";
+import {
+    MetaStrip,
+    useRefreshInterval,
+} from "./plugins/shared/MetaStrip";
 
 import {
     Table,
@@ -25,11 +28,19 @@ import {
 interface Props {
     projectID: string;
     hostID: string;
+    // `agentID` keys the per-host operator preference for the
+    // refresh-interval picker (persisted via useRefreshInterval).
+    agentID: string;
     // `active` is true while the Processes tab is the visible one —
     // gates the 5s polling timer so we don't keep an offscreen tab
     // hammering the agent.
     active: boolean;
 }
+
+// Stable persistence key for the operator's refresh-interval choice.
+// Independent of host OS so the preference survives a Linux→Darwin
+// host switch.
+const PROCESSES_REFRESH_KEY = "builtin-processes";
 
 type SortKey = NonNullable<ListHostProcessesOpts["sort"]>;
 
@@ -38,29 +49,38 @@ type SortKey = NonNullable<ListHostProcessesOpts["sort"]>;
 // is cached DB-side, so an offline agent surfaces as an inline error
 // rather than a stale list. Auto-refresh runs every 5 seconds while
 // the tab is active.
-export default function ProcessesTab({ projectID, hostID, active }: Props) {
+export default function ProcessesTab({
+    projectID,
+    hostID,
+    agentID,
+    active,
+}: Props) {
     const [sort, setSort] = useState<SortKey>("cpu");
     const [top, setTop] = useState<number>(100);
     const [search, setSearch] = useState("");
 
+    // Operator-tunable refresh cadence (default 5s, persisted per
+    // host). MetaStrip below renders the picker that mutates this.
+    const { effectiveMs, chooseInterval } = useRefreshInterval(
+        PROCESSES_REFRESH_KEY,
+        agentID,
+        5000,
+    );
+
     // react-query handles the abort-on-unmount, dedup, and retry
     // wiring we used to spell out by hand. `enabled: active` pauses
-    // the query while the Processes tab is dormant; `refetchInterval:
-    // active ? 5000 : false` matches the previous setInterval gate.
-    // When the tab comes back active, the query automatically
-    // refetches and resumes polling — no explicit wake-up needed.
-    const {
-        data,
-        isFetching: loading,
-        error,
-        refetch,
-    } = useQuery({
+    // the query while the Processes tab is dormant. The polling
+    // cadence is now operator-tunable (`effectiveMs`); active=false
+    // or "Off" both park the timer.
+    const query = useQuery({
         queryKey: [...qk.hostProcesses(projectID, hostID), { top, sort }] as const,
         queryFn: () => listHostProcesses(projectID, hostID, { top, sort }),
         enabled: active,
-        refetchInterval: active ? 5000 : false,
+        refetchInterval:
+            active && effectiveMs > 0 ? effectiveMs : false,
         refetchIntervalInBackground: false,
     });
+    const { data, isFetching: loading, error, refetch } = query;
 
     const procs = data?.processes || [];
     const filtered = useMemo(() => {
@@ -96,6 +116,13 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: space[3] }}>
+            <MetaStrip
+                dataUpdatedAt={query.dataUpdatedAt}
+                isFetching={loading}
+                onRefresh={() => void refetch()}
+                intervalMs={effectiveMs}
+                onIntervalChange={chooseInterval}
+            />
             <div
                 style={{
                     display: "flex",
@@ -149,7 +176,6 @@ export default function ProcessesTab({ projectID, hostID, active }: Props) {
                         ))}
                     </select>
                 </label>
-                <RefreshButton loading={loading} onClick={() => void refetch()} />
                 <span style={{ fontSize: 12, color: palette.textSecondary }}>
                     {data?.total_count !== undefined
                         ? `${filtered.length} of ${data.total_count}`

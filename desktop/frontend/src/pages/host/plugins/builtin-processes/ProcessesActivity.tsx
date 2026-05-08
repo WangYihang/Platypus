@@ -26,7 +26,12 @@ export default function ProcessesActivity({
             agentID={agentID}
             activity="processes"
         >
-            <ProcessesTab projectID={projectID} hostID={hostID} active={active} />
+            <ProcessesTab
+                projectID={projectID}
+                hostID={hostID}
+                agentID={agentID}
+                active={active}
+            />
         </RequiresPlugins>
     );
 }
