@@ -1,0 +1,44 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_procs.proto — wire shape for the per-OS process-list plugins
+// (com.platypus.sys-procs-{linux,darwin,windows}).
+//
+// Each plugin reads the OS-native process table (procfs / `ps -axwwo`
+// / Win32_Process) and emits a unified ProcessListResponse. The
+// agent does the sort so top_n is meaningful client-side.
+//
+// Extracted from rpc.proto in the proto-per-plugin refactor.
+
+// ProcessInfo is a single OS process snapshot. cmdline is truncated
+// to 512 bytes agent-side to bound payload size.
+message ProcessInfo {
+  uint32 pid             = 1;
+  uint32 ppid            = 2;
+  string user            = 3;
+  string name            = 4;
+  string cmdline         = 5;
+  string status          = 6;   // gopsutil Status() string, e.g. "S", "R"
+  double cpu_percent     = 7;
+  double mem_percent     = 8;
+  uint64 rss_bytes       = 9;
+  uint32 num_threads     = 10;
+  int64  created_at_unix = 11;
+}
+
+// ProcessListRequest selects how many processes to return and how to
+// sort them. top_n=0 means "all", capped at 500 server-side to keep
+// the payload bounded.
+message ProcessListRequest {
+  uint32 top_n   = 1;
+  string sort_by = 2;   // "cpu" (default) | "mem" | "rss" | "pid"
+}
+
+message ProcessListResponse {
+  repeated ProcessInfo processes = 1;
+  // Total process count before top_n slicing; useful for the UI to
+  // show "30 of 412 processes".
+  uint32 total_count             = 2;
+  string error                   = 3;
+}

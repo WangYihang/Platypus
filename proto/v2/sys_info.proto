@@ -1,0 +1,182 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_info.proto — wire shape for the SysInfo plugin
+// (com.platypus.sys-info / sys-info-go).
+//
+// One-shot host introspection: OS, kernel, CPU, memory, disks,
+// network interfaces, GPUs, current user. The agent emits one
+// SysInfoResponse per RPC; the periodic-push variant lives on the
+// EVENT stream (see event.proto).
+//
+// Extracted from rpc.proto in the proto-per-plugin refactor; the
+// generated Go symbols stay in v2pb (same Go package) so existing
+// imports keep working.
+
+message SysInfoRequest  {}
+
+// NetworkInterface describes a single NIC as seen by the agent.
+// Addresses are in CIDR form (e.g. "192.168.1.10/24"); Mac is the
+// hardware address (empty on loopback / virtual); Flags mirror the
+// Go net.Interface.Flags string ("up|broadcast|multicast").
+message NetworkInterface {
+  string name           = 1;
+  string mac            = 2;
+  repeated string addrs = 3;
+  string flags          = 4;
+  uint64 mtu            = 5;
+  bool   is_up          = 6;
+  bool   is_loopback    = 7;
+}
+
+// DiskPartition is a single filesystem mount point. TotalBytes /
+// UsedBytes reflect the underlying storage; FsType is the kernel's
+// filesystem name (ext4, xfs, apfs, NTFS, ...).
+message DiskPartition {
+  string device      = 1;
+  string mountpoint  = 2;
+  string fstype      = 3;
+  uint64 total_bytes = 4;
+  uint64 used_bytes  = 5;
+}
+
+// UserSession identifies a currently-logged-in user. Empty on
+// platforms where the enumeration isn't available (some embedded
+// systems, sandboxed containers).
+message UserSession {
+  string user        = 1;
+  string terminal    = 2;
+  string host        = 3;
+  int64  started_at  = 4;
+}
+
+// GPUInfo is a single graphics adapter. All fields are optional;
+// zero/empty means "not reported" (which the UI renders as "—").
+// Runtime stats (VramUsedBytes, UtilizationPct) require a vendor tool
+// — today only nvidia-smi is consulted. Static fields (vendor/model/
+// driver/VramTotal) come from the kernel (Linux /sys/class/drm) or
+// WMI (Windows).
+message GPUInfo {
+  string vendor           = 1;   // "NVIDIA" | "AMD" | "Intel" | "Apple" | ...
+  string model            = 2;   // brand / product name
+  string driver           = 3;   // driver module name, e.g. "nvidia", "amdgpu"
+  string driver_version   = 4;
+  uint64 vram_total_bytes = 5;   // 0 = unknown
+  uint64 vram_used_bytes  = 6;   // 0 = unknown
+  double utilization_pct  = 7;   // 0 = unknown
+  string bus_id           = 8;   // PCI bus id where applicable
+  string uuid             = 9;   // vendor-provided uuid if any
+  uint32 index            = 10;  // vendor-local ordinal (nvidia-smi index)
+}
+
+message SysInfoResponse {
+  string os              = 1;
+  string arch            = 2;
+  string hostname        = 3;
+  string kernel_version  = 4;
+  double cpu_percent     = 5;
+  uint64 mem_total       = 6;
+  uint64 mem_used        = 7;
+  uint64 disk_total      = 8;
+  uint64 disk_used       = 9;
+  // Deprecated: prefer `interfaces`. Kept for wire compat: keyed by
+  // interface name, value is a comma-separated CIDR list.
+  map<string, string> network_interfaces = 10;
+  string error = 11;
+
+  // --- Extended fields (all optional; agents on older builds leave
+  // these zero/empty). The server and UI treat missing values as
+  // "unknown" rather than failing. ---
+
+  // Platform identification.
+  string platform         = 20; // "ubuntu", "darwin", "windows", ...
+  string platform_family  = 21; // "debian", "rhel", "bsd", ...
+  string platform_version = 22; // "22.04", "14.1", "10.0.19045", ...
+  string virtualization   = 23; // "kvm", "docker", "wsl", "" (bare metal)
+  string timezone         = 24; // IANA tz name, e.g. "Asia/Shanghai"
+
+  // Hardware.
+  uint32 num_cpu          = 30; // logical CPU count
+  uint32 num_cpu_physical = 31; // physical core count (0 if unknown)
+  string cpu_model        = 32; // brand string of CPU 0
+  double cpu_mhz          = 33;
+
+  // Memory breakdown.
+  uint64 mem_available    = 40;
+  uint64 mem_free         = 41;
+  uint64 swap_total       = 42;
+  uint64 swap_used        = 43;
+
+  // Uptime / boot.
+  uint64 boot_time_unix   = 50;
+  uint64 uptime_seconds   = 51;
+
+  // Load (Linux/macOS). Zero on Windows.
+  double load1            = 60;
+  double load5            = 61;
+  double load15           = 62;
+
+  // Process / user session count.
+  uint32 process_count    = 70;
+
+  // Identity.
+  string current_user     = 80; // e.g. "ubuntu", "root", "DESKTOP\\alice"
+  // Agent build identity, mirrors EnrollRequest fields. Sent on
+  // every SysInfo refresh so the host row stays in sync across
+  // self-upgrades / manual binary swaps.
+  string build_version    = 81; // semver, from pkg/version.Version
+  string build_commit     = 83; // short git SHA, from pkg/version.Commit
+  string build_date       = 84; // RFC3339, from pkg/version.Date
+  uint32 protocol_version = 85; // mirrors EnrollRequest.protocol_version
+  string machine_id       = 82;
+
+  // Networking (rich).
+  string default_gateway  = 90;
+  string primary_ip       = 91; // source IP chosen for an outbound route
+  string primary_mac      = 92;
+  string public_ip        = 93; // legacy single-family probe; kept for older agents
+  repeated NetworkInterface interfaces = 94;
+  // Dual-stack public-IP probes. Each is the agent's apparent address
+  // as observed by an external resolver over the corresponding
+  // transport, so both can be populated when the host has working v4
+  // and v6 egress (different addresses, different geo). Empty when the
+  // family has no usable egress or the probe failed within the tight
+  // timeout. New agents fill these instead of public_ip; the server
+  // backfills public_ip as a copy of whichever is set so older clients
+  // still get something.
+  string public_ipv4      = 95;
+  string public_ipv6      = 96;
+
+  // Disks (rich).
+  repeated DiskPartition disks = 100;
+
+  // Logged-in users.
+  repeated UserSession users   = 110;
+
+  // When the snapshot was captured, agent-side wall clock.
+  int64 sampled_at_unix = 120;
+
+  // --- Hardware / chassis / machine classification (all optional) ---
+
+  // Coarse classification of what the agent runs on. One of:
+  // "container" | "vm" | "bare_metal" | "laptop" | "desktop" | "unknown".
+  // Derived agent-side from container markers (cgroup, /.dockerenv),
+  // gopsutil's VirtualizationSystem, and the SMBIOS chassis type.
+  string machine_type      = 130;
+  // Raw SMBIOS chassis type as a string (DMTF spec 3.3.4.1), e.g. "10"
+  // (Notebook), "23" (Rack Mount). Empty when unavailable.
+  string chassis_type      = 131;
+  string product_vendor    = 132; // e.g. "Dell Inc.", "Apple Inc."
+  string product_name      = 133; // e.g. "PowerEdge R740", "MacBookPro18,1"
+  string bios_vendor       = 134;
+  string bios_version      = 135;
+  // Container runtime when machine_type=="container": "docker" |
+  // "kubepods" | "containerd" | "lxc" | "podman" | "wsl" | "".
+  string container_runtime = 136;
+
+  // Graphics adapters. Static fields populated via /sys or WMI on all
+  // platforms; runtime stats (utilization, VRAM used) come from
+  // nvidia-smi when it's on PATH.
+  repeated GPUInfo gpus    = 140;
+}
