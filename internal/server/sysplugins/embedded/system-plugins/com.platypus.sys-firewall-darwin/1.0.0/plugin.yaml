@@ -1,0 +1,46 @@
+api_version: 1
+id: com.platypus.sys-firewall-darwin
+name: Firewall rules (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS firewall-rule inventory via pf (Packet Filter). Shells
+  `/sbin/pfctl -sr` for the active rules and parses each line:
+
+      pass in proto tcp from any to any port = 22
+      block return-rst in proto tcp from any to any port = 23
+
+  pf has its own rich grammar (anchors, scrub rules, NAT). v1
+  surfaces `pass` / `block` rules with proto + direction + port +
+  src/dst extracted; everything else lands as raw=<line> for the
+  UI to render verbatim. pfctl needs root; the plugin tolerates
+  permission denied and returns "permission_denied" in error.
+
+runtime:
+  type: wasm
+  entry: sys_firewall_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_firewall_rules
+    request:  { proto: FirewallListRequest }
+    response: { proto: FirewallListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/sbin/pfctl"
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 130C1C9D9EFD8A97
+  sig_file: sys_firewall_darwin.wasm.minisig

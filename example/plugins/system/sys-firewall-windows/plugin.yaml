@@ -1,0 +1,44 @@
+api_version: 1
+id: com.platypus.sys-firewall-windows
+name: Firewall rules (windows)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Windows firewall-rule inventory via Get-NetFirewallRule + the
+  per-rule filter cmdlets (Get-NetFirewallPortFilter,
+  Get-NetFirewallAddressFilter). Returns each rule with name,
+  display name, direction, action, enabled, profile, protocol +
+  port + src/dst, and the InstanceID as the stable id.
+
+  Rules with multiple ports / addresses get one row per
+  (rule, port) pair so the table is flat for the UI; the original
+  rule's InstanceID is preserved in `id`.
+
+runtime:
+  type: wasm
+  entry: sys_firewall_windows.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [windows]
+
+rpc:
+  - name: list_firewall_rules
+    request:  { proto: FirewallListRequest }
+    response: { proto: FirewallListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+
+resources:
+  max_memory_mb: 64
+  max_invocation_ms: 60000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_firewall_windows.wasm.minisig

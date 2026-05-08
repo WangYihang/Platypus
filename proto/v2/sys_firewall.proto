@@ -1,0 +1,92 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_firewall.proto — wire shape for the per-OS firewall-rule
+// inventory plugins (com.platypus.sys-firewall-{linux,darwin,
+// windows}).
+//
+// Companion to sys-net (which lists active connections + listeners).
+// sys-firewall reports the rules the kernel-side packet filter is
+// configured to enforce: "what's allowed in / out of this host"
+// rather than "what's currently talking to it".
+//
+// The three OS surfaces differ wildly:
+//   linux    iptables / nftables / ufw / firewalld
+//   darwin   pf (Packet Filter) via `pfctl -sr`
+//   windows  Get-NetFirewallRule (rich per-rule object model)
+//
+// We model a unified FirewallRule with the most useful common
+// fields, plus a `raw` field carrying the source-line text so the
+// UI can fall back to "show me the original" for fidelity.
+
+message FirewallListRequest {
+  // When false (default), return only enabled / active rules. When
+  // true, include disabled rules (Windows: Enabled=False;
+  // Linux ufw: status=disabled). iptables / pf rules don't have a
+  // disabled state — they're either present or absent — so this
+  // toggle is a no-op for them.
+  bool include_disabled = 1;
+  // Substring match on rule name / display name (case-insensitive).
+  // Empty = no filter. Useful for finding "Skype" or "Docker" rules
+  // among the hundreds Windows ships with by default.
+  string filter         = 2;
+}
+
+message FirewallListResponse {
+  repeated FirewallRule rules = 1;
+  // Detected backend: "iptables", "nftables", "ufw", "firewalld",
+  // "pf", "windows-firewall", "" (none detected). Empty when no
+  // backend was usable on this host.
+  string backend              = 2;
+  string error                = 3;
+}
+
+// FirewallRule is one rule in the host's firewall configuration.
+// Most fields are best-effort — different backends surface
+// different attributes, and `raw` always carries the source line
+// for callers who need full fidelity.
+message FirewallRule {
+  // Stable rule id where the backend provides one. iptables/pf
+  // synthesise "<chain>:<index>"; ufw uses its row number; Windows
+  // uses the InstanceID GUID.
+  string id          = 1;
+  // Operator-facing name. Always populated for Windows rules
+  // (DisplayName); empty for iptables / pf rules that have only a
+  // chain + index.
+  string name        = 2;
+  // "in" | "out" | "both" | ""
+  string direction   = 3;
+  // "allow" | "deny" | "drop" | "reject" | "log" | "" (or backend-
+  // specific like "masquerade" for nftables NAT rules).
+  string action      = 4;
+  // "tcp" | "udp" | "icmp" | "any" | "" or a less-common protocol
+  // (the iptables --proto value verbatim).
+  string protocol    = 5;
+  // Source address / CIDR. "any" or "" when not constrained.
+  string src         = 6;
+  // Destination address / CIDR.
+  string dst         = 7;
+  // Source / destination port. May be a single port ("22"), a
+  // range ("8000-8999"), or empty / "any".
+  string src_port    = 8;
+  string dst_port    = 9;
+  // True when the rule is currently enforced. Always true for
+  // iptables / pf rules (their presence IS their enabled state).
+  bool   enabled     = 10;
+  // Network interface the rule applies to (iptables -i / -o, pf
+  // `on <iface>`, Windows InterfaceAlias). Empty for "any".
+  string interface_  = 11;
+  // Windows profile bitmask rendered as a string ("Domain",
+  // "Private", "Public", "All"); empty for non-Windows backends.
+  string profile     = 12;
+  // The original source line for full fidelity, e.g.
+  // "-A INPUT -p tcp --dport 22 -j ACCEPT" or
+  // "pass in proto tcp from any to any port = 22".
+  string raw         = 13;
+  // Backend-relative chain / table the rule lives in: iptables
+  // "INPUT" / "FORWARD" / "OUTPUT", nftables "filter:input",
+  // pf "scrub" / "block-quick" / "pass", windows InstanceID
+  // namespace. Empty when the backend has no such concept.
+  string chain       = 14;
+}

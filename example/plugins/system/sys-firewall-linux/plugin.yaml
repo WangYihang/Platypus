@@ -1,0 +1,62 @@
+api_version: 1
+id: com.platypus.sys-firewall-linux
+name: Firewall rules (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux firewall-rule inventory. Auto-detects the active backend
+  in priority order:
+
+    nft list ruleset       (nftables — modern default)
+    iptables-save          (legacy — covers iptables-nft and
+                            iptables-legacy alike)
+    ufw status numbered    (Debian/Ubuntu user-space frontend)
+    firewall-cmd --list-all (RHEL/Fedora/SUSE user-space frontend)
+
+  Returns each rule as a unified FirewallRule row with backend +
+  chain + direction + action + protocol + src/dst + ports + the
+  raw source line for full fidelity. v1 surfaces the iptables
+  `-A` chain rules; nftables falls back to per-line raw text
+  inside the parsed table+chain hierarchy.
+
+  All backends require either CAP_NET_ADMIN or root to read the
+  kernel-side rules. The plugin runs whatever it can; missing
+  backends produce backend="" + a contextual error rather than
+  a crash.
+
+runtime:
+  type: wasm
+  entry: sys_firewall_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_firewall_rules
+    request:  { proto: FirewallListRequest }
+    response: { proto: FirewallListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/bin/sh"
+      - "/sbin/iptables-save"
+      - "/usr/sbin/iptables-save"
+      - "/sbin/ip6tables-save"
+      - "/usr/sbin/ip6tables-save"
+      - "/usr/sbin/nft"
+      - "/sbin/nft"
+      - "/usr/sbin/ufw"
+      - "/usr/bin/firewall-cmd"
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_firewall_linux.wasm.minisig
