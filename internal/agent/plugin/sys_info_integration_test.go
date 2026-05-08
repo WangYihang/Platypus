@@ -16,7 +16,7 @@ import (
 //
 // Source of truth is internal/server/sysplugins/embedded/ — the same
 // tree the server binary ships. A missing artefact here means
-// hack/stage_system_plugins didn't run after a rust source change
+// scripts/stage_system_plugins didn't run after a rust source change
 // (or a fresh clone never produced one); fail loud instead of
 // silently skipping.
 func installSysInfo(t *testing.T) *plugin.Registry {
@@ -38,7 +38,7 @@ func installSysInfo(t *testing.T) *plugin.Registry {
 		t.Fatal(err)
 	}
 	// The staged manifest's key_id field is a hex literal that
-	// rotates with every `go run ./hack/stage_system_plugins` run.
+	// rotates with every `go run ./scripts/stage_system_plugins` run.
 	// For tests we don't care about its value — the agent verifies
 	// signatures against the supplied PublisherPubkey (manifest
 	// key_id is purely informational, see manifest_validate.go) —

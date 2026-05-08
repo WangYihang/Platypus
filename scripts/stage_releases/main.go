@@ -6,7 +6,7 @@
 // Run via the Makefile's `releases` target — `goreleaser build` is
 // expected to have run first so `dist/artifacts.json` is present. The
 // privkey path points at a PEM-encoded Ed25519 secret key (the dev
-// keypair the Makefile mints under hack/ on first run).
+// keypair the Makefile mints under scripts/ on first run).
 //
 // The output schema mirrors internal/core/distributor.go's Manifest /
 // ManifestArtifact types so the server's existing parser eats it
@@ -60,7 +60,7 @@ func main() {
 		releasesDir = flag.String("releases-dir", "data/releases", "output root (LocalStore prefix)")
 		version     = flag.String("version", "0.0.0-dev", "release version")
 		channel     = flag.String("channel", "stable", "release channel")
-		privkeyPath = flag.String("privkey", "hack/.agent-signing.pem", "PEM-encoded Ed25519 private key for manifest signing")
+		privkeyPath = flag.String("privkey", "scripts/.agent-signing.pem", "PEM-encoded Ed25519 private key for manifest signing")
 	)
 	flag.Parse()
 

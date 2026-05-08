@@ -4,7 +4,7 @@
 // tree.
 //
 // The bundles themselves are produced by `go run
-// ./hack/stage_system_plugins` from the rust artefacts under
+// ./scripts/stage_system_plugins` from the rust artefacts under
 // example/plugins/system/; that helper writes
 //
 //	embedded/system-plugins/

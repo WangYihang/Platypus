@@ -10,8 +10,8 @@ BIN_PATHS  := $(addprefix $(BUILD_DIR)/,$(BINS))
 # up the dev pubkey automatically when present so `make build` and
 # `make releases` produce binaries with matching trust roots. CI /
 # production override AGENT_SIGNING_PUBKEY explicitly via env.
-DEV_SIGNING_KEY    := hack/.agent-signing.pem
-DEV_SIGNING_PUBKEY := hack/.agent-signing.pub.b64
+DEV_SIGNING_KEY    := scripts/.agent-signing.pem
+DEV_SIGNING_PUBKEY := scripts/.agent-signing.pub.b64
 # `=` (deferred) so the shell read of the sentinel happens each time
 # AGENT_LDFLAGS expands — `make all` mints the keypair part-way through,
 # and the host build (later in the chain) needs to pick up the freshly-
@@ -178,7 +178,7 @@ stage-system-plugins:
 	  dir=$$(dirname $$d); echo "→ $$(basename $$dir)"; \
 	  (cd $$dir && cargo build --release --target wasm32-unknown-unknown) || exit 1; \
 	done
-	$(GO) run ./hack/stage_system_plugins
+	$(GO) run ./scripts/stage_system_plugins
 
 # ---------- Geo data ----------
 # The Go binary used to embed ip2region but stopped doing so to slim
@@ -207,12 +207,12 @@ data-v6:
 # scripts/dev-publish-entrypoint.sh:28-37 (dev compose sidecar).
 $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY):
 	@$(call require-bin,openssl,apt install openssl  /  brew install openssl)
-	@mkdir -p hack
+	@mkdir -p scripts
 	@openssl genpkey -algorithm ED25519 -out $(DEV_SIGNING_KEY)
 	@openssl pkey -in $(DEV_SIGNING_KEY) -pubout -outform DER \
 	  | tail -c 32 | base64 -w0 > $(DEV_SIGNING_PUBKEY)
 	@chmod 0600 $(DEV_SIGNING_KEY)
-	@echo "→ minted dev signing keypair under hack/"
+	@echo "→ minted dev signing keypair under scripts/"
 
 # `--config .goreleaser.dev.yaml` selects a focused config that only
 # builds platypus-agent for the proven-compiling matrix (the production
@@ -229,7 +229,7 @@ $(RELEASES_MANIFEST): $(DEV_SIGNING_KEY) $(DEV_SIGNING_PUBKEY)
 	AGENT_SIGNING_PUBKEY_B64=$$(cat $(DEV_SIGNING_PUBKEY)) \
 	  goreleaser build --config .goreleaser.dev.yaml --snapshot --clean
 	@echo "→ staging + signing manifest"
-	@$(GO) run ./hack/stage_releases \
+	@$(GO) run ./scripts/stage_releases \
 	  --dist dist \
 	  --releases-dir $(DATA_DIR)/releases \
 	  --version $(RELEASES_VERSION) \

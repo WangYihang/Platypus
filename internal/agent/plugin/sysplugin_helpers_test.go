@@ -12,7 +12,7 @@ import (
 // + plugin.yaml directly out of it; a missing artefact here is now a
 // CI failure (was a silent t.Skipf before D-tests).
 //
-// Refresh via `go run ./hack/stage_system_plugins` from the repo root
+// Refresh via `go run ./scripts/stage_system_plugins` from the repo root
 // after editing rust source under example/plugins/system/.
 const stagedSystemRoot = "../../../internal/server/sysplugins/embedded/system-plugins"
 
@@ -25,7 +25,7 @@ func stagedWasmBytes(t *testing.T, pluginID, version, entry string) []byte {
 	p := filepath.Join(stagedSystemRoot, pluginID, version, entry)
 	data, err := os.ReadFile(p)
 	if err != nil {
-		t.Fatalf("staged wasm %s missing (%v) — run `go run ./hack/stage_system_plugins` from the repo root", p, err)
+		t.Fatalf("staged wasm %s missing (%v) — run `go run ./scripts/stage_system_plugins` from the repo root", p, err)
 	}
 	return data
 }
@@ -44,7 +44,7 @@ func stagedManifestBytes(t *testing.T, pluginID, version string) []byte {
 // rewriteManifestKeyID swaps the manifest's signature.key_id field for
 // the supplied hex string, preserving comments and surrounding
 // formatting. Integration tests sign with a fresh per-test keypair;
-// the staged manifest's key_id is whatever hack/stage_system_plugins
+// the staged manifest's key_id is whatever scripts/stage_system_plugins
 // minted at build time, so the keys won't match without rewriting.
 //
 // String-level rewrite (rather than yaml round-trip) so we don't lose

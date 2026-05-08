@@ -2,14 +2,14 @@
 // internal/server/sysplugins/embedded/ from the rust artefacts under
 // example/plugins/system/. Run via:
 //
-//	go run ./hack/stage_system_plugins
+//	go run ./scripts/stage_system_plugins
 //
 // from the repo root, AFTER `cargo build --release --target
 // wasm32-unknown-unknown` in each plugin directory.
 //
 // On every run it:
 //  1. Reads (or mints) the system signing keypair at
-//     hack/.system-signing.secret. The corresponding pubkey is staged
+//     scripts/.system-signing.secret. The corresponding pubkey is staged
 //     at internal/server/sysplugins/embedded/system-plugins/publisher.pub.
 //     The secret is gitignored — losing it just means the next run
 //     mints a new one and re-signs every plugin.
@@ -43,7 +43,7 @@ import (
 const (
 	pluginsRoot   = "example/plugins/system"
 	stagedRoot    = "internal/server/sysplugins/embedded/system-plugins"
-	secretPath    = "hack/.system-signing.secret"
+	secretPath    = "scripts/.system-signing.secret"
 	publisherName = "untrusted comment: Platypus system publisher"
 )
 

@@ -10,7 +10,7 @@ import (
 // embedded by go:embed has the publisher.pub trust anchor and at
 // least the mandatory sys-info bundle. If this fails the binary
 // either ships an empty system-plugins set (operator dropped a binary
-// on a fresh box → no plugins → broken UI) or hack/stage_system_plugins
+// on a fresh box → no plugins → broken UI) or scripts/stage_system_plugins
 // produced a malformed tree.
 func TestPrebuiltFSContainsExpectedShape(t *testing.T) {
 	fsys := PrebuiltFS()
