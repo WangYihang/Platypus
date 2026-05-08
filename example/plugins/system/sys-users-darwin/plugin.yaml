@@ -1,0 +1,48 @@
+api_version: 1
+id: com.platypus.sys-users-darwin
+name: Local accounts (darwin)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  macOS account inventory via dscl and (where present) sudoers.
+  Lists every entry in /Local/Default/Users with shell, home,
+  RealName, UID/GID; lists groups via dscl . -list /Groups; reads
+  /etc/sudoers + /etc/sudoers.d/* for escalation entries.
+
+  By default UID < 500 entries (system / launchd internal) are
+  filtered; pass include_system=true to see every account
+  including _hidden roles macOS reserves.
+
+runtime:
+  type: wasm
+  entry: sys_users_darwin.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [darwin]
+
+rpc:
+  - name: list_users
+    request:  { proto: UserListRequest }
+    response: { proto: UserListResponse }
+
+capabilities:
+  exec:
+    commands:
+      - "/usr/bin/dscl"
+      - "/bin/sh"
+  fs.read:
+    paths:
+      - /etc/sudoers
+      - /etc/sudoers.d
+
+resources:
+  max_memory_mb: 32
+  max_invocation_ms: 30000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_users_darwin.wasm.minisig

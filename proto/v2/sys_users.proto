@@ -1,0 +1,82 @@
+syntax = "proto3";
+package platypus.v2;
+option go_package = "github.com/WangYihang/Platypus/pkg/proto/v2;v2pb";
+
+// sys_users.proto — wire shape for the per-OS account-inventory
+// plugins (com.platypus.sys-users-{linux,darwin,windows}).
+//
+// "Who has access to this host?" is the first question of any
+// security audit. The plugins enumerate local accounts, groups,
+// and the sudo / Administrators escalation paths.
+//
+// Source per OS:
+//   linux    /etc/passwd + /etc/group + /etc/sudoers{,.d/*}
+//   darwin   `dscl . -list /Users` + per-user dscl reads, plus
+//            members of the `admin` group as the sudo equivalent
+//   windows  Get-LocalUser + Get-LocalGroup + members of the
+//            Administrators group
+
+message UserListRequest {
+  // When false (default), system / built-in accounts are filtered:
+  //   linux:   UID < 1000 (the conventional human-user threshold)
+  //   darwin:  UID < 500
+  //   windows: SIDs in the well-known system range
+  // Set true to see every account.
+  bool include_system = 1;
+}
+
+message UserListResponse {
+  repeated User users        = 1;
+  repeated Group groups      = 2;
+  // Sudo / Administrators entries (linux + darwin via /etc/sudoers
+  // and /etc/sudoers.d/, windows via Administrators group
+  // membership). Surfaces "who can become root" without the operator
+  // hunting through the file tree manually.
+  repeated SudoEntry sudoers = 3;
+  string error               = 4;
+}
+
+// User is one local account.
+message User {
+  string username       = 1;
+  uint32 uid            = 2;
+  uint32 gid            = 3;
+  // GECOS / FullName.
+  string full_name      = 4;
+  string home           = 5;
+  string shell          = 6;
+  // Per-OS coarse classification — see UserListRequest.include_system.
+  bool   is_system      = 7;
+  // True when the account is locked (no password / disabled). Linux
+  // requires reading /etc/shadow which is root-only, so this is
+  // best-effort; Windows reads Get-LocalUser.Enabled directly.
+  bool   is_locked      = 8;
+  // Names of groups this user belongs to (primary + supplementary).
+  // Empty if the plugin couldn't enumerate group membership.
+  repeated string groups = 9;
+}
+
+// Group is one local group.
+message Group {
+  string name              = 1;
+  uint32 gid               = 2;
+  // Member usernames listed in /etc/group / Get-LocalGroupMember.
+  repeated string members  = 3;
+}
+
+// SudoEntry is one sudoers / Administrators escalation row.
+//
+//   linux/darwin:
+//     source = "/etc/sudoers" | "/etc/sudoers.d/<file>"
+//     who    = "alice" | "%wheel" | "%admin"
+//     how    = "(ALL) ALL" | "(ALL) NOPASSWD: /usr/bin/systemctl" | ...
+//
+//   windows:
+//     source = "Administrators"
+//     who    = the member name ("DOMAIN\\alice", "BUILTIN\\Administrator")
+//     how    = "" (membership IS the privilege)
+message SudoEntry {
+  string source = 1;
+  string who    = 2;
+  string how    = 3;
+}

@@ -1,0 +1,50 @@
+api_version: 1
+id: com.platypus.sys-users-linux
+name: Local accounts (linux)
+version: 1.0.0
+author:
+  name: Platypus
+  email: dev@example.com
+license: Apache-2.0
+description: |
+  Linux account inventory: /etc/passwd, /etc/group,
+  /etc/sudoers + /etc/sudoers.d/*. Returns one User row per
+  passwd entry with primary + supplementary groups resolved,
+  every Group from /etc/group, and a SudoEntry per sudoers line
+  granting elevated access.
+
+  By default UID < 1000 entries are filtered out (system accounts);
+  pass include_system=true to see every passwd row.
+
+  /etc/shadow is root-only and not read; locked-account detection
+  surfaces only when the shell is /sbin/nologin or /bin/false
+  (a coarse heuristic) since we can't read shadow.
+
+runtime:
+  type: wasm
+  entry: sys_users_linux.wasm
+  abi: extism/1
+  lang: rust
+  os_targets: [linux]
+
+rpc:
+  - name: list_users
+    request:  { proto: UserListRequest }
+    response: { proto: UserListResponse }
+
+capabilities:
+  fs.read:
+    paths:
+      - /etc/passwd
+      - /etc/group
+      - /etc/sudoers
+      - /etc/sudoers.d
+
+resources:
+  max_memory_mb: 16
+  max_invocation_ms: 15000
+
+signature:
+  algo: minisign-ed25519
+  key_id: 5C9C41AD529D87AC
+  sig_file: sys_users_linux.wasm.minisig
