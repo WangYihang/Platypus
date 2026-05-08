@@ -68,6 +68,14 @@ beforeEach(() => {
     mocked.invokePluginRPC.mockReset();
     toastMocks.success.mockReset();
     toastMocks.error.mockReset();
+    // The MetaStrip persists the operator's interval choice to
+    // localStorage; clear it between tests so a previous test's
+    // pick can't bleed into the next mount.
+    try {
+        window.localStorage.clear();
+    } catch {
+        // jsdom may reject under odd conditions; not fatal.
+    }
 });
 
 const stubUnits: ListUnitsResponse = {
@@ -373,6 +381,138 @@ describe("<RPCTable>", () => {
         );
 
         expect(mocked.invokePluginRPC).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // MetaStrip — last-updated indicator + manual refresh + interval picker
+    // -----------------------------------------------------------------------
+
+    it("MetaStrip: renders 'Updated …' once a query result lands", async () => {
+        mocked.invokePluginRPC.mockResolvedValueOnce(stubUnits);
+
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                />
+            </Wrapper>,
+        );
+
+        // After the first successful fetch, dataUpdatedAt is set;
+        // MetaStrip renders "Updated just now" (since the test runs
+        // < 5s after the mock resolution).
+        await waitFor(() => screen.getByText("ssh.service"));
+        await waitFor(() => {
+            expect(screen.getByText(/^Updated /)).toBeInTheDocument();
+        });
+    });
+
+    it("MetaStrip: clicking the refresh button triggers a refetch", async () => {
+        mocked.invokePluginRPC.mockResolvedValue(stubUnits);
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+        const callsBefore = mocked.invokePluginRPC.mock.calls.length;
+
+        await user.click(
+            screen.getByRole("button", { name: /refresh now/i }),
+        );
+
+        await waitFor(() => {
+            expect(mocked.invokePluginRPC.mock.calls.length).toBeGreaterThan(
+                callsBefore,
+            );
+        });
+    });
+
+    it("MetaStrip: changing the interval persists the choice to localStorage", async () => {
+        mocked.invokePluginRPC.mockResolvedValue(stubUnits);
+
+        const user = userEvent.setup();
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    refreshMs={30000}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+
+        await user.selectOptions(
+            screen.getByRole("combobox", {
+                name: /auto refresh interval/i,
+            }),
+            "5000",
+        );
+
+        // Persistence key matches the readPersistedInterval helper:
+        // `rpc-refresh:<pluginID>:<agentID>`.
+        expect(
+            window.localStorage.getItem(
+                "rpc-refresh:com.platypus.sys-systemd-linux:agent-a1",
+            ),
+        ).toBe("5000");
+    });
+
+    it("MetaStrip: persisted interval pre-fills the selector on next mount", async () => {
+        mocked.invokePluginRPC.mockResolvedValue(stubUnits);
+
+        // Pretend a prior session picked 10s for this (host, plugin).
+        window.localStorage.setItem(
+            "rpc-refresh:com.platypus.sys-systemd-linux:agent-a1",
+            "10000",
+        );
+
+        render(
+            <Wrapper>
+                <RPCTable<ListUnitsResponse, ListUnitsResponse["units"][number]>
+                    projectID="proj1"
+                    agentID="agent-a1"
+                    pluginID="com.platypus.sys-systemd-linux"
+                    method="list_units"
+                    rowsFrom={(r) => r.units}
+                    rowKey={(row) => row.name}
+                    columns={[{ field: "name", label: "Service", primary: true }]}
+                    // Per-tab default is 30s but the persisted 10s
+                    // should win.
+                    refreshMs={30000}
+                />
+            </Wrapper>,
+        );
+
+        await waitFor(() => screen.getByText("ssh.service"));
+        const select = screen.getByRole("combobox", {
+            name: /auto refresh interval/i,
+        }) as HTMLSelectElement;
+        expect(select.value).toBe("10000");
     });
 
     // -----------------------------------------------------------------------

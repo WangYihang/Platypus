@@ -10,6 +10,7 @@
 // (windows levels are pre-mapped by the plugin).
 
 import RPCTable, { type Column } from "../shared/RPCTable";
+import { Badge, type BadgeTone } from "../shared/Badge";
 import { palette } from "../../../../layout/theme";
 import type { PluginUIProps } from "../registry";
 
@@ -34,15 +35,15 @@ interface QueryResponse {
     nextCursor?: string;
 }
 
-const PRIORITY_COLOR: Record<number, string> = {
-    0: palette.danger, // emerg
-    1: palette.danger, // alert
-    2: palette.danger, // crit
-    3: palette.danger, // err
-    4: palette.warning, // warning
-    5: palette.warning, // notice
-    6: palette.textMuted, // info
-    7: palette.textMuted, // debug
+const PRIORITY_TONE: Record<number, BadgeTone> = {
+    0: "danger", // emerg
+    1: "danger", // alert
+    2: "danger", // crit
+    3: "danger", // err
+    4: "warning", // warning
+    5: "warning", // notice
+    6: "muted", // info
+    7: "muted", // debug
 };
 
 const PRIORITY_LABEL: Record<number, string> = {
@@ -58,22 +59,10 @@ const PRIORITY_LABEL: Record<number, string> = {
 
 function PriorityBadge({ p }: { p: number | undefined }) {
     if (p === undefined) return <>—</>;
-    const color = PRIORITY_COLOR[p] ?? palette.textMuted;
     return (
-        <span
-            style={{
-                display: "inline-block",
-                padding: "1px 6px",
-                borderRadius: 4,
-                fontSize: 10,
-                fontFamily: "monospace",
-                fontWeight: 600,
-                color: "#fff",
-                background: color,
-            }}
-        >
+        <Badge tone={PRIORITY_TONE[p] ?? "muted"} shape="tag">
             {PRIORITY_LABEL[p] ?? String(p)}
-        </span>
+        </Badge>
     );
 }
 

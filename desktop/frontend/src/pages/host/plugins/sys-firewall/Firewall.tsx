@@ -5,6 +5,7 @@
 // detected backend is surfaced in the empty-state line.
 
 import RPCTable, { type Column } from "../shared/RPCTable";
+import { Badge, type BadgeTone } from "../shared/Badge";
 import { palette } from "../../../../layout/theme";
 import type { PluginUIProps } from "../registry";
 
@@ -33,33 +34,22 @@ interface ListFirewallRulesResponse {
     hasMore?: boolean;
 }
 
-const ACTION_COLOR: Record<string, string> = {
-    allow: palette.success,
-    pass: palette.success,
-    deny: palette.danger,
-    drop: palette.danger,
-    reject: palette.danger,
-    block: palette.danger,
-    log: palette.warning,
-    masquerade: palette.warning,
+const ACTION_TONE: Record<string, BadgeTone> = {
+    allow: "success",
+    pass: "success",
+    deny: "danger",
+    drop: "danger",
+    reject: "danger",
+    block: "danger",
+    log: "warning",
+    masquerade: "warning",
 };
 
 function ActionBadge({ action }: { action: string }) {
-    const color = ACTION_COLOR[action.toLowerCase()] ?? palette.textMuted;
     return (
-        <span
-            style={{
-                display: "inline-block",
-                padding: "1px 8px",
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#fff",
-                background: color,
-            }}
-        >
+        <Badge tone={ACTION_TONE[action.toLowerCase()] ?? "muted"} shape="tag">
             {action || "—"}
-        </span>
+        </Badge>
     );
 }
 

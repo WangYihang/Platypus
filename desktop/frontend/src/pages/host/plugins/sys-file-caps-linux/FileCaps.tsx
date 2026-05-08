@@ -9,6 +9,7 @@
 // outliers up front; toggle to surface every cap'd file.
 
 import RPCTable, { type Column } from "../shared/RPCTable";
+import { Badge, type BadgeTone } from "../shared/Badge";
 import { palette } from "../../../../layout/theme";
 import type { PluginUIProps } from "../registry";
 
@@ -25,28 +26,17 @@ interface ListFileCapsResponse {
     error?: string;
 }
 
-const RISK_COLOR: Record<string, string> = {
-    low: palette.textMuted,
-    medium: palette.warning,
-    high: palette.danger,
+const RISK_TONE: Record<string, BadgeTone> = {
+    low: "muted",
+    medium: "warning",
+    high: "danger",
 };
 
 function RiskBadge({ risk }: { risk: string }) {
-    const color = RISK_COLOR[risk.toLowerCase()] ?? palette.textMuted;
     return (
-        <span
-            style={{
-                display: "inline-block",
-                padding: "1px 8px",
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#fff",
-                background: color,
-            }}
-        >
+        <Badge tone={RISK_TONE[risk.toLowerCase()] ?? "muted"} shape="tag">
             {risk || "—"}
-        </span>
+        </Badge>
     );
 }
 

@@ -5,7 +5,7 @@
 // windows is similar enough to share one component.
 
 import RPCTable, { type Column, type RowAction } from "../shared/RPCTable";
-import { palette } from "../../../../layout/theme";
+import { Badge, type BadgeTone } from "../shared/Badge";
 import type { PluginUIProps } from "../registry";
 
 interface Unit {
@@ -25,32 +25,17 @@ interface ListUnitsResponse {
     hasMore?: boolean;
 }
 
-const STATE_COLOR: Record<string, string> = {
-    running: palette.success,
-    active: palette.success,
-    stopped: palette.textMuted,
-    inactive: palette.textMuted,
-    failed: palette.danger,
-    paused: palette.warning,
+const STATE_TONE: Record<string, BadgeTone> = {
+    running: "success",
+    active: "success",
+    stopped: "muted",
+    inactive: "muted",
+    failed: "danger",
+    paused: "warning",
 };
 
 function StateBadge({ state }: { state: string }) {
-    const color = STATE_COLOR[state] ?? palette.textMuted;
-    return (
-        <span
-            style={{
-                display: "inline-block",
-                padding: "2px 8px",
-                borderRadius: 999,
-                fontSize: 11,
-                fontWeight: 500,
-                color: "#fff",
-                background: color,
-            }}
-        >
-            {state}
-        </span>
-    );
+    return <Badge tone={STATE_TONE[state] ?? "muted"}>{state}</Badge>;
 }
 
 const COLUMNS: ReadonlyArray<Column<Unit>> = [

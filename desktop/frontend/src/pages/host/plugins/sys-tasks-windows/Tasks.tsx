@@ -5,7 +5,7 @@
 // side of "what's scheduled to fire on this host".
 
 import RPCTable, { type Column } from "../shared/RPCTable";
-import { palette } from "../../../../layout/theme";
+import { Badge, type BadgeTone } from "../shared/Badge";
 import type { PluginUIProps } from "../registry";
 
 interface ScheduledTaskAction {
@@ -35,30 +35,19 @@ interface ListTasksResponse {
     hasMore?: boolean;
 }
 
-const STATE_COLOR: Record<string, string> = {
-    Ready: palette.success,
-    Running: palette.success,
-    Disabled: palette.textMuted,
-    Queued: palette.warning,
-    Unknown: palette.textMuted,
+const STATE_TONE: Record<string, BadgeTone> = {
+    Ready: "success",
+    Running: "success",
+    Disabled: "muted",
+    Queued: "warning",
+    Unknown: "muted",
 };
 
 function StateBadge({ state }: { state: string }) {
-    const color = STATE_COLOR[state] ?? palette.textMuted;
     return (
-        <span
-            style={{
-                display: "inline-block",
-                padding: "1px 8px",
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#fff",
-                background: color,
-            }}
-        >
+        <Badge tone={STATE_TONE[state] ?? "muted"} shape="tag">
             {state}
-        </span>
+        </Badge>
     );
 }
 
