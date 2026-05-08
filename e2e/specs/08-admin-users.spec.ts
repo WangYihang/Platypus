@@ -2,11 +2,14 @@ import { expect, test } from "../fixtures/test";
 
 import { loginAsAdmin, shotPath } from "../fixtures/auth";
 
+// 2026-05 IA pass: the user-menu "Manage users" button moved to a
+// global "Admin" tab in the top bar (visible when no project is in
+// scope). Admin-role users see it; the Admin route lands on
+// /admin/users by default.
 test.describe("admin users", () => {
-    test("manage users via the user menu", async ({ page }) => {
+    test("manage users via the Admin top-bar tab", async ({ page }) => {
         await loginAsAdmin(page);
-        await page.getByRole("button", { name: "User menu" }).click();
-        await page.getByRole("button", { name: /Manage users/ }).click();
+        await page.getByRole("link", { name: /^Admin$/ }).click();
         await expect(page).toHaveURL(/\/admin\/users$/);
 
         // Admin row + role select. Scope to the admin-users table so

@@ -22,10 +22,12 @@ test.describe("host view", () => {
         await expect(row).toBeVisible({ timeout: 10_000 });
         await row.click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
-        // Hop over to the Info tab — the rest of this spec asserts on
-        // the host header + tab strip, which renders identically
-        // regardless of the active tab.
-        await page.getByRole("tab", { name: "Info" }).click();
+        // Hop over to the Info activity — the rest of this spec asserts
+        // on the host header + activity bar, which renders identically
+        // regardless of the active activity. The host tab strip moved
+        // to a vertical ActivityBar with one <button> per entry; each
+        // button carries data-testid="host-activity-<activityKey>".
+        await page.getByTestId("host-activity-info").click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/info$/);
 
         // PageHeader subtitle on HostView is "<N> active · <os>".
@@ -33,14 +35,10 @@ test.describe("host view", () => {
             page.getByText(/active · /).first(),
         ).toBeVisible({ timeout: 10_000 });
 
-        // Current tab strip — Terminal moved to the global drawer.
-        for (const label of ["Info", "Files", "Processes"]) {
-            await expect(page.getByRole("tab", { name: label })).toBeVisible();
+        // Current activity bar — Terminal moved to the global drawer.
+        for (const key of ["info", "files", "processes", "sessions"]) {
+            await expect(page.getByTestId(`host-activity-${key}`)).toBeVisible();
         }
-        // Sessions tab renders with a count suffix, match the prefix.
-        await expect(
-            page.getByRole("tab", { name: /^Sessions/ }),
-        ).toBeVisible();
         // "Open terminal" button lives in the page header actions
         // row. Match the exact name so the status-bar's terminals
         // pill ("N open terminal(s)") doesn't double-resolve.

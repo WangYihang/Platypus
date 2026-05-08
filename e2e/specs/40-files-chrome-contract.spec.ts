@@ -27,7 +27,9 @@ test.describe("host files chrome + right-click menu contract", () => {
             .locator("table tbody tr")
             .first()
             .click();
-        await page.getByRole("tab", { name: "Files" }).click();
+        // Files is the host's default landing tab; the ActivityBar
+        // entry lives at data-testid="host-activity-files".
+        await page.getByTestId("host-activity-files").click();
         await expect(page).toHaveURL(/\/files$/);
         // Wait for the listing — without it the right-click target
         // is racing against the agent's first /fs/list response.

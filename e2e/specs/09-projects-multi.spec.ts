@@ -9,20 +9,16 @@ test.describe("projects multi", () => {
         await page.getByRole("button", { name: /Default created/i }).click();
         await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // Click the project switcher in the sidebar. Scope to the
-        // sidebar (`role=complementary`) so we don't pick up the
-        // "Default" tile copy on the overview page.
-        await page
-            .getByRole("complementary")
-            .getByRole("button", { name: /Default/ })
-            .first()
-            .click();
+        // Click the project switcher in the top bar (the sidebar
+        // collapsed into the horizontal NavTabs strip in the 2026-05
+        // IA pass; the switcher trigger has data-testid for stable
+        // selection).
+        await page.getByTestId("project-switcher-trigger").click();
 
         // Wait for popover animation.
         await page.waitForTimeout(500);
 
         // Both projects appear in the popover.
-        await expect(page.getByText("Projects", { exact: true }).first()).toBeVisible();
         await expect(page.getByRole("button", { name: /Default/ }).last())
             .toBeVisible();
         await expect(page.getByRole("button", { name: /Staging/ }))

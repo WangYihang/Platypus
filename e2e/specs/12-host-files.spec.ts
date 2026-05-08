@@ -16,7 +16,9 @@ test.describe("host files", () => {
             .locator("table tbody tr")
             .first()
             .click();
-        await page.getByRole("tab", { name: "Files" }).click();
+        // Files is the default landing tab on the host detail; the
+        // ActivityBar entry lives at data-testid="host-activity-files".
+        await page.getByTestId("host-activity-files").click();
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
 
         // /etc is on every Linux agent; if the listing rendered at

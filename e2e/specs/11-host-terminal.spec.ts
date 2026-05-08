@@ -24,26 +24,18 @@ test.describe("global terminal drawer", () => {
         // don't need to switch.
         await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
 
-        // Wait for the link-session row to land: the agent finishes
-        // its WS upgrade asynchronously (the link handler inserts a
-        // session row inside the upgrade callback, so the host page
-        // can briefly mount with `0 active`). The "Open terminal"
-        // button gates on `liveCount > 0` and stays disabled until
-        // the row appears.
-        await expect(page.getByText(/^\d+ active · /).first()).toContainText(
-            /^[1-9]\d* active/,
-            { timeout: 15_000 },
-        );
-
-        // Click the "Open terminal" action in the page header; that
-        // pushes a shell into the global drawer and unhides it.
-        // Scope to shell-content-frame so the status-bar's
-        // terminals-pill (aria-label "N open terminal(s)") doesn't
-        // double-resolve once the drawer is up.
-        await page
+        // The "Open terminal" header button is enabled once the
+        // agent's link-session row exists (`canOpenShell = liveCount
+        // > 0 && !!agent_id`). That happens asynchronously after the
+        // page mounts, so wait for the button to leave the disabled
+        // state before clicking. Without the gate the click would
+        // fire while the title still reads "No live agent session"
+        // and the openShell handler bails.
+        const openBtn = page
             .getByTestId("shell-content-frame")
-            .getByRole("button", { name: "Open terminal" })
-            .click();
+            .getByRole("button", { name: "Open terminal" });
+        await expect(openBtn).toBeEnabled({ timeout: 15_000 });
+        await openBtn.click();
 
         // Xterm mounts at least one `.xterm-screen` inside the
         // drawer once the WS upgrade lands. It may be visibility:

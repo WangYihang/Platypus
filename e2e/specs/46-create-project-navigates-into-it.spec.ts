@@ -17,10 +17,13 @@ test.describe("project creation — navigates into the new project", () => {
         page,
     }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects");
+        // Enter the Default project so the top-bar ProjectSwitcher
+        // (which hosts the "+ new project" footer action) renders —
+        // the trigger is gated on `currentProject != null` and the
+        // /projects landing page never mounts it.
+        await page.getByRole("button", { name: /Default created/i }).click();
+        await expect(page).toHaveURL(/\/projects\/default\/overview$/);
 
-        // ProjectSwitcher is in the top bar. Open the menu and click
-        // the "new project" footer action.
         await page.getByTestId("project-switcher-trigger").click();
         await page
             .getByRole("button", { name: /new project/i })

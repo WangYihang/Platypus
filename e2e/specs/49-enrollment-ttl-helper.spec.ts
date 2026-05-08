@@ -53,7 +53,7 @@ test.describe("enrollment dialogs — friendlier TTL + machine-id labels", () =>
         page,
     }) => {
         await loginAsAdmin(page);
-        await page.goto("/projects/default/hosts/enroll");
+        await page.goto("/projects/default/enrollment");
         await page.getByRole("tab", { name: /enrollment tokens/i }).click();
         await page
             .getByRole("button", { name: /issue (an? )?enrollment token/i })
