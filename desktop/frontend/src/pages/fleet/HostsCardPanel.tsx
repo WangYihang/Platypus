@@ -7,8 +7,9 @@ import EmptyState from "../../components/EmptyState";
 import FilterToolbar from "../../components/FilterToolbar";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { space } from "../../layout/theme";
-import { listHosts, listInstallArtifacts } from "../../lib/api";
+import { listInstallArtifacts } from "../../lib/api";
 import { qk } from "../../lib/queryKeys";
+import { useProjectHosts } from "../../lib/queries/hosts";
 import { humanizeError } from "../../lib/humanizeError";
 import { isOnline } from "../../lib/time";
 
@@ -46,9 +47,7 @@ export default function HostsCardPanel() {
     const queryClient = useQueryClient();
     const [query, setQuery] = useState("");
 
-    const hostsQuery = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
+    const hostsQuery = useProjectHosts(project.id, {
         refetchInterval: POLL_INTERVAL_MS,
     });
     const artifactsKey = ["installArtifactsActive", project.id] as const;

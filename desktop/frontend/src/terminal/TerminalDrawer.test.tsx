@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
+
+import { renderWithQueryClient as render } from "@/testing/renderWithQueryClient";
 import {
     MemoryRouter,
     Outlet,

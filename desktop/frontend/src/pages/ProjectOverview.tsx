@@ -21,11 +21,11 @@ import {
     Project,
     SessionRow,
     getServerInfo,
-    listHosts,
     listProjectSessions,
 } from "../lib/api";
 import { humanizeError } from "../lib/humanizeError";
 import { qk } from "../lib/queryKeys";
+import { useProjectHosts } from "../lib/queries/hosts";
 import { fromNow, isOnline } from "../lib/time";
 
 interface Props {
@@ -47,10 +47,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
         queryKey: qk.serverInfo(),
         queryFn: () => getServerInfo(),
     });
-    const hostsQuery = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
-    });
+    const hostsQuery = useProjectHosts(project.id);
     // 24h sessions feed for the chart + activity list. The cache key
     // pins `since=24h` symbolically so a refetch always resolves the
     // same window even though the timestamp moves; an exact-second

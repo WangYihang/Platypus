@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { LayoutGrid, Rows3, Search } from "lucide-react";
 import { useNavigate, useParams, Outlet } from "react-router-dom";
 
 import StatusDot from "../../components/StatusDot";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, space } from "../../layout/theme";
-import { Host, listHosts } from "../../lib/api";
-import { qk } from "../../lib/queryKeys";
+import { Host } from "../../lib/api";
+import { useProjectHostList } from "../../lib/queries/hosts";
 import { fromNow, isOnline } from "../../lib/time";
 import { usePreference } from "../../lib/preferences";
 
@@ -120,10 +119,7 @@ function HostsMasterDetail({ hostId }: { hostId: string }) {
     const project = useCurrentProject();
     const navigate = useNavigate();
     const [query, setQuery] = useState("");
-    const { data: hosts = [] } = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
-    });
+    const hosts = useProjectHostList(project.id);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();

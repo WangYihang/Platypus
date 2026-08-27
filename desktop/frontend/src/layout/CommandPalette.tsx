@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useProjectHosts } from "@/lib/queries/hosts";
 import { useNavigate } from "react-router-dom";
 import {
     Clock,
@@ -26,7 +27,6 @@ import {
 
 import { palette, radius, space } from "./theme";
 import { useShell } from "./ProjectShell";
-import { Host, listHosts } from "../lib/api";
 import { ServerProfile, useServersStore } from "../lib/servers";
 import { switchServer } from "../lib/auth";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
@@ -46,8 +46,6 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
     const { project, projects } = useShell();
     const { openShell } = useGlobalTerminal();
     const [open, setOpen] = useState(false);
-    const [hosts, setHosts] = useState<Host[]>([]);
-    const [loadingHosts, setLoadingHosts] = useState(false);
     const servers = useServerList();
     const activeServerId = useActiveServerId();
 
@@ -65,24 +63,12 @@ export default function CommandPalette({ onAddServer, onManageServers }: Props) 
     // Hosts are only useful when a project is active; fetch lazily on
     // each open so freshly-enrolled hosts show up without a page
     // reload.
-    useEffect(() => {
-        if (!open || !project) return;
-        let cancelled = false;
-        setLoadingHosts(true);
-        listHosts(project.id)
-            .then((hs) => {
-                if (!cancelled) setHosts(hs);
-            })
-            .catch(() => {
-                if (!cancelled) setHosts([]);
-            })
-            .finally(() => {
-                if (!cancelled) setLoadingHosts(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [open, project]);
+    // Shared with the eight other places that need this list, so the
+    // palette gets whatever the fleet view already fetched instead of
+    // issuing its own request each time it opens.
+    const hostsQuery = useProjectHosts(project?.id, { enabled: open });
+    const hosts = hostsQuery.data ?? [];
+    const loadingHosts = hostsQuery.isFetching;
 
     const run = useCallback(
         (fn: () => void) => {

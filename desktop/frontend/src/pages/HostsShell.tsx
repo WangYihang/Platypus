@@ -14,9 +14,10 @@ import PageShell from "../components/PageShell";
 import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { icons } from "../lib/icons";
-import { listHosts, pendingApprovalCount } from "../lib/api";
+import { pendingApprovalCount } from "../lib/api";
 import { HOST_SUBVIEWS } from "../lib/hostRoutes";
 import { qk } from "../lib/queryKeys";
+import { useProjectHosts } from "../lib/queries/hosts";
 import { isOnline } from "../lib/time";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -64,10 +65,7 @@ export default function HostsShell() {
             ? (after as HostsView)
             : "list";
 
-    const { data: hosts } = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
-    });
+    const { data: hosts } = useProjectHosts(project.id);
 
     // Pending approvals badge polls every 10s. The badge surfaces in
     // the header so the operator sees pending approvals from anywhere

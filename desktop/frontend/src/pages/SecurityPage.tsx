@@ -14,11 +14,11 @@ import {
     Host,
     SecurityFinding,
     Severity,
-    listHosts,
     listProjectFindings,
 } from "../lib/api";
 import { humanizeError } from "../lib/humanizeError";
 import { qk } from "../lib/queryKeys";
+import { useProjectHosts } from "../lib/queries/hosts";
 import { fromNow } from "../lib/time";
 
 import { severityTone } from "./fleet/cards/SecurityBadge";
@@ -85,10 +85,7 @@ export default function SecurityPage() {
     // Hosts list reused for the host-filter dropdown. React Query
     // shares the cache with FleetPage so navigating from Fleet →
     // Security skips the round trip.
-    const hostsQuery = useQuery({
-        queryKey: qk.hosts(projectID),
-        queryFn: () => listHosts(projectID),
-    });
+    const hostsQuery = useProjectHosts(projectID);
 
     const total = findingsQuery.data?.total ?? 0;
     const findings = findingsQuery.data?.findings ?? [];

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     Boxes,
     HelpCircle,
@@ -20,8 +20,9 @@ import FilterToolbar from "../../components/FilterToolbar";
 import StatusDot from "../../components/StatusDot";
 import { useCurrentProject } from "../../layout/ProjectShell";
 import { palette, space } from "../../layout/theme";
-import { Host, listHosts } from "../../lib/api";
+import { Host } from "../../lib/api";
 import { qk } from "../../lib/queryKeys";
+import { useProjectHosts } from "../../lib/queries/hosts";
 import { fromNow, isOnline } from "../../lib/time";
 
 import { Button } from "@/components/ui/button";
@@ -49,10 +50,7 @@ export default function HostsPanel() {
         data: hosts = null,
         error,
         isFetching: loading,
-    } = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
-    });
+    } = useProjectHosts(project.id);
     const refresh = () =>
         queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
 

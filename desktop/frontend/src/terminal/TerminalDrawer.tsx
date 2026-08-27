@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useProjectHosts } from "@/lib/queries/hosts";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, Plus, TerminalSquare, X } from "lucide-react";
 
 import Terminal from "../pages/Terminal";
 import { palette, radius, space } from "../layout/theme";
-import { Host, listHosts } from "../lib/api";
+
 import { useShell } from "../layout/ProjectShell";
 import { colorForId } from "../lib/colors";
 import {
@@ -331,8 +332,6 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
     const { project } = useShell();
     const navigate = useNavigate();
     const [menuOpen, setMenuOpen] = useState(false);
-    const [hosts, setHosts] = useState<Host[] | null>(null);
-    const [loading, setLoading] = useState(false);
 
     const quickNew = () => {
         if (!activeShell) return;
@@ -347,24 +346,11 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
         });
     };
 
-    useEffect(() => {
-        if (!menuOpen || !project) return;
-        let cancelled = false;
-        setLoading(true);
-        listHosts(project.id)
-            .then((hs) => {
-                if (!cancelled) setHosts(hs);
-            })
-            .catch(() => {
-                if (!cancelled) setHosts([]);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [menuOpen, project]);
+    // Same shared query the fleet views use — this menu used to
+    // re-fetch the whole list every time it opened.
+    const hostsQuery = useProjectHosts(project?.id, { enabled: menuOpen });
+    const hosts = hostsQuery.data ?? [];
+    const loading = hostsQuery.isFetching;
 
     return (
         <div style={{ display: "inline-flex", alignItems: "center" }}>

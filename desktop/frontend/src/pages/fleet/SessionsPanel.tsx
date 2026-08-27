@@ -15,10 +15,10 @@ import { palette, space } from "../../layout/theme";
 import {
     Host,
     SessionRow,
-    listHosts,
     listProjectSessions,
 } from "../../lib/api";
 import { qk } from "../../lib/queryKeys";
+import { useProjectHosts } from "../../lib/queries/hosts";
 import { fromNow } from "../../lib/time";
 
 import {
@@ -50,10 +50,7 @@ export default function SessionsPanel() {
         queryFn: () =>
             listProjectSessions(project.id, filter === "live" ? { live: true } : {}),
     });
-    const hostsQuery = useQuery({
-        queryKey: qk.hosts(project.id),
-        queryFn: () => listHosts(project.id),
-    });
+    const hostsQuery = useProjectHosts(project.id);
 
     const sessions: SessionRow[] | null = sessionsQuery.data ?? null;
     const hostsByID = useMemo(() => {
