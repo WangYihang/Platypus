@@ -23,47 +23,78 @@ import (
 // govulncheck or pnpm audit, they just lock in the rule those
 // tools would have caught.
 
-// minToolchainPatch is the floor the desktop module must declare.
-// Update both this constant and the toolchain line in
-// desktop/go.mod when you intentionally raise the floor — tying
-// the assertion to a single source of truth keeps drift loud.
-const minDesktopToolchainPatch = 9
+// minDesktopToolchainMinor / minDesktopToolchainPatch are the floor
+// the desktop module's build must meet, as a (minor, patch) pair
+// compared lexicographically. Both halves matter: a bare patch floor
+// would reject a perfectly good go1.27.0 for having patch 0, and a
+// bare minor floor would let the module drift back onto an unpatched
+// .0 of the minor it is already on.
+//
+// Update these constants and the version lines in go.mod and
+// desktop/go.mod together when you intentionally raise the floor —
+// tying the assertion to a single source of truth keeps drift loud.
+const (
+	minDesktopToolchainMinor = 27
+	minDesktopToolchainPatch = 0
+)
 
-// TestDesktopGoModHasToolchainPin guards against the desktop
-// submodule reverting to a bare `go 1.25.x` directive without a
-// `toolchain go1.25.<patch>` pin. Without the pin the build picks
-// the language-version stdlib (1.25.0) and inherits the 16
-// patch-level stdlib vulnerabilities that govulncheck reports
-// (GO-2025-4007 through GO-2026-4947 across crypto/x509, crypto/tls,
-// net/url, net/http, encoding/asn1, encoding/pem, os).
-func TestDesktopGoModHasToolchainPin(t *testing.T) {
+// TestDesktopGoModEffectiveToolchainFloor guards the stdlib the desktop
+// submodule actually builds against.
+//
+// The concrete regression: the module once declared `go 1.25.0` while
+// the patch-level stdlib fixes it needed had landed in 1.25.9, so a
+// contributor on a stock 1.25.0 toolchain inherited all 16 vulns
+// govulncheck reports (GO-2025-4007 through GO-2026-4947 across
+// crypto/x509, crypto/tls, net/url, net/http, encoding/asn1,
+// encoding/pem, os). A `toolchain go1.25.9` line closed that gap.
+//
+// What matters is therefore the *effective* floor — max(go directive,
+// toolchain pin) — not the presence of any particular line. An earlier
+// version of this test demanded a literal `toolchain` line, which is
+// wrong in both directions: `go mod tidy` deletes that line as
+// redundant whenever it equals the `go` directive, and a `toolchain`
+// line alone says nothing if the `go` directive is what's too low.
+func TestDesktopGoModEffectiveToolchainFloor(t *testing.T) {
 	repoRoot := repoRoot(t)
 	body, err := os.ReadFile(filepath.Join(repoRoot, "desktop", "go.mod"))
 	if err != nil {
 		t.Fatalf("read desktop/go.mod: %v", err)
 	}
+	text := string(body)
 
-	// Look for `toolchain go1.<minor>.<patch>` on its own line.
-	// We don't pin a specific minor (1.25 today, possibly 1.26
-	// later), only the floor on the patch within whatever minor.
-	tcPat := regexp.MustCompile(`(?m)^toolchain\s+go1\.\d+\.(\d+)\b`)
-	m := tcPat.FindStringSubmatch(string(body))
+	goPat := regexp.MustCompile(`(?m)^go\s+1\.(\d+)(?:\.(\d+))?\b`)
+	m := goPat.FindStringSubmatch(text)
 	if m == nil {
-		t.Fatalf(
-			"desktop/go.mod has no `toolchain go1.X.Y` line; without it "+
-				"the build pins to the language-version stdlib and inherits "+
-				"the patch-level stdlib vulnerabilities govulncheck reports. "+
-				"Add `toolchain go1.25.%d` (or newer) immediately under the `go` line.",
-			minDesktopToolchainPatch,
-		)
+		t.Fatal("desktop/go.mod has no `go 1.X[.Y]` directive")
 	}
-	patch := atoi(t, m[1])
-	if patch < minDesktopToolchainPatch {
+	minor, patch := atoi(t, m[1]), 0
+	if m[2] != "" {
+		patch = atoi(t, m[2])
+	}
+
+	// A toolchain pin only ever raises the effective floor; Go ignores
+	// one that is lower than the `go` directive.
+	tcPat := regexp.MustCompile(`(?m)^toolchain\s+go1\.(\d+)\.(\d+)\b`)
+	if tc := tcPat.FindStringSubmatch(text); tc != nil {
+		tcMinor, tcPatch := atoi(t, tc[1]), atoi(t, tc[2])
+		if tcMinor > minor || (tcMinor == minor && tcPatch > patch) {
+			minor, patch = tcMinor, tcPatch
+		}
+	}
+
+	if minor < minDesktopToolchainMinor ||
+		(minor == minDesktopToolchainMinor && patch < minDesktopToolchainPatch) {
 		t.Fatalf(
-			"desktop/go.mod toolchain patch is go1.X.%d but minimum is "+
-				"go1.X.%d (raise both the file and minDesktopToolchainPatch in "+
-				"this test if you intentionally floor higher)",
-			patch, minDesktopToolchainPatch,
+			"desktop/go.mod builds against go1.%d.%d at the earliest, but the "+
+				"minimum is go1.%d.%d — raise the `go` directive, or add a "+
+				"`toolchain go1.%d.%d` line under it when the language version "+
+				"needs to stay where it is. Below the floor the build inherits "+
+				"the patch-level stdlib vulnerabilities govulncheck reports. "+
+				"(If this bump is intentional, raise the minDesktopToolchain* "+
+				"constants in this test too.)",
+			minor, patch,
+			minDesktopToolchainMinor, minDesktopToolchainPatch,
+			minDesktopToolchainMinor, minDesktopToolchainPatch,
 		)
 	}
 }

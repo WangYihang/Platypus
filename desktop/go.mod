@@ -1,15 +1,21 @@
 module github.com/WangYihang/Platypus/desktop
 
-go 1.25.0
-
-// toolchain pin matches the root module so the desktop build picks
-// up patch-level stdlib fixes. govulncheck flagged 16 stdlib vulns
-// when this submodule was building against the bare 1.25.0 stdlib
-// (crypto/x509, crypto/tls, net/url, net/http, encoding/asn1,
-// encoding/pem, os — all fixed by 1.25.9). Bump in lockstep with
-// root go.mod when raising the floor; the regression test in
-// cmd/platypus-server/dependencies_test.go pins the floor.
-toolchain go1.25.9
+// Keep this in lockstep with the root go.mod. The floor exists because
+// govulncheck flagged 16 patch-level stdlib vulns (crypto/x509,
+// crypto/tls, net/url, net/http, encoding/asn1, encoding/pem, os) back
+// when this submodule declared `go 1.25.0` and the fixes only landed in
+// 1.25.9 — a contributor on a bare 1.25.0 toolchain built against every
+// one of them.
+//
+// While the newest patch of the current minor is what the `go` line
+// already names, no separate `toolchain` line is needed (and `go mod
+// tidy` strips it as redundant). When a patch release lands with fixes
+// worth requiring, add `toolchain go1.X.Y` below the `go` line rather
+// than raising `go`, so the language version stays where the code
+// actually needs it. The regression test in
+// cmd/platypus-server/dependencies_test.go asserts the effective floor
+// either way.
+go 1.27.0
 
 require (
 	github.com/coder/websocket v1.8.15

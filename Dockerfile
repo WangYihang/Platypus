@@ -17,7 +17,7 @@ COPY desktop/frontend/ ./
 RUN pnpm run build:web
 
 # Stage 1: Build the binaries
-FROM golang:1.25 AS builder
+FROM golang:1.27 AS builder
 
 WORKDIR /app
 
@@ -89,7 +89,7 @@ ENTRYPOINT ["/usr/local/bin/platypus-agent"]
 # production releases run scripts/release-publish.sh from CI with a
 # vault-stored signing key, then rsync the resulting tree onto the
 # server's data volume.
-FROM golang:1.25 AS publisher
+FROM golang:1.27 AS publisher
 WORKDIR /workspace
 # python3 + pyyaml are for the marketplace index.json generator the
 # publisher entrypoint runs after building the example plugins. They
