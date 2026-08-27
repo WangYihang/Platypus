@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +9,6 @@ import {
     IssueInstallResponse,
     getServerInfo,
     issueInstallArtifact,
-    listInstallPlatforms,
 } from "../../../lib/api";
 import { humanizeError } from "../../../lib/humanizeError";
 import { formatSeconds } from "../../../lib/time";
@@ -34,7 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 import PlatformPickerField from "../PlatformPickerField";
-import { PlatformsState } from "../platforms";
+import { useInstallPlatforms } from "../platforms";
 import { InstallFormValues, installSchema } from "../schemas";
 
 interface Props {
@@ -55,6 +54,10 @@ export default function IssueInstallDialog({
     onIssued,
     projectID,
 }: Props) {
+    // Shared producer — see platforms.ts. This and EnrollAgentWizard
+    // each built the same four-case state by hand.
+    const platforms = useInstallPlatforms(open);
+
     const form = useForm<InstallFormValues>({
         resolver: zodResolver(installSchema),
         // onBlur revalidation surfaces "must be a positive integer"
@@ -71,9 +74,6 @@ export default function IssueInstallDialog({
     });
 
     // Live (os, arch) list from the active channel's manifest.
-    const [platforms, setPlatforms] = useState<PlatformsState>({
-        status: "loading",
-    });
 
     // Pre-fill server_endpoint with the server's public_addr and load
     // the platform list whenever the dialog opens. Both are best-effort
@@ -95,22 +95,6 @@ export default function IssueInstallDialog({
                 if (browserFallback) {
                     form.setValue("server_endpoint", browserFallback);
                 }
-            });
-        setPlatforms({ status: "loading" });
-        listInstallPlatforms()
-            .then((r) => {
-                if (r.platforms.length === 0) {
-                    setPlatforms({ status: "empty", channel: r.channel });
-                } else {
-                    setPlatforms({
-                        status: "ready",
-                        platforms: r.platforms,
-                        channel: r.channel,
-                    });
-                }
-            })
-            .catch((e) => {
-                setPlatforms({ status: "error", message: humanizeError(e) });
             });
     }, [open, form]);
 

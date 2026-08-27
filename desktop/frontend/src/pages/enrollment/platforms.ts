@@ -4,7 +4,12 @@
 // so the wizard doesn't have to depend on the management-page module
 // just to pick up the priority lists.
 
-import { InstallPlatform } from "../../lib/api";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { InstallPlatform, listInstallPlatforms } from "../../lib/api";
+import { humanizeError } from "../../lib/humanizeError";
+import { qk } from "../../lib/queryKeys";
 
 // PlatformsState tracks the install-target picker's lifecycle so the
 // UI can disable the dropdown while loading and surface the right
@@ -138,3 +143,36 @@ export function preferredOrder(priority: string[]): (a: string, b: string) => nu
 // definitions also removes the only place in the FE that used to
 // hard-code Linux/Windows/macOS labels — keep that property if you're
 // adding new platform handling here.
+
+
+/**
+ * Produces the PlatformsState above from the install manifest.
+ *
+ * The wizard and the management-page dialog each built this by hand,
+ * in eighteen identical lines: a listInstallPlatforms() call, a
+ * length check to tell "empty" from "ready", and a catch mapping the
+ * failure into { status: "error" }. Two copies of a four-case state
+ * machine is two places for a case to be handled differently, on a
+ * type whose whole reason for existing is that "no manifest
+ * published" and "request failed" must not be conflated.
+ *
+ * Backed by a query, so opening the dialog after the wizard (or the
+ * other way round) reuses the manifest rather than refetching it.
+ */
+export function useInstallPlatforms(enabled = true): PlatformsState {
+    const q = useQuery({
+        queryKey: qk.installPlatforms(),
+        queryFn: listInstallPlatforms,
+        enabled,
+        refetchOnWindowFocus: false,
+    });
+
+    return useMemo<PlatformsState>(() => {
+        if (q.error) return { status: "error", message: humanizeError(q.error) };
+        if (!q.data) return { status: "loading" };
+        if (q.data.platforms.length === 0) {
+            return { status: "empty", channel: q.data.channel };
+        }
+        return { status: "ready", platforms: q.data.platforms, channel: q.data.channel };
+    }, [q.data, q.error]);
+}

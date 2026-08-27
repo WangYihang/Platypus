@@ -11,7 +11,6 @@ import {
     getServerInfo,
     issueInstallArtifact,
     listEnrollmentPresets,
-    listInstallPlatforms,
     seedEnrollmentPresets,
 } from "../../../lib/api";
 import { PluginSpecDraft } from "../../../components/PluginSpecEditor";
@@ -30,6 +29,7 @@ import {
     archLabel,
     osLabel,
     preferredOrder,
+    useInstallPlatforms,
 } from "../../enrollment/platforms";
 import StepIndicator from "./StepIndicator";
 import WizardFooter from "./WizardFooter";
@@ -45,7 +45,7 @@ import BaselinePluginsStep from "./steps/BaselinePluginsStep";
 import DescriptionStep from "./steps/DescriptionStep";
 import ReviewStep from "./steps/ReviewStep";
 import RunStep from "./steps/RunStep";
-import { PlatformsState, STEPS, Step } from "./steps";
+import { STEPS, Step } from "./steps";
 import { useEnrollWizardOpen } from "./useEnrollWizardOpen";
 
 export default function EnrollAgentWizard() {
@@ -70,7 +70,6 @@ export default function EnrollAgentWizard() {
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [issued, setIssued] = useState<IssueInstallResponse | null>(null);
-    const [platforms, setPlatforms] = useState<PlatformsState>({ status: "loading" });
     const [presets, setPresets] = useState<PresetsState>({ status: "loading" });
     // Tracks which preset (if any) the operator is currently editing.
     // Set when the user clicks "Edit" on a preset card and used by the
@@ -82,6 +81,11 @@ export default function EnrollAgentWizard() {
     // Reset on every open transition. Remounting on close-then-open
     // would flash the platforms-loading skeleton each time, so we
     // keep the wizard mounted and snap state back instead.
+    // Shared producer — see platforms.ts. This and IssueInstallDialog
+    // each built the same four-case state by hand, and now share the
+    // fetch too: opening one after the other reuses the manifest.
+    const platforms = useInstallPlatforms(open);
+
     // Form state resets during render; the loads below stay in an
     // effect because they are what effects are for.
     useResetOnOpen(open, () => {
@@ -115,22 +119,6 @@ export default function EnrollAgentWizard() {
                 /* leave blank */
             });
 
-        setPlatforms({ status: "loading" });
-        listInstallPlatforms()
-            .then((r) => {
-                if (r.platforms.length === 0) {
-                    setPlatforms({ status: "empty", channel: r.channel });
-                } else {
-                    setPlatforms({
-                        status: "ready",
-                        platforms: r.platforms,
-                        channel: r.channel,
-                    });
-                }
-            })
-            .catch((e) => {
-                setPlatforms({ status: "error", message: humanizeError(e) });
-            });
 
         setPresets({ status: "loading" });
         listEnrollmentPresets(project.id)
