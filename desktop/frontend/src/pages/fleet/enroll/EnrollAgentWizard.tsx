@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 import { toast } from "sonner";
 
 import { useCurrentProject } from "../../../layout/ProjectShell";
@@ -80,8 +82,9 @@ export default function EnrollAgentWizard() {
     // Reset on every open transition. Remounting on close-then-open
     // would flash the platforms-loading skeleton each time, so we
     // keep the wizard mounted and snap state back instead.
-    useEffect(() => {
-        if (!open) return;
+    // Form state resets during render; the loads below stay in an
+    // effect because they are what effects are for.
+    useResetOnOpen(open, () => {
         setStep("pick_preset");
         setTargetOS("");
         setTargetArch("");
@@ -94,6 +97,10 @@ export default function EnrollAgentWizard() {
         setIssued(null);
         setSubmitting(false);
         setEditingPresetID(null);
+    });
+
+    useEffect(() => {
+        if (!open) return;
 
         // Best-effort prefill. Failures fall through to a blank input
         // — the operator just types it in step 3.

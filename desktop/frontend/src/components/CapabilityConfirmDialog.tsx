@@ -1,4 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
+
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -87,14 +89,16 @@ export default function CapabilityConfirmDialog({
     // reads: the form must reset when the dialog is pointed at a
     // different plugin, not only when it opens. That is what the rule
     // reads as an extra dependency.
-    useEffect(() => {
-        if (open) {
-            setGranted(new Set());
-            setAdvancedOpen(false);
-            setSubmitting(false);
-        }
-        // oxlint-disable-next-line react/exhaustive-effect-dependencies
-    }, [open, pluginID, pluginVersion]);
+    // Keyed on the dialog's subject, not just `open`: pluginID and
+    // pluginVersion were in the dependency array for exactly that
+    // reason, and needed a suppression because the body read neither.
+    // Naming the tuple says it directly.
+    useOnValueChange(`${open}:${pluginID}:${pluginVersion}`, () => {
+        if (!open) return;
+        setGranted(new Set());
+        setAdvancedOpen(false);
+        setSubmitting(false);
+    });
 
     const sorted = useMemo(() => sortCapabilities(declared), [declared]);
     const declaredSet = useMemo(

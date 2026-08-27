@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,6 +10,7 @@ import RefreshButton from "../../components/RefreshButton";
 import Toolbar from "../../components/Toolbar";
 import { palette, space } from "../../layout/theme";
 import { humanizeError } from "../../lib/humanizeError";
+import { qk } from "../../lib/queryKeys";
 import { fromNow } from "../../lib/time";
 import {
     type AccountPAT,
@@ -41,31 +43,33 @@ import IssueAccountPATDialog from "./IssueAccountPATDialog";
 import IssuedAccountPATDialog from "./IssuedAccountPATDialog";
 
 export default function AccountTokensTab() {
-    const [rows, setRows] = useState<AccountPAT[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
     const [includeRevoked, setIncludeRevoked] = useState(false);
     const [issueOpen, setIssueOpen] = useState(false);
     const [lastIssued, setLastIssued] = useState<IssueAccountPATResponse | null>(null);
     const [pendingRevoke, setPendingRevoke] = useState<AccountPAT | null>(null);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await listAccountPATs(includeRevoked);
-            setRows(data);
-            setError(null);
-        } catch (e) {
-            setError(humanizeError(e));
-            toast.error(`Couldn't load tokens: ${humanizeError(e)}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [includeRevoked]);
+    // useQuery rather than a useCallback fetch driven by an effect:
+    // that pairing was a hand-rolled version of exactly this, down to
+    // the loading flag and the try/catch/finally, and it re-fetched on
+    // every identity change of the callback rather than on a change of
+    // what it fetches.
+    const tokens = useQuery({
+        queryKey: qk.accountPATs(includeRevoked),
+        queryFn: () => listAccountPATs(includeRevoked),
+        refetchOnWindowFocus: false,
+    });
+    const rows = tokens.data ?? null;
+    const loading = tokens.isFetching;
+    const error = tokens.error ? humanizeError(tokens.error) : null;
+    const refresh = useCallback(() => {
+        void tokens.refetch();
+    }, [tokens]);
 
     useEffect(() => {
-        void refresh();
-    }, [refresh]);
+        if (tokens.error) {
+            toast.error(`Couldn't load tokens: ${humanizeError(tokens.error)}`);
+        }
+    }, [tokens.error]);
 
     async function confirmRevoke() {
         if (!pendingRevoke) return;

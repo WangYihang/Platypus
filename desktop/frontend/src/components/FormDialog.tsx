@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -64,13 +64,10 @@ export default function FormDialog({
 }: FormDialogProps) {
     const [submitting, setSubmitting] = useState(false);
 
-    // Reset the in-flight flag whenever the dialog re-opens. Without
-    // this a previous submission that errored mid-flight could leave
-    // submitting=true, locking out the next attempt.
-    useEffect(() => {
-        if (open) setSubmitting(false);
-    }, [open]);
-
+    // No reset-on-open for `submitting`: handleSubmit sets it in a
+    // `finally`, so it cannot survive a submission that threw. There
+    // used to be an effect here guarding against exactly that, which
+    // could not happen.
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (submitting || submitDisabled) return;

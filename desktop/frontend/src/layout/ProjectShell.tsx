@@ -8,9 +8,12 @@ import {
     useEffect,
     useState,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { qk } from "../lib/queryKeys";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -101,19 +104,24 @@ export default function ProjectShell({ requireProject = false }: Props) {
     const params = useParams<{ projectSlug?: string }>();
     const user = getSessionUser();
     const serverURL = getSession()?.serverURL ?? "";
-    const [projects, setProjects] = useState<Project[] | null>(null);
-
+    // useQuery, not a useCallback fetch triggered by an effect — the
+    // pair was a hand-rolled version of this, and it swallowed the
+    // error into an empty list, so a failed /projects call looked
+    // exactly like an account with no projects.
+    const projectsQuery = useQuery({
+        queryKey: qk.projects(),
+        queryFn: listProjects,
+        refetchOnWindowFocus: false,
+    });
+    // Errors still fall back to an empty list so the shell stays
+    // renderable; `loading` below is the query's own state now rather
+    // than "data is still null".
+    const projects = projectsQuery.isPending ? null : projectsQuery.data ?? [];
+    // Kept async because the context type promises a Promise — callers
+    // await it to sequence a refresh after a mutation.
     const refresh = useCallback(async () => {
-        try {
-            setProjects(await listProjects());
-        } catch {
-            setProjects([]);
-        }
-    }, []);
-
-    useEffect(() => {
-        void refresh();
-    }, [refresh]);
+        await projectsQuery.refetch();
+    }, [projectsQuery]);
 
     if (!user) return null;
 

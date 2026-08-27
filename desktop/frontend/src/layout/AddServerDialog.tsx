@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -70,8 +72,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
 
     const [busy, setBusy] = useState(false);
 
-    useEffect(() => {
-        if (!open) return;
+    useResetOnOpen(open, () => {
         setPhase("probe");
         setProbeInfo(null);
         setProbeError(null);
@@ -80,7 +81,7 @@ export default function AddServerDialog({ open, onOpenChange, onAdded }: Props) 
         setSecret("");
         setBootstrapPassword("");
         setBootstrapUsername("admin");
-    }, [open]);
+    });
 
     const displayName = useMemo(
         () => name.trim() || (url ? hostnameFromURL(url) : ""),

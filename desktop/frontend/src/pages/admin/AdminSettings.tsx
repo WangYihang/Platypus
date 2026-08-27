@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../lib/humanizeError";
 import { leafText } from "@/lib/displayValue";
+import { useOnValueChange } from "@/lib/useOnValueChange";
+import { qk } from "@/lib/queryKeys";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
@@ -103,31 +106,33 @@ function parseFormValue(
 // section's dirty rows via PUT /api/v1/admin/settings/:key, Reset
 // clears the DB override for one row via DELETE.
 export default function AdminSettings() {
-    const [descs, setDescs] = useState<SettingDescriptor[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
     // Per-key in-progress string values. Seeded from descs, updated
     // on each input change, diffed against descs on Save.
     const [draft, setDraft] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState<string | null>(null); // section being saved
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        try {
-            const rows = await listSettings();
-            setDescs(rows);
-            setDraft(Object.fromEntries(rows.map((d) => [d.key, formValueFor(d)])));
-            setError(null);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    // The fetch is a query; the draft is state seeded from it. Those
+    // are two different things and used to share one hand-rolled
+    // effect — which meant the draft could only ever be re-seeded by
+    // re-running the whole fetch.
+    const settingsQuery = useQuery({
+        queryKey: qk.adminSettings(),
+        queryFn: listSettings,
+        refetchOnWindowFocus: false,
+    });
+    const descs = settingsQuery.isPending ? null : settingsQuery.data ?? null;
+    const loading = settingsQuery.isFetching;
+    const error = settingsQuery.error ? String(settingsQuery.error) : null;
 
-    useEffect(() => {
-        void refresh();
-    }, [refresh]);
+    // Seeded, not derived: the operator edits these, so they have to
+    // be written once per arrival rather than recomputed each render.
+    useOnValueChange(settingsQuery.data, (rows) => {
+        if (rows) setDraft(Object.fromEntries(rows.map((d) => [d.key, formValueFor(d)])));
+    });
+
+    const refresh = useCallback(async () => {
+        await settingsQuery.refetch();
+    }, [settingsQuery]);
 
     const sections = useMemo(() => {
         if (!descs) return [];
