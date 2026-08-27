@@ -7,7 +7,7 @@ import {
     useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, TerminalSquare } from "lucide-react";
+import { Archive, Loader2, TerminalSquare } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import RefreshButton from "../components/RefreshButton";
@@ -17,10 +17,24 @@ import {
     Host,
     HostSysInfo,
     SessionRow,
+    archiveHost,
     getHost,
     getHostSysInfo,
     listHostSessions,
 } from "../lib/api";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
+import { humanizeError } from "../lib/humanizeError";
 import { NotifyEvent, SessionEventPayload, onNotify } from "../lib/notify";
 import { qk } from "../lib/queryKeys";
 import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
@@ -163,6 +177,24 @@ export default function HostView({ projectID, hostID }: Props) {
     const [bottomTab, setBottomTab] = useState<BottomTab>("processes");
     const [bottomHeight, setBottomHeight] = useState(220);
 
+    // Declared up here, above the loading/not-found guards below, so
+    // the hook count is the same on every render — see PluginsTab for
+    // what happens when a guard sneaks above a hook.
+    const [archiveOpen, setArchiveOpen] = useState(false);
+    const archiveMu = useMutation({
+        mutationFn: (reason: string = "") => archiveHost(project.id, hostID, reason),
+        onSuccess: () => {
+            toast.success("Host archived");
+            void queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+            void queryClient.invalidateQueries({ queryKey: qk.archivedHosts(project.id) });
+            void queryClient.invalidateQueries({ queryKey: qk.pendingHosts(project.id) });
+            void queryClient.invalidateQueries({ queryKey: qk.pendingHostsCount(project.id) });
+            setArchiveOpen(false);
+            navigate(`/projects/${project.slug}/hosts`);
+        },
+        onError: (e) => toast.error(humanizeError(e)),
+    });
+
     // Per-activity scroll preservation. Each activity panel shares one
     // scroll container; without help every switch resets scrollTop to
     // 0. computeScrollSwap is the pure brain.
@@ -304,6 +336,15 @@ export default function HostView({ projectID, hostID }: Props) {
             >
                 <TerminalSquare className="size-3.5" />
             </Button>
+            <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={() => setArchiveOpen(true)}
+                aria-label="Archive host"
+                title="Archive this host — removes it from the fleet list, keeps its history"
+            >
+                <Archive className="size-3.5" />
+            </Button>
             <RefreshButton
                 loading={loading}
                 onClick={refresh}
@@ -314,9 +355,35 @@ export default function HostView({ projectID, hostID }: Props) {
         </span>
     );
 
+    const archiveDialog = (
+        <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Archive {primary}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        It drops out of the fleet list and the approval queue. Its
+                        terminal recordings, security scans and config audits are kept,
+                        and you can restore it from Hosts → Archived. If the agent
+                        reconnects, the host comes back on its own.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => archiveMu.mutate("")}
+                        disabled={archiveMu.isPending}
+                    >
+                        Archive
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
             <HostHeaderBar project={project} host={host} actions={headerActions} />
+            {archiveDialog}
             <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
                 <ActivityBar
                     active={activeActivity}

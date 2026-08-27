@@ -1,5 +1,7 @@
 import { useMatch } from "react-router-dom";
 
+import { HOST_SUBVIEWS } from "@/lib/hostRoutes";
+
 // useRouteHostId reads the :hostId segment of a host-detail URL without
 // depending on where the caller sits in the route tree.
 //
@@ -22,9 +24,12 @@ export function useRouteHostId(): string | undefined {
 
     const hostId = withTab?.params.hostId ?? bare?.params.hostId;
 
-    // "topology" is a sibling view, not a host id: /hosts/topology
-    // matches the bare pattern above and would otherwise be reported as
-    // a host whose shells could never exist.
-    if (!hostId || hostId === "topology") return undefined;
+    if (!hostId || RESERVED_HOST_SEGMENTS.has(hostId)) return undefined;
     return hostId;
 }
+
+// The fleet sub-views match the bare /hosts/:hostId pattern above, so
+// without this each would be reported as a host whose shells could
+// never exist. Derived from the shared list rather than restated, so
+// adding a sub-view cannot forget this file.
+const RESERVED_HOST_SEGMENTS: ReadonlySet<string> = new Set(HOST_SUBVIEWS);

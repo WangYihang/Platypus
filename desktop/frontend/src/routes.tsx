@@ -23,6 +23,7 @@ const HostsShell = lazy(() => import("./pages/HostsShell"));
 const SecurityPage = lazy(() => import("./pages/SecurityPage"));
 const HostsView = lazy(() => import("./pages/fleet/HostsView"));
 const TopologyPanel = lazy(() => import("./pages/fleet/TopologyPanel"));
+const ArchivedHostsPage = lazy(() => import("./pages/fleet/ArchivedHostsPage"));
 const HostViewRoute = lazy(() => import("./routes/HostViewRoute"));
 const ActivityShell = lazy(() => import("./pages/ActivityShell"));
 const SessionsPanel = lazy(() => import("./pages/fleet/SessionsPanel"));
@@ -204,6 +205,12 @@ export const routeTree: RouteObject[] = [
                         children: [
                             { index: true, element: withSuspense(<HostsView />) },
                             { path: "topology", element: withSuspense(<TopologyPanel />) },
+                            // Static siblings of :hostId. Every one of
+                            // these must also be listed in
+                            // RESERVED_HOST_SEGMENTS (terminal/
+                            // useRouteHostId.ts) or the terminal drawer
+                            // treats the segment as a host id.
+                            { path: "archived", element: withSuspense(<ArchivedHostsPage />) },
                             // hosts/:hostId without an activity lands on
                             // `files` — the VS-Code-style HostView treats
                             // the file browser as the centrepiece.

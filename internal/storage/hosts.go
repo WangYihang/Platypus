@@ -104,6 +104,15 @@ type Host struct {
 	// missing plugin to the agent with the operator's full
 	// deployment intent.
 	PluginSpecs []PluginSpec
+
+	// --- Archive (migration 000036). A soft delete: archived hosts
+	// stay in the table with every recording, scan and audit that
+	// references them intact, but drop out of the fleet list and the
+	// approval queue. Restore clears all three fields. Re-enrolment
+	// clears them too — see Upsert. ---
+	ArchivedAt     *time.Time
+	ArchivedBy     string
+	ArchivedReason string
 }
 
 // HostApprovalStatus is the host-level approval state. See migration
@@ -194,7 +203,8 @@ const hostAllCols = `id, project_id, machine_id, fingerprint, fingerprint_fallba
        machine_type, chassis_type, product_vendor, product_name,
        bios_vendor, bios_version, gpu_summary,
        approval_status, approval_decided_at, approval_decided_by, approval_reason,
-       plugin_specs`
+       plugin_specs,
+       archived_at, archived_by_user, archived_reason`
 
 // Upsert merges the given identity into the hosts table. Matching order:
 //
@@ -283,7 +293,17 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 			       protocol_version = ?,
 			       machine_type = ?, chassis_type = ?, product_vendor = ?,
 			       product_name = ?, bios_vendor = ?, bios_version = ?,
-			       gpu_summary = ?
+			       gpu_summary = ?,
+			       -- An agent that comes back un-archives its own
+			       -- row. The alternative is a machine that is
+			       -- demonstrably live staying invisible in the
+			       -- fleet list because someone archived it once,
+			       -- with no hint as to why it never reappeared.
+			       -- The row keeps its id and its history either
+			       -- way, so nothing is duplicated by this.
+			       archived_at = NULL,
+			       archived_by_user = NULL,
+			       archived_reason = NULL
 			 WHERE id = ?`,
 			nullIfEmpty(merged.MachineID), merged.Fingerprint, merged.FingerprintFallback,
 			merged.Hostname, merged.OS, merged.LastSeenAt,
@@ -310,6 +330,13 @@ func (r *HostRepo) Upsert(ctx context.Context, ident *HostIdentity) (*Host, erro
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
+		// merged was built from the pre-update row, so it still
+		// carries the archive fields the UPDATE just cleared. Callers
+		// read the returned Host rather than re-fetching, so mirror
+		// the write here or they see a live agent as archived.
+		merged.ArchivedAt = nil
+		merged.ArchivedBy = ""
+		merged.ArchivedReason = ""
 		return merged, nil
 	}
 
@@ -534,10 +561,12 @@ func coalesceString(a, b string) string {
 	return b
 }
 
+// ListByProject returns the project's live hosts. Archived rows are
+// excluded — see ListArchivedByProject for those.
 func (r *HostRepo) ListByProject(ctx context.Context, projectID string) ([]*Host, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT `+hostAllCols+`
-		  FROM hosts WHERE project_id = ?
+		  FROM hosts WHERE project_id = ? AND archived_at IS NULL
 		 ORDER BY hostname ASC`, projectID)
 	if err != nil {
 		return nil, err
@@ -670,6 +699,9 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		approvalBy      sql.NullString
 		approvalReason  sql.NullString
 		baselineCSV     sql.NullString
+		archivedAt      sql.NullTime
+		archivedBy      sql.NullString
+		archivedReason  sql.NullString
 	)
 	err := s.Scan(
 		&h.ID, &h.ProjectID, &machineID, &h.Fingerprint, &h.FingerprintFallback,
@@ -684,9 +716,20 @@ func scanHostRow(s rowScanner) (*Host, error) {
 		&biosVendor, &biosVersion, &gpuSummary,
 		&approvalStatus, &approvalAt, &approvalBy, &approvalReason,
 		&baselineCSV,
+		&archivedAt, &archivedBy, &archivedReason,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if archivedAt.Valid {
+		t := archivedAt.Time
+		h.ArchivedAt = &t
+	}
+	if archivedBy.Valid {
+		h.ArchivedBy = archivedBy.String
+	}
+	if archivedReason.Valid {
+		h.ArchivedReason = archivedReason.String
 	}
 	if machineID.Valid {
 		h.MachineID = machineID.String
@@ -880,6 +923,7 @@ func (r *HostRepo) ListPendingByProject(ctx context.Context, projectID string) (
 		SELECT `+hostAllCols+`
 		  FROM hosts
 		 WHERE project_id = ? AND approval_status = 'pending'
+		   AND archived_at IS NULL
 		 ORDER BY first_seen_at ASC`, projectID)
 	if err != nil {
 		return nil, err
@@ -904,7 +948,8 @@ func (r *HostRepo) CountPendingByProject(ctx context.Context, projectID string) 
 	var n int
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM hosts
-		 WHERE project_id = ? AND approval_status = 'pending'`, projectID).Scan(&n); err != nil {
+		 WHERE project_id = ? AND approval_status = 'pending'
+		   AND archived_at IS NULL`, projectID).Scan(&n); err != nil {
 		return 0, err
 	}
 	return n, nil
@@ -968,4 +1013,84 @@ func (r *HostRepo) SetPluginSpecs(ctx context.Context, hostID string, specs []Pl
 		return ErrNotFound
 	}
 	return nil
+}
+
+// Archive soft-deletes a host: it drops out of ListByProject and the
+// approval queue, but the row and everything referencing it — terminal
+// recordings, security scans, config audits, transfers — stay exactly
+// where they were.
+//
+// This is the only "delete" a host has. A cascade would take the
+// evidence with it, and an operator clearing a stale row off a list is
+// not making a retention decision. Reversible via Restore.
+func (r *HostRepo) Archive(ctx context.Context, id, byUser, reason string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE hosts
+		   SET archived_at = ?,
+		       archived_by_user = ?,
+		       archived_reason = ?
+		 WHERE id = ? AND archived_at IS NULL`,
+		at.UTC(), nullIfEmpty(byUser), nullIfEmpty(reason), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		// Either no such host, or it was already archived. Both are
+		// "nothing to do" for the caller; the handler distinguishes
+		// them with a Get when it needs to.
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Restore brings an archived host back into the fleet list, clearing
+// the archive metadata so a later archive records its own actor and
+// reason rather than inheriting the previous one.
+func (r *HostRepo) Restore(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE hosts
+		   SET archived_at = NULL,
+		       archived_by_user = NULL,
+		       archived_reason = NULL
+		 WHERE id = ? AND archived_at IS NOT NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListArchivedByProject returns the project's archived hosts, most
+// recently archived first. Backs the "show archived" view an operator
+// uses to find something to restore.
+func (r *HostRepo) ListArchivedByProject(ctx context.Context, projectID string) ([]*Host, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT `+hostAllCols+`
+		  FROM hosts
+		 WHERE project_id = ? AND archived_at IS NOT NULL
+		 ORDER BY archived_at DESC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := []*Host{}
+	for rows.Next() {
+		h, err := scanHostRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }

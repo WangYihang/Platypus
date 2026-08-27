@@ -15,6 +15,7 @@ import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
 import { icons } from "../lib/icons";
 import { listHosts, pendingApprovalCount } from "../lib/api";
+import { HOST_SUBVIEWS } from "../lib/hostRoutes";
 import { qk } from "../lib/queryKeys";
 import { isOnline } from "../lib/time";
 import { Button } from "@/components/ui/button";
@@ -33,12 +34,16 @@ import EnrollAgentWizard from "./fleet/enroll/EnrollAgentWizard";
 // concern it handles internally; mounting it here also unmounted it on
 // every navigation away, closing the WebSocket behind each open shell.
 // It now sits in ShellChrome via terminal/TerminalDock.
-const VIEWS = ["list", "topology"] as const;
+// "list" is /hosts itself; the rest come from the shared sub-view list
+// so this switcher and useRouteHostId cannot disagree about what is a
+// view and what is a host id.
+const VIEWS = ["list", ...HOST_SUBVIEWS] as const;
 type HostsView = (typeof VIEWS)[number];
 
 const VIEW_LABELS: Record<HostsView, string> = {
     list: "List",
     topology: "Topology",
+    archived: "Archived",
 };
 
 export default function HostsShell() {
@@ -47,13 +52,17 @@ export default function HostsShell() {
     const { pathname } = useLocation();
     const { hostId } = useParams<{ hostId?: string }>();
 
-    // Pick the active view from the URL. /hosts → list, /hosts/topology
-    // → topology, /hosts/:hostId/* → list (so the rail stays grouped
-    // with the list-mode chrome).
+    // Pick the active view from the URL. /hosts → list, /hosts/<view>
+    // → that view, /hosts/:hostId/* → list (so the rail stays grouped
+    // with the list-mode chrome). A :hostId lands here too and falls
+    // through to "list" because it is not one of VIEWS.
     const segments = pathname.split("/").filter(Boolean);
     const hostsIdx = segments.indexOf("hosts");
     const after = hostsIdx >= 0 ? segments[hostsIdx + 1] : undefined;
-    const activeView: HostsView = after === "topology" ? "topology" : "list";
+    const activeView: HostsView =
+        after && (VIEWS as readonly string[]).includes(after) && after !== "list"
+            ? (after as HostsView)
+            : "list";
 
     const { data: hosts } = useQuery({
         queryKey: qk.hosts(project.id),

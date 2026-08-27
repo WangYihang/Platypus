@@ -58,7 +58,15 @@ type hostResponse struct {
 	ApprovalStatus    string     `json:"approval_status"`
 	ApprovalDecidedAt *time.Time `json:"approval_decided_at,omitempty"`
 	ApprovalDecidedBy string     `json:"approval_decided_by,omitempty"`
-	ApprovalReason    string     `json:"approval_reason,omitempty"`
+
+	// Archive metadata. Only ever set on rows from the archived
+	// listing — the fleet list filters archived hosts out — so the
+	// UI can treat a present archived_at as "this is an archived
+	// row" without a second flag.
+	ArchivedAt     *time.Time `json:"archived_at,omitempty"`
+	ArchivedBy     string     `json:"archived_by,omitempty"`
+	ArchivedReason string     `json:"archived_reason,omitempty"`
+	ApprovalReason string     `json:"approval_reason,omitempty"`
 
 	AgentID         string       `json:"agent_id,omitempty"`
 	Arch            string       `json:"arch,omitempty"`
@@ -181,6 +189,9 @@ func toHostResponse(h *storage.Host) hostResponse {
 		ApprovalStatus:      string(h.ApprovalStatus),
 		ApprovalDecidedAt:   h.ApprovalDecidedAt,
 		ApprovalDecidedBy:   h.ApprovalDecidedBy,
+		ArchivedAt:          h.ArchivedAt,
+		ArchivedBy:          h.ArchivedBy,
+		ArchivedReason:      h.ArchivedReason,
 		ApprovalReason:      h.ApprovalReason,
 	}
 }
@@ -1008,9 +1019,116 @@ func (h *HostsHandler) Reject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "rejected"})
 }
 
+// Archive handles DELETE /projects/:pid/hosts/:hid. Soft delete: the
+// host drops out of the fleet list and the approval queue, and
+// everything that references it — recordings, security scans, config
+// audits, transfers — is untouched.
+//
+// It is deliberately not a cascade. Those references are the record
+// that a machine was reachable, was scanned, and was non-compliant on
+// a given date; an operator clearing a stale row off a list is not
+// making a retention decision, and should not be able to destroy that
+// by accident. Reversible via Restore.
+func (h *HostsHandler) Archive(c *gin.Context) {
+	projectID := c.Param("pid")
+	hostID := c.Param("hid")
+	claims, _ := ClaimsFromContext(c)
+
+	var body approvalDecisionRequest
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now().UTC()
+	err := h.db.Hosts().Archive(c.Request.Context(), hostID, claims.UserID, body.Reason, now)
+	if errors.Is(err, storage.ErrNotFound) {
+		// Archive matches on archived_at IS NULL, so this covers both
+		// "no such host" and "already archived". Tell them apart so an
+		// operator double-clicking gets a no-op rather than a puzzle.
+		if existing, getErr := h.db.Hosts().GetByID(c.Request.Context(), hostID); getErr == nil && existing.ArchivedAt != nil {
+			c.JSON(http.StatusOK, gin.H{"status": "archived"})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		log.Warn("hosts: archive %s: %v", hostID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "archive host"})
+		return
+	}
+
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      "host.archive",
+		TargetType:  "host",
+		TargetID:    hostID,
+		TargetLabel: hostID,
+		Outcome:     storage.OutcomeSuccess,
+		Meta:        map[string]string{"reason": body.Reason},
+		At:          now,
+	})
+	c.JSON(http.StatusOK, gin.H{"status": "archived"})
+}
+
+// Restore handles POST /projects/:pid/hosts/:hid/restore, undoing an
+// Archive. Note that a re-enrolling agent un-archives its own host, so
+// this is for rows whose machine is gone or offline.
+func (h *HostsHandler) Restore(c *gin.Context) {
+	projectID := c.Param("pid")
+	hostID := c.Param("hid")
+
+	now := time.Now().UTC()
+	err := h.db.Hosts().Restore(c.Request.Context(), hostID)
+	if errors.Is(err, storage.ErrNotFound) {
+		if existing, getErr := h.db.Hosts().GetByID(c.Request.Context(), hostID); getErr == nil && existing.ArchivedAt == nil {
+			c.JSON(http.StatusOK, gin.H{"status": "restored"})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+	if err != nil {
+		log.Warn("hosts: restore %s: %v", hostID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "restore host"})
+		return
+	}
+
+	pid := projectID
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryAdmin,
+		Action:      "host.restore",
+		TargetType:  "host",
+		TargetID:    hostID,
+		TargetLabel: hostID,
+		Outcome:     storage.OutcomeSuccess,
+		At:          now,
+	})
+	c.JSON(http.StatusOK, gin.H{"status": "restored"})
+}
+
+// ListArchived handles GET /projects/:pid/hosts/archived — the view an
+// operator opens to find something to restore.
+func (h *HostsHandler) ListArchived(c *gin.Context) {
+	projectID := c.Param("pid")
+	hosts, err := h.db.Hosts().ListArchivedByProject(c.Request.Context(), projectID)
+	if err != nil {
+		log.Warn("hosts: list archived %s: %v", projectID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list archived hosts"})
+		return
+	}
+	out := make([]hostResponse, 0, len(hosts))
+	for _, host := range hosts {
+		out = append(out, toHostResponse(host))
+	}
+	c.JSON(http.StatusOK, gin.H{"hosts": out})
+}
+
 // RegisterV1HostsRoutes mounts the per-project host routes under
 // /api/v1/projects/:pid/hosts. Every route is RequireAuth +
-// RequireProjectRole(viewer); approve/reject bump up to admin.
+// RequireProjectRole(viewer); approve/reject/archive/restore bump
+// up to admin.
 func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
 	viewer := engine.Group("/api/v1/projects/:pid/hosts")
 	viewer.Use(rbac.RequireAuth(), rbac.RequireProjectRole("pid", user.RoleViewer))
@@ -1018,6 +1136,9 @@ func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
 		viewer.GET("", h.List)
 		viewer.GET("/pending", h.ListPendingApprovals)
 		viewer.GET("/pending/count", h.PendingApprovalCount)
+		// Literal segment before /:hid so gin matches it as a listing
+		// rather than a host called "archived".
+		viewer.GET("/archived", h.ListArchived)
 		viewer.GET("/:hid", h.Get)
 		viewer.GET("/:hid/sysinfo", h.GetSysInfo)
 		viewer.GET("/:hid/processes", h.GetProcesses)
@@ -1039,5 +1160,7 @@ func RegisterV1HostsRoutes(engine *gin.Engine, h *HostsHandler, rbac *RBAC) {
 	{
 		admin.POST("/:hid/approve", h.Approve)
 		admin.POST("/:hid/reject", h.Reject)
+		admin.DELETE("/:hid", h.Archive)
+		admin.POST("/:hid/restore", h.Restore)
 	}
 }

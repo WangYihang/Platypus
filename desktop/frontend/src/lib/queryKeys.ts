@@ -41,6 +41,8 @@ export const qk = {
         ["pendingHosts", projectId] as const,
     pendingHostsCount: (projectId: string) =>
         ["pendingHostsCount", projectId] as const,
+    archivedHosts: (projectId: string) =>
+        ["archivedHosts", projectId] as const,
 
     // --- Project-scoped lists -------------------------------------
     activities: (projectId: string, opts: ListActivitiesOpts) =>

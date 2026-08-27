@@ -69,6 +69,11 @@ export interface Host {
     approval_status: "pending" | "approved" | "rejected";
     approval_decided_at?: string;
     approval_decided_by?: string;
+    // Only present on rows from listArchivedHosts — the fleet list
+    // filters archived hosts out server-side.
+    archived_at?: string;
+    archived_by?: string;
+    archived_reason?: string;
     approval_reason?: string;
 
     // Latest security-scan summary, ridden onto the hosts list
@@ -265,6 +270,31 @@ export async function rejectHost(pid: string, hid: string, reason: string): Prom
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
+    });
+}
+
+// Archived hosts, most recently archived first. Separate endpoint
+// because listHosts is the live fleet and never includes them.
+export async function listArchivedHosts(pid: string): Promise<Host[]> {
+    const j = await authJSON<{ hosts: Host[] }>(`/api/v1/projects/${pid}/hosts/archived`);
+    return j.hosts;
+}
+
+// Archive is a soft delete: the row leaves the fleet list and the
+// approval queue, but its recordings, security scans and config audits
+// are untouched. Reversible with restoreHost. An agent that re-enrols
+// un-archives its own host, so this is for machines that are gone.
+export async function archiveHost(pid: string, hid: string, reason: string): Promise<void> {
+    await authFetch(`/api/v1/projects/${pid}/hosts/${hid}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+    });
+}
+
+export async function restoreHost(pid: string, hid: string): Promise<void> {
+    await authFetch(`/api/v1/projects/${pid}/hosts/${hid}/restore`, {
+        method: "POST",
     });
 }
 
