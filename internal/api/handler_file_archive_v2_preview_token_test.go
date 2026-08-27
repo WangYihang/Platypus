@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -106,12 +107,24 @@ func TestFileRead_PreviewToken_Tampered(t *testing.T) {
 	defer srv.Close()
 
 	tok, exp := signer.Sign(a.fixture.ProjectID, a.fixture.AgentID, "/x")
-	bad := tok[:len(tok)-1]
-	if strings.HasSuffix(tok, "A") {
-		bad += "B"
-	} else {
-		bad += "A"
+
+	// Tamper in signature space, not base64 space. The token is a
+	// 32-byte HMAC in RawURLEncoding, i.e. 43 characters of which the
+	// last carries only 4 significant bits + 2 slack bits that Go's
+	// non-strict decoder ignores. Substituting that final character
+	// for another one in the same 4-value group therefore decodes to
+	// the *identical* signature and the request is legitimately
+	// allowed through: the old "swap A for B, anything else for A"
+	// trick hit that case whenever the token ended in "A" (1 run in
+	// 16, since a valid encoding always leaves the slack bits zero)
+	// and flaked with 200 instead of 401. Flipping a bit of the
+	// decoded MAC is unambiguous.
+	raw, err := base64.RawURLEncoding.DecodeString(tok)
+	if err != nil {
+		t.Fatalf("decode minted token: %v", err)
 	}
+	raw[0] ^= 0x01
+	bad := base64.RawURLEncoding.EncodeToString(raw)
 
 	req, _ := http.NewRequest(http.MethodGet,
 		fsReadURLWithToken(srv.URL, a.fixture.URL(""), "/x", bad, exp), nil)
