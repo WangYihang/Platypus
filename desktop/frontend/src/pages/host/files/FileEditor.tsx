@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState, Extension } from "@codemirror/state";
@@ -8,8 +8,10 @@ import { toast } from "sonner";
 import { humanizeError } from "../../../lib/humanizeError";
 
 import { Button } from "@/components/ui/button";
-import { ReadFile, WriteFile } from "@wails/go/app/App";
+import { WriteFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
+import { useOnValueChange } from "@/lib/useOnValueChange";
+import { useRemoteFileText } from "./remoteFile";
 import { inferLanguage } from "./paths";
 
 // SMALL_FILE_LIMIT is the in-memory edit threshold. Below: full load,
@@ -28,72 +30,33 @@ interface Props {
     onSaved?: () => void;
 }
 
-// bytesFromWailsRead normalises the two shapes the ReadFile binding
-// returns: Wails v2 gives us number[] (marshalled via JSON); the web
-// shim also gives us number[]. Accept either and produce a Uint8Array.
-function bytesFromWailsRead(raw: unknown): Uint8Array {
-    if (raw instanceof Uint8Array) return raw;
-    if (Array.isArray(raw)) return new Uint8Array(raw as number[]);
-    throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
-}
-
-// decodeText tries to read bytes as UTF-8. Falls back to Latin-1 for
-// files with invalid UTF-8 sequences so we can still edit scripts that
-// have a stray non-ASCII byte.
-function decodeText(bytes: Uint8Array): string {
-    try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    } catch {
-        return new TextDecoder("latin1").decode(bytes);
-    }
-}
-
 export default function FileEditor({ projectID, sessionHash, path, size, onSaved }: Props) {
-    const [loaded, setLoaded] = useState(false);
-    const [loading, setLoading] = useState(true);
     const [content, setContent] = useState("");
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [langExt, setLangExt] = useState<Extension | null>(null);
 
-    // Track the most recently loaded path so a stale async load doesn't
-    // clobber the editor when the user opens a different file quickly.
-    //
-    // Assigned in an effect rather than during render — React may
-    // discard a render, and this mutation would survive it. Declared
-    // above the load effect so it has already run by the time that
-    // effect's async continuation compares against it.
-    const pathRef = useRef(path);
-    useEffect(() => {
-        pathRef.current = path;
-    }, [path]);
+    // The read is a query keyed on the path, so the stale-response
+    // problem it used to guard against with a pathRef — open a file,
+    // open another before the first lands, watch the first overwrite
+    // the editor — cannot arise: a response only ever populates the
+    // key it was requested for.
+    const file = useRemoteFileText({ projectID, sessionHash, path });
+    const loading = file.isFetching;
+    const loaded = file.text !== null;
+    const loadError = file.error
+        ? String(file.error instanceof Error ? file.error.message : file.error)
+        : null;
 
-    // Load file contents once per (session, path).
-    useEffect(() => {
-        let cancelled = false;
-        setLoading(true);
-        setLoaded(false);
-        setLoadError(null);
+    // Seeded, not derived: this is the editor buffer, so once the
+    // bytes land the operator owns it. Re-seeding on each arrival is
+    // what "reload discards my edits" means, which is the behaviour
+    // the old effect had via setContent + setDirty(false).
+    useOnValueChange(file.text, (text) => {
+        if (text === null) return;
+        setContent(text);
         setDirty(false);
-        void (async () => {
-            try {
-                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
-                if (cancelled || pathRef.current !== path) return;
-                const bytes = bytesFromWailsRead(raw);
-                setContent(decodeText(bytes));
-                setLoaded(true);
-            } catch (err) {
-                if (cancelled) return;
-                setLoadError(String(err instanceof Error ? err.message : err));
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [projectID, sessionHash, path]);
+    });
 
     // Lazy-load the language extension per file type. Keeps the initial
     // editor bundle minimal.

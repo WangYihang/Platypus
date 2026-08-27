@@ -78,7 +78,7 @@ export default function AccountTokensTab() {
         try {
             await revokeAccountPAT(r.token_id);
             toast.success("Token revoked");
-            void refresh();
+            refresh();
         } catch (e) {
             toast.error(`Couldn't revoke: ${humanizeError(e)}`);
         }
@@ -161,12 +161,12 @@ export default function AccountTokensTab() {
                 open={issueOpen}
                 onOpenChange={(o) => {
                     setIssueOpen(o);
-                    if (!o) void refresh();
+                    if (!o) refresh();
                 }}
                 onIssued={(r) => {
                     setLastIssued(r);
                     setIssueOpen(false);
-                    void refresh();
+                    refresh();
                 }}
             />
             <IssuedAccountPATDialog

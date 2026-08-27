@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 
 import { useOnValueChange } from "@/lib/useOnValueChange";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
@@ -77,10 +77,10 @@ export default function CapabilityConfirmDialog({
     declared,
     onApprove,
 }: CapabilityConfirmDialogProps) {
-    // Ticked families. We keep this as a Set for O(1) toggle + use a
-    // useEffect to reset when the dialog re-opens — re-using state
-    // across opens would surprise an operator who expected each
-    // install confirmation to be independent.
+    // Ticked families. A Set for O(1) toggle, reset whenever the
+    // dialog's subject changes — re-using state across opens would
+    // surprise an operator who expected each install confirmation to
+    // be independent.
     const [granted, setGranted] = useState<Set<string>>(() => new Set());
     const [submitting, setSubmitting] = useState(false);
     const [advancedOpen, setAdvancedOpen] = useState(false);
