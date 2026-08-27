@@ -114,26 +114,26 @@ type issueInstallResponse struct {
 // installListItem is the redacted view. It covers both unused + consumed
 // tokens so the admin UI can show history.
 type installListItem struct {
-	DownloadID          string     `json:"download_id"`
-	ProjectID           string     `json:"project_id"`
-	IssuedByUser        string     `json:"issued_by_user"`
-	IssuedAt            time.Time  `json:"issued_at"`
-	ExpiresAt           time.Time  `json:"expires_at"`
-	ServerEndpoint      string     `json:"server_endpoint"`
-	TargetOS            string     `json:"target_os,omitempty"`
-	TargetArch          string     `json:"target_arch,omitempty"`
-	PATTTLSeconds       int        `json:"pat_ttl_seconds"`
-	PATMaxUses          int        `json:"pat_max_uses"`
-	PATBindingMachineID string     `json:"pat_binding_machine_id,omitempty"`
-	PATDescription      string     `json:"pat_description,omitempty"`
-	PluginSpecs   []storage.PluginSpec `json:"plugin_specs,omitempty"`
-	ConsumedAt    *time.Time           `json:"consumed_at,omitempty"`
-	ConsumedIP    string               `json:"consumed_ip,omitempty"`
-	ConsumedPATID string               `json:"consumed_pat_id,omitempty"`
-	AutoApprove   bool                 `json:"auto_approve"`
-	Revoked       bool                 `json:"revoked"`
-	RevokedAt     *time.Time           `json:"revoked_at,omitempty"`
-	Status        string               `json:"status"`
+	DownloadID          string               `json:"download_id"`
+	ProjectID           string               `json:"project_id"`
+	IssuedByUser        string               `json:"issued_by_user"`
+	IssuedAt            time.Time            `json:"issued_at"`
+	ExpiresAt           time.Time            `json:"expires_at"`
+	ServerEndpoint      string               `json:"server_endpoint"`
+	TargetOS            string               `json:"target_os,omitempty"`
+	TargetArch          string               `json:"target_arch,omitempty"`
+	PATTTLSeconds       int                  `json:"pat_ttl_seconds"`
+	PATMaxUses          int                  `json:"pat_max_uses"`
+	PATBindingMachineID string               `json:"pat_binding_machine_id,omitempty"`
+	PATDescription      string               `json:"pat_description,omitempty"`
+	PluginSpecs         []storage.PluginSpec `json:"plugin_specs,omitempty"`
+	ConsumedAt          *time.Time           `json:"consumed_at,omitempty"`
+	ConsumedIP          string               `json:"consumed_ip,omitempty"`
+	ConsumedPATID       string               `json:"consumed_pat_id,omitempty"`
+	AutoApprove         bool                 `json:"auto_approve"`
+	Revoked             bool                 `json:"revoked"`
+	RevokedAt           *time.Time           `json:"revoked_at,omitempty"`
+	Status              string               `json:"status"`
 }
 
 func toInstallListItem(t *storage.InstallDownloadToken, now time.Time) installListItem {

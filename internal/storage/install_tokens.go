@@ -68,11 +68,11 @@ type InstallDownloadToken struct {
 	// hands these to handler_enroll_v2 which stamps them onto the
 	// host record so the agent-link reconciler can install each
 	// plugin with full deployment intent.
-	PluginSpecs []PluginSpec
-	Revoked     bool
-	RevokedAt         *time.Time
-	RevokedByUser     string
-	RevokedReason     string
+	PluginSpecs   []PluginSpec
+	Revoked       bool
+	RevokedAt     *time.Time
+	RevokedByUser string
+	RevokedReason string
 }
 
 // InstallDownloadStatus is derived (never materialised). Separate from
@@ -322,21 +322,21 @@ func scanInstallDownloadSingle(row rowScanner) (*InstallDownloadToken, error) {
 
 func scanInstallDownloadToken(row rowScanner) (*InstallDownloadToken, error) {
 	var (
-		t            InstallDownloadToken
-		tOS          sql.NullString
-		tArch        sql.NullString
-		bindMID      sql.NullString
-		patDesc      sql.NullString
-		autoApprove  int
-		baselineCSV  sql.NullString
-		consAt       sql.NullTime
-		consIP       sql.NullString
-		consUA       sql.NullString
-		consPAT      sql.NullString
-		revAt        sql.NullTime
-		revBy        sql.NullString
-		revReas      sql.NullString
-		revoked      int
+		t           InstallDownloadToken
+		tOS         sql.NullString
+		tArch       sql.NullString
+		bindMID     sql.NullString
+		patDesc     sql.NullString
+		autoApprove int
+		baselineCSV sql.NullString
+		consAt      sql.NullTime
+		consIP      sql.NullString
+		consUA      sql.NullString
+		consPAT     sql.NullString
+		revAt       sql.NullTime
+		revBy       sql.NullString
+		revReas     sql.NullString
+		revoked     int
 	)
 	err := row.Scan(
 		&t.DownloadID, &t.SecretHash, &t.ProjectID, &t.IssuedByUser,

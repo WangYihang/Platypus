@@ -25,9 +25,10 @@ import (
 // the live agent link, drains the response, and renders JSON.
 //
 // Per-op flow lives in the sibling files:
-//   handler_plugins_install.go   POST   .../plugins (streaming install)
-//   handler_plugins_readonly.go  GET    .../plugins, GET .../logs (single-frame replies)
-//   handler_plugins_mutate.go    DELETE / PATCH .../plugins/:plugin_id
+//
+//	handler_plugins_install.go   POST   .../plugins (streaming install)
+//	handler_plugins_readonly.go  GET    .../plugins, GET .../logs (single-frame replies)
+//	handler_plugins_mutate.go    DELETE / PATCH .../plugins/:plugin_id
 type AgentPluginsHandler struct {
 	svc          *core.AgentLinkService
 	catalog      MarketplaceCatalog // optional; when nil install_marketplace returns 503
@@ -94,9 +95,9 @@ const pluginMgmtTimeout = 30 * time.Second
 const pluginInstallTimeout = 5 * time.Minute
 
 // openMgmtStream is the common preamble for every plugin REST handler:
-//   1. resolve the live link by agent_id
-//   2. marshal the PluginMgmtRequest into the StreamHeader.metadata
-//   3. open the stream
+//  1. resolve the live link by agent_id
+//  2. marshal the PluginMgmtRequest into the StreamHeader.metadata
+//  3. open the stream
 //
 // Returns the stream + the resolved link session id (for audit lines)
 // + the agent id ready to record. On any of these failures it has
@@ -186,7 +187,7 @@ func toPluginInfoJSON(p *v2pb.PluginInfo) pluginInfoJSON {
 	}
 }
 
-var _ = errors.New // reserved for richer error returns once batch callers land
+var _ = errors.New  // reserved for richer error returns once batch callers land
 var _ = fmt.Sprintf // reserved for the install handler's progress strings; keep import stable.
 
 // RegisterV1AgentPluginRoutes mounts the per-agent plugin endpoints.
@@ -209,4 +210,3 @@ func RegisterV1AgentPluginRoutes(engine *gin.Engine, h *AgentPluginsHandler, rba
 		admin.GET("/:agent_id/plugins/:plugin_id/logs", h.Logs)
 	}
 }
-

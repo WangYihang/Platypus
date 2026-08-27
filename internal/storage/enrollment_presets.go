@@ -57,10 +57,10 @@ type EnrollmentPresetRepo struct {
 // the three system-default presets. Seeding skips entries whose
 // (os, arch) the live install manifest doesn't publish.
 type SystemPresetSpec struct {
-	Name     string
-	OS       string
-	Arch     string
-	Comment  string
+	Name    string
+	OS      string
+	Arch    string
+	Comment string
 }
 
 // SystemPresetSpecs is the canonical list of presets seeded into a

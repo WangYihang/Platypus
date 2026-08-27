@@ -969,4 +969,3 @@ func (r *HostRepo) SetPluginSpecs(ctx context.Context, hostID string, specs []Pl
 	}
 	return nil
 }
-

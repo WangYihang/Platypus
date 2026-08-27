@@ -28,8 +28,8 @@ import (
 // granted_capabilities mirrors the operator-confirmed dialog: the
 // agent enforces this set on every host_fn call.
 type installMarketplaceRequest struct {
-	PluginID            string   `json:"plugin_id" binding:"required"`
-	Version             string   `json:"version" binding:"required"`
+	PluginID            string                     `json:"plugin_id" binding:"required"`
+	Version             string                     `json:"version" binding:"required"`
 	GrantedCapabilities []agentplugin.CapabilityID `json:"granted_capabilities"`
 }
 
@@ -222,7 +222,7 @@ func (f CatalogFunc) Get(ctx context.Context, pluginID, version string) (Marketp
 // is the actual ceiling but a server-side first-line of defence is
 // cheap.
 type httpArtefactFetcher struct {
-	client *http.Client
+	client   *http.Client
 	maxBytes int64
 }
 

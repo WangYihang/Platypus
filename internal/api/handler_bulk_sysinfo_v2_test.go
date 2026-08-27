@@ -42,13 +42,13 @@ func TestBulkSysInfo_Success(t *testing.T) {
 
 	var body struct {
 		Results []struct {
-			AgentID  string `json:"agent_id"`
-			Ok       bool   `json:"ok"`
-			Hostname string `json:"hostname"`
-			Os       string `json:"os"`
-			MemTotal uint64 `json:"mem_total"`
+			AgentID  string  `json:"agent_id"`
+			Ok       bool    `json:"ok"`
+			Hostname string  `json:"hostname"`
+			Os       string  `json:"os"`
+			MemTotal uint64  `json:"mem_total"`
 			Load1    float64 `json:"load1"`
-			Error    string `json:"error"`
+			Error    string  `json:"error"`
 		} `json:"results"`
 	}
 	json.NewDecoder(resp.Body).Decode(&body)

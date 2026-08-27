@@ -30,8 +30,8 @@ import (
 // valid JSON objects — so resolution status is an out-of-band fact
 // the caller tracks.
 type PluginSpec struct {
-	PluginID            string                     `json:"plugin_id"`
-	Version             string                     `json:"version,omitempty"`
+	PluginID string `json:"plugin_id"`
+	Version  string `json:"version,omitempty"`
 	// GrantedCapabilities uses the typed CapabilityID so the
 	// compiler catches unknown families everywhere a PluginSpec
 	// is constructed in Go. The on-the-wire JSON shape is the

@@ -256,17 +256,17 @@ func (s *Service) ConsumeInstallDownload(ctx context.Context, raw string, cctx C
 	}
 
 	return &ConsumeResult{
-		Outcome:           "success",
-		DownloadID:        id,
-		ServerEndpoint:    tok.ServerEndpoint,
-		TargetOS:          tok.TargetOS,
-		TargetArch:        tok.TargetArch,
-		PATTokenID:        patRes.TokenID,
-		PATPlaintext:      patRes.PlaintextToken,
-		PATExpiresAt:      patRes.ExpiresAt,
-		ProjectID:         tok.ProjectID,
-		ProjectCAPEM:      caPEM,
-		PluginSpecs:       tok.PluginSpecs,
+		Outcome:        "success",
+		DownloadID:     id,
+		ServerEndpoint: tok.ServerEndpoint,
+		TargetOS:       tok.TargetOS,
+		TargetArch:     tok.TargetArch,
+		PATTokenID:     patRes.TokenID,
+		PATPlaintext:   patRes.PlaintextToken,
+		PATExpiresAt:   patRes.ExpiresAt,
+		ProjectID:      tok.ProjectID,
+		ProjectCAPEM:   caPEM,
+		PluginSpecs:    tok.PluginSpecs,
 	}, nil
 }
 

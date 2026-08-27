@@ -57,9 +57,9 @@ type openCall struct {
 	// PluginInstallRequest. They're only populated for "install"
 	// ops; tests that don't care about config leave them at the
 	// zero value.
-	installConfigJSON     []byte
-	installCaps           []string
-	installSchemaVersion  int32
+	installConfigJSON    []byte
+	installCaps          []string
+	installSchemaVersion int32
 }
 
 func (f *fakeSession) Open(t v2pb.StreamType, metadata []byte, correlationID string) (io.ReadWriteCloser, error) {

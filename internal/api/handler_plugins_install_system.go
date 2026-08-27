@@ -18,14 +18,15 @@ import (
 // System plugins live under <data-dir>/system-plugins/<id>/<v>/ —
 // the publisher (or production seeder) writes them there. Distinct
 // from the marketplace path because:
-//   · they're signed by the SYSTEM publisher key, not the
-//     marketplace key (one publisher.pub at the system catalog root
-//     vs. per-row pubkey in the marketplace)
-//   · they ship as on-disk files, not URLs — no fetcher dance
-//   · they're auto-installable at enroll time via the install
-//     bundle's baseline_plugin_ids, so the post-enroll install
-//     flow is the only "outside the wizard" path the operator has
-//     to add one
+//
+//	· they're signed by the SYSTEM publisher key, not the
+//	  marketplace key (one publisher.pub at the system catalog root
+//	  vs. per-row pubkey in the marketplace)
+//	· they ship as on-disk files, not URLs — no fetcher dance
+//	· they're auto-installable at enroll time via the install
+//	  bundle's baseline_plugin_ids, so the post-enroll install
+//	  flow is the only "outside the wizard" path the operator has
+//	  to add one
 //
 // granted_capabilities mirrors the operator-confirmed dialog. For
 // system plugins the convention is to pass exactly the manifest's
@@ -33,8 +34,8 @@ import (
 // so granting their declared caps wholesale matches the trust
 // boundary the operator already accepted at enroll time.
 type installSystemRequest struct {
-	PluginID            string   `json:"plugin_id" binding:"required"`
-	Version             string   `json:"version" binding:"required"`
+	PluginID            string                `json:"plugin_id" binding:"required"`
+	Version             string                `json:"version" binding:"required"`
 	GrantedCapabilities []plugin.CapabilityID `json:"granted_capabilities"`
 }
 

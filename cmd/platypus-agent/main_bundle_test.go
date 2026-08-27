@@ -88,4 +88,3 @@ func TestExpandInstallBundle_Malformed(t *testing.T) {
 		t.Fatal("malformed bundle should error")
 	}
 }
-

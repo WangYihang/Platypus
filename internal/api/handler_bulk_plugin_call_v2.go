@@ -176,4 +176,3 @@ func v2BulkPluginCall(svc *core.AgentLinkService, rbac *RBAC) gin.HandlerFunc {
 		c.JSON(http.StatusOK, out)
 	}
 }
-

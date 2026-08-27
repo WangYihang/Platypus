@@ -42,10 +42,10 @@ func TestEnrollmentPresets_CreateGetList(t *testing.T) {
 			{PluginID: "sys-info"},
 			{PluginID: "shell"},
 		},
-		PATDescription:      "Linux fleet baseline",
-		CreatedByUser:       admin.ID,
-		CreatedAt:           now,
-		UpdatedAt:           now,
+		PATDescription: "Linux fleet baseline",
+		CreatedByUser:  admin.ID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if err := db.EnrollmentPresets().Create(context.Background(), p); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -92,18 +92,18 @@ func TestEnrollmentPresets_Update(t *testing.T) {
 
 	now := time.Now().UTC()
 	p := &storage.EnrollmentPreset{
-		PresetID:    newPresetID(t),
-		ProjectID:   proj.ID,
-		Name:        "win",
-		TargetOS:    "windows",
-		TargetArch:  "amd64",
-		TTLSeconds:  intPtr(60),
-		PATMaxUses:  intPtr(1),
-		AutoApprove: false,
+		PresetID:            newPresetID(t),
+		ProjectID:           proj.ID,
+		Name:                "win",
+		TargetOS:            "windows",
+		TargetArch:          "amd64",
+		TTLSeconds:          intPtr(60),
+		PATMaxUses:          intPtr(1),
+		AutoApprove:         false,
 		SkipTLSVerification: true,
-		CreatedByUser: admin.ID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedByUser:       admin.ID,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := db.EnrollmentPresets().Create(context.Background(), p); err != nil {
 		t.Fatalf("Create: %v", err)
