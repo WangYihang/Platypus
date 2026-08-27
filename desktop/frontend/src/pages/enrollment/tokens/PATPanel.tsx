@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -59,7 +59,13 @@ export default function PATPanel({ projectID }: Props) {
     const [pendingRevoke, setPendingRevoke] =
         useState<EnrollmentTokenListItem | null>(null);
 
-    const enrollmentTokensKey = ["enrollmentTokens", projectID, filter] as const;
+    // Stable identity: this is a useCallback dependency below, and a
+    // fresh array literal each render meant that callback was rebuilt
+    // every time.
+    const enrollmentTokensKey = useMemo(
+        () => ["enrollmentTokens", projectID, filter] as const,
+        [projectID, filter],
+    );
     const {
         data: rows = null,
         error,

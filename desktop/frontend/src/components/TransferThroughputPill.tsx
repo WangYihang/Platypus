@@ -76,7 +76,13 @@ export default function TransferThroughputPill() {
     // Cumulative-since-mount baseline: the sum of bytes_transferred
     // across all rows on the very first useEffect tick. After that
     // we render `current - baseline`.
-    const baselineRef = useRef<number | null>(null);
+    // State, not a ref: this is read during render to compute the
+    // cumulative figure, and a ref write does not schedule a render.
+    // The baseline was set in the effect below — i.e. after commit —
+    // so the first paint with data showed 0 transferred and only
+    // corrected itself when some other update happened to re-render
+    // the pill.
+    const [baseline, setBaseline] = useState<number | null>(null);
 
     const totalSourceBytes = useMemo(
         () => rows.reduce((s, r) => s + r.bytes_transferred, 0),
@@ -88,8 +94,8 @@ export default function TransferThroughputPill() {
     );
 
     useEffect(() => {
-        if (baselineRef.current === null) {
-            baselineRef.current = totalSourceBytes;
+        if (baseline === null) {
+            setBaseline(totalSourceBytes);
         }
         // No active transfers → flush the ring so the next session
         // starts fresh. Keeps "rate" honest: an idle pill must read 0,
@@ -107,14 +113,12 @@ export default function TransferThroughputPill() {
         );
         samplesRef.current = next;
         setSamples(next);
-    }, [totalSourceBytes, runningRows.length]);
+    }, [totalSourceBytes, runningRows.length, baseline]);
 
     const rate = computeInstantaneousRate(samples);
     const active = runningRows.length > 0;
     const cumulativeBytes =
-        baselineRef.current !== null
-            ? Math.max(0, totalSourceBytes - baselineRef.current)
-            : 0;
+        baseline !== null ? Math.max(0, totalSourceBytes - baseline) : 0;
 
     const rateText = active && rate !== null ? formatBytesPerSec(rate) : "—";
     const cumulativeText = active ? formatBytes(cumulativeBytes) : "";

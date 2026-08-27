@@ -33,7 +33,11 @@ export default function TerminalsPill() {
     const ctx = useGlobalTerminalSafe();
     const navigate = useNavigate();
 
-    const shells = ctx?.shells ?? [];
+    // useMemo so the identity is stable across renders: this feeds
+    // effect and memo dependency arrays below, and `?? []` alone
+    // hands them a fresh array every time, which defeats the
+    // memoisation entirely and re-runs the effects on every render.
+    const shells = useMemo(() => ctx?.shells ?? [], [ctx?.shells]);
     const groups = useMemo(() => groupByHost(shells), [shells]);
 
     if (!ctx || shells.length === 0) return null;

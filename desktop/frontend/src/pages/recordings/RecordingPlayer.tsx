@@ -39,6 +39,8 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
 
     useEffect(() => {
         let cancelled = false;
+        let created: { dispose?: () => void } | null = null;
+        const container = containerRef.current;
         setLoading(true);
         setError(null);
 
@@ -69,11 +71,12 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
                 // initial prompt + first command echo on most
                 // sessions, short enough not to spoil the recording
                 // or take meaningful time to render.
-                playerRef.current = api.create(
+                created = api.create(
                     { data: text },
                     containerRef.current,
                     { autoPlay, poster: "npt:0:0.5" },
                 );
+                playerRef.current = created;
                 setLoading(false);
             } catch (e) {
                 if (cancelled) return;
@@ -82,19 +85,25 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
             }
         })();
 
+        // Captured at setup, not read from the ref at teardown. The
+        // ref reflects whatever the newest effect run put there, so a
+        // cleanup that reads it can dispose the wrong player — or, if
+        // a later run has already nulled it, none at all. `container`
+        // likewise: React detaches refs around unmount, and the value
+        // this run attached to is the one to clear.
         return () => {
             cancelled = true;
-            if (playerRef.current?.dispose) {
+            if (created?.dispose) {
                 try {
-                    playerRef.current.dispose();
+                    created.dispose();
                 } catch {
                     // dispose can throw if the player hasn't fully
                     // attached yet; we're tearing down anyway.
                 }
             }
-            playerRef.current = null;
+            if (playerRef.current === created) playerRef.current = null;
             // Reset the container so a re-mount starts clean.
-            if (containerRef.current) containerRef.current.innerHTML = "";
+            if (container) container.innerHTML = "";
         };
     }, [projectId, recordingId, autoPlay]);
 

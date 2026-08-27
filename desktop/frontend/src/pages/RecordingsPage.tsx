@@ -67,11 +67,22 @@ export default function RecordingsPage() {
     const currentCursor = pageStack[pageStack.length - 1];
     const pageNumber = pageStack.length;
 
-    const recordingsKey = [
-        "recordings",
-        project.id,
-        { cursor: currentCursor ?? null, status: statusFilter || null, q: debouncedQuery || null },
-    ] as const;
+    // Stable identity — the nested object literal made this a new
+    // array on every render, so the refresh callback below never
+    // memoised.
+    const recordingsKey = useMemo(
+        () =>
+            [
+                "recordings",
+                project.id,
+                {
+                    cursor: currentCursor ?? null,
+                    status: statusFilter || null,
+                    q: debouncedQuery || null,
+                },
+            ] as const,
+        [project.id, currentCursor, statusFilter, debouncedQuery],
+    );
 
     const recordingsQuery = useQuery({
         queryKey: recordingsKey,

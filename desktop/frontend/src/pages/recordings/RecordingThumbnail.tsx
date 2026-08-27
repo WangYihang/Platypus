@@ -91,6 +91,11 @@ export default function RecordingThumbnail({
     useEffect(() => {
         if (!visible) return;
         let cancelled = false;
+        // Captured at setup rather than read from the refs at
+        // teardown — see RecordingPlayer for the same reasoning: the
+        // refs reflect the newest run, the cleanup belongs to this one.
+        let created: { dispose?: () => void } | null = null;
+        const container = containerRef.current;
         void (async () => {
             try {
                 const [api, resp] = await Promise.all([
@@ -101,7 +106,7 @@ export default function RecordingThumbnail({
                 ]);
                 const text = await resp.text();
                 if (cancelled || !containerRef.current) return;
-                playerRef.current = api.create(
+                created = api.create(
                     { data: text },
                     containerRef.current,
                     {
@@ -109,6 +114,7 @@ export default function RecordingThumbnail({
                         poster: "npt:0:1.5",
                     },
                 );
+                playerRef.current = created;
             } catch {
                 if (cancelled) return;
                 setFailed(true);
@@ -117,12 +123,12 @@ export default function RecordingThumbnail({
         return () => {
             cancelled = true;
             try {
-                playerRef.current?.dispose?.();
+                created?.dispose?.();
             } catch {
                 /* ignore */
             }
-            playerRef.current = null;
-            if (containerRef.current) containerRef.current.innerHTML = "";
+            if (playerRef.current === created) playerRef.current = null;
+            if (container) container.innerHTML = "";
         };
     }, [visible, projectId, recordingId]);
 

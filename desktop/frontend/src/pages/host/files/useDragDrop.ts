@@ -49,8 +49,14 @@ export function useDragDrop({
     // Keep the latest path in a ref so the event listeners (registered
     // once) always upload into the directory the user is *currently*
     // viewing, not whatever path was live when the subscription opened.
+    //
+    // In an effect rather than during render: the listeners read it
+    // from a drop callback, which is well after commit, and a mutation
+    // during a render React later discards would leave it wrong.
     const pathRef = useRef(currentPath);
-    pathRef.current = currentPath;
+    useEffect(() => {
+        pathRef.current = currentPath;
+    }, [currentPath]);
 
     // --- Desktop: Wails OS drop --------------------------------------
     useEffect(() => {

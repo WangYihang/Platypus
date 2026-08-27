@@ -181,7 +181,11 @@ export default function PluginsTab({
     // below so React's rules-of-hooks invariant holds across the
     // loading→loaded transition (every render must call the same
     // hooks in the same order).
-    const list = plugins.data ?? [];
+    // useMemo so the identity is stable across renders: this feeds
+    // effect and memo dependency arrays below, and `?? []` alone
+    // hands them a fresh array every time, which defeats the
+    // memoisation entirely and re-runs the effects on every render.
+    const list = useMemo(() => plugins.data ?? [], [plugins.data]);
     const installedIDs = useMemo(
         () => new Set(list.map((p) => p.id)),
         [list],

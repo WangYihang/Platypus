@@ -59,8 +59,15 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
 
     // Track the most recently loaded path so a stale async load doesn't
     // clobber the editor when the user opens a different file quickly.
+    //
+    // Assigned in an effect rather than during render — React may
+    // discard a render, and this mutation would survive it. Declared
+    // above the load effect so it has already run by the time that
+    // effect's async continuation compares against it.
     const pathRef = useRef(path);
-    pathRef.current = path;
+    useEffect(() => {
+        pathRef.current = path;
+    }, [path]);
 
     // Load file contents once per (session, path).
     useEffect(() => {

@@ -90,8 +90,15 @@ export default function Split({
     );
     // Mirror the latest pct into a ref so the pointermove handler
     // doesn't have to re-bind whenever pct changes.
+    //
+    // Written in an effect, not during render: a render can be started
+    // and thrown away, but the mutation would not be. The ref is only
+    // ever read from the pointermove handler, which runs after commit,
+    // so the extra tick costs nothing here.
     const pctRef = useRef(pct);
-    pctRef.current = pct;
+    useEffect(() => {
+        pctRef.current = pct;
+    }, [pct]);
 
     const horizontal = direction === "row";
 

@@ -121,7 +121,14 @@ export default function HostView({ projectID, hostID }: Props) {
         agentID,
         installedPlugins.ids ?? null,
     );
-    const sessions: SessionRow[] = sessionsQuery.data ?? [];
+    // useMemo so the identity is stable across renders: this feeds
+    // effect and memo dependency arrays below, and `?? []` alone
+    // hands them a fresh array every time, which defeats the
+    // memoisation entirely and re-runs the effects on every render.
+    const sessions: SessionRow[] = useMemo(
+        () => sessionsQuery.data ?? [],
+        [sessionsQuery.data],
+    );
     const sysInfo: HostSysInfo | null = sysInfoQuery.data ?? null;
     const sysInfoError: string | null = sysInfoQuery.error
         ? String(sysInfoQuery.error)

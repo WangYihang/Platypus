@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -61,7 +61,11 @@ export default function InstallPanel({ projectID, projectSlug }: Props) {
     const [pendingRevoke, setPendingRevoke] =
         useState<InstallArtifactListItem | null>(null);
 
-    const installArtifactsKey = ["installArtifacts", projectID, filter] as const;
+    // See PATPanel: stable identity for the useCallback below.
+    const installArtifactsKey = useMemo(
+        () => ["installArtifacts", projectID, filter] as const,
+        [projectID, filter],
+    );
     const {
         data: rows = null,
         error,

@@ -82,7 +82,11 @@ export default function ProcessesTab({
     });
     const { data, isFetching: loading, error, refetch } = query;
 
-    const procs = data?.processes || [];
+    // useMemo so the identity is stable across renders: this feeds
+    // effect and memo dependency arrays below, and `?? []` alone
+    // hands them a fresh array every time, which defeats the
+    // memoisation entirely and re-runs the effects on every render.
+    const procs = useMemo(() => data?.processes ?? [], [data?.processes]);
     const filtered = useMemo(() => {
         const needle = search.trim().toLowerCase();
         if (!needle) return procs;

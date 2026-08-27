@@ -59,7 +59,11 @@ export default function HostsCardPanel() {
     });
 
     const hosts = hostsQuery.data ?? null;
-    const artifacts = artifactsQuery.data ?? [];
+    // useMemo so the identity is stable across renders: this feeds
+    // effect and memo dependency arrays below, and `?? []` alone
+    // hands them a fresh array every time, which defeats the
+    // memoisation entirely and re-runs the effects on every render.
+    const artifacts = useMemo(() => artifactsQuery.data ?? [], [artifactsQuery.data]);
 
     function refresh() {
         void queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
