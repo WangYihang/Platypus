@@ -1,3 +1,12 @@
+---
+# Without an explicit slug this file also claims /dev-guide/design/:
+# Docusaurus treats a doc named after its parent folder as that folder's
+# index, case-insensitively, so Design.md and index.md both resolved
+# there and one of the two became unreachable depending on build order.
+slug: admin-flow
+title: 管理端设计
+---
+
 ## 管理端
 
 1. 认证

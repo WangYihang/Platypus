@@ -1,7 +1,7 @@
 # 快速上手
 
 !!! Tips
-    您可以在[**这里**](https://github.com/WangYihang/Platypus/releases)下载最新 Release，或参考[**这里**](/内部机制/build/)从源码编译 Platypus。
+    您可以在[**这里**](https://github.com/WangYihang/Platypus/releases)下载最新 Release，或参考[**这里**](./dev-guide/internal/build.md)从源码编译 Platypus。
 
 ## 启动 Server
 
@@ -23,7 +23,7 @@
 启动时 Server 会完成初始化、绑定配置文件中声明的每一个 Ingress 端口（默认 `13337`）与 Distributor 端口（默认 `13339`），并拉起 REST API（默认 `127.0.0.1:7331`）。
 
 !!! Tips
-    如果您希望了解 Server 的具体启动流程，可以参考[本文](/内部机制/startup/)。
+    如果您希望了解 Server 的具体启动流程，可以参考[本文](./dev-guide/internal/startup.md)。
 
 ## 在管理的主机上安装 Agent
 
@@ -37,7 +37,7 @@ curl -fsSL http://1.3.3.7:13339/agent/1.3.3.7:13337 -o /usr/local/bin/platypus-a
   && /usr/local/bin/platypus-agent
 ```
 
-更完整的安装方式（含 systemd 单元）见 [Agent 文档](/使用/基本功能/agent/)。
+更完整的安装方式（含 systemd 单元）见 [Agent 文档](./user-guide/basic/agent.md)。
 
 Agent 启动后会立即回连 Server 完成 TLS 握手，成功后即可在 Server 端看到新上线的 Session。
 
@@ -45,9 +45,9 @@ Agent 启动后会立即回连 Server 完成 TLS 握手，成功后即可在 Ser
 
 Platypus 提供 3 种与 Server 交互的方式：
 
-* [Admin CLI](/使用/交互方式/cli/)
-* [Desktop / Web UI](/使用/交互方式/web/)
-* [Python SDK](/使用/交互方式/sdk/)
+* [Admin CLI](./user-guide/interact/cli.md)
+* [Desktop / Web UI](./user-guide/interact/web.md)
+* [Python SDK](./user-guide/interact/sdk.md)
 
 ### Admin CLI 常用命令
 
@@ -65,13 +65,13 @@ platypus-admin --server http://127.0.0.1:7331 --secret <S> list
 platypus-admin --server http://127.0.0.1:7331 --secret <S> tunnel ...
 ```
 
-Session 的哈希由配置文件中的 `hashFormat` 决定；详见[哈希计算](/内部机制/hashing/)。
+Session 的哈希由配置文件中的 `hashFormat` 决定；详见[哈希计算](./dev-guide/internal/hashing.md)。
 
 ### 交互式 Shell、文件管理、隧道
 
 上述高频功能在 Desktop / Web UI 中更为直观：
 
 * **Sessions** Tab：查看所有在线 Agent。
-* **Terminal** Tab：对指定 Agent 打开完全交互式 Shell（类 SSH 体验），详见 [Interact 文档](/使用/基本功能/interact/)。
+* **Terminal** Tab：对指定 Agent 打开完全交互式 Shell（类 SSH 体验），详见 [Interact 文档](./user-guide/basic/interact.md)。
 * **Files** Tab：对远端文件进行读写、上传、下载。
-* **Tunnels** Tab：建立 pull / push / dynamic SOCKS5 / internet 隧道，详见 [Tunnel 文档](/使用/基本功能/tunnel/)。
+* **Tunnels** Tab：建立 pull / push / dynamic SOCKS5 / internet 隧道，详见 [Tunnel 文档](./user-guide/basic/tunnel.md)。

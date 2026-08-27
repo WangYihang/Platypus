@@ -19,7 +19,14 @@ const config: Config = {
   projectName: 'platypus', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+
+  // onBrokenMarkdownLinks moved under markdown.hooks in Docusaurus 3.9
+  // and the top-level form is removed in v4.
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -38,7 +45,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/WangYihang/Platypus/tree/main/docs/platypus/',
         },
         blog: {
           showReadingTime: true,
@@ -49,7 +56,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/WangYihang/Platypus/tree/main/docs/platypus/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -68,7 +75,7 @@ const config: Config = {
     navbar: {
       title: 'Platypus',
       logo: {
-        alt: 'My Site Logo',
+        alt: 'Platypus Logo',
         src: 'images/logo.svg',
       },
       items: [
@@ -78,11 +85,24 @@ const config: Config = {
           position: 'left',
           label: 'Documents',
         },
-        {to: '/download', label: 'Download', position: 'left'},
-        {to: '/internals', label: 'Internals', position: 'left'},
-        {to: '/roadmap', label: 'Roadmap', position: 'left'},
-        {to: '/changelogs', label: 'Change Logs', position: 'left'},
-        {to: '/about', label: 'About', position: 'left'},
+        // /download, /internals, /roadmap, /changelogs and /about were
+        // navbar entries for pages that were never written — src/pages/
+        // only holds index.tsx. Docusaurus counted all five as broken
+        // links on every generated page and failed the build. The three
+        // that have a real destination now point at it; Roadmap and
+        // About are dropped rather than stubbed, since inventing their
+        // content is not a build fix.
+        {to: '/docs/dev-guide/overview', label: 'Internals', position: 'left'},
+        {
+          href: 'https://github.com/WangYihang/Platypus/releases',
+          label: 'Download',
+          position: 'left',
+        },
+        {
+          href: 'https://github.com/WangYihang/Platypus/blob/main/CHANGELOG.md',
+          label: 'Change Logs',
+          position: 'left',
+        },
         {
           href: 'https://github.com/wangyihang/platypus',
           label: 'GitHub',
@@ -96,26 +116,36 @@ const config: Config = {
         {
           title: 'Docs',
           items: [
+            // Was /docs/intro, which does not exist: the docs root is
+            // docs/index.md and the tutorial is docs/getting-started.md.
             {
-              label: 'Tutorial',
-              to: '/docs/intro',
+              label: 'Getting Started',
+              to: '/docs/getting-started',
+            },
+            {
+              label: 'User Guide',
+              to: '/docs/user-guide/overview',
+            },
+            {
+              label: 'Dev Guide',
+              to: '/docs/dev-guide/overview',
             },
           ],
         },
         {
           title: 'Community',
           items: [
+            // These were the scaffold's own channels — Docusaurus's
+            // Stack Overflow tag, Discord and Twitter — presented as if
+            // they were this project's. Point at the places that
+            // actually take Platypus questions instead.
             {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+              label: 'Issues',
+              href: 'https://github.com/WangYihang/Platypus/issues',
             },
             {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
-            },
-            {
-              label: 'Twitter',
-              href: 'https://twitter.com/docusaurus',
+              label: 'Security Policy',
+              href: 'https://github.com/WangYihang/Platypus/blob/main/SECURITY.md',
             },
           ],
         },
@@ -127,13 +157,18 @@ const config: Config = {
               to: '/blog',
             },
             {
+              // Was facebook/docusaurus.
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/WangYihang/Platypus',
+            },
+            {
+              label: 'Releases',
+              href: 'https://github.com/WangYihang/Platypus/releases',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Platypus. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
