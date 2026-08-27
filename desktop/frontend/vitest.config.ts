@@ -14,11 +14,11 @@ export default defineConfig({
         alias: [
             {
                 find: "@wails/go/app/App",
-                replacement: path.resolve(__dirname, "src/platform/App.web.ts"),
+                replacement: path.resolve(import.meta.dirname, "src/platform/App.web.ts"),
             },
             {
                 find: "@wails/runtime/runtime",
-                replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
+                replacement: path.resolve(import.meta.dirname, "src/platform/runtime.web.ts"),
             },
             // pdfWorkerSrc.ts uses a Vite-only `?url` import that
             // vitest's import-analysis can't resolve. Swap in a stub
@@ -28,9 +28,9 @@ export default defineConfig({
             // below, otherwise the broader rule wins.
             {
                 find: "@/pages/host/files/pdfWorkerSrc",
-                replacement: path.resolve(__dirname, "src/test/pdfWorkerSrc.stub.ts"),
+                replacement: path.resolve(import.meta.dirname, "src/test/pdfWorkerSrc.stub.ts"),
             },
-            { find: "@", replacement: path.resolve(__dirname, "src") },
+            { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
         ],
     },
     test: {

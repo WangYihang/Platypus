@@ -25,21 +25,21 @@ export default defineConfig(({ mode }) => {
         ? [
               {
                   find: "@wails/go/app/App",
-                  replacement: path.resolve(__dirname, "src/platform/App.web.ts"),
+                  replacement: path.resolve(import.meta.dirname, "src/platform/App.web.ts"),
               },
               {
                   find: "@wails/runtime/runtime",
-                  replacement: path.resolve(__dirname, "src/platform/runtime.web.ts"),
+                  replacement: path.resolve(import.meta.dirname, "src/platform/runtime.web.ts"),
               },
           ]
         : [
               {
                   find: "@wails/go/app/App",
-                  replacement: path.resolve(__dirname, "wailsjs/go/app/App"),
+                  replacement: path.resolve(import.meta.dirname, "wailsjs/go/app/App"),
               },
               {
                   find: "@wails/runtime/runtime",
-                  replacement: path.resolve(__dirname, "wailsjs/runtime/runtime"),
+                  replacement: path.resolve(import.meta.dirname, "wailsjs/runtime/runtime"),
               },
           ];
 
@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
         resolve: {
             alias: [
                 ...platformAliases,
-                { find: "@", replacement: path.resolve(__dirname, "src") },
+                { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
             ],
         },
         build: {
