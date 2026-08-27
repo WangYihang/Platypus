@@ -31,7 +31,6 @@ type bulkRPCEnv struct {
 	token     string
 	projectID string
 	prefix    string
-	dbCleanup func()
 }
 
 // setupBulkRPC seeds N agents into one project, paired with N live

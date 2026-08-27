@@ -22,12 +22,12 @@ import (
 // agent enforces this set on every host-function call regardless of
 // what the manifest claims, so under-grant is the safe default.
 type installRequest struct {
-	PluginID            string   `json:"plugin_id" binding:"required"`
-	Version             string   `json:"version" binding:"required"`
-	PublisherPubkey     string   `json:"publisher_pubkey" binding:"required"` // raw minisign .pub file contents
-	ManifestB64         string   `json:"manifest_b64" binding:"required"`
-	WasmB64             string   `json:"wasm_b64" binding:"required"`
-	SignatureB64        string   `json:"signature_b64" binding:"required"`
+	PluginID            string                     `json:"plugin_id" binding:"required"`
+	Version             string                     `json:"version" binding:"required"`
+	PublisherPubkey     string                     `json:"publisher_pubkey" binding:"required"` // raw minisign .pub file contents
+	ManifestB64         string                     `json:"manifest_b64" binding:"required"`
+	WasmB64             string                     `json:"wasm_b64" binding:"required"`
+	SignatureB64        string                     `json:"signature_b64" binding:"required"`
 	GrantedCapabilities []agentplugin.CapabilityID `json:"granted_capabilities"`
 }
 
@@ -159,16 +159,21 @@ func pushInstallChunks(w io.Writer, manifest, wasm, sig []byte) {
 // full progression (last entry is the terminal one on the happy path)
 // plus any drain error (typically ctx.Err()).
 func drainInstallProgress(ctx context.Context, stream io.ReadWriteCloser) ([]installProgressJSON, error) {
+	// The frame travels by pointer: a generated protobuf message
+	// embeds protoimpl.MessageState, which carries a sync.Mutex and a
+	// self-referential pointer used for lazy init. Copying one by
+	// value (into the struct literal, then out of the channel) trips
+	// govet's copylocks and can corrupt that cached state.
 	type frameResult struct {
-		p   v2pb.PluginInstallProgress
+		p   *v2pb.PluginInstallProgress
 		err error
 	}
 	out := make([]installProgressJSON, 0, 8)
 	for {
 		ch := make(chan frameResult, 1)
 		go func() {
-			var p v2pb.PluginInstallProgress
-			err := link.ReadFrame(stream, &p)
+			p := &v2pb.PluginInstallProgress{}
+			err := link.ReadFrame(stream, p)
 			ch <- frameResult{p, err}
 		}()
 		select {
@@ -193,4 +198,3 @@ func drainInstallProgress(ctx context.Context, stream io.ReadWriteCloser) ([]ins
 		}
 	}
 }
-

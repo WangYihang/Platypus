@@ -147,16 +147,23 @@ func copyAndDigest(src, dst string) (int64, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
 		return 0, "", err
 	}
-	defer out.Close()
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(out, h), in)
 	if err != nil {
+		_ = out.Close()
 		return 0, "", err
+	}
+	// Close the destination explicitly rather than in a defer: this
+	// function's contract is that dst on disk matches the digest it
+	// returns, and a deferred close would let a failed final flush
+	// land in a release manifest as a verified artefact.
+	if err := out.Close(); err != nil {
+		return 0, "", fmt.Errorf("close %s: %w", dst, err)
 	}
 	return n, hex.EncodeToString(h.Sum(nil)), nil
 }

@@ -12,14 +12,6 @@ import (
 	"github.com/WangYihang/Platypus/internal/agent/plugin"
 )
 
-// systemPluginsDirName is the basename inside the server's data dir
-// that the dev publisher (scripts/dev-publish-entrypoint.sh) drops
-// signed system-plugin bundles into when it wants to override the
-// server binary's embedded set. The reconciler in
-// handler_agent_link_v2.go pulls from this directory (or the embedded
-// fallback when it's empty) on every agent connect.
-const systemPluginsDirName = "system-plugins"
-
 // SystemPluginsHandler exposes the catalogue of system-eligible
 // plugins to the admin / enroll wizard. systemBundle is the fs.FS
 // the resolver picked at boot (operator-staged disk override or the
@@ -47,12 +39,12 @@ func NewSystemPluginsHandler(bundle fs.FS) *SystemPluginsHandler {
 // from the manifest at a glance, with the operator-visible fields
 // the wizard / picker needs.
 type systemPluginInfo struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	Description  string   `json:"description,omitempty"`
-	Author       string   `json:"author,omitempty"`
-	License      string   `json:"license,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
+	Author      string `json:"author,omitempty"`
+	License     string `json:"license,omitempty"`
 	// Capabilities uses the typed CapabilityID (encodes as plain
 	// strings in JSON since CapabilityID is string-derived) so
 	// the reconciler — the only Go-side consumer — gets compile-

@@ -18,7 +18,6 @@ package sysplugins
 
 import (
 	"embed"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -57,13 +56,14 @@ func PrebuiltFS() fs.FS {
 func Resolve(dataDir string) fs.FS {
 	if dataDir != "" {
 		probe := filepath.Join(dataDir, "system-plugins", "publisher.pub")
+		// Only a clean stat selects the disk tree. Every other
+		// outcome falls through to the embedded bundles: ErrNotExist
+		// on a fresh install, but equally a permission error on a
+		// misconfigured mount — serving the embedded catalog beats
+		// serving an empty one, and the operator sees the disk-side
+		// log line from the surrounding handler either way.
 		if _, err := os.Stat(probe); err == nil {
 			return os.DirFS(filepath.Join(dataDir, "system-plugins"))
-		} else if !errors.Is(err, os.ErrNotExist) {
-			// Permission errors and similar fall through to the
-			// embedded tree; the operator can read the disk-side
-			// log line via the surrounding handler if they care
-			// to investigate.
 		}
 	}
 	return PrebuiltFS()
