@@ -65,6 +65,9 @@ export default function RecordingThumbnail({
         if (!el) return;
         if (typeof IntersectionObserver === "undefined") {
             // SSR / very old browsers — just mount eagerly.
+            // Synchronising with IntersectionObserver. This branch is the fallback for environments
+            // that have none.
+            // oxlint-disable-next-line react/set-state-in-effect
             setVisible(true);
             return;
         }

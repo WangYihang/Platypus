@@ -55,6 +55,8 @@ export function TransfersDrawerProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (!store) {
+            // Synchronising with an external transfers store, subscribed to below.
+            // oxlint-disable-next-line react/set-state-in-effect
             setRows([]);
             return;
         }

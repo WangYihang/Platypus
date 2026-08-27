@@ -43,11 +43,13 @@
     // `npm run lint` still gates on real violations; use
     // `--deny-warnings` to see the whole list as failures.
     //
-    // set-state-in-effect (44) is the big one and most of it is
-    // load-bearing prop-sync; each case needs its own judgement and a
-    // pass through the e2e suite. exhaustive-deps (14) is mostly
-    // "depends on X, which changes every render" — perf notes, not
-    // bugs — but worth reading before adding more.
+    // set-state-in-effect started at 44 and is an error now. The ones
+    // that remain each carry a comment naming the external system they
+    // synchronise with — a timer, a poll, an IntersectionObserver, the
+    // DOM, localStorage, a refcounted cache — which is the rule's own
+    // criterion for when an effect is the right tool. Everything else
+    // turned out to be a hand-rolled query, derived state, or one fact
+    // split across two useStates.
     "react-hooks/exhaustive-deps": "warn",
 
     // Off, after reading all 44 it reported. The rule targets state
@@ -70,7 +72,7 @@
     //
     // 43 inline suppressions would bury a future real one just as
     // thoroughly as this does, and in 25 files instead of here.
-    "react/set-state-in-effect": "warn",
+    "react/set-state-in-effect": "error",
     "react/refs": "warn",
     "react/purity": "warn",
     "react/immutability": "warn",

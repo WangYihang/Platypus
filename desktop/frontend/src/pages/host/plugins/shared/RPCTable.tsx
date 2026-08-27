@@ -326,6 +326,9 @@ export default function RPCTable<TResponse, TRow>(
     }, [requestForm]);
     useEffect(() => {
         if (debounceMs <= 0) {
+            // Synchronising with a timer. Debouncing is scheduling work outside React and cancelling
+            // it on change, which is what the cleanup does.
+            // oxlint-disable-next-line react/set-state-in-effect
             setDebouncedForm(form);
             return;
         }

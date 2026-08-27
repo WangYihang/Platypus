@@ -120,6 +120,9 @@ export default function EnrollAgentWizard() {
             });
 
 
+        // Synchronising with a fetch that also seeds server-side defaults on first open. The
+        // write makes it a mutation, not a query.
+        // oxlint-disable-next-line react/set-state-in-effect
         setPresets({ status: "loading" });
         listEnrollmentPresets(project.id)
             .then(async (rows) => {

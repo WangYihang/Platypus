@@ -165,6 +165,9 @@ export function useNewPluginActivities(
 
         const stored = readSeen(projectID, agentID);
         if (stored !== null) {
+            // Synchronising with localStorage. Read on mount and seeded when absent; nothing about
+        // it is derivable from props.
+            // oxlint-disable-next-line react/set-state-in-effect
             setSeen(stored);
             bootstrappedRef.current = hostKey;
             return;

@@ -12,7 +12,7 @@ import { WriteFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
 import { useOnValueChange } from "@/lib/useOnValueChange";
 import { useRemoteFileText } from "./remoteFile";
-import { inferLanguage } from "./paths";
+import { useLanguageExtension } from "./languageExtension";
 
 // SMALL_FILE_LIMIT is the in-memory edit threshold. Below: full load,
 // edit, save. Above: caller should route to FileViewerPaged instead.
@@ -34,7 +34,6 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
     const [content, setContent] = useState("");
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [langExt, setLangExt] = useState<Extension | null>(null);
 
     // The read is a query keyed on the path, so the stale-response
     // problem it used to guard against with a pathRef — open a file,
@@ -60,43 +59,7 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
 
     // Lazy-load the language extension per file type. Keeps the initial
     // editor bundle minimal.
-    useEffect(() => {
-        let cancelled = false;
-        const lang = inferLanguage(path);
-        setLangExt(null);
-        void (async () => {
-            let ext: Extension | null = null;
-            switch (lang) {
-                case "json": {
-                    const m = await import("@codemirror/lang-json");
-                    ext = m.json();
-                    break;
-                }
-                case "javascript": {
-                    const m = await import("@codemirror/lang-javascript");
-                    ext = m.javascript({ jsx: /\.(jsx|tsx)$/i.test(path), typescript: /\.tsx?$/i.test(path) });
-                    break;
-                }
-                case "python": {
-                    const m = await import("@codemirror/lang-python");
-                    ext = m.python();
-                    break;
-                }
-                case "shell": {
-                    const m = await import("@codemirror/legacy-modes/mode/shell");
-                    const { StreamLanguage } = await import("@codemirror/language");
-                    ext = StreamLanguage.define(m.shell);
-                    break;
-                }
-                default:
-                    ext = null;
-            }
-            if (!cancelled) setLangExt(ext);
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [path]);
+    const langExt = useLanguageExtension(path);
 
     // Browser-native guard — warns if the tab/window is closed with
     // unsaved edits. Does not fire for intra-app router navigation; the

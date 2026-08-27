@@ -49,6 +49,8 @@ export default function EnrollmentWaitBanner({ projectID, projectSlug }: Props) 
     // poll cycles can compare against the same baseline.
     useEffect(() => {
         if (!active) {
+            // Synchronising with a polling loop. The reset is the teardown half.
+            // oxlint-disable-next-line react/set-state-in-effect
             setState(null);
             initial.current = true;
             return;

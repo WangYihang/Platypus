@@ -20,6 +20,9 @@ export default function ChartContainer({ children, height = "100%", minHeight = 
     const [isReady, setIsMounted] = useState(false);
 
     useEffect(() => {
+        // Synchronising with the DOM. Recharts measures its container, which has no size until
+        // after the first commit — a fact only an effect can observe.
+        // oxlint-disable-next-line react/set-state-in-effect
         setIsMounted(true);
     }, []);
 

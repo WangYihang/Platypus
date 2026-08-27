@@ -41,6 +41,9 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
         let cancelled = false;
         let created: { dispose?: () => void } | null = null;
         const container = containerRef.current;
+        // Synchronising with the asciinema player, which is created into a DOM node and
+        // disposed on unmount.
+        // oxlint-disable-next-line react/set-state-in-effect
         setLoading(true);
         setError(null);
 

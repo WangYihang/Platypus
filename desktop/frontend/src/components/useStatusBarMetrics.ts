@@ -59,6 +59,9 @@ export function useStatusBarMetrics(): StatusBarMetrics {
 
     useEffect(() => {
         if (!session) {
+            // Synchronising with a polling loop over the agent link. The reset here is the
+            // teardown half of that subscription.
+            // oxlint-disable-next-line react/set-state-in-effect
             setInfo(null);
             setOnline("offline");
             setMemHistory([]);

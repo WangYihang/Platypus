@@ -100,6 +100,9 @@ export default function TransferThroughputPill() {
         // not the average from the last burst.
         if (runningRows.length === 0) {
             samplesRef.current = [];
+            // Synchronising with a rolling time window. The ring is flushed when transfers stop so
+            // an idle pill reads 0 rather than the last burst's average.
+            // oxlint-disable-next-line react/set-state-in-effect
             setSamples([]);
             return;
         }
