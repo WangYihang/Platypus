@@ -40,6 +40,16 @@ export default defineConfig({
         {
             name: "demo",
             testDir: "./specs/_demo",
+            // Demos are narrated recordings, not latency assertions:
+            // slowMo below adds 250ms to every action and each spec
+            // stages its own pause()s and captions on top, so their
+            // runtime is mostly deliberate. 04-terminal-persistence
+            // spends ~20s in scripted pauses alone and lands at ~38s
+            // idle — inside the 60s the rest of the suite uses, but
+            // only just, so it tipped over whenever the full run put
+            // the box under load. A timeout here is a "something
+            // hung" backstop, and 60s was measuring the pauses.
+            timeout: 180_000,
             // Demo specs use *.demo.ts (not *.spec.ts) so the default
             // glob would skip them. Match them explicitly here.
             testMatch: "**/*.demo.ts",
