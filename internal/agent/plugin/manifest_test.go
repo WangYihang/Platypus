@@ -154,8 +154,8 @@ func TestIsAbsCrossPlatform(t *testing.T) {
 		{"../etc/passwd", false},
 		{"./foo", false},
 		{"", false},
-		{"C:", false},        // missing root separator
-		{"C:foo", false},     // drive-relative path, not absolute
+		{"C:", false},    // missing root separator
+		{"C:foo", false}, // drive-relative path, not absolute
 		{`\single-back`, false},
 	}
 	for _, tc := range cases {

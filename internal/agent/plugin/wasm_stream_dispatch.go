@@ -19,16 +19,16 @@ import (
 // FileReadRequest) ride along in PluginStreamRequest.payload.
 //
 // The function:
-//   1. Parses the metadata + looks up the plugin in the registry.
-//   2. Verifies the plugin is enabled + declares the requested
-//      stream name + the manifest's host_handler is the wasm:
-//      marker. The legacy claim path (host_handler="agent.X") is
-//      explicitly NOT accepted — it has its own dispatcher.
-//   3. Allocates per-stream channels via runActiveStream + spawns
-//      pumpInboundFrames + pumpOutboundFrames around the wasm
-//      method invocation.
-//   4. After the wasm method returns, joins the pumps + writes the
-//      terminal frame so the wire peer sees a clean close.
+//  1. Parses the metadata + looks up the plugin in the registry.
+//  2. Verifies the plugin is enabled + declares the requested
+//     stream name + the manifest's host_handler is the wasm:
+//     marker. The legacy claim path (host_handler="agent.X") is
+//     explicitly NOT accepted — it has its own dispatcher.
+//  3. Allocates per-stream channels via runActiveStream + spawns
+//     pumpInboundFrames + pumpOutboundFrames around the wasm
+//     method invocation.
+//  4. After the wasm method returns, joins the pumps + writes the
+//     terminal frame so the wire peer sees a clean close.
 //
 // Error returns are surfaced to the caller AND emitted as KIND_ERROR
 // frames on the wire so the operator's UI sees a structured failure

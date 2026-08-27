@@ -217,11 +217,11 @@ func TestFilesWrite_Rename(t *testing.T) {
 // TestFilesWrite_Write_StreamRoundTrip drives the full upload
 // streaming protocol:
 //
-//   1. metadata = FileWriteRequest{path, mkdirs}
-//   2. agent acks with FileWriteResponse{error=""}
-//   3. server pushes FileChunk{data, eof=true}
-//   4. agent emits FileWriteResult{bytes_written, error=""}
-//   5. on-disk content == what the server sent
+//  1. metadata = FileWriteRequest{path, mkdirs}
+//  2. agent acks with FileWriteResponse{error=""}
+//  3. server pushes FileChunk{data, eof=true}
+//  4. agent emits FileWriteResult{bytes_written, error=""}
+//  5. on-disk content == what the server sent
 //
 // 64 KB payload is enough to verify the chunk push + that the agent
 // wrote it correctly without venturing into the multi-chunk OOM
@@ -295,4 +295,3 @@ func TestFilesWrite_Write_StreamRoundTrip(t *testing.T) {
 		t.Fatal("DispatchStream did not return")
 	}
 }
-

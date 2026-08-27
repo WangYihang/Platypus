@@ -20,11 +20,12 @@ import (
 // integration test toolchain.
 //
 // Layout (per WebAssembly Core 1 spec):
-//   magic + version (8 bytes)
-//   type section:    one ()->() func type
-//   function section: one function of type 0
-//   export section:  "noop" -> function 0
-//   code section:    one body, no locals, just `end`
+//
+//	magic + version (8 bytes)
+//	type section:    one ()->() func type
+//	function section: one function of type 0
+//	export section:  "noop" -> function 0
+//	code section:    one body, no locals, just `end`
 var noopWasm = []byte{
 	0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // \0asm v1
 	0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type: func ()->()

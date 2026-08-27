@@ -73,7 +73,7 @@ func (r *Registry) hotLoad(ctx context.Context, e CatalogEntry, m *Manifest, pk 
 
 	granted := map[CapabilityID]bool{CapLog: true}
 	for _, g := range e.GrantedCapabilities {
-		granted[CapabilityID(g)] = true
+		granted[g] = true
 	}
 	l := &loaded{
 		id: e.ID, manifest: m, entry: e, pubKey: pk,

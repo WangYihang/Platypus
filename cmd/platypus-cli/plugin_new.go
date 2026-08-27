@@ -166,7 +166,9 @@ func (c *pluginNewCmd) buildContext(caps []agentplugin.CapabilityID) templateCon
 // non-template files in dir are preserved (the --force gate already
 // let the author through).
 func render(dir string, ctx templateContext) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// Scaffolding a source tree for a developer to work in — normal
+	// project permissions, not a secret store.
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G301: scaffolded source tree
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
@@ -184,7 +186,7 @@ func render(dir string, ctx templateContext) error {
 		rel := strings.TrimPrefix(path, root+"/")
 		out := filepath.Join(dir, strings.TrimSuffix(rel, ".tmpl"))
 
-		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil { //nolint:gosec // G301: scaffolded source tree
 			return fmt.Errorf("mkdir %s: %w", filepath.Dir(out), err)
 		}
 		raw, err := tmpls.FS.ReadFile(path)
@@ -258,7 +260,8 @@ func rightmostSegment(id string) string {
 // author-name / author-email fields with the operator's git
 // identity, mirroring `cargo new`'s ergonomics.
 func gitConfigOrDefault(key, def string) string {
-	out, err := exec.Command("git", "config", "--get", key).Output()
+	// Fixed argv; key is a compile-time constant from the wizard.
+	out, err := exec.Command("git", "config", "--get", key).Output() //nolint:gosec // G204: constant argv
 	if err != nil {
 		return def
 	}

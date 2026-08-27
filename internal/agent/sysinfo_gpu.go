@@ -109,7 +109,9 @@ func enrichNvidiaSmi(ctx context.Context, gpus []*v2pb.GPUInfo) {
 		"--query-gpu=index,pci.bus_id,name,driver_version,memory.total,memory.used,utilization.gpu,uuid",
 		"--format=csv,noheader,nounits",
 	}
-	cmd := exec.CommandContext(runCtx, bin, args...)
+	// bin is whatever LookPath resolved for "nvidia-smi"; args are
+	// the constants above.
+	cmd := exec.CommandContext(runCtx, bin, args...) //nolint:gosec // G204: LookPath result + constant args
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	if err := cmd.Run(); err != nil {

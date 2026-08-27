@@ -237,7 +237,7 @@ func TestFanOutRPC_EmptyInput(t *testing.T) {
 	got := FanOutRPC(context.Background(), nil, &v2pb.RpcRequest{}, FanOutOptions{
 		MaxConcurrency: 4,
 	}, disp)
-	if got != nil && len(got) != 0 {
+	if len(got) != 0 {
 		t.Errorf("results = %v, want empty", got)
 	}
 }

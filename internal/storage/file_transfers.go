@@ -181,7 +181,10 @@ func (r *FileTransfersRepo) List(ctx context.Context, f FileTransferFilter) ([]*
 	q := "SELECT " + fileTransferColumns + " FROM file_transfers"
 	conds, args := buildTransferWhere(f)
 	if len(conds) > 0 {
-		q += " WHERE " + strings.Join(conds, " AND ")
+		// Not interpolation: every element of conds is a literal
+		// fragment ending in a `?`, and the values ride along in
+		// args for the driver to bind.
+		q += " WHERE " + strings.Join(conds, " AND ") //nolint:gosec // G202: literal fragments, values bound via args
 	}
 	q += " ORDER BY started_at DESC"
 

@@ -187,8 +187,12 @@ func (d *Dialer) dialOnce(ctx context.Context, t *dialTask) error {
 	}
 	leafPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf.Raw})
 
+	// context.Background() on purpose: the adopted stream is a
+	// long-lived mesh session that must outlive this dial. Handing it
+	// the dial's context would tear the session down the moment the
+	// dial returned.
 	nc := NetConnFromWebSocket(context.Background(), wsConn)
-	go d.node.AdoptStream(context.Background(), nc, peerNodeID, peerPubkey, leafPEM)
+	go d.node.AdoptStream(context.Background(), nc, peerNodeID, peerPubkey, leafPEM) //nolint:gosec // G118: session deliberately outlives the dial
 	return nil
 }
 
@@ -214,8 +218,13 @@ func peerDialTLSConfig(id *Identity, caPool *x509.CertPool) (*tls.Config, *atomi
 	}
 	captured := &atomic.Pointer[x509.Certificate]{}
 	cfg := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true, // hostname/IP match skipped; chain verified manually below
+		Certificates: []tls.Certificate{cert},
+		// Skips *hostname* matching only — mesh peers carry
+		// platypus:// URI SANs, not DNS or IP names, so the stock
+		// check has nothing to match. The chain itself is verified
+		// against the project CA in VerifyConnection below, which
+		// rejects the handshake on any failure.
+		InsecureSkipVerify: true, //nolint:gosec // G402: chain verified in VerifyConnection
 		MinVersion:         tls.VersionTLS12,
 		NextProtos:         []string{"h2", "http/1.1"},
 		VerifyConnection: func(cs tls.ConnectionState) error {

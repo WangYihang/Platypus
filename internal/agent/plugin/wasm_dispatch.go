@@ -26,9 +26,9 @@ type invokerResult struct {
 // Returns immediately (the wasm call runs in the spawned goroutine)
 // with:
 //   - *streamCtx  the per-stream channels — caller drives byte
-//                 plumbing on these
+//     plumbing on these
 //   - <-chan invokerResult  signals when the wasm method returned;
-//                 read for the invoker's (output, err)
+//     read for the invoker's (output, err)
 //
 // The caller (the agent's per-stream-type dispatcher in
 // serve_link.go) is responsible for:

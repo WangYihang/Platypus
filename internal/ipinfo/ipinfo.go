@@ -121,7 +121,9 @@ func resolveXDBPath(envVar, filename string) string {
 }
 
 func fileExists(p string) bool {
-	st, err := os.Stat(p)
+	// p comes from a fixed candidate list plus an operator-set env
+	// override — no remote input reaches it.
+	st, err := os.Stat(p) //nolint:gosec // G703: fixed candidates + operator env
 	return err == nil && !st.IsDir()
 }
 

@@ -4,17 +4,27 @@ run:
   timeout: 5m
   tests: true
 
-# Strict style + security linters (revive, gocritic, gosec) produced ~260
-# findings across the legacy agent/admin/core code when first enabled.
-# Fixing them inline on this branch is out of scope, so this config aims
-# for "catches real bugs, not style nits":
+# Aims for "catches real bugs, not style nits":
 #
 #   - govet / staticcheck / ineffassign / unconvert / unused → real bugs
 #   - errcheck / misspell                                     → useful hygiene
+#   - gosec                                                   → security
+#
+# internal/agent and internal/core used to be excluded wholesale, which
+# meant the two largest packages in the repo were linted by nothing at
+# all. They are in scope now; only errcheck is still held off there (the
+# best-effort teardowns below). Turning them on cost 36 fixes, one of
+# which — an unused method — was a settings key that had quietly never
+# been wired to anything.
+#
+# gosec is likewise on for the whole repo now. Three of its rules are
+# off in settings.gosec.excludes below, with reasons; everything else it
+# reports has either been fixed or carries a //nolint naming the rule
+# and why. Grep `//nolint:gosec` to audit those.
 #
 # New code added under desktop/ ships with its own go.mod and gets
-# type-checked via `make desktop-test` separately. When the legacy paths
-# get cleaned up, re-enable revive + gocritic + gosec here.
+# type-checked via `make desktop-test` separately. revive + gocritic
+# remain off — they were ~260 style findings on first run.
 linters:
   default: none
   enable:
@@ -25,17 +35,46 @@ linters:
     - unused
     - errcheck
     - misspell
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        # errcheck already covers unhandled errors, and it has the
+        # per-path exclusions below that gosec's copy does not.
+        - G104
+        # "File inclusion via variable". Platypus is a remote admin
+        # tool: reading a file the operator named is the product, so
+        # this fires on nearly every legitimate read and would drown
+        # the signal. The boundary that actually matters is the plugin
+        # sandbox's checkFSReadPath / checkFSWritePath, which are
+        # tested directly in internal/agent/plugin/host_fs_test.go.
+        - G304
+        # Integer conversion overflow. All 33 hits were reviewed and
+        # every one was a widening or a value bounded a line or two
+        # earlier (NumCPU, MTU, exit codes, a length already checked
+        # against a max). The conversions worth constraining now
+        # saturate explicitly — see ptyDim.
+        - G115
   exclusions:
     paths:
       - pkg/proto
-      # Legacy code — unchecked errors on best-effort teardowns (resp.Body.Close,
-      # conn.Close in defer, PTY writes) are idiomatic but noisy under errcheck.
-      - internal/agent
-      - internal/core
+      # Build-time staging tools. They assemble release trees that are
+      # meant to be world-readable, so G301/G302/G306 are backwards
+      # here, and none of it ships in a binary.
+      - scripts/
     rules:
+      # Legacy code — unchecked errors on best-effort teardowns
+      # (resp.Body.Close, conn.Close in defer, PTY writes) are
+      # idiomatic but noisy under errcheck. Every other linter runs.
+      - path: internal/(agent|core)/
+        linters:
+          - errcheck
+      # A test that ignores a Close or writes 0644 into t.TempDir() is
+      # not a finding.
       - path: _test\.go
         linters:
           - errcheck
+          - gosec
       - path: cmd/
         linters:
           - errcheck

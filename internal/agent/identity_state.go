@@ -78,7 +78,9 @@ func WriteActive(root, fingerprint string) error {
 		return fmt.Errorf("agent: WriteActive mkdir %s: %w", root, err)
 	}
 	tmp := activePath(root) + ".tmp"
-	if err := os.WriteFile(tmp, []byte(fingerprint+"\n"), 0o600); err != nil {
+	// root is the agent's own identity dir from local config, not
+	// anything the server or a plugin can steer.
+	if err := os.WriteFile(tmp, []byte(fingerprint+"\n"), 0o600); err != nil { //nolint:gosec // G703: path derived from local config
 		return fmt.Errorf("agent: WriteActive write: %w", err)
 	}
 	return os.Rename(tmp, activePath(root))

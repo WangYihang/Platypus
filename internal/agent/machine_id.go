@@ -126,7 +126,7 @@ func fallbackFingerprint() string {
 	macs := []string{}
 	if ifs, err := net.Interfaces(); err == nil {
 		for _, i := range ifs {
-			if i.HardwareAddr != nil && len(i.HardwareAddr) > 0 {
+			if len(i.HardwareAddr) > 0 {
 				macs = append(macs, i.HardwareAddr.String())
 			}
 		}

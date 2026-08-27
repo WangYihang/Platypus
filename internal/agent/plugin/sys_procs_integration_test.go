@@ -112,4 +112,3 @@ func TestProcs_TopNCapsResultLength(t *testing.T) {
 		t.Errorf("total_count %d < returned len %d", resp.GetTotalCount(), len(resp.GetProcesses()))
 	}
 }
-

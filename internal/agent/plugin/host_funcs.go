@@ -52,17 +52,17 @@ type pluginCtx struct {
 	// increasing handle id; uint32 is plenty (the table is short-
 	// lived per plugin instance and a busy plugin spawning thousands
 	// of long-lived processes is out of scope).
-	processMu             sync.Mutex
-	processHandles        map[uint32]*processHandle
-	processHandleCounter  uint32
+	processMu            sync.Mutex
+	processHandles       map[uint32]*processHandle
+	processHandleCounter uint32
 
 	// netHandles is the per-plugin TCP-dial table for the host_net_*
 	// family. Same lifecycle as processHandles: cleared on plugin
 	// teardown via reapNetHandles so a crashed plugin doesn't leak a
 	// live TCP conn.
-	netMu             sync.Mutex
-	netHandles        map[uint32]*netHandle
-	netHandleCounter  uint32
+	netMu            sync.Mutex
+	netHandles       map[uint32]*netHandle
+	netHandleCounter uint32
 }
 
 // buildHostFunctions returns the slice handed to extism.NewPlugin for
@@ -209,7 +209,9 @@ func returnEnvelope(p *extism.CurrentPlugin, stack []uint64, env envelope) {
 	stack[0] = off
 }
 
-func denied(reason string) envelope { return envelope{Ok: false, Error: "capability_denied: " + reason} }
+func denied(reason string) envelope {
+	return envelope{Ok: false, Error: "capability_denied: " + reason}
+}
 func failed(reason string) envelope { return envelope{Ok: false, Error: reason} }
 func okData(d any) envelope {
 	b, _ := json.Marshal(d)

@@ -1,8 +1,6 @@
 package core
 
 import (
-	"errors"
-	"io"
 	"net"
 	"sync"
 	"testing"
@@ -206,12 +204,11 @@ func TestAgentLinkService_CloseAllUnblocksAccept(t *testing.T) {
 	// Both Accepts must unblock with EOF (yamux session shutdown).
 	for i := 0; i < 2; i++ {
 		select {
-		case r := <-out:
-			if r.err != nil && !errors.Is(r.err, io.EOF) {
-				// Any non-nil err is acceptable (the session was torn
-				// down somehow); we're guarding against "Accept stays
-				// blocked forever".
-			}
+		case <-out:
+			// The error value doesn't matter: any return means Accept
+			// unblocked, which is the whole point. We're guarding
+			// against "Accept stays blocked forever", not asserting a
+			// particular teardown error.
 		case <-time.After(2 * time.Second):
 			t.Fatal("Accept did not unblock within 2s of CloseAll")
 		}

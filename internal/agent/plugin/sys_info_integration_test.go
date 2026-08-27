@@ -112,4 +112,3 @@ func TestSysInfo_PlatformReportsLinux(t *testing.T) {
 		t.Errorf("no platform info populated: %+v", resp)
 	}
 }
-

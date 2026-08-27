@@ -25,14 +25,14 @@ import (
 // plugin pays the wazero compile cost. For chatty plugins that's
 // amortised; for one-shot plugins it's <50ms.
 type loaded struct {
-	id        string
-	manifest  *Manifest
-	entry     CatalogEntry
-	pubKey    minisign.PublicKey
-	stateDir  string
-	wasmPath  string // resolved at load time, never changes
-	sigPath   string
-	logs      *logBuffer
+	id       string
+	manifest *Manifest
+	entry    CatalogEntry
+	pubKey   minisign.PublicKey
+	stateDir string
+	wasmPath string // resolved at load time, never changes
+	sigPath  string
+	logs     *logBuffer
 
 	pctx        *pluginCtx // built once, reused by every instance
 	currentCorr atomic.Pointer[string]
@@ -213,7 +213,7 @@ func loadOne(ctx context.Context, paths Paths, e CatalogEntry, resolve Publisher
 
 	granted := map[CapabilityID]bool{}
 	for _, g := range e.GrantedCapabilities {
-		granted[CapabilityID(g)] = true
+		granted[g] = true
 	}
 	granted[CapLog] = true // always
 

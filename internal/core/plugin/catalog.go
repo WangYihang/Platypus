@@ -38,21 +38,21 @@ var base64Std = b64.StdEncoding
 // IndexEntry is the per-version row the index.json publishes. One
 // plugin contributes one entry per published version.
 type IndexEntry struct {
-	PluginID         string   `json:"plugin_id"`
-	Version          string   `json:"version"`
-	Name             string   `json:"name"`
-	Author           string   `json:"author,omitempty"`
-	License          string   `json:"license,omitempty"`
-	Homepage         string   `json:"homepage,omitempty"`
-	Description      string   `json:"description,omitempty"`
-	LatestVersion    string   `json:"latest_version"`
-	PublisherKeyID   string   `json:"publisher_key_id"`
-	WasmURL          string   `json:"wasm_url"`
-	SignatureURL     string   `json:"signature_url"`
-	ManifestURL      string   `json:"manifest_url,omitempty"`
-	WasmSHA256Hex    string   `json:"wasm_sha256_hex"`
-	Capabilities     []string `json:"capabilities"`
-	Tags             []string `json:"tags,omitempty"`
+	PluginID       string   `json:"plugin_id"`
+	Version        string   `json:"version"`
+	Name           string   `json:"name"`
+	Author         string   `json:"author,omitempty"`
+	License        string   `json:"license,omitempty"`
+	Homepage       string   `json:"homepage,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	LatestVersion  string   `json:"latest_version"`
+	PublisherKeyID string   `json:"publisher_key_id"`
+	WasmURL        string   `json:"wasm_url"`
+	SignatureURL   string   `json:"signature_url"`
+	ManifestURL    string   `json:"manifest_url,omitempty"`
+	WasmSHA256Hex  string   `json:"wasm_sha256_hex"`
+	Capabilities   []string `json:"capabilities"`
+	Tags           []string `json:"tags,omitempty"`
 
 	// PublisherPubkeyB64 is the base64 of the publisher's minisign
 	// .pub file. Optional in the index format for backward compat;
@@ -71,8 +71,8 @@ type Index struct {
 // startup with the live *sql.DB from internal/storage. Methods are
 // goroutine-safe (sqlite handles its own locking).
 type Catalog struct {
-	db        *sql.DB
-	indexURL  string
+	db         *sql.DB
+	indexURL   string
 	httpClient *http.Client
 	now        func() time.Time
 }

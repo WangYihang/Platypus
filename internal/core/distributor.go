@@ -120,17 +120,6 @@ func (d *Distributor) currentChannel() string {
 	return "stable"
 }
 
-// currentPresignedTTL mirrors currentChannel for the presigned URL
-// lifetime.
-func (d *Distributor) currentPresignedTTL() time.Duration {
-	if d.Settings != nil {
-		if d := d.Settings.DistributorPresignedTTL(); d > 0 {
-			return d
-		}
-	}
-	return 5 * time.Minute
-}
-
 // handleManifest returns the raw manifest JSON for the requested
 // channel. It's small, so we forward the bytes directly rather than
 // issuing a presigned URL — the agent needs the bytes anyway to verify

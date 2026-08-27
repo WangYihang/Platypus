@@ -93,7 +93,9 @@ func (n *Node) browse(ctx context.Context) {
 		}
 		interval := n.currentBrowseInterval()
 		// Add up to 20% jitter to the interval
-		jitter := time.Duration(float64(interval) * 0.2 * (2.0*rand.Float64() - 1.0))
+		// Spreading announce timings so peers do not synchronise.
+		// Nothing here is a secret or a token.
+		jitter := time.Duration(float64(interval) * 0.2 * (2.0*rand.Float64() - 1.0)) //nolint:gosec // G404: scheduling jitter, not security
 		select {
 		case <-ctx.Done():
 			return

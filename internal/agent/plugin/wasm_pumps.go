@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/WangYihang/Platypus/internal/link"
@@ -90,10 +89,3 @@ func pumpOutboundFrames(ctx context.Context, w io.Writer, s *streamCtx) {
 		}
 	}
 }
-
-// errPumpClosed is the sentinel pump callers check for when they
-// want to distinguish "wire ended cleanly" from a real error. Not
-// used today (the dispatcher logs at the layer above) but reserved
-// so a future code path that needs the distinction has a stable
-// symbol to compare against.
-var errPumpClosed = errors.New("plugin: pump closed cleanly")

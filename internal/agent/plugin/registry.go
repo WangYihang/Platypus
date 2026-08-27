@@ -19,13 +19,14 @@ import (
 // in parallel.
 //
 // Method placement across files:
-//   registry.go              this file: ctor, lifecycle, types
-//   registry_invoke.go       Invoke + audit + exportDeclared
-//   registry_lifecycle.go    List, Tail, SetEnabled, Remove
-//   mgmt_stream.go           HandleMgmt + per-op write helpers
-//   install.go               handleInstall (entry point)
-//   install_receive.go       receive + chunk parsing + sha256
-//   install_persist.go       persistInstall + hotLoad
+//
+//	registry.go              this file: ctor, lifecycle, types
+//	registry_invoke.go       Invoke + audit + exportDeclared
+//	registry_lifecycle.go    List, Tail, SetEnabled, Remove
+//	mgmt_stream.go           HandleMgmt + per-op write helpers
+//	install.go               handleInstall (entry point)
+//	install_receive.go       receive + chunk parsing + sha256
+//	install_persist.go       persistInstall + hotLoad
 type Registry struct {
 	paths   Paths
 	catalog *Catalog

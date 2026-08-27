@@ -70,7 +70,10 @@ func (pctx *pluginCtx) hostExec(ctx context.Context, p *extism.CurrentPlugin, st
 		cctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(cctx, req.Command, req.Args...)
+	// Running an operator-approved command *is* the capability. The
+	// gate is matchAny against manifest.capabilities.process.commands
+	// above, not the shape of this call.
+	cmd := exec.CommandContext(cctx, req.Command, req.Args...) //nolint:gosec // G204: allowlist-gated above
 	cmd.Dir = req.CWD
 	if len(req.Env) > 0 {
 		env := make([]string, 0, len(req.Env))

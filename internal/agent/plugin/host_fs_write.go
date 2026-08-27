@@ -92,7 +92,11 @@ func (pctx *pluginCtx) hostFSWriteRange(_ context.Context, p *extism.CurrentPlug
 		return
 	}
 	if req.MakeDirs {
-		if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
+		// 0o750, not 0o755: the agent usually runs as root, and a
+		// directory it creates on a plugin's behalf has no reason to be
+		// traversable by every local user. Files inside still get the
+		// mode the plugin asked for.
+		if err := os.MkdirAll(filepath.Dir(clean), 0o750); err != nil {
 			returnEnvelope(p, stack, failed("mkdirs: "+err.Error()))
 			return
 		}
@@ -241,8 +245,8 @@ func (pctx *pluginCtx) runFSWriteCall(p *extism.CurrentPlugin, stack []uint64, o
 // checkFSWritePath mirrors checkFSReadPath but against the fs.write
 // allowlist. Resolves symlinks eagerly so a symlink under an allowed
 // dir pointing outside it cannot be used as a write portal. For
-// not-yet-existing targets (mkdir, write to a new file), the parent
-// dir is what we resolve — the new entry inherits the parent's
+// not-yet-existing targets (mkdir, write to a new file), the deepest
+// existing ancestor is what we resolve — the new entries inherit its
 // allowlist position.
 func (pctx *pluginCtx) checkFSWritePath(path string) (string, error) {
 	if pctx.manifest.Capabilities.FSWrite == nil {
@@ -251,17 +255,9 @@ func (pctx *pluginCtx) checkFSWritePath(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", errors.New("path_not_absolute")
 	}
-	clean := filepath.Clean(path)
-	resolved, err := filepath.EvalSymlinks(clean)
+	resolved, err := resolveForCreate(filepath.Clean(path))
 	if err != nil {
-		// Path doesn't exist yet. Resolve the parent dir + retain the
-		// final component so the write goes where the operator expects
-		// (otherwise mkdir / write-new-file would always fail).
-		parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
-		if err != nil {
-			parent = filepath.Dir(clean)
-		}
-		resolved = filepath.Join(parent, filepath.Base(clean))
+		return "", err
 	}
 	for _, allowed := range pctx.manifest.Capabilities.FSWrite.Paths {
 		allowedClean, _ := filepath.EvalSymlinks(allowed)

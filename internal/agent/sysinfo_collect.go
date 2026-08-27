@@ -37,10 +37,14 @@ import (
 // (on-demand refresh from the Web UI).
 func CollectSysInfo(ctx context.Context) *v2pb.SysInfoResponse {
 	resp := &v2pb.SysInfoResponse{
-		Os:                runtime.GOOS,
-		Arch:              runtime.GOARCH,
-		NumCpu:            uint32(runtime.NumCPU()),
-		NetworkInterfaces: map[string]string{},
+		Os:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		NumCpu: uint32(runtime.NumCPU()),
+		// Deprecated in favour of Interfaces, but still populated:
+		// a new agent can be talking to an older server that only
+		// reads this map. Drop it when the oldest supported server
+		// understands Interfaces.
+		NetworkInterfaces: map[string]string{}, //nolint:staticcheck // SA1019: wire compat with older servers
 		SampledAtUnix:     time.Now().Unix(),
 		// Build identity travels on every refresh so server-side host
 		// rows stay accurate after a self-upgrade swap. Sourced from
@@ -234,7 +238,7 @@ func collectInterfaces(resp *v2pb.SysInfoResponse) {
 			IsLoopback: isLoop,
 		})
 		if len(cidrs) > 0 {
-			resp.NetworkInterfaces[ifi.Name] = strings.Join(cidrs, ",")
+			resp.NetworkInterfaces[ifi.Name] = strings.Join(cidrs, ",") //nolint:staticcheck // SA1019: wire compat, see CollectSysInfo
 		}
 	}
 	if ip, mac := detectPrimary(); ip != "" {

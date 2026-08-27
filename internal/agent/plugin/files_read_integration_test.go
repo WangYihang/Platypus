@@ -247,8 +247,8 @@ func TestFilesRead_Scan_CountsTreeRoots(t *testing.T) {
 	reg := installSysFilesRead(t)
 
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "a.txt"), []byte("aaaa"))      // 4 bytes
-	mustWrite(t, filepath.Join(root, "b.txt"), []byte("bbbbbb"))    // 6 bytes
+	mustWrite(t, filepath.Join(root, "a.txt"), []byte("aaaa"))   // 4 bytes
+	mustWrite(t, filepath.Join(root, "b.txt"), []byte("bbbbbb")) // 6 bytes
 	sub := filepath.Join(root, "sub")
 	mustMkdir(t, sub)
 	mustWrite(t, filepath.Join(sub, "c.txt"), []byte("cccccccccc")) // 10 bytes

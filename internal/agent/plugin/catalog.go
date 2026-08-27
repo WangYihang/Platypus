@@ -14,20 +14,20 @@ import (
 // are stable wire-style names so a future tool reading catalog.json
 // from outside this package isn't broken by Go-side renames.
 type CatalogEntry struct {
-	ID                  string    `json:"id"`
-	Version             string    `json:"version"`
-	Name                string    `json:"name"`
-	Author              string    `json:"author"`
-	Enabled             bool      `json:"enabled"`
+	ID      string `json:"id"`
+	Version string `json:"version"`
+	Name    string `json:"name"`
+	Author  string `json:"author"`
+	Enabled bool   `json:"enabled"`
 	// GrantedCapabilities uses the typed CapabilityID set so the
 	// loader / install path can't accidentally compare a typo'd
 	// raw string against the manifest's typed declaration. JSON
 	// shape stays as `["fs.read", ...]` since CapabilityID is a
 	// string-derived type.
 	GrantedCapabilities []CapabilityID `json:"granted_capabilities"`
-	InstalledAt         time.Time `json:"installed_at"`
-	SourceURL           string    `json:"source_url,omitempty"` // empty for inline installs
-	PublisherKeyID      string    `json:"publisher_key_id"`
+	InstalledAt         time.Time      `json:"installed_at"`
+	SourceURL           string         `json:"source_url,omitempty"` // empty for inline installs
+	PublisherKeyID      string         `json:"publisher_key_id"`
 
 	// System marks plugins shipped inside the agent binary and
 	// auto-installed on startup by the system-plugin bootstrap. Their

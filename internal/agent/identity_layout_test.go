@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
@@ -232,7 +233,7 @@ func TestEnrollAndPersist_LandsInPerCASubdir(t *testing.T) {
 // ErrIdentityNotFound.
 func TestLoadOrEnroll_FirstRunNoPAT(t *testing.T) {
 	root := t.TempDir()
-	_, err := loadOrEnroll(nil, root, BootstrapV2Options{})
+	_, err := loadOrEnroll(context.Background(), root, BootstrapV2Options{})
 	if err == nil {
 		t.Fatal("expected error when nothing is configured")
 	}
@@ -246,7 +247,7 @@ func TestLoadOrEnroll_FirstRunNoPAT(t *testing.T) {
 // PAT.
 func TestLoadOrEnroll_FirstRunNoCA(t *testing.T) {
 	root := t.TempDir()
-	_, err := loadOrEnroll(nil, root, BootstrapV2Options{
+	_, err := loadOrEnroll(context.Background(), root, BootstrapV2Options{
 		PAT: "plt_test",
 	})
 	if err == nil {

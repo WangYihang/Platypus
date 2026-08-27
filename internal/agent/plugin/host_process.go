@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"sync"
@@ -124,7 +125,8 @@ func (pctx *pluginCtx) hostProcessSpawn(_ context.Context, p *extism.CurrentPlug
 		return
 	}
 
-	cmd := exec.Command(req.Command, req.Args...)
+	// Same as host_exec: the command allowlist above is the gate.
+	cmd := exec.Command(req.Command, req.Args...) //nolint:gosec // G204: allowlist-gated above
 	if req.Cwd != "" {
 		cmd.Dir = req.Cwd
 	}
@@ -134,7 +136,7 @@ func (pctx *pluginCtx) hostProcessSpawn(_ context.Context, p *extism.CurrentPlug
 
 	h := &processHandle{cmd: cmd}
 	if req.Pty {
-		ws := &pty.Winsize{Cols: uint16(req.Cols), Rows: uint16(req.Rows)}
+		ws := &pty.Winsize{Cols: ptyDim(req.Cols), Rows: ptyDim(req.Rows)}
 		ptmx, perr := pty.StartWithSize(cmd, ws)
 		if perr != nil {
 			returnEnvelope(p, stack, failed("spawn_pty: "+perr.Error()))
@@ -289,8 +291,8 @@ func relayPTY(ctx context.Context, wire io.ReadWriter, h *processHandle) process
 				}
 			case *v2pb.ProcessFrame_Resize:
 				_ = pty.Setsize(h.ptmx, &pty.Winsize{
-					Cols: uint16(p.Resize.Cols),
-					Rows: uint16(p.Resize.Rows),
+					Cols: ptyDim(p.Resize.Cols),
+					Rows: ptyDim(p.Resize.Rows),
 				})
 			}
 		}
@@ -486,3 +488,15 @@ func (pctx *pluginCtx) reapProcessHandles() {
 // import is still needed because future write_stdin paths will want
 // raw bytes.)
 var _ = base64.StdEncoding
+
+// ptyDim narrows a wire-supplied terminal dimension to the uint16 the
+// TIOCSWINSZ ioctl takes. A plain conversion wraps — 65616 columns
+// would arrive as 80 — which is a confusing way to answer a nonsense
+// request. Saturating says what we mean, and nothing legitimate is
+// anywhere near the ceiling.
+func ptyDim(v uint32) uint16 {
+	if v > math.MaxUint16 {
+		return math.MaxUint16
+	}
+	return uint16(v)
+}

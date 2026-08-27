@@ -43,7 +43,10 @@ func (c *pluginKeygenCmd) Run(_ *runContext) error {
 	if err := os.WriteFile(c.OutSecret, []byte(plugin.EncodeSecretKey(sk)), 0o600); err != nil {
 		return fmt.Errorf("write secret: %w", err)
 	}
-	if err := os.WriteFile(c.OutPublic, []byte(plugin.EncodePublicKey(pk, "")), 0o644); err != nil {
+	// 0644 is deliberate: this is the *public* half, meant to be
+	// distributed and read by anyone verifying a plugin. The secret
+	// key is written 0600 above.
+	if err := os.WriteFile(c.OutPublic, []byte(plugin.EncodePublicKey(pk, "")), 0o644); err != nil { //nolint:gosec // G306: public key, published by design
 		// Best-effort cleanup of the orphaned secret so the operator
 		// isn't left with a half-written keypair on disk.
 		_ = os.Remove(c.OutSecret)

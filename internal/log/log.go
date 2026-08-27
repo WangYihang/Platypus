@@ -53,7 +53,13 @@ func init() {
 // the logger stays on stderr-only and a warning is emitted.
 func Init() {
 	initOnce.Do(func() {
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		// 0600, not 0644: this file carries whatever the server and
+		// agent log, and SECURITY.md counts secret disclosure through
+		// logs as in scope. An existing file keeps its current mode —
+		// O_CREATE only applies the mode on creation — so a deployment
+		// that already has a world-readable platypus.log needs a manual
+		// chmod.
+		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		var w io.Writer = os.Stderr
 		level := resolveLevel()
 		if err != nil {

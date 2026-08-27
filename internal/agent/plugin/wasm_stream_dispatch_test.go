@@ -129,7 +129,7 @@ func TestDispatchPluginStream_NonWasmHandlerReturnsError(t *testing.T) {
 	// running the wrong handler.
 	reg := emptyRegistry(t)
 	injectPlugin(reg, &loaded{
-		id: "com.example.legacy",
+		id:    "com.example.legacy",
 		entry: CatalogEntry{ID: "com.example.legacy", Enabled: true},
 		manifest: &Manifest{
 			Streams: []ManifestStream{

@@ -54,7 +54,9 @@ func (c *pluginSignCmd) Run(_ *runContext) error {
 	if err != nil {
 		return fmt.Errorf("sign: %w", err)
 	}
-	if err := os.WriteFile(out, []byte(plugin.EncodeSignature(sig)), 0o644); err != nil {
+	// A signature is published alongside the artifact it signs;
+	// world-readable is the point.
+	if err := os.WriteFile(out, []byte(plugin.EncodeSignature(sig)), 0o644); err != nil { //nolint:gosec // G306: signature is public by design
 		return fmt.Errorf("write sig: %w", err)
 	}
 	fmt.Printf("Signed %s -> %s\n", c.Wasm, out)

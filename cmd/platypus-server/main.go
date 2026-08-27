@@ -87,7 +87,15 @@ func main() {
 	// Ensure data_dir exists before any subsystem touches files inside
 	// it. Auto-creation here (rather than failing at first Open) keeps
 	// the "drop a binary on a fresh box" experience close to one-step.
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	//
+	// 0o700: this holds the sqlite DB, terminal recordings, and — in
+	// dev mode — ca.kek, which decrypts the project CA key. ca.kek is
+	// written 0600 on its own, but the directory was 0755, so every
+	// other file in here was only as private as whatever mode its
+	// writer happened to pick. Denying traversal to other local users
+	// covers all of them at once. An existing data dir keeps its
+	// current mode; MkdirAll only applies this on creation.
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		log.Error("create data dir %q: %v", cfg.DataDir, err)
 		os.Exit(1)
 	}
@@ -840,7 +848,8 @@ func certCoversHosts(certPath string, wants []string) bool {
 // log and carry on with the in-memory copy, accepting the regression
 // to "new fingerprint every restart" rather than aborting startup.
 func persistAutoIssuedLeaf(certPath, keyPath, certPEM, keyPEM string) {
-	if err := os.WriteFile(certPath, []byte(certPEM), 0o644); err != nil {
+	// The cert is public; the key below is 0600.
+	if err := os.WriteFile(certPath, []byte(certPEM), 0o644); err != nil { //nolint:gosec // G306: X.509 cert is public
 		log.L.Warn("ingress_tls_persist_cert_failed",
 			"path", certPath, "error", err.Error())
 		return

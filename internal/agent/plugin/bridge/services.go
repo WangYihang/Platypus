@@ -21,9 +21,9 @@ import (
 // Windows) instead of a lossy union.
 
 const (
-	systemdPluginID  = "com.platypus.sys-systemd-linux"
-	launchdPluginID  = "com.platypus.sys-services-darwin"
-	winSvcPluginID   = "com.platypus.sys-services-windows"
+	systemdPluginID = "com.platypus.sys-systemd-linux"
+	launchdPluginID = "com.platypus.sys-services-darwin"
+	winSvcPluginID  = "com.platypus.sys-services-windows"
 )
 
 // SystemdListUnits forwards to com.platypus.sys-systemd-linux's

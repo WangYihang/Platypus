@@ -56,8 +56,8 @@ type AgentHandlerDeps struct {
 //   - (true, nil)   plugin owned + ran the stream successfully
 //   - (true, err)   plugin owned the stream but the provider errored
 //   - (false, nil)  no plugin claimed this type → fall through to the
-//                   built-in switch in dispatchAgentStream (RPC /
-//                   upgrade / plugin-mgmt) or end with a reject
+//     built-in switch in dispatchAgentStream (RPC /
+//     upgrade / plugin-mgmt) or end with a reject
 type PluginStreamDispatcher func(ctx context.Context, t v2pb.StreamType, stream io.ReadWriteCloser, metadata []byte) (handled bool, err error)
 
 // UpgradeHandler processes one STREAM_TYPE_AGENT_UPGRADE stream.

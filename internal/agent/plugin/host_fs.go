@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,10 +136,10 @@ type fsReadRangeRequest struct {
 // receives. EOF is true when offset+returned bytes covered the
 // trailing tail of the file (no more bytes available).
 type fsReadRangeResponse struct {
-	Data   []byte `json:"data"`
-	EOF    bool   `json:"eof"`
-	Size   int64  `json:"size"`
-	Mode   uint32 `json:"mode"`
+	Data []byte `json:"data"`
+	EOF  bool   `json:"eof"`
+	Size int64  `json:"size"`
+	Mode uint32 `json:"mode"`
 }
 
 // maxFileReadRangeBytes caps a single host_fs_read_range call so a
@@ -208,12 +209,10 @@ func (pctx *pluginCtx) hostFSReadRange(_ context.Context, p *extism.CurrentPlugi
 	// when offset already pointed past the end. Either way the
 	// caller should know "no more after this batch".
 	eof := false
-	switch {
-	case err == nil:
+	switch err {
+	case nil:
 		// Buffer fully filled — there may be more data after.
-	case err == io.EOF:
-		eof = true
-	case err == io.ErrUnexpectedEOF:
+	case io.EOF, io.ErrUnexpectedEOF:
 		eof = true
 	default:
 		returnEnvelope(p, stack, failed("read: "+err.Error()))
@@ -358,4 +357,55 @@ func pathHasPrefix(p, prefix string) bool {
 	}
 	rest := p[len(prefix):]
 	return len(rest) > 0 && rest[0] == filepath.Separator
+}
+
+// resolveForCreate turns a cleaned absolute path into one with every
+// symlink already followed, so an allowlist prefix check on the result
+// says something true about where the bytes will actually land.
+//
+// filepath.EvalSymlinks fails outright when any component is missing,
+// which is the normal case for a write: the plugin is creating the
+// file. Resolving just the immediate parent (what this used to do) is
+// only enough when exactly one component is missing. With two or more
+// — /allowed/link/a/b, where /allowed/link is a symlink out of the
+// tree — the parent (/allowed/link/a) does not exist either, so
+// resolution failed there too and the raw, unresolved path was handed
+// to the prefix check. It starts with /allowed, so it passed, and
+// MkdirAll then walked straight through the symlink and wrote outside
+// the allowlist.
+//
+// So walk up to the deepest ancestor that does exist, resolve that,
+// and re-attach the components below it. Those cannot be symlinks —
+// they do not exist yet — so joining them onto a fully-resolved
+// ancestor cannot leave it. Clean has already removed any "..", so
+// the join cannot climb either.
+//
+// Anything other than "does not exist" (a permission error partway up,
+// say) is returned rather than swallowed: failing closed on a path we
+// could not resolve is the safe direction for a capability check.
+//
+// This is a check, not a lock — the tree can still change between here
+// and the open(2). Narrowing that window means *at-style syscalls and
+// an O_NOFOLLOW on the final component, which is a bigger change than
+// this; the plugin would have to win a race against itself to exploit
+// it, having already been granted fs.write.
+func resolveForCreate(clean string) (string, error) {
+	var missing []string
+	cur := clean
+	for {
+		resolved, err := filepath.EvalSymlinks(cur)
+		if err == nil {
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("resolve_path: %w", err)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			// Root itself did not resolve; nothing left to walk up to.
+			return "", errors.New("resolve_path: no resolvable ancestor")
+		}
+		missing = append([]string{filepath.Base(cur)}, missing...)
+		cur = parent
+	}
 }

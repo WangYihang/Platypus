@@ -255,7 +255,7 @@ type ManifestRuntime struct {
 }
 
 type ManifestRPC struct {
-	Name            string         `yaml:"name"`             // wasm export name
+	Name            string         `yaml:"name"` // wasm export name
 	Request         ManifestSchema `yaml:"request"`
 	Response        ManifestSchema `yaml:"response"`
 	ProtoDescriptor string         `yaml:"proto_descriptor"` // optional FileDescriptorSet path

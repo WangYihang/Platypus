@@ -71,7 +71,7 @@ var allDescriptors = []descriptorMeta{
 		Type:        typeDurationSeconds,
 		Section:     "distributor",
 		Label:       "Presigned URL TTL",
-		Description: "How long S3 presigned download links stay valid, in seconds.",
+		Description: "How long S3 presigned download links stay valid, in seconds. Inert on the built-in filesystem store, which streams artifact bytes directly; applies once an object-store backend is configured.",
 	},
 	{
 		Key:         KeyMeshDiscoveryLAN,

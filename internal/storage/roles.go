@@ -56,7 +56,10 @@ func (r *RoleRepo) List(ctx context.Context, f RoleFilter) ([]*Role, error) {
 		args = append(args, boolToInt(*f.IsProject))
 	}
 	if len(clauses) > 0 {
-		q += " WHERE " + strings.Join(clauses, " AND ")
+		// Not interpolation: every element of clauses is a literal
+		// fragment ending in a `?`, and the values ride along in
+		// args for the driver to bind.
+		q += " WHERE " + strings.Join(clauses, " AND ") //nolint:gosec // G202: literal fragments, values bound via args
 	}
 	q += " ORDER BY slug"
 	rows, err := r.db.QueryContext(ctx, q, args...)

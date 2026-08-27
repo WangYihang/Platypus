@@ -234,4 +234,3 @@ func TestProcessOpen_DeniesUnlistedCommand(t *testing.T) {
 		t.Fatal("DispatchStream did not return")
 	}
 }
-

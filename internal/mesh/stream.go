@@ -121,7 +121,9 @@ func (m *streamManager) handleOpen(env *v2pb.MeshEnvelope) {
 		return
 	}
 
-	conn, err := net.DialTimeout("tcp", m.node.cfg.BootstrapTarget, 10*time.Second)
+	// BootstrapTarget is operator configuration, not a value any
+	// peer or request can set.
+	conn, err := net.DialTimeout("tcp", m.node.cfg.BootstrapTarget, 10*time.Second) //nolint:gosec // G704: operator-configured target
 	if err != nil {
 		m.sendOpenAck(msg.InitiatorNodeId, msg.StreamId, false, err.Error())
 		return

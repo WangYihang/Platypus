@@ -157,4 +157,3 @@ func (r *Registry) replyGetLogs(stream io.Writer, req *v2pb.PluginGetLogsRequest
 	}
 	return nil
 }
-

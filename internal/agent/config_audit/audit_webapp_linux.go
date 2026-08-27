@@ -74,9 +74,7 @@ func (a webAppAuditor) Run(ctx context.Context) ([]Leak, error) {
 	roots := append([]string{}, webAppRoots...)
 	// First-level subdirectories of each home count as web-app
 	// candidates too — `/home/alice/myapp/.env` is a common shape.
-	for _, h := range sources.HomeDirs() {
-		roots = append(roots, h)
-	}
+	roots = append(roots, sources.HomeDirs()...)
 
 	for _, root := range roots {
 		if ctx.Err() != nil || visited >= webAppMaxFiles {
@@ -115,7 +113,7 @@ func (a webAppAuditor) Run(ctx context.Context) ([]Leak, error) {
 				// `appsettings.<env>.json` is common in .NET; admit
 				// it via prefix so we don't have to enumerate every
 				// possible environment name.
-				if !(strings.HasPrefix(lower, "appsettings.") && strings.HasSuffix(lower, ".json")) {
+				if !strings.HasPrefix(lower, "appsettings.") || !strings.HasSuffix(lower, ".json") {
 					return nil
 				}
 			}

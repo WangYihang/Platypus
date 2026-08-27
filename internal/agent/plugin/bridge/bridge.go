@@ -73,8 +73,8 @@ func invokeJSON(ctx context.Context, reg *plugin.Registry, pluginID, method stri
 // sys-procs, sys-security, sys-config-audit). Use invokeJSON only
 // for ad-hoc payloads that don't have a proto.
 var (
-	protoMarshalSnakeCase  = protojson.MarshalOptions{UseProtoNames: true}
-	protoUnmarshalLenient  = protojson.UnmarshalOptions{DiscardUnknown: true}
+	protoMarshalSnakeCase = protojson.MarshalOptions{UseProtoNames: true}
+	protoUnmarshalLenient = protojson.UnmarshalOptions{DiscardUnknown: true}
 )
 
 func invokeProto(ctx context.Context, reg *plugin.Registry, pluginID, method string, req, resp proto.Message) (string, error) {

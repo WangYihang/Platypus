@@ -136,4 +136,3 @@ func normaliseYAMLValue(v interface{}) interface{} {
 		return v
 	}
 }
-

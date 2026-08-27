@@ -119,7 +119,8 @@ func loadOrGenerate(src CertSource) (tls.Certificate, error) {
 	// half-written pair is recoverable on the next boot, so we log
 	// and carry on rather than aborting.
 	if src.PersistTo.CertPath != "" && src.PersistTo.KeyPath != "" {
-		if err := os.WriteFile(src.PersistTo.CertPath, []byte(certPEM), 0o644); err != nil {
+		// The cert is public; the key below is 0600.
+		if err := os.WriteFile(src.PersistTo.CertPath, []byte(certPEM), 0o644); err != nil { //nolint:gosec // G306: X.509 cert is public
 			log.L.Warn("ingress_tls_persist_cert_failed",
 				"path", src.PersistTo.CertPath, "error", err.Error())
 		} else if err := os.WriteFile(src.PersistTo.KeyPath, []byte(keyPEM), 0o600); err != nil {

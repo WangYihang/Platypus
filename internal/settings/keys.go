@@ -26,8 +26,10 @@ import "time"
 // a typed accessor on Registry, a default constant, and a descriptor
 // row in allDescriptors.
 const (
-	KeyAuthAccessTokenTTL        = "auth.access_token_ttl"
-	KeyAuthRefreshTokenTTL       = "auth.refresh_token_ttl"
+	// The two below name token *lifetimes*; gosec's G101 heuristic
+	// sees "token" in a string constant and assumes a credential.
+	KeyAuthAccessTokenTTL        = "auth.access_token_ttl"  //nolint:gosec // G101: setting key, not a credential
+	KeyAuthRefreshTokenTTL       = "auth.refresh_token_ttl" //nolint:gosec // G101: setting key, not a credential
 	KeyAuthPATDefaultTTL         = "auth.pat_default_ttl"
 	KeyDistributorChannel        = "distributor.channel"
 	KeyDistributorPresignedTTL   = "distributor.presigned_ttl"
