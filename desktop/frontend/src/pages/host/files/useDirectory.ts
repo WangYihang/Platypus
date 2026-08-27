@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { ListDir } from "@wails/go/app/App";
 import type { FileEntryDTO } from "@wails/go/app/App";
@@ -47,7 +47,6 @@ function writeSavedPath(sessionHash: string, path: string) {
 }
 
 export function useDirectory(projectID: string, sessionHash: string, initialPath = "/") {
-    const queryClient = useQueryClient();
     const [path, setPath] = useState<string>(() =>
         readSavedPath(sessionHash, initialPath),
     );
@@ -164,17 +163,6 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
             ? null
             : String(error instanceof Error ? error.message : error);
 
-    // Expose the queryClient so consumers (e.g. mutations like delete /
-    // rename / mkdir) can `invalidateQueries({ queryKey: ["directory",
-    // ...] })` without re-deriving the key.
-    const invalidate = useCallback(
-        () =>
-            queryClient.invalidateQueries({
-                queryKey: ["directory", projectID, sessionHash, path],
-            }),
-        [queryClient, projectID, sessionHash, path],
-    );
-
     const entries = useMemo(() => data?.entries ?? [], [data?.entries]);
 
     // Memoised as a whole. Every consumer of this hook puts the
@@ -202,7 +190,6 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
             canBack: history.back.length > 0,
             canForward: history.forward.length > 0,
             reload,
-            invalidate,
         }),
         [
             path,
@@ -217,7 +204,6 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
             history.back.length,
             history.forward.length,
             reload,
-            invalidate,
         ],
     );
 }
