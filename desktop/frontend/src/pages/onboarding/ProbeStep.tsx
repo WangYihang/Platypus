@@ -71,6 +71,7 @@ export default function ProbeStep({
             </Field>
             {probeError && (
                 <div
+                    data-testid="onboarding-probe-error"
                     style={{
                         display: "flex",
                         alignItems: "center",
