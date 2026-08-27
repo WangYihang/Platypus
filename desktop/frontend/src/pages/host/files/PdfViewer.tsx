@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ReadFile } from "@wails/go/app/App";
-import { fsReadPreviewURL } from "@/lib/fs-preview";
 import { humanize } from "../../../lib/format";
+import { useRemotePreviewURL } from "./remoteFile";
 // Absolute import (rather than "./pdfWorkerSrc") so vitest's alias
 // table can swap in a stub — vitest aliases only match against the
 // import specifier as written, before relative-path resolution.
@@ -26,78 +25,27 @@ interface Props {
     size: number;
 }
 
-function bytesFromWailsRead(raw: unknown): Uint8Array {
-    if (raw instanceof Uint8Array) return raw;
-    if (Array.isArray(raw)) return new Uint8Array(raw as number[]);
-    throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
-}
-
 export default function PdfViewer({ projectID, sessionHash, path, size }: Props) {
-    // Blob URL, not raw bytes. Passing { data: Uint8Array } made pdfjs
-    // postMessage the underlying ArrayBuffer to its worker as a
-    // transferable, which detached the buffer; the next render then
-    // crashed with "ArrayBuffer is already detached". A Blob URL is
-    // stable under React re-renders, lets pdfjs fetch the document
-    // however it likes internally, and revokes cleanly on unmount.
-    const [url, setUrl] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [numPages, setNumPages] = useState(0);
-    const [pageNumber, setPageNumber] = useState(1);
+    // Web mode hands pdf.js a preview URL so it can Range-fetch pages
+    // lazily; desktop reads the whole file and wraps it in a blob URL,
+    // because pdf.js cannot Range-fetch over Wails IPC. Both live in
+    // useRemotePreviewURL now — MediaViewer needed the same choice.
+    //
+    // A blob URL specifically, not raw bytes: passing { data:
+    // Uint8Array } made pdfjs postMessage the underlying ArrayBuffer to
+    // its worker as a transferable, which detached the buffer and
+    // crashed the next render with "ArrayBuffer is already detached".
+    const { url, error: loadError } = useRemotePreviewURL({
+        projectID,
+        sessionHash,
+        path,
+        mime: "application/pdf",
+    });
 
-    useEffect(() => {
-        let cancelled = false;
-        setUrl(null);
-        setError(null);
-        setPageNumber(1);
-        setNumPages(0);
-
-        if (import.meta.env.MODE === "web") {
-            // Web mode: hand pdf.js a preview URL so it can issue its
-            // own Range fetches against /fs/read for lazy-page
-            // rendering. Opening a 50 MB PDF doesn't have to download
-            // the whole file before the first page paints.
-            void (async () => {
-                try {
-                    const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
-                    if (!cancelled) setUrl(previewURL);
-                } catch (err) {
-                    if (!cancelled) {
-                        setError(err instanceof Error ? err.message : String(err));
-                    }
-                }
-            })();
-            return () => {
-                cancelled = true;
-            };
-        }
-
-        // Desktop fallback: full-file read into a stable Blob URL.
-        // pdf.js can't Range-fetch over Wails IPC anyway, so this is
-        // the same behaviour the desktop binary has always had.
-        let createdURL: string | null = null;
-        void (async () => {
-            try {
-                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
-                if (cancelled) return;
-                const bytes = bytesFromWailsRead(raw);
-                const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
-                createdURL = URL.createObjectURL(blob);
-                setUrl(createdURL);
-            } catch (err) {
-                if (cancelled) return;
-                setError(err instanceof Error ? err.message : String(err));
-            }
-        })();
-        return () => {
-            cancelled = true;
-            if (createdURL) URL.revokeObjectURL(createdURL);
-        };
-    }, [projectID, sessionHash, path]);
-
-    if (error) {
+    if (loadError) {
         return (
             <div className="flex h-full items-center justify-center px-4 text-center text-sm text-red-500">
-                {error}
+                {loadError instanceof Error ? loadError.message : String(loadError)}
             </div>
         );
     }
@@ -107,6 +55,27 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
                 Loading {humanize(size)}…
+            </div>
+        );
+    }
+
+    // Keyed on the url so page position and page count are discarded
+    // when the document changes. They belong to one document, so the
+    // component that owns them is identified by that document —
+    // rather than an effect that reaches in and resets them whenever
+    // the path prop moves.
+    return <PdfDocument key={url} url={url} path={path} />;
+}
+
+function PdfDocument({ url, path }: { url: string; path: string }) {
+    const [numPages, setNumPages] = useState(0);
+    const [pageNumber, setPageNumber] = useState(1);
+    const [renderError, setRenderError] = useState<string | null>(null);
+
+    if (renderError) {
+        return (
+            <div className="flex h-full items-center justify-center px-4 text-center text-sm text-red-500">
+                {renderError}
             </div>
         );
     }
@@ -129,7 +98,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
                                 <ChevronLeft className="size-3.5" />
                                 Prev
                             </Button>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs textate-muted-foreground">
                                 Page {pageNumber} of {numPages}
                             </span>
                             <Button
@@ -153,7 +122,9 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
                 <Document
                     file={url}
                     onLoadSuccess={(info) => setNumPages(info.numPages)}
-                    onLoadError={(err) => setError(err instanceof Error ? err.message : String(err))}
+                    onLoadError={(err) =>
+                        setRenderError(err instanceof Error ? err.message : String(err))
+                    }
                     loading={
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="size-4 animate-spin" />

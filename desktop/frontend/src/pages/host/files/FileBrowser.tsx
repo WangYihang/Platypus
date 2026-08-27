@@ -196,6 +196,25 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
     // Right-click on a row reconciles selection (right-click on an unselected row
     // first selects it; right-click within an existing multi-selection keeps the set).
+    // Stable identity: this is a dependency of the row context menu
+    // and of the keydown effect further down, and both now get a
+    // memoised `dir` and `preview` to hang off.
+    const openEntry = useCallback(
+        async (entry: FileEntryDTO) => {
+            if (entry.isDir) {
+                dir.cd(joinPath(dir.path, entry.name));
+                return;
+            }
+            if (entry.isSymlink) {
+                toast.message(`${entry.name} → ${entry.symlinkTarget || "(unreadable)"}`);
+                return;
+            }
+            setSelected(new Set([entry.name]));
+            preview.setOpen(true);
+        },
+        [dir, preview],
+    );
+
     const wrapRowWithContextMenu = useCallback(
         (entry: FileEntryDTO, node: React.ReactNode): React.ReactNode => {
             const isInSelection = selected.has(entry.name);
@@ -281,19 +300,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         if (dir.path === "/") return;
         dir.cd(parentPath(dir.path));
     }, [dir]);
-
-    async function openEntry(entry: FileEntryDTO) {
-        if (entry.isDir) {
-            dir.cd(joinPath(dir.path, entry.name));
-            return;
-        }
-        if (entry.isSymlink) {
-            toast.message(`${entry.name} → ${entry.symlinkTarget || "(unreadable)"}`);
-            return;
-        }
-        setSelected(new Set([entry.name]));
-        preview.setOpen(true);
-    }
 
     async function handleUploadClick() {
         const src = await PickFileToUpload("Choose local file");
@@ -516,19 +522,14 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
 
     // Container-level keyboard shortcuts. Skip when CodeMirror is mounted (Backspace
     // there must edit text, not pop the directory) or when typing in any input.
-    // Binds one window keydown listener. The dependency list is the
-    // full set the handler closes over, which means it re-binds on
-    // every render — useDirectory and usePreviewPane both return a
-    // fresh object literal each time, so `dir` and `preview` never
-    // compare equal.
-    //
-    // That is deliberate. The previous list named hand-picked fields
+    // Binds one window keydown listener, depending on the full set the
+    // handler closes over. That list used to name hand-picked fields
     // (dir.path, dir.canBack, preview.open, a join() of the selected
-    // names) and carried a suppression comment, which meant the
-    // handler could hold a `dir` or `preview` from an earlier render
-    // whenever something changed that wasn't on the list. Re-binding
-    // one listener is an addEventListener and a removeEventListener;
-    // a shortcut acting on a stale directory is a bug report.
+    // names) under a suppression comment, so the handler could hold a
+    // `dir` or `preview` from an earlier render whenever something
+    // changed that wasn't on it — a shortcut acting on a stale
+    // directory. useDirectory and usePreviewPane memoise what they
+    // return now, so naming the objects is both correct and cheap.
     useEffect(() => {
         function onKey(ev: KeyboardEvent) {
             if (shouldSkipBrowserShortcut(ev.target, preview.open)) return;
@@ -575,14 +576,6 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
         }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-        // The re-bind-every-render cost is the point of the comment
-        // above, so the perf warning here is expected. It cannot be
-        // resolved locally: openEntry closes over dir and preview, and
-        // both hooks return a fresh object literal per render, so a
-        // useCallback around it would have unstable deps too. Fixing it
-        // properly means memoising what useDirectory and usePreviewPane
-        // return, which is a change to every consumer, not to this line.
-        // oxlint-disable-next-line react-hooks/exhaustive-deps
     }, [goUp, dir, preview, openEntry, selectedEntries]);
 
     const crumbs = splitCrumbs(dir.path);

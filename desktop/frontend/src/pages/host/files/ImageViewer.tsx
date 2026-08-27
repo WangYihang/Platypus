@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import { ReadFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
+import { useRemoteObjectURL } from "./remoteFile";
 
 // 16 MiB caps the bytes the viewer is willing to base64 through React
 // state. The blob path is fine for typical screenshots / icons; a
@@ -21,42 +20,24 @@ interface Props {
     mime?: string;
 }
 
-function bytesFromWailsRead(raw: unknown): Uint8Array {
-    if (raw instanceof Uint8Array) return raw;
-    if (Array.isArray(raw)) return new Uint8Array(raw as number[]);
-    throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
-}
-
 export default function ImageViewer({ projectID, sessionHash, path, size, mime }: Props) {
-    const [url, setUrl] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
     const tooLarge = size > MAX_INLINE_IMAGE_BYTES;
 
-    useEffect(() => {
-        if (tooLarge) return;
-        let cancelled = false;
-        let createdURL: string | null = null;
-        setUrl(null);
-        setError(null);
-        void (async () => {
-            try {
-                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
-                if (cancelled) return;
-                const bytes = bytesFromWailsRead(raw);
-                const blob = new Blob([bytes as BlobPart], { type: mime || "image/*" });
-                createdURL = URL.createObjectURL(blob);
-                setUrl(createdURL);
-            } catch (err) {
-                if (cancelled) return;
-                setError(err instanceof Error ? err.message : String(err));
-            }
-        })();
-        return () => {
-            cancelled = true;
-            if (createdURL) URL.revokeObjectURL(createdURL);
-        };
-    }, [projectID, sessionHash, path, mime, tooLarge]);
+    const {
+        url,
+        error: loadError,
+    } = useRemoteObjectURL({
+        projectID,
+        sessionHash,
+        path,
+        mime: mime || "image/*",
+        enabled: !tooLarge,
+    });
+    const error = loadError
+        ? loadError instanceof Error
+            ? loadError.message
+            : String(loadError)
+        : null;
 
     if (tooLarge) {
         return (

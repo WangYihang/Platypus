@@ -1,4 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+
+import { renderWithQueryClient as render } from "@/testing/renderWithQueryClient";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@wails/go/app/App", () => ({

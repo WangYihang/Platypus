@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import { ReadFile } from "@wails/go/app/App";
-import { fsReadPreviewURL } from "@/lib/fs-preview";
 import { humanize } from "../../../lib/format";
+import { useRemotePreviewURL } from "./remoteFile";
 
 interface Props {
     projectID: string;
@@ -12,12 +10,6 @@ interface Props {
     size: number;
     kind: "video" | "audio";
     mime?: string;
-}
-
-function bytesFromWailsRead(raw: unknown): Uint8Array {
-    if (raw instanceof Uint8Array) return raw;
-    if (Array.isArray(raw)) return new Uint8Array(raw as number[]);
-    throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
 }
 
 // MediaViewer renders <video> / <audio> for video and audio files. In
@@ -36,54 +28,17 @@ export default function MediaViewer({
     kind,
     mime,
 }: Props) {
-    const [url, setUrl] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        setUrl(null);
-        setError(null);
-
-        if (import.meta.env.MODE === "web") {
-            // Web path: mint a signed URL and let the browser stream
-            // it natively. No bytes flow through React's render loop.
-            void (async () => {
-                try {
-                    const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
-                    if (!cancelled) setUrl(previewURL);
-                } catch (err) {
-                    if (!cancelled) {
-                        setError(err instanceof Error ? err.message : String(err));
-                    }
-                }
-            })();
-            return () => {
-                cancelled = true;
-            };
-        }
-
-        // Desktop fallback: existing blob-URL path.
-        let createdURL: string | null = null;
-        void (async () => {
-            try {
-                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
-                if (cancelled) return;
-                const bytes = bytesFromWailsRead(raw);
-                const blob = new Blob([bytes as BlobPart], {
-                    type: mime || (kind === "video" ? "video/*" : "audio/*"),
-                });
-                createdURL = URL.createObjectURL(blob);
-                setUrl(createdURL);
-            } catch (err) {
-                if (cancelled) return;
-                setError(err instanceof Error ? err.message : String(err));
-            }
-        })();
-        return () => {
-            cancelled = true;
-            if (createdURL) URL.revokeObjectURL(createdURL);
-        };
-    }, [projectID, sessionHash, path, kind, mime]);
+    const { url, error: loadError } = useRemotePreviewURL({
+        projectID,
+        sessionHash,
+        path,
+        mime: mime || (kind === "video" ? "video/*" : "audio/*"),
+    });
+    const error = loadError
+        ? loadError instanceof Error
+            ? loadError.message
+            : String(loadError)
+        : null;
 
     if (error) {
         return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ListDir } from "@wails/go/app/App";
@@ -164,25 +164,60 @@ export function useDirectory(projectID: string, sessionHash: string, initialPath
             ? null
             : String(error instanceof Error ? error.message : error);
 
-    return {
-        path,
-        entries: data?.entries ?? [],
-        total: data?.total ?? 0,
-        eof: data?.eof ?? true,
-        loading,
-        error: errorString,
-        cd,
-        back,
-        forward,
-        canBack: history.back.length > 0,
-        canForward: history.forward.length > 0,
-        reload,
-        // Expose the queryClient so consumers (e.g. mutations like
-        // delete / rename / mkdir) can `invalidateQueries({ queryKey:
-        // ["directory", ...] })` without re-deriving the key.
-        invalidate: () =>
+    // Expose the queryClient so consumers (e.g. mutations like delete /
+    // rename / mkdir) can `invalidateQueries({ queryKey: ["directory",
+    // ...] })` without re-deriving the key.
+    const invalidate = useCallback(
+        () =>
             queryClient.invalidateQueries({
                 queryKey: ["directory", projectID, sessionHash, path],
             }),
-    };
+        [queryClient, projectID, sessionHash, path],
+    );
+
+    const entries = useMemo(() => data?.entries ?? [], [data?.entries]);
+
+    // Memoised as a whole. Every consumer of this hook puts the
+    // returned object, or something derived from it, into a dependency
+    // array; a fresh literal per render made all of those compare
+    // unequal every time, so downstream memos never memoised and
+    // effects re-ran on every render. FileBrowser worked around it by
+    // listing hand-picked fields (dir.path, dir.canBack, …) under a
+    // suppression comment, which then went stale whenever something
+    // changed that wasn't on the list.
+    //
+    // The callbacks above are already stable; `entries` is memoised on
+    // the query result; everything else is a primitive.
+    return useMemo(
+        () => ({
+            path,
+            entries,
+            total: data?.total ?? 0,
+            eof: data?.eof ?? true,
+            loading,
+            error: errorString,
+            cd,
+            back,
+            forward,
+            canBack: history.back.length > 0,
+            canForward: history.forward.length > 0,
+            reload,
+            invalidate,
+        }),
+        [
+            path,
+            entries,
+            data?.total,
+            data?.eof,
+            loading,
+            errorString,
+            cd,
+            back,
+            forward,
+            history.back.length,
+            history.forward.length,
+            reload,
+            invalidate,
+        ],
+    );
 }

@@ -70,7 +70,7 @@
     //
     // 43 inline suppressions would bury a future real one just as
     // thoroughly as this does, and in 25 files instead of here.
-    "react/set-state-in-effect": "off",
+    "react/set-state-in-effect": "warn",
     "react/refs": "warn",
     "react/purity": "warn",
     "react/immutability": "warn",

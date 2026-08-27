@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { ReadFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
+import { useRemoteFileText } from "./remoteFile";
 
 // 4 MiB is the cap the viewer is willing to feed react-markdown +
 // remark-gfm. Above this point the parser walk and the rendered
@@ -19,45 +18,20 @@ interface Props {
     size: number;
 }
 
-function bytesFromWailsRead(raw: unknown): Uint8Array {
-    if (raw instanceof Uint8Array) return raw;
-    if (Array.isArray(raw)) return new Uint8Array(raw as number[]);
-    throw new Error(`unexpected ReadFile shape: ${typeof raw}`);
-}
-
-function decodeText(bytes: Uint8Array): string {
-    try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    } catch {
-        return new TextDecoder("latin1").decode(bytes);
-    }
-}
-
 export default function MarkdownViewer({ projectID, sessionHash, path, size }: Props) {
-    const [text, setText] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
     const tooLarge = size > MAX_INLINE_MARKDOWN_BYTES;
 
-    useEffect(() => {
-        if (tooLarge) return;
-        let cancelled = false;
-        setText(null);
-        setError(null);
-        void (async () => {
-            try {
-                const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
-                if (cancelled) return;
-                setText(decodeText(bytesFromWailsRead(raw)));
-            } catch (err) {
-                if (cancelled) return;
-                setError(err instanceof Error ? err.message : String(err));
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [projectID, sessionHash, path, tooLarge]);
+    const { text, error: loadError } = useRemoteFileText({
+        projectID,
+        sessionHash,
+        path,
+        enabled: !tooLarge,
+    });
+    const error = loadError
+        ? loadError instanceof Error
+            ? loadError.message
+            : String(loadError)
+        : null;
 
     if (tooLarge) {
         return (

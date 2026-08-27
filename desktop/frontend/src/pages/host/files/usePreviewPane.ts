@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { usePreference } from "../../../lib/preferences";
 
@@ -22,5 +22,11 @@ export function usePreviewPane(): PreviewPane {
     const [open, setOpen] = usePreference("ui.files.previewOpen");
     const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
     const close = useCallback(() => setOpen(false), [setOpen]);
-    return { open, setOpen, toggle, close };
+    // Memoised for the same reason as useDirectory: consumers put this
+    // object in dependency arrays, and a fresh literal per render makes
+    // every one of them re-run forever.
+    return useMemo(
+        () => ({ open, setOpen, toggle, close }),
+        [open, setOpen, toggle, close],
+    );
 }
