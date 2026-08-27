@@ -46,6 +46,11 @@ type projectResponse struct {
 	Slug      string    `json:"slug"`
 	CreatedAt time.Time `json:"created_at"`
 	CreatedBy string    `json:"created_by"`
+	// AISummariesEnabled mirrors the per-project opt-in for sending
+	// finished terminal recordings to an LLM for a one-line summary.
+	// Always present (not omitempty) so the settings UI can render the
+	// toggle's real state rather than inferring off from a missing key.
+	AISummariesEnabled bool `json:"ai_summaries_enabled"`
 }
 
 type memberResponse struct {
@@ -56,11 +61,12 @@ type memberResponse struct {
 
 func toProjectResponse(p *storage.Project) projectResponse {
 	return projectResponse{
-		ID:        p.ID,
-		Name:      p.Name,
-		Slug:      p.Slug,
-		CreatedAt: p.CreatedAt,
-		CreatedBy: p.CreatedBy,
+		ID:                 p.ID,
+		Name:               p.Name,
+		Slug:               p.Slug,
+		CreatedAt:          p.CreatedAt,
+		CreatedBy:          p.CreatedBy,
+		AISummariesEnabled: p.AISummariesEnabled,
 	}
 }
 
@@ -163,6 +169,60 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// updateProjectRequest is the body for PATCH /projects/:pid. Pointer
+// field so "absent" and "explicitly false" stay distinguishable — a
+// PATCH that omits the key must not silently turn the opt-in off.
+type updateProjectRequest struct {
+	AISummariesEnabled *bool `json:"ai_summaries_enabled"`
+}
+
+// Update handles PATCH /projects/:pid. Currently only the AI-summary
+// opt-in is settable. Gated at the project-admin level rather than
+// viewer: enabling it sends terminal output to a third party, which is
+// not a read-only decision.
+func (h *ProjectsHandler) Update(c *gin.Context) {
+	var req updateProjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	if req.AISummariesEnabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no updatable fields in body"})
+		return
+	}
+
+	pid := c.Param("pid")
+	err := h.db.Projects().SetAISummariesEnabled(c.Request.Context(), pid, *req.AISummariesEnabled)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update project"})
+		return
+	}
+
+	action := "project.ai_summaries.disable"
+	if *req.AISummariesEnabled {
+		action = "project.ai_summaries.enable"
+	}
+	RecordActivity(c, ActivityInput{
+		ProjectID:   &pid,
+		Category:    storage.CategoryProject,
+		Action:      action,
+		TargetType:  "project",
+		TargetID:    pid,
+		TargetLabel: pid,
+	})
+
+	p, err := h.db.Projects().GetByID(c.Request.Context(), pid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "reload project"})
+		return
+	}
+	c.JSON(http.StatusOK, toProjectResponse(p))
+}
+
 // AddMember handles POST /projects/:pid/members. Gated by
 // RequireProjectRole(admin) — project-admins can add/update members
 // without being global admins.
@@ -259,6 +319,11 @@ func RegisterV1ProjectsRoutes(engine *gin.Engine, h *ProjectsHandler, rbac *RBAC
 		rbac.RequireAuth(),
 		rbac.RequireGlobalRole(user.RoleAdmin),
 		h.Delete,
+	)
+	engine.PATCH("/api/v1/projects/:pid",
+		rbac.RequireAuth(),
+		rbac.RequireProjectRole("pid", user.RoleAdmin),
+		h.Update,
 	)
 	engine.GET("/api/v1/projects/:pid/members",
 		rbac.RequireAuth(),

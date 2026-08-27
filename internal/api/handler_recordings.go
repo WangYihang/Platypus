@@ -53,6 +53,11 @@ type recordingResponse struct {
 	ErrorMessage string     `json:"error_message,omitempty"`
 	StartedAt    time.Time  `json:"started_at"`
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
+	// Summary is the LLM-generated one-liner. Omitted when absent —
+	// the project may not have opted in, the call may have failed, or
+	// it may simply not have run yet, and the UI treats all three the
+	// same way by falling back to metadata.
+	Summary string `json:"summary,omitempty"`
 }
 
 func (h *RecordingsHandler) toResponse(c *gin.Context, r *storage.TerminalRecording, hostCache map[string]hostBrief, userCache map[string]string) recordingResponse {
@@ -73,6 +78,7 @@ func (h *RecordingsHandler) toResponse(c *gin.Context, r *storage.TerminalRecord
 		ErrorMessage: r.ErrorMessage,
 		StartedAt:    r.StartedAt,
 		EndedAt:      r.EndedAt,
+		Summary:      r.Summary,
 	}
 	if r.HostID != "" {
 		if cached, ok := hostCache[r.HostID]; ok {

@@ -27,6 +27,12 @@ export interface TerminalRecording {
     error_message?: string;
     started_at: string;
     ended_at?: string;
+    /**
+     * LLM-generated one-liner. Absent when the project has not opted
+     * in, the call failed, or it has not run yet — render metadata
+     * instead rather than treating this as an error.
+     */
+    summary?: string;
 }
 
 export interface ListRecordingsOpts {

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/WangYihang/Platypus/internal/llm"
 	"github.com/WangYihang/Platypus/internal/storage"
 )
 
@@ -26,12 +27,27 @@ type Manager struct {
 	db       *storage.DB
 	dir      string
 	disabled bool
+
+	// llm is the summariser client. Always non-nil (llm.FromEnv never
+	// returns nil) but Available() is false unless an API key is
+	// configured, which is the default — see summarise.go.
+	llm *llm.Client
+	// sem caps concurrent LLM calls; wg lets Wait drain them at
+	// shutdown.
+	sem chan struct{}
+	wg  sync.WaitGroup
 }
 
 // New constructs a Manager. dir is the absolute path where .cast files
 // are written; disabled=true bypasses both the file and DB writes.
 func New(db *storage.DB, dir string, enabled bool) *Manager {
-	return &Manager{db: db, dir: dir, disabled: !enabled || db == nil || dir == ""}
+	return &Manager{
+		db:       db,
+		dir:      dir,
+		disabled: !enabled || db == nil || dir == "",
+		llm:      llm.FromEnv(),
+		sem:      make(chan struct{}, maxConcurrentSummaries),
+	}
 }
 
 // Enabled reports whether the manager will actually persist. Useful
@@ -201,6 +217,14 @@ func (s *Session) Finish(ctx context.Context, errMsg string) {
 	_ = s.manager.db.TerminalRecordings().Finish(
 		ctx, s.id, status, bytes, dur.Milliseconds(), frames, errMsg, endedAt,
 	)
+
+	// Only completed sessions get summarised. A failed one is usually
+	// truncated mid-command, so the model would be describing an
+	// accident rather than what the operator did. Returns immediately;
+	// the work runs on its own context (see Manager.summarise).
+	if status == storage.RecordingStatusCompleted {
+		s.manager.summarise(s.id)
+	}
 }
 
 // AbsolutePath returns the on-disk file path. Empty for disabled

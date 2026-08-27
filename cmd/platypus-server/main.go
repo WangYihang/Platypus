@@ -252,7 +252,7 @@ func main() {
 	}
 	tlsListener := tls.NewListener(rawListener, tlsCfg)
 
-	rest, agentLinkSvc := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg, meshNode)
+	rest, agentLinkSvc, recMgr := buildRESTEngine(ctx, cfg, db, pkiSvc, settingsReg, meshNode)
 
 	go activity.NewReaper(db, settingsReg, log.L).Run(ctx)
 
@@ -312,6 +312,12 @@ func main() {
 	// that would never return on their own.
 	agentLinkSvc.CloseAll()
 
+	// Drain in-flight recording summarisers. They run on their own
+	// background contexts (a request-scoped one would be cancelled
+	// before the LLM answers), so without this the process could exit
+	// with a summary half-written.
+	recMgr.Wait()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
@@ -367,7 +373,7 @@ func fileExistsDir(path string) bool {
 	return info.IsDir()
 }
 
-func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry, meshNode *mesh.Node) (http.Handler, *core.AgentLinkService) {
+func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, pkiSvc *pki.Service, settingsReg *settings.Registry, meshNode *mesh.Node) (http.Handler, *core.AgentLinkService, *recording.Manager) {
 	rest := api.CreateRESTfulAPIServer()
 
 	auth := api.NewAuth()
@@ -719,7 +725,9 @@ func buildRESTEngine(ctx context.Context, cfg *config.Options, db *storage.DB, p
 	)
 
 	core.Ctx.RESTful = rest
-	return rest, agentLinkSvc
+	// recMgr escapes so the shutdown path can drain in-flight
+	// summarisers before the process exits.
+	return rest, agentLinkSvc, recMgr
 }
 
 // tryStartServerMesh self-issues a cert-bound mesh identity for the

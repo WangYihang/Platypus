@@ -6,6 +6,12 @@ export interface Project {
     slug: string;
     created_at: string;
     created_by: string;
+    /**
+     * Per-project opt-in for sending finished terminal recordings to an
+     * LLM for a one-line summary. Off unless a project admin turns it
+     * on — cast files can contain pasted secrets.
+     */
+    ai_summaries_enabled: boolean;
 }
 
 export interface ProjectMember {
@@ -24,6 +30,22 @@ export async function createProject(name: string, slug: string): Promise<Project
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, slug }),
+    });
+}
+
+/**
+ * Flip the per-project AI-summary opt-in. Requires project-admin:
+ * enabling it sends terminal output to a third party, so it is not a
+ * viewer-level decision. Returns the updated project.
+ */
+export async function setProjectAISummaries(
+    pid: string,
+    enabled: boolean,
+): Promise<Project> {
+    return authJSON<Project>(`/api/v1/projects/${pid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ai_summaries_enabled: enabled }),
     });
 }
 

@@ -18,6 +18,13 @@ type Project struct {
 	Slug      string
 	CreatedAt time.Time
 	CreatedBy string
+
+	// AISummariesEnabled gates the LLM round-trip that summarises a
+	// finished terminal recording (internal/recording.Session.Finish).
+	// Off by default and only flipped by an explicit call to
+	// SetAISummariesEnabled: cast files can contain pasted secrets, so
+	// they never leave the deployment without per-project consent.
+	AISummariesEnabled bool
 }
 
 func (db *DB) Projects() *ProjectRepo {
@@ -38,19 +45,19 @@ func (r *ProjectRepo) Create(ctx context.Context, p *Project) error {
 
 func (r *ProjectRepo) GetByID(ctx context.Context, id string) (*Project, error) {
 	return r.queryOne(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects WHERE id = ?`, id)
 }
 
 func (r *ProjectRepo) GetBySlug(ctx context.Context, slug string) (*Project, error) {
 	return r.queryOne(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects WHERE slug = ?`, slug)
 }
 
 func (r *ProjectRepo) List(ctx context.Context) ([]*Project, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, slug, created_at, created_by
+		SELECT id, name, slug, created_at, created_by, ai_summaries_enabled
 		  FROM projects ORDER BY slug ASC`)
 	if err != nil {
 		return nil, err
@@ -76,7 +83,7 @@ func (r *ProjectRepo) ListForUser(ctx context.Context, userID string, globalRole
 		return r.List(ctx)
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT p.id, p.name, p.slug, p.created_at, p.created_by
+		SELECT p.id, p.name, p.slug, p.created_at, p.created_by, p.ai_summaries_enabled
 		  FROM projects p
 		  JOIN project_members m ON m.project_id = p.id
 		 WHERE m.user_id = ?
@@ -176,12 +183,42 @@ func (r *ProjectRepo) ListMembers(ctx context.Context, projectID string) ([]*Pro
 	return out, rows.Err()
 }
 
+// SetAISummariesEnabled flips the per-project opt-in for LLM session
+// summaries. Row missing → ErrNotFound, so a caller acting on a stale
+// project id gets a 404 rather than silently succeeding.
+func (r *ProjectRepo) SetAISummariesEnabled(ctx context.Context, projectID string, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	res, err := r.db.ExecContext(ctx,
+		"UPDATE projects SET ai_summaries_enabled = ? WHERE id = ?", v, projectID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func scanProject(s rowScanner) (*Project, error) {
-	var p Project
-	err := s.Scan(&p.ID, &p.Name, &p.Slug, &p.CreatedAt, &p.CreatedBy)
+	// ai_summaries_enabled is stored as INTEGER 0/1 (the migration
+	// constrains it to those two values), so scan through an int
+	// rather than relying on the driver's bool coercion.
+	var (
+		p         Project
+		aiEnabled int
+	)
+	err := s.Scan(&p.ID, &p.Name, &p.Slug, &p.CreatedAt, &p.CreatedBy, &aiEnabled)
 	if err != nil {
 		return nil, err
 	}
+	p.AISummariesEnabled = aiEnabled != 0
 	return &p, nil
 }
 
