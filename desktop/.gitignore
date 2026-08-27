@@ -10,5 +10,9 @@ frontend/dist-web
 frontend/wailsjs/
 # wails frontend-deps cache marker
 frontend/package.json.md5
+# tsc --build incremental state. tsconfig.node.json sets composite:true,
+# so any `tsc --build` (or a type-aware lint run, which builds the
+# referenced projects) drops one of these next to the config.
+frontend/*.tsbuildinfo
 # go build output when invoked from desktop/
 /desktop
