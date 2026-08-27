@@ -300,9 +300,15 @@ function RuntimePills({
     // recompute on each render so the pill counts up live without
     // a separate timer. Anchored to started_at_unix so the
     // arithmetic is integer seconds, no Date.parse() drift.
+    //
+    // This does make the render impure, which is what the rule below
+    // objects to. Kept anyway: the alternative is a second interval
+    // purely to move a seconds counter, and the worst case if two
+    // renders disagree is that the label is off by a second.
     const uptimeSecs =
         info?.started_at_unix !== undefined
-            ? Math.floor(Date.now() / 1000) - info.started_at_unix
+            ? // oxlint-disable-next-line react/purity
+              Math.floor(Date.now() / 1000) - info.started_at_unix
             : null;
 
     return (

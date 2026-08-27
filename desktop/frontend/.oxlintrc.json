@@ -49,7 +49,28 @@
     // "depends on X, which changes every render" — perf notes, not
     // bugs — but worth reading before adding more.
     "react-hooks/exhaustive-deps": "warn",
-    "react/set-state-in-effect": "warn",
+
+    // Off, after reading all 44 it reported. The rule targets state
+    // that should have been computed during render; exactly one of the
+    // 44 was that (HostView's pickedSessionID, now derived — nothing
+    // but its own effect ever wrote it, so every sessions update cost
+    // a second render pass). The rest:
+    //
+    //   17  setLoading/setError before an async fetch
+    //   14  `if (open) setX(...)` — reset a dialog's form on open
+    //   10  mount gates, localStorage seeding, a debounce, an
+    //       IntersectionObserver fallback
+    //    2  signal-driven (a parent ticks a counter, we act)
+    //
+    // The first group is what effects are *for* — the rule's own help
+    // text says "use an effect only when synchronizing with an external
+    // system", which a file-read API is. The dialog resets have a
+    // documented alternative (remount via `key`), but that is a change
+    // to every call site, not to the effect.
+    //
+    // 43 inline suppressions would bury a future real one just as
+    // thoroughly as this does, and in 25 files instead of here.
+    "react/set-state-in-effect": "off",
     "react/refs": "warn",
     "react/purity": "warn",
     "react/immutability": "warn",

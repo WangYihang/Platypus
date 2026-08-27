@@ -58,9 +58,13 @@ That pass needs to build the program, so it takes seconds rather than
 milliseconds. Bare `pnpm exec oxlint` gives you the fast parser-only
 subset while editing; CI and pre-commit run the type-aware one.
 
-A standing backlog of React warnings (`set-state-in-effect`,
-`exhaustive-deps`) prints but does not block. Don't add to it;
-`pnpm run lint:strict` shows the whole list as failures.
+There is no warning backlog: `pnpm run lint:strict`, which treats
+warnings as errors, passes too. If you need to silence something,
+`oxlint-disable-next-line <rule>` with a comment saying why — a bare
+suppression will be asked about in review, same as `//nolint` on the
+Go side. Note the comment has to sit on the line the rule reports,
+which for a hook dependency complaint is the `}, [deps]);` line rather
+than the `useEffect(` line.
 
 ## Layout
 

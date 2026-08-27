@@ -55,10 +55,14 @@ describe("uploadFile", () => {
         expect(path).toContain("path=");
         expect(path).toContain("total_bytes=1024");
         expect(path).toContain("mkdirs=true");
+        expect(init).toBeDefined();
         expect(init?.method).toBe("PUT");
-        expect((init?.headers as Record<string, string>)["Content-Type"]).toBe(
-            "application/octet-stream",
-        );
+        // Asserted rather than optional-chained into: indexing the
+        // result of `init?.headers` throws a TypeError when init is
+        // undefined, which would replace a readable assertion failure
+        // with a confusing one.
+        const headers = init?.headers as Record<string, string> | undefined;
+        expect(headers?.["Content-Type"]).toBe("application/octet-stream");
     });
 
     it("URL-encodes the destination path", async () => {

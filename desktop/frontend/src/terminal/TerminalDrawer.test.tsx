@@ -133,6 +133,10 @@ function NavigateProbe({
 }) {
     const navigate = useNavigate();
     useEffect(() => {
+        // Writing through a caller-supplied box so the test can drive
+        // navigation from outside the router. It is a ref in all but
+        // name; the rule sees a prop being mutated.
+        // oxlint-disable-next-line react/immutability
         if (target) target.current = (to) => navigate(to);
     }, [navigate, target]);
     return <div data-testid={`page-${label}`}>{label}</div>;

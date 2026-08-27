@@ -150,7 +150,16 @@ export default function HostView({ projectID, hostID }: Props) {
     // because that's a fresh UUID per insert with no relationship to
     // the cert. The "session" framing stays in the variable name so
     // existing tab props keep working without churn.
-    const [pickedSessionID, setPickedSessionID] = useState<string | null>(null);
+    //
+    // Derived during render, not held in state. It used to be state
+    // written by an effect that recomputed it from these same two
+    // values and nothing else — so every sessions update cost a
+    // second render pass to converge, and a reader had to go check
+    // whether anything else ever wrote it. Nothing did.
+    const pickedSessionID = useMemo(() => {
+        const live = sessions.filter((sess) => !sess.disconnected_at);
+        return live.length > 0 && host?.agent_id ? host.agent_id : null;
+    }, [sessions, host?.agent_id]);
 
     const project = useCurrentProject();
     const navigate = useNavigate();
@@ -255,14 +264,6 @@ export default function HostView({ projectID, hostID }: Props) {
         );
         return () => offs.forEach((off) => off());
     }, [projectID, hostID, refetchSessions]);
-
-    useEffect(() => {
-        const live = sessions.filter((s) => !s.disconnected_at);
-        const next = live.length > 0 && host?.agent_id ? host.agent_id : null;
-        if (pickedSessionID !== next) {
-            setPickedSessionID(next);
-        }
-    }, [sessions, host?.agent_id, pickedSessionID]);
 
     // Auto-open a terminal the first time the operator lands on a
     // host that's reachable. The motivating UX: opening a host from

@@ -255,6 +255,10 @@ export default function FileTable({
         if (a !== b) setPersistedSizes(columnSizing);
     }, [columnSizing, persistedSizes, setPersistedSizes]);
 
+    // useReactTable returns fresh function identities each call, which
+    // React Compiler cannot memoise. Nothing to do from here — it is a
+    // property of the library, not of this call site.
+    // oxlint-disable-next-line react/incompatible-library
     const table = useReactTable({
         data: entries,
         columns,

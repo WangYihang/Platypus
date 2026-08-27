@@ -83,12 +83,17 @@ export default function CapabilityConfirmDialog({
     const [submitting, setSubmitting] = useState(false);
     const [advancedOpen, setAdvancedOpen] = useState(false);
 
+    // pluginID / pluginVersion are triggers, not values the body
+    // reads: the form must reset when the dialog is pointed at a
+    // different plugin, not only when it opens. That is what the rule
+    // reads as an extra dependency.
     useEffect(() => {
         if (open) {
             setGranted(new Set());
             setAdvancedOpen(false);
             setSubmitting(false);
         }
+        // oxlint-disable-next-line react/exhaustive-effect-dependencies
     }, [open, pluginID, pluginVersion]);
 
     const sorted = useMemo(() => sortCapabilities(declared), [declared]);

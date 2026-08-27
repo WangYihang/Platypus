@@ -363,9 +363,13 @@ export default function RPCTable<TResponse, TRow>(
         () => JSON.stringify(baseRequest ?? {}),
         [baseRequest],
     );
+    // baseRequestKey is the trigger — paging resets when the request
+    // changes. The body reads nothing from it, which is exactly what
+    // the rule objects to.
     useEffect(() => {
         setOffset(0);
         setCursorReq(null);
+        // oxlint-disable-next-line react/exhaustive-effect-dependencies
     }, [baseRequestKey]);
 
     // ----- RPC query -----

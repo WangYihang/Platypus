@@ -110,9 +110,12 @@ export default function RecordingsPage() {
         if (error) toast.error(`load recordings: ${humanizeError(error)}`);
     }, [error]);
 
-    // Reset to page 1 whenever the filter or query changes.
+    // Reset to page 1 whenever the filter or query changes. Same
+    // shape as RPCTable: the dependencies are the trigger, the body
+    // reads none of them.
     useEffect(() => {
         setPageStack([undefined]);
+        // oxlint-disable-next-line react/exhaustive-effect-dependencies
     }, [statusFilter, debouncedQuery, project.id]);
 
     const totalPagesHint = useMemo(() => {
