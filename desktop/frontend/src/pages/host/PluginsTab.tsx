@@ -82,7 +82,7 @@ interface Props {
 // the same `/plugins` endpoint this tab reads from.
 export default function PluginsTab({
     projectID,
-    hostID,
+    hostID: _hostID,
     agentID,
     hostOS,
     active,
@@ -127,15 +127,6 @@ export default function PluginsTab({
         refetchOnWindowFocus: false,
         retry: false,
     });
-
-    if (agentID === "") {
-        return (
-            <EmptyState
-                title="Agent not enrolled"
-                description="This host record exists but no agent has connected yet. Plugins can be managed once the agent's mTLS handshake completes."
-            />
-        );
-    }
 
     const enable = useMutation({
         mutationFn: (vars: { id: string; enabled: boolean }) =>
@@ -215,6 +206,22 @@ export default function PluginsTab({
             return true;
         });
     }, [systemCatalog.data, installedIDs, hostOS]);
+
+    // Every guard lives here, below the last hook. The
+    // agent-not-enrolled check used to sit up next to the queries,
+    // above seven other hooks — so the render that saw agentID become
+    // non-empty called seven more hooks than the one before it, which
+    // is the "Rendered more hooks than during the previous render"
+    // crash. The queries already decline to fire via their `enabled`
+    // predicate, so nothing is fetched while we are in this state.
+    if (agentID === "") {
+        return (
+            <EmptyState
+                title="Agent not enrolled"
+                description="This host record exists but no agent has connected yet. Plugins can be managed once the agent's mTLS handshake completes."
+            />
+        );
+    }
 
     if (plugins.isLoading) {
         return (

@@ -200,10 +200,10 @@ export function useTopology(projectId: string): TopologyState {
                         return {
                             ...m,
                             sys_info: {
-                                ...(m.sys_info ?? {}),
+                                ...m.sys_info,
                                 cpu_percent: payload.cpu_percent,
                                 mem_percent: payload.mem_percent,
-                                ...(payload.sys_info ?? {}),
+                                ...payload.sys_info,
                                 sampled_at_unix: payload.sampled_at,
                             },
                         } satisfies TopologyMachine;

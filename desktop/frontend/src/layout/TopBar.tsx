@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, Search, SlashIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

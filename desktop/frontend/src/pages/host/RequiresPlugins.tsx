@@ -10,7 +10,6 @@ import { palette, radius, space } from "../../layout/theme";
 import { capabilityMeta } from "../../lib/capabilities";
 import { humanizeError } from "../../lib/humanizeError";
 import {
-    InstalledPlugin,
     installFromSystem,
 } from "../../lib/api/agents/plugins";
 import { listSystemPlugins, SystemPlugin } from "../../lib/api/system_plugins";

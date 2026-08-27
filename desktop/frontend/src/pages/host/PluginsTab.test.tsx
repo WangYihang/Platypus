@@ -392,3 +392,34 @@ describe("<PluginsTab>", () => {
         expect(screen.queryByRole("heading", { name: /available/i })).toBeNull();
     });
 });
+
+// The agent-not-enrolled guard used to sit above seven hooks
+// (useMutation / useState / useMemo), so the render where an agent
+// finished enrolling called more hooks than the one before it. That is
+// exactly the transition the empty state promises — "Plugins can be
+// managed once the agent's mTLS handshake completes" — and it threw
+// "Rendered more hooks than during the previous render" instead.
+describe("<PluginsTab> agent enrolls while mounted", () => {
+    it("survives agentID going from empty to set", async () => {
+        mocked.listPlugins.mockResolvedValue([]);
+        const client = makeClient();
+        function Wrapper({ children }: { children: ReactNode }) {
+            return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+        }
+
+        const { rerender } = render(
+            <PluginsTab projectID="proj1" hostID="h1" agentID="" hostOS="linux" active />,
+            { wrapper: Wrapper },
+        );
+        expect(await screen.findByText(/Agent not enrolled/i)).toBeInTheDocument();
+
+        // The host query refetches with agent_id populated.
+        rerender(
+            <PluginsTab projectID="proj1" hostID="h1" agentID="agent-a1" hostOS="linux" active />,
+        );
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Agent not enrolled/i)).not.toBeInTheDocument();
+        });
+    });
+});

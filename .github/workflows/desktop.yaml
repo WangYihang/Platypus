@@ -70,6 +70,12 @@ jobs:
         working-directory: desktop/frontend
         run: pnpm exec tsc --noEmit
 
+      # Fails on the "correctness" class only; the pre-existing warning
+      # backlog is printed but does not block. See .oxlintrc.json.
+      - name: Lint
+        working-directory: desktop/frontend
+        run: pnpm run lint
+
       - name: Test
         working-directory: desktop/frontend
         run: pnpm test

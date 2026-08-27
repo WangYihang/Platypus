@@ -191,7 +191,6 @@ describe("<SchemaForm>", () => {
 
     it("renders array-of-strings as a dynamic list with add/remove", async () => {
         const onChange = vi.fn();
-        const user = userEvent.setup();
         render(
             <SchemaForm
                 schema={{

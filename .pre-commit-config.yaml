@@ -32,14 +32,32 @@ repos:
         entry: go mod tidy
 
       - id: golangci-lint
-        name: golangci-lint (pinned v2.11.4)
+        name: golangci-lint (pinned v2.13.1 — must match .github/workflows/ci.yaml)
         language: system
         types: [go]
         pass_filenames: false
         entry: bash -c '
           set -e;
           BIN="$(go env GOPATH)/bin/golangci-lint";
-          if [ ! -x "$BIN" ] || ! "$BIN" version 2>/dev/null | grep -q "2.11.4"; then
-            go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4;
+          if [ ! -x "$BIN" ] || ! "$BIN" version 2>/dev/null | grep -q "2.13.1"; then
+            go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1;
           fi;
           "$BIN" run ./...'
+
+      # Frontend. oxlint stands in for ESLint — see the note at the top
+      # of desktop/frontend/.oxlintrc.json. It reads its own config, so
+      # this only fires when a frontend source file is staged, and it
+      # no-ops when node_modules is absent: a Go-only contributor should
+      # not have to install the frontend toolchain to commit.
+      - id: oxlint
+        name: oxlint (desktop/frontend)
+        language: system
+        files: ^desktop/frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false
+        entry: bash -c '
+          cd desktop/frontend;
+          if [ ! -x node_modules/.bin/oxlint ]; then
+            echo "oxlint not installed (cd desktop/frontend && pnpm install) - skipping";
+            exit 0;
+          fi;
+          node_modules/.bin/oxlint'

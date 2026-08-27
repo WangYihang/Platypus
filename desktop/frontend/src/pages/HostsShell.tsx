@@ -6,14 +6,13 @@ import {
     useParams,
 } from "react-router-dom";
 import { ShieldAlert } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import EnrollmentWaitBanner from "../components/EnrollmentWaitBanner";
 import PageShell from "../components/PageShell";
 import StatusPills from "../components/StatusPills";
 import { useCurrentProject } from "../layout/ProjectShell";
-import { cn } from "@/lib/cn";
 import { icons } from "../lib/icons";
 import { listHosts, pendingApprovalCount } from "../lib/api";
 import { qk } from "../lib/queryKeys";

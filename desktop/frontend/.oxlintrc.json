@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  // Why oxlint and not ESLint: this project is on TypeScript 7, and
+  // typescript-eslint refuses to load against it — see
+  // https://github.com/typescript-eslint/typescript-eslint/issues/10940.
+  // The alternatives were to pin TypeScript back to 6.x for the
+  // linter's benefit, or to run a second TS copy side by side and lint
+  // against a compiler the code isn't built with. oxlint parses TS
+  // itself, needs no TypeScript API, and covers the rules that were
+  // actually worth having here. Revisit if typescript-eslint ships
+  // TS 7 support and the type-aware rules start looking worth it.
+
+  "plugins": ["react", "typescript", "unicorn", "oxc"],
+
+  // Only "correctness" is an error. Turning on `suspicious` and `perf`
+  // as well produced over 4000 findings on first run, which is the
+  // same as having no linter. This mirrors .golangci.yml's line:
+  // catch real bugs, not style nits.
+  "categories": { "correctness": "error" },
+
+  "rules": {
+    // Promoted to error: cheap to keep clean, and both were at zero
+    // once the first pass was fixed.
+    "eslint/no-unused-vars": "error",
+    "eslint/no-unused-expressions": "error",
+
+    // React 17+ automatic JSX transform — importing React is not
+    // required and this rule fires ~4400 times if left on.
+    "react/react-in-jsx-scope": "off",
+
+    // Everything below is a pre-existing backlog, kept visible as
+    // warnings rather than silenced. Warnings do not fail the run, so
+    // `npm run lint` still gates on real violations; use
+    // `--deny-warnings` to see the whole list as failures.
+    //
+    // set-state-in-effect (44) is the big one and most of it is
+    // load-bearing prop-sync; each case needs its own judgement and a
+    // pass through the e2e suite. exhaustive-deps (14) is mostly
+    // "depends on X, which changes every render" — perf notes, not
+    // bugs — but worth reading before adding more.
+    "react-hooks/exhaustive-deps": "warn",
+    "react/set-state-in-effect": "warn",
+    "react/refs": "warn",
+    "react/purity": "warn",
+    "react/immutability": "warn",
+    "react/incompatible-library": "warn",
+    "react/exhaustive-effect-dependencies": "warn",
+    "react/hooks": "warn",
+    "eslint/no-unsafe-optional-chaining": "warn"
+  },
+
+  "ignorePatterns": ["dist/**", "dist-web/**", "wailsjs/**", "node_modules/**"]
+}

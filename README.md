@@ -76,7 +76,7 @@ docker-compose up -d
 
 ### Build from source
 
-Requires Go 1.24+ and `protoc` (only if you regenerate protobuf code).
+Requires Go 1.27+ and `protoc` (only if you regenerate protobuf code).
 
 ```bash
 git clone https://github.com/WangYihang/Platypus
@@ -85,6 +85,8 @@ make build              # → ./build/{platypus-server,platypus-agent}
 ```
 
 Other useful targets: `make test`, `make lint`, `make snapshot` (cross-platform via goreleaser), `make help`.
+
+Planning to send a patch? [CONTRIBUTING.md](./CONTRIBUTING.md) covers the checks, the layout, and what a reviewable PR looks like.
 
 ### Development (pre-commit hooks)
 

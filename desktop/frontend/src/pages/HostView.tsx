@@ -38,7 +38,6 @@ import BottomPanel, { BottomTab } from "./host/BottomPanel";
 import HostHeaderBar from "./host/HostHeaderBar";
 import { HostContextProvider } from "./host/HostContext";
 import ProcessesTab from "./host/ProcessesTab";
-import RequiresPlugins from "./host/RequiresPlugins";
 
 import {
     useInstalledPluginIDs,

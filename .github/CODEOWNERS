@@ -1,0 +1,50 @@
+# Code owners are requested for review automatically when a pull request
+# touches a path they own. Last match wins, so the more specific rules
+# below override the catch-all.
+#
+# There is one maintainer today, so every rule here resolves to the same
+# person and nothing is gated differently in practice. The paths are
+# still listed individually because they are the ones where a review is
+# least optional — a security boundary, a wire format, or something that
+# ships signed. When there are more maintainers, this is the file where
+# a narrower team goes on those lines, and the split is already drawn.
+
+*                               @WangYihang
+
+# --- Security boundaries -------------------------------------------
+# The plugin capability sandbox: the filesystem allowlist, the command
+# allowlist, and signature verification for plugin artefacts.
+/internal/agent/plugin/         @WangYihang
+
+# Enrollment, identity, and the mTLS setup between agent and server.
+/internal/agent/identity*.go    @WangYihang
+/internal/agent/enroll*.go      @WangYihang
+/internal/agent/bootstrap.go    @WangYihang
+/internal/enrollment/           @WangYihang
+/internal/cryptobox/            @WangYihang
+
+# Authn/authz on the server side.
+/internal/api/auth*.go          @WangYihang
+/internal/storage/roles.go      @WangYihang
+
+# Peer-to-peer links — cert verification and stream adoption.
+/internal/mesh/                 @WangYihang
+
+# --- Contracts ------------------------------------------------------
+# Wire format. A change here is a compatibility decision for every
+# deployed agent, not just for main.
+/proto/                         @WangYihang
+/pkg/proto/                     @WangYihang
+/internal/link/                 @WangYihang
+
+# --- Supply chain ---------------------------------------------------
+# What CI does, what Dependabot opens, and what gets signed and shipped.
+/.github/                       @WangYihang
+/.golangci.yml                  @WangYihang
+/.pre-commit-config.yaml        @WangYihang
+/scripts/                       @WangYihang
+/.goreleaser.yaml               @WangYihang
+
+# --- Policy ---------------------------------------------------------
+/SECURITY.md                    @WangYihang
+/CONTRIBUTING.md                @WangYihang

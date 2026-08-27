@@ -161,7 +161,7 @@ export function GlobalTerminalProvider({ children }: { children: ReactNode }) {
         } catch {
             // ignore
         }
-    }, [drawerOpen]);
+    }, [drawerOpen, activeServerId]);
 
     const openShell = useCallback((input: OpenShellInput): string | null => {
         let created: string | null = null;

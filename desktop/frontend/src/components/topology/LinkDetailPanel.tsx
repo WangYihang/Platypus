@@ -62,7 +62,7 @@ export default function LinkDetailPanel({
                 max: 300,
             });
             setHistory(pts);
-        } catch (e) {
+        } catch {
             setHistory([]);
         } finally {
             setHistoryLoading(false);

@@ -9,7 +9,6 @@
 
 import {
     authFetch,
-    forgetServer,
     getSession,
     onActiveChange,
     onSessionChange,
@@ -406,7 +405,6 @@ onServersChange(() => {
 // waiting for the next onSessionChange tick.
 export function disconnectServer(serverId: string): void {
     disconnect(serverId);
-    forgetServer; // reference to keep import live across tree-shaking
 }
 
 // --- Event constants ------------------------------------------------
