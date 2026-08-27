@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -66,13 +68,11 @@ export default function InstallFromMarketplaceDialog({
 
     // Reset the picker on every reopen — re-using state across opens
     // would surprise an operator who closed mid-flow then reopened.
-    useEffect(() => {
-        if (open) {
-            setQuery("");
-            setPicked(null);
-            setInstallResult(null);
-        }
-    }, [open]);
+    useResetOnOpen(open, () => {
+        setQuery("");
+        setPicked(null);
+        setInstallResult(null);
+    });
 
     const plugins = useQuery({
         queryKey: ["marketplace", "search", query],

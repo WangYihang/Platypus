@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,12 +54,10 @@ export default function FolderArchiveDialog({
 
     // Reset to tar.gz every time the dialog re-opens so the choice
     // doesn't sticky-leak across unrelated downloads.
-    useEffect(() => {
-        if (open) {
-            setFormat("tar.gz");
-            setSubmitting(false);
-        }
-    }, [open]);
+    useResetOnOpen(open, () => {
+        setFormat("tar.gz");
+        setSubmitting(false);
+    });
 
     async function handleConfirm() {
         setSubmitting(true);

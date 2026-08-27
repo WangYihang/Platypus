@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,17 +41,15 @@ export default function CreateRoleDialog({ open, onOpenChange, permissions }: Pr
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => {
-        if (open) {
-            setSlug("");
-            setName("");
-            setDescription("");
-            setIsGlobal(true);
-            setIsProject(true);
-            setSelected(new Set());
-            setSubmitting(false);
-        }
-    }, [open]);
+    useResetOnOpen(open, () => {
+        setSlug("");
+        setName("");
+        setDescription("");
+        setIsGlobal(true);
+        setIsProject(true);
+        setSelected(new Set());
+        setSubmitting(false);
+    });
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();

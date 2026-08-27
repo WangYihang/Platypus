@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,14 +37,16 @@ export default function EditRoleDialog({ role, onOpenChange, permissions }: Prop
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => {
-        if (role) {
-            setName(role.name);
-            setDescription(role.description ?? "");
-            setSelected(new Set(role.permissions));
-            setSubmitting(false);
-        }
-    }, [role]);
+    // Keyed on the role rather than on `open`: this dialog is reused
+    // for whichever role the operator picked, and the fields have to
+    // follow that, not the open flag.
+    useOnValueChange(role, (next) => {
+        if (!next) return;
+        setName(next.name);
+        setDescription(next.description ?? "");
+        setSelected(new Set(next.permissions));
+        setSubmitting(false);
+    });
 
     if (!role) return null;
 

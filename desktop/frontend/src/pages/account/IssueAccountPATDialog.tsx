@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { palette } from "../../layout/theme";
+import { useOnValueChange, useResetOnOpen } from "@/lib/useOnValueChange";
 import { humanizeError } from "../../lib/humanizeError";
 import {
     type IssueAccountPATResponse,
@@ -36,31 +38,46 @@ export default function IssueAccountPATDialog({ open, onOpenChange, onIssued }: 
     const [description, setDescription] = useState("");
     // available is the caller's effective permission set, fetched on open.
     // selected is the subset they want to put on the new PAT.
-    const [available, setAvailable] = useState<string[] | null>(null);
+    // Fetched on open. useQuery rather than a hand-rolled load: it
+    // owns the in-flight/error states and dedupes if the operator
+    // opens the dialog twice in a row.
+    const permsQuery = useQuery({
+        queryKey: ["myPermissions"],
+        queryFn: listMyPermissions,
+        enabled: open,
+        refetchOnWindowFocus: false,
+        retry: false,
+    });
+    const available = permsQuery.data ?? null;
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [ttlDays, setTtlDays] = useState<number>(90);
     const [submitting, setSubmitting] = useState(false);
 
-    // Reset + refetch on open so each new token starts clean and reflects
-    // any role changes since the page mounted.
-    useEffect(() => {
-        if (!open) return;
+    // Each opening starts from a clean form.
+    useResetOnOpen(open, () => {
         setName("");
         setDescription("");
         setTtlDays(90);
         setSubmitting(false);
-        setAvailable(null);
         setSelected(new Set());
-        listMyPermissions()
-            .then((perms) => {
-                setAvailable(perms);
-                setSelected(new Set(perms));
-            })
-            .catch((e) => {
-                toast.error(`Couldn't load permissions: ${humanizeError(e)}`);
-                setAvailable([]);
-            });
-    }, [open]);
+    });
+
+    // Everything is pre-selected when the permission list lands, and
+    // the operator narrows from there — so this is state seeded from
+    // async data, not derived from it, and has to be written once per
+    // arrival rather than recomputed.
+    useOnValueChange(permsQuery.data, (perms) => {
+        if (perms) setSelected(new Set(perms));
+    });
+
+    // A toast is an external side effect, so it belongs in an effect —
+    // useOnValueChange runs during a render React is still free to
+    // discard, which would fire this for a render nobody saw.
+    useEffect(() => {
+        if (permsQuery.error) {
+            toast.error(`Couldn't load permissions: ${humanizeError(permsQuery.error)}`);
+        }
+    }, [permsQuery.error]);
 
     function toggleScope(s: string) {
         setSelected((prev) => {

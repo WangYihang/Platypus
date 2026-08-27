@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { useResetOnOpen } from "@/lib/useOnValueChange";
 
 import FormDialog from "../../../components/FormDialog";
 import { Input } from "@/components/ui/input";
@@ -25,9 +27,7 @@ interface NewFileProps extends BaseProps {
 export function NewFileDialog({ open, onOpenChange, parentPath, onConfirm }: NewFileProps) {
     const [name, setName] = useState("");
 
-    useEffect(() => {
-        if (open) setName("");
-    }, [open]);
+    useResetOnOpen(open, () => setName(""));
 
     return (
         <FormDialog
@@ -57,9 +57,7 @@ export function NewFileDialog({ open, onOpenChange, parentPath, onConfirm }: New
 export function NewFolderDialog({ open, onOpenChange, parentPath, onConfirm }: NewFolderProps) {
     const [name, setName] = useState("");
 
-    useEffect(() => {
-        if (open) setName("");
-    }, [open]);
+    useResetOnOpen(open, () => setName(""));
 
     return (
         <FormDialog
@@ -94,9 +92,7 @@ interface RenameProps extends BaseProps {
 export function RenameDialog({ open, onOpenChange, entry, onConfirm }: RenameProps) {
     const [name, setName] = useState("");
 
-    useEffect(() => {
-        if (open && entry) setName(entry.name);
-    }, [open, entry]);
+    useResetOnOpen(open, () => setName(entry?.name ?? ""));
 
     return (
         <FormDialog
@@ -131,12 +127,11 @@ export function ChmodDialog({ open, onOpenChange, entry, onConfirm }: ChmodProps
     const [mode, setMode] = useState("644");
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (open && entry) {
-            setMode(formatModeOctal(entry.mode));
-            setError(null);
-        }
-    }, [open, entry]);
+    useResetOnOpen(open, () => {
+        if (!entry) return;
+        setMode(formatModeOctal(entry.mode));
+        setError(null);
+    });
 
     return (
         <FormDialog
