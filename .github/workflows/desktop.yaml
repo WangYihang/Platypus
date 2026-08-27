@@ -157,7 +157,7 @@ jobs:
           VERSION=${{ github.ref_name }}
           cd desktop/build/bin
           # Rename single binary
-          mv desktop.exe platypus-desktop-$VERSION-windows-amd64.exe
+          mv platypus-desktop.exe platypus-desktop-$VERSION-windows-amd64.exe
           # Rename NSIS installer
           mv *installer.exe platypus-desktop-$VERSION-windows-amd64-installer.exe || echo "No installer found"
         shell: bash
@@ -167,7 +167,7 @@ jobs:
         run: |
           VERSION=${{ github.ref_name }}
           cd desktop/build/bin
-          tar -czvf platypus-desktop-$VERSION-linux-amd64.tar.gz desktop
+          tar -czvf platypus-desktop-$VERSION-linux-amd64.tar.gz platypus-desktop
         shell: bash
 
       - name: Package artifacts (macOS)
