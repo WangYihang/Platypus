@@ -29,6 +29,7 @@ Then, for whichever part you touched:
 | Desktop Go | `make desktop-test` |
 | Frontend | `cd desktop/frontend && pnpm test && pnpm exec tsc --noEmit && pnpm run lint` |
 | Anything user-visible | `make e2e-deps` once, then `make e2e` |
+| Release packaging | `make desktop-package-test` |
 | Protobuf | `make proto`, and commit the regenerated files |
 | Swagger annotations | `make swag`, and commit `docs/swagger.{yaml,json}` |
 
@@ -77,7 +78,11 @@ desktop/        Wails app; its own go.mod, frontend/ is the React app
 e2e/            Playwright suite, runs against a real server + agent
 examples/       sample plugins
 docs/           Docusaurus site + generated swagger
-scripts/        build-time staging tools, not shipped
+scripts/        build-time staging tools, not shipped — including
+                package-desktop.sh, which turns a wails build into the
+                release artifact for one platform and has its own
+                .test.sh so all three OS branches can be exercised
+                without pushing a tag
 ```
 
 Inside `internal/`, the pieces you're most likely to want:

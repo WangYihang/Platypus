@@ -154,49 +154,27 @@ jobs:
           fi
         shell: bash
 
-      - name: Package artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          VERSION=${{ github.ref_name }}
-          cd desktop/build/bin
-          # Rename single binary
-          mv platypus-desktop.exe platypus-desktop-$VERSION-windows-amd64.exe
-          # Rename NSIS installer
-          mv *installer.exe platypus-desktop-$VERSION-windows-amd64-installer.exe || echo "No installer found"
-        shell: bash
-
-      - name: Package artifacts (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          VERSION=${{ github.ref_name }}
-          cd desktop/build/bin
-          tar -czvf platypus-desktop-$VERSION-linux-amd64.tar.gz platypus-desktop
-        shell: bash
-
-      - name: Package artifacts (macOS)
+      # create-dmg is environment setup, not packaging, so it stays
+      # here; everything else moved into the script below.
+      - name: Install create-dmg (macOS)
         if: runner.os == 'macOS'
+        run: brew install create-dmg
+
+      # One script for all three platforms. It reads the binary and
+      # product names out of desktop/wails.json instead of repeating
+      # them, and scripts/package-desktop.test.sh exercises every
+      # branch against a fake build directory — so a mistake in the
+      # Windows path surfaces on any machine rather than during a tag
+      # build, after three OSes have already compiled.
+      - name: Package artifacts
         run: |
-          VERSION=${{ github.ref_name }}
-          cd desktop/build/bin
-          
-          # Install create-dmg
-          brew install create-dmg
-          
-          # Create DMG
-          APP_NAME=$(ls -d *.app)
-          create-dmg \
-            --volname "Platypus Desktop" \
-            --window-pos 200 120 \
-            --window-size 600 300 \
-            --icon-size 100 \
-            --icon "$APP_NAME" 150 150 \
-            --hide-extension "$APP_NAME" \
-            --app-drop-link 450 150 \
-            "platypus-desktop-$VERSION-macos-universal.dmg" \
-            "$APP_NAME"
-          
-          # Also keep the zip as a fallback
-          zip -r platypus-desktop-$VERSION-macos-universal.zip "$APP_NAME"
+          case "${{ runner.os }}" in
+            Linux)   os=linux ;;
+            Windows) os=windows ;;
+            macOS)   os=darwin ;;
+            *) echo "unsupported runner: ${{ runner.os }}" >&2; exit 1 ;;
+          esac
+          scripts/package-desktop.sh --version "${{ github.ref_name }}" --os "$os"
         shell: bash
 
       - name: Upload Release

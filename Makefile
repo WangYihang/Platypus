@@ -37,7 +37,7 @@ IP2REGION_V4 := internal/ipinfo/data/ip2region_v4.xdb
         hooks pre-commit data data-v6 releases check-deps \
         example-plugins stage-system-plugins \
         desktop-deps desktop-dev desktop-build desktop-test desktop-bindings \
-        desktop-lint desktop-typecheck \
+        desktop-lint desktop-typecheck desktop-package desktop-package-test \
         web-ui web-ui-embed web-ui-serve e2e e2e-deps screenshots \
         $(BIN_PATHS)
 
@@ -109,6 +109,8 @@ help:
 	@echo "  desktop-test          Desktop Go tests (race)"
 	@echo "  desktop-lint          oxlint over desktop/frontend/src"
 	@echo "  desktop-typecheck     tsc --noEmit over the frontend"
+	@echo "  desktop-package       Package build/bin into a release artifact (RELEASES_VERSION=…)"
+	@echo "  desktop-package-test  Exercise the packaging script on a fake build dir"
 	@echo ""
 	@echo "Web UI / e2e:"
 	@echo "  web-ui                Build standalone bundle to desktop/frontend/dist-web/"
@@ -272,6 +274,8 @@ desktop-dev:       ; cd desktop && $(WAILS) dev -tags "$(WAILS_TAGS)"
 desktop-build:     ; cd desktop && $(WAILS) build -clean -tags "$(WAILS_TAGS)" -ldflags "$(LDFLAGS)"
 desktop-test:      ; cd desktop && $(GO) test -race -count=1 -timeout=120s ./internal/...
 desktop-lint:      ; cd desktop/frontend && pnpm run lint
+desktop-package:   ; ./scripts/package-desktop.sh --version "$(RELEASES_VERSION)"
+desktop-package-test: ; ./scripts/package-desktop.test.sh
 desktop-typecheck: ; cd desktop/frontend && pnpm exec tsc --noEmit
 
 # ---------- Web UI ----------
