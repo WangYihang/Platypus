@@ -40,6 +40,8 @@ import { bootstrapAdmin, createProject, listProjects, waitForBackend } from "./f
 //   PLATYPUS_E2E_PID      backend PID; teardown SIGKILLs
 //   PLATYPUS_E2E_PROJECTS JSON of seeded projects { slug, id }
 //   PLATYPUS_E2E_ADMIN_TOKEN a fresh JWT access token for spec-side API calls
+//   PLATYPUS_E2E_BASELINE_HOST_ID  host row of the baseline agent
+//   PLATYPUS_E2E_BASELINE_AGENT_ID agent id of the baseline agent
 //
 // Baseline agent + per-session-fixtures are deliberately not started
 // here — they now require PAT-based enrollment against the project
@@ -348,6 +350,7 @@ async function startBaselineAgent(
     // Block globalSetup until the host row shows up, so the first
     // spec already has its populated hosts view.
     let agentID = "";
+    let hostID = "";
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
         const r = await fetch(`${backendURL}/api/v1/projects/${projectID}/hosts`, {
@@ -355,10 +358,11 @@ async function startBaselineAgent(
         });
         if (r.ok) {
             const { hosts } = (await r.json()) as {
-                hosts?: Array<{ agent_id?: string }>;
+                hosts?: Array<{ id?: string; agent_id?: string }>;
             };
             if (hosts && hosts.length > 0) {
                 agentID = hosts[0]?.agent_id ?? "";
+                hostID = hosts[0]?.id ?? "";
                 break;
             }
         }
@@ -367,6 +371,17 @@ async function startBaselineAgent(
     if (!agentID) {
         throw new Error("globalSetup: baseline agent did not register a host in 15s");
     }
+
+    // Published so specs can open *this* host rather than whatever
+    // `tbody tr` happens to sort first. Specs that spawn their own
+    // agent (22-recording-playback) leave its host row behind when the
+    // process dies — there is no delete-host API — and only the
+    // baseline agent gets the system plugins installed below. A spec
+    // that clicked the wrong row got a 502 from /fs/list and a
+    // beforeEach timeout, which is what made 40-files-chrome-contract
+    // fail in a full run but pass on its own.
+    process.env.PLATYPUS_E2E_BASELINE_AGENT_ID = agentID;
+    process.env.PLATYPUS_E2E_BASELINE_HOST_ID = hostID;
 
     // Install the file + process system plugins on the baseline agent
     // so specs that exercise the Files / Terminal / Recordings flow

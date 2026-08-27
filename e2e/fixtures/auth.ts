@@ -3,6 +3,7 @@ import { Page, expect } from "@playwright/test";
 import {
     ADMIN_PASSWORD,
     ADMIN_USERNAME,
+    BASELINE_HOST_ID,
     backendURL,
     baseURL,
 } from "./env";
@@ -28,4 +29,29 @@ import { SCREENSHOT_DIR } from "./env";
 import * as path from "node:path";
 export function shotPath(name: string): string {
     return path.join(SCREENSHOT_DIR, name);
+}
+
+// openBaselineHost navigates to the baseline agent's host page.
+//
+// Prefer this over clicking `tbody tr` .first() in the fleet table:
+// the table can hold rows for agents that specs spawned and killed,
+// and those hosts have no system plugins installed, so every /fs/list
+// against them 502s. Which row sorts first is not something a spec
+// should be betting on.
+//
+// Falls back to the old first-row click when globalSetup did not
+// publish an id, so this keeps working if the suite is ever driven
+// against an externally-provisioned backend.
+export async function openBaselineHost(
+    page: Page,
+    opts: { projectSlug?: string; origin?: string } = {},
+) {
+    const slug = opts.projectSlug ?? "default";
+    if (BASELINE_HOST_ID) {
+        const prefix = opts.origin ?? "";
+        await page.goto(`${prefix}/projects/${slug}/hosts/${BASELINE_HOST_ID}/files`);
+        return;
+    }
+    await page.getByRole("link", { name: /^Hosts$/ }).click();
+    await page.getByTestId("fleet-panel-table").locator("table tbody tr").first().click();
 }

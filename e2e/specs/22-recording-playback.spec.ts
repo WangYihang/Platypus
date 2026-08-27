@@ -1,7 +1,7 @@
 import { Page } from "@playwright/test";
 
 import { expect, test } from "../fixtures/test";
-import { spawnAgent } from "../fixtures/agent";
+import { openBaselineHost } from "../fixtures/auth";
 import { ADMIN_PASSWORD, ADMIN_USERNAME, backendURL } from "../fixtures/env";
 
 // loginAsAdminAt: like fixtures/auth::loginAsAdmin but lets the caller
@@ -58,32 +58,20 @@ const ORIGINS = [
 test.describe("recording playback", () => {
     for (const { label, origin } of ORIGINS) {
         test(`[${label}] clicking the play overlay starts playback`, async ({ page }) => {
-            // Spin up an agent in the default project so the operator
-            // has something to record against. The fixture handles
-            // PAT minting + project-CA injection + waitForHost.
-            const projectID = JSON.parse(
-                process.env.PLATYPUS_E2E_PROJECTS || "[]",
-            ).find((p: { slug: string }) => p.slug === "default")?.id as string;
-            expect(projectID, "default project id").toBeTruthy();
-            const agent = await spawnAgent({ projectID, labelForLogs: "rec-playback" });
-
-            try {
+            // Record against the baseline agent from globalSetup. This
+            // used to spawn its own agent, which was wrong twice over:
+            // only the baseline agent gets the file/process system
+            // plugins installed, and killing a spawned agent leaves its
+            // host row behind for every later spec to trip over (there
+            // is no delete-host API). 40-files-chrome-contract failing
+            // only in a full run was this.
+            {
                 // Drive the UI: log in, open the Fleet host row, hit
                 // "Open terminal" — that mounts xterm in the global
                 // drawer and the server-side recording manager opens
                 // a .cast file.
                 await loginAsAdminAt(page, origin);
-                await page.getByRole("button", { name: /Default created/i }).click();
-                // Post-2466550 IA: "Fleet" was renamed to "Hosts"
-                // and the URL moved from /fleet to /hosts. The
-                // table testid kept its old `fleet-panel-table`
-                // name even after the rename.
-                await page.getByRole("link", { name: /^Hosts$/ }).click();
-                await page
-                    .getByTestId("fleet-panel-table")
-                    .locator("table tbody tr")
-                    .first()
-                    .click();
+                await openBaselineHost(page, { origin });
                 await expect(page).toHaveURL(/\/projects\/default\/hosts\/[^/]+\/files$/);
                 // Post-2466550 IA: "Open terminal" is now an icon-
                 // only button in the host header (aria-label
@@ -236,8 +224,6 @@ test.describe("recording playback", () => {
                         `[${label}] sub-floor resize event in cast: ${cols}x${rows} (line: ${line})`,
                     ).toBe(true);
                 }
-            } finally {
-                await agent.kill();
             }
         });
     }

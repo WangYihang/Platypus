@@ -49,3 +49,18 @@ export const backendURL = `https://${BACKEND_HOST}:${BACKEND_PORT}`;
 export function makeTmpdir(): string {
     return mkdtempSync(path.join(os.tmpdir(), "platypus-e2e-"));
 }
+
+// The baseline agent's host row, published by globalSetup.
+//
+// Specs used to reach a host by clicking `tbody tr` .first() in the
+// fleet table. That is only correct while exactly one host exists.
+// 22-recording-playback spawns its own agent per test, and when that
+// process is killed the host row stays — there is no delete-host API —
+// so later specs could click a row whose agent is gone. Worse, only
+// the baseline agent has the file/process system plugins installed, so
+// even a *live* spawned agent answers /fs/list with a 502.
+//
+// That is what made 40-files-chrome-contract pass alone and fail in a
+// full run: it is ordered after 22.
+export const BASELINE_HOST_ID = process.env.PLATYPUS_E2E_BASELINE_HOST_ID ?? "";
+export const BASELINE_AGENT_ID = process.env.PLATYPUS_E2E_BASELINE_AGENT_ID ?? "";

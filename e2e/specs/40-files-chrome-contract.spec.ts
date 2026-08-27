@@ -1,6 +1,6 @@
 import { expect, test } from "../fixtures/test";
 
-import { loginAsAdmin } from "../fixtures/auth";
+import { loginAsAdmin, openBaselineHost } from "../fixtures/auth";
 
 // The Files chrome shrank to a single breadcrumb row: ↑ + ⟳ + path
 // crumbs + QuickPaths chips. Every other action moved into the
@@ -21,12 +21,10 @@ test.describe("host files chrome + right-click menu contract", () => {
     test.beforeEach(async ({ page }) => {
         await loginAsAdmin(page);
         await page.getByRole("button", { name: /Default created/i }).click();
-        await page.getByRole("link", { name: /Hosts$/ }).click();
-        await page
-            .getByTestId("fleet-panel-table")
-            .locator("table tbody tr")
-            .first()
-            .click();
+        // Not `tbody tr` .first(): 22-recording-playback runs earlier
+        // and leaves behind host rows for agents it spawned and
+        // killed, and those have no system plugins, so /fs/list 502s.
+        await openBaselineHost(page);
         // Files is the host's default landing tab; the ActivityBar
         // entry lives at data-testid="host-activity-files".
         await page.getByTestId("host-activity-files").click();
