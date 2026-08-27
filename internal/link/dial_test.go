@@ -19,9 +19,14 @@ import (
 // upgraded connection and builds NewServerSession.
 
 // fakeLinkServer stands up an httptest.Server that, on WS upgrade,
-// runs a yamux server session and immediately closes it after one
-// accepted stream. Used to exercise Dial without building the real
+// runs a yamux server session and serves streams off it until the
+// client hangs up. Used to exercise Dial without building the real
 // AgentLink handler.
+//
+// It deliberately mirrors the real handler in outliving each
+// individual stream. An earlier version returned as soon as it had
+// handled one, which tore the whole yamux session down underneath a
+// client that was still inside its own Open call — see the loop below.
 func fakeLinkServer(t *testing.T, onStream func(hdr *v2pb.StreamHeader, stream interface{ Write(p []byte) (int, error) })) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -43,14 +48,30 @@ func fakeLinkServer(t *testing.T, onStream func(hdr *v2pb.StreamHeader, stream i
 		}
 		defer sess.Close()
 
-		hdr, stream, err := sess.Accept()
-		if err != nil {
-			return
+		// Serve until the client closes the session, rather than
+		// tearing everything down after the first stream.
+		//
+		// Session.Open writes the StreamHeader through yamux, and
+		// yamux's Stream.Write does not return until the send loop
+		// reports back on that frame. The bytes reach the peer before
+		// that report does, so a server that accepted the header,
+		// finished with the stream and closed the session could win
+		// the race and leave Open returning ErrSessionShutdown for a
+		// write whose bytes had in fact been delivered — the flake
+		// read `Open: link: write header: ... session shutdown` and
+		// hit roughly 1.5% of runs under load. Nothing was wrong on
+		// the wire, and nothing was wrong in Session.Open; the
+		// harness simply hung up sooner than any real peer would.
+		for {
+			hdr, stream, err := sess.Accept()
+			if err != nil {
+				return
+			}
+			if onStream != nil {
+				onStream(hdr, stream)
+			}
+			stream.Close()
 		}
-		if onStream != nil {
-			onStream(hdr, stream)
-		}
-		stream.Close()
 	})
 	return httptest.NewServer(mux)
 }
