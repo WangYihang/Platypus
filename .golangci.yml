@@ -28,11 +28,9 @@ linters:
   exclusions:
     paths:
       - pkg/proto
-      - pkg/dependencies
       # Legacy code — unchecked errors on best-effort teardowns (resp.Body.Close,
       # conn.Close in defer, PTY writes) are idiomatic but noisy under errcheck.
       - internal/agent
-      - internal/admin
       - internal/core
     rules:
       - path: _test\.go

@@ -1,0 +1,27 @@
+# Normalise line endings in the repository. The desktop app builds on
+# Linux, macOS and Windows, so without this a Windows contributor's
+# checkout can commit CRLF into files the Go and shell tooling then
+# reads back with stray \r.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png    binary
+*.ico    binary
+*.gif    binary
+*.jpg    binary
+*.webm   binary
+*.wasm   binary
+*.minisig binary
+*.xdb    binary
+
+# Windows-native files that genuinely want CRLF.
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# Generated — collapse them in diffs and exclude from language stats.
+pkg/proto/**/*.pb.go        linguist-generated=true
+desktop/frontend/pnpm-lock.yaml   linguist-generated=true -diff
+e2e/pnpm-lock.yaml                linguist-generated=true -diff
+docs/platypus/pnpm-lock.yaml      linguist-generated=true -diff
+go.sum                            linguist-generated=true -diff
+desktop/go.sum                    linguist-generated=true -diff

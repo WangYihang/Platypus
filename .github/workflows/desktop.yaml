@@ -16,10 +16,20 @@ on:
       - "Makefile"
   workflow_dispatch:
 
+# Least privilege by default; the build job re-grants what it needs to
+# publish releases.
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Go test (linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
@@ -33,9 +43,45 @@ jobs:
       - name: Run tests
         run: make desktop-test
 
+  frontend:
+    name: Frontend test + typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend/pnpm-lock.yaml
+
+      - name: Install deps
+        working-directory: desktop/frontend
+        run: pnpm install --frozen-lockfile
+
+      # tsc already runs inside build:desktop, but only on the release
+      # path. Run it here so a type error fails a PR instead of a tag.
+      - name: Typecheck
+        working-directory: desktop/frontend
+        run: pnpm exec tsc --noEmit
+
+      - name: Test
+        working-directory: desktop/frontend
+        run: pnpm test
+
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    # Re-grants what the workflow-level read-only default withholds:
+    # this job publishes release assets via softprops/action-gh-release.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:

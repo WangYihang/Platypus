@@ -1,0 +1,145 @@
+version: 2
+
+# Five manifests live in this repo: two Go modules and three npm
+# projects. Before this file existed the update cadence was invisible —
+# nothing described which ecosystems were watched, how often, or how
+# updates were batched, so it could not be reviewed or changed in code.
+#
+# Everything is grouped. A week of patch bumps arriving as one PR per
+# ecosystem is reviewable; nine separate PRs is what left #340 open long
+# enough that Dependabot stopped rebasing it and it had to be resolved
+# by hand.
+
+updates:
+  # ---------- Go ----------
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      golang-x:
+        # The golang.org/x/* set moves together and a partial bump just
+        # makes MVS pick the rest anyway.
+        patterns:
+          - "golang.org/x/*"
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: gomod
+    directory: "/desktop"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # ---------- npm ----------
+  - package-ecosystem: npm
+    directory: "/desktop/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      react:
+        # react and react-dom must move in lockstep, and @types/react*
+        # tracks them.
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      radix-ui:
+        patterns:
+          - "radix-ui"
+          - "@radix-ui/*"
+      codemirror:
+        patterns:
+          - "@codemirror/*"
+          - "@uiw/react-codemirror"
+      tooling:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "typescript"
+          - "@vitejs/*"
+          - "@tailwindcss/*"
+          - "tailwindcss"
+          - "jsdom"
+          - "@testing-library/*"
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # react-pdf pins pdfjs-dist to an exact version as a hard
+      # dependency. Bumping pdfjs-dist on its own puts two copies in the
+      # graph; it moves when react-pdf moves.
+      - dependency-name: pdfjs-dist
+
+  - package-ecosystem: npm
+    directory: "/e2e"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      e2e-all:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: "/docs/platypus"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      docusaurus:
+        patterns:
+          - "@docusaurus/*"
+      docs-rest:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # ---------- CI ----------
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions-all:
+        patterns:
+          - "*"

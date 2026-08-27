@@ -1,0 +1,55 @@
+name: Docs
+
+# The docs site had no build job, which is how it stayed broken:
+# first on a webpackbar/ProgressPlugin schema mismatch, then on six
+# navbar links pointing at pages that were never written. Both are
+# fixed; this keeps them fixed. onBrokenLinks is already 'throw' in
+# docusaurus.config.ts, so link rot fails the build on its own.
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "docs/platypus/**"
+      - ".github/workflows/docs.yaml"
+  pull_request:
+    paths:
+      - "docs/platypus/**"
+      - ".github/workflows/docs.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: docs/platypus/pnpm-lock.yaml
+
+      - name: Install deps
+        working-directory: docs/platypus
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: docs/platypus
+        run: pnpm run typecheck
+
+      - name: Build
+        working-directory: docs/platypus
+        run: pnpm run build

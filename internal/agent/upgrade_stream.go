@@ -233,7 +233,18 @@ func (u *UpgradeRunner) Handle(ctx context.Context, stream io.ReadWriteCloser, r
 		ResolvedVersion: m.Version,
 		ResolvedSha256:  expectedSHA,
 	})
-	if err := os.Chmod(tmpPath, 0o755); err != nil {
+	// Match the mode of the binary being replaced rather than forcing
+	// 0755. An operator who installed the agent 0700 — the tighter
+	// choice for a root-run daemon, since nothing else needs to execute
+	// it — should not have a self-upgrade quietly widen that to
+	// group- and world-executable. 0755 stays the fallback for the
+	// fresh-install path, where there is no current binary to copy from
+	// and the rename below creates it.
+	mode := os.FileMode(0o755)
+	if fi, statErr := os.Stat(u.BinaryPath); statErr == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
 		_ = os.Remove(tmpPath)
 		return u.fail(stream, upgradeErrf("install_failed", "chmod: %v", err))
 	}

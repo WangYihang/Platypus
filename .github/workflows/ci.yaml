@@ -7,9 +7,20 @@ on:
     branches: [master, main]
   workflow_dispatch:
 
+# Least privilege: nothing in this workflow writes to the repository.
+permissions:
+  contents: read
+
+# A rapid series of pushes should leave one run standing, not three
+# full matrices racing each other.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
@@ -23,10 +34,46 @@ jobs:
         run: go build ./cmd/...
 
       - name: Test
-        run: go test -race -count=1 -timeout=120s ./...
+        run: go test -race -count=1 -timeout=300s -coverprofile=coverage.out ./...
+
+      # Surfaced in the job log rather than shipped to a coverage
+      # service — the trend is the useful part and this keeps the
+      # pipeline dependency-free.
+      - name: Coverage summary
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          go tool cover -func=coverage.out | sort -k3 -nr | head -20
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # cmd/platypus-server/dependencies_test.go exists because
+      # govulncheck once found 16 patch-level stdlib advisories here.
+      # That test is a string assertion standing in for this tool; run
+      # the real thing so the next advisory is caught too.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Scan root module
+        run: $(go env GOPATH)/bin/govulncheck ./...
+
+      - name: Scan desktop module
+        working-directory: desktop
+        run: $(go env GOPATH)/bin/govulncheck ./...
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 

@@ -116,3 +116,6 @@ scripts/.agent-signing.*
 # release tree, optional TLS cert, dev CA KEK, bootstrap secret.
 # Wipe with `rm -rf data` to reset local state.
 data/
+# The frontend is pnpm-only (packageManager pins it); an npm lockfile
+# here would silently diverge from what CI installs.
+desktop/frontend/package-lock.json
