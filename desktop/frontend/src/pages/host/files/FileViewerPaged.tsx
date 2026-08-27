@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -6,8 +6,9 @@ import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ReadFile } from "@wails/go/app/App";
 import { humanize } from "../../../lib/format";
+import { useOnValueChange } from "@/lib/useOnValueChange";
+import { useRemoteFileRangeText } from "./remoteFile";
 
 // Read-only paged viewer for files that are too big to load into a
 // CodeMirror editor in full. Each page is 64 KiB — small enough to
@@ -24,54 +25,44 @@ interface Props {
     onDownload?: () => void;
 }
 
-function bytesToText(raw: unknown): string {
-    if (raw instanceof Uint8Array) {
-        return safeDecode(raw);
-    }
-    if (Array.isArray(raw)) {
-        return safeDecode(new Uint8Array(raw as number[]));
-    }
-    return "";
-}
-
-function safeDecode(bytes: Uint8Array): string {
-    try {
-        return new TextDecoder("utf-8").decode(bytes);
-    } catch {
-        return new TextDecoder("latin1").decode(bytes);
-    }
-}
-
 export default function FileViewerPaged({ projectID, sessionHash, path, size, onDownload }: Props) {
+    // The offset is the input to the read, not a result of it. This
+    // used to be a loadPage() callback that fetched and then set the
+    // offset it had just used, so an effect had to call it once on
+    // mount to get the first page — and the offset could not change
+    // without a fetch having already happened.
     const [offset, setOffset] = useState(0);
-    const [content, setContent] = useState("");
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [gotoInput, setGotoInput] = useState("0");
 
-    const loadPage = useCallback(
-        async (at: number) => {
-            setLoading(true);
-            setError(null);
-            try {
-                const clamped = Math.max(0, Math.min(at, Math.max(0, size - 1)));
-                const want = Math.min(PAGE_SIZE, Math.max(0, size - clamped));
-                const raw = await ReadFile(projectID, sessionHash, path, clamped, want);
-                setContent(bytesToText(raw));
-                setOffset(clamped);
-                setGotoInput(String(clamped));
-            } catch (err) {
-                setError(String(err instanceof Error ? err.message : err));
-            } finally {
-                setLoading(false);
-            }
-        },
-        [projectID, sessionHash, path, size],
+    const clampOffset = useCallback(
+        (at: number) => Math.max(0, Math.min(at, Math.max(0, size - 1))),
+        [size],
     );
+    const wantBytes = Math.min(PAGE_SIZE, Math.max(0, size - offset));
 
-    useEffect(() => {
-        void loadPage(0);
-    }, [loadPage]);
+    const {
+        text,
+        error: loadError,
+        isFetching: loading,
+    } = useRemoteFileRangeText({
+        projectID,
+        sessionHash,
+        path,
+        offset,
+        length: wantBytes,
+    });
+    const content = text ?? "";
+    const error = loadError
+        ? String(loadError instanceof Error ? loadError.message : loadError)
+        : null;
+
+    // The jump-to box follows the offset unless the user is editing it.
+    useOnValueChange(offset, (next) => setGotoInput(String(next)));
+
+    const loadPage = useCallback(
+        (at: number) => setOffset(clampOffset(at)),
+        [clampOffset],
+    );
 
     const page = Math.floor(offset / PAGE_SIZE) + 1;
     const totalPages = Math.max(1, Math.ceil(size / PAGE_SIZE));
@@ -119,7 +110,7 @@ export default function FileViewerPaged({ projectID, sessionHash, path, size, on
                     onSubmit={(e) => {
                         e.preventDefault();
                         const n = parseInt(gotoInput, 10);
-                        if (Number.isFinite(n)) void loadPage(n);
+                        if (Number.isFinite(n)) loadPage(n);
                     }}
                 >
                     <span className="text-muted-foreground">go to offset:</span>

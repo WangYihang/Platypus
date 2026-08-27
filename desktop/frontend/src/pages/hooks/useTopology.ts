@@ -10,7 +10,10 @@
 //      samples per machine so the detail panel can render a
 //      sparkline without hitting the history API.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { qk } from "../../lib/queryKeys";
 
 import {
     TopologySnapshot,
@@ -63,9 +66,37 @@ function edgeKey(a: string, b: string): string {
 }
 
 export function useTopology(projectId: string): TopologyState {
-    const [snapshot, setSnapshot] = useState<TopologySnapshot | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    // The snapshot is fetched once and then patched by topology.*
+    // events. Both used to write a local useState, which meant the
+    // fetch was a hand-rolled effect — cancelled flag, loading and
+    // error mirrored by hand — sitting next to the patchers.
+    //
+    // The query owns it now and the patchers write through
+    // setQueryData. Their updater bodies are unchanged; only what
+    // they update moved. One store instead of a fetch feeding a state
+    // that then diverges from it.
+    const snapshotKey = useMemo(() => qk.topology(projectId), [projectId]);
+    const snapshotQuery = useQuery({
+        queryKey: snapshotKey,
+        queryFn: () => fetchTopologySnapshot(projectId),
+        refetchOnWindowFocus: false,
+    });
+    const snapshot = snapshotQuery.data ?? null;
+    const loading = snapshotQuery.isPending;
+    const error = snapshotQuery.error ? String(snapshotQuery.error) : null;
+
+    // Same signature as the old setSnapshot, so the patchers below did
+    // not have to change shape.
+    const setSnapshot = useCallback(
+        (updater: (prev: TopologySnapshot | null) => TopologySnapshot | null) => {
+            queryClient.setQueryData<TopologySnapshot | null>(snapshotKey, (prev) =>
+                updater(prev ?? null),
+            );
+        },
+        [queryClient, snapshotKey],
+    );
     const [linkRates, setLinkRates] = useState<Map<string, LinkRate>>(() => new Map());
     const [machineHistory, setMachineHistory] = useState<Map<string, MachineSeries>>(() => new Map());
 
@@ -74,27 +105,6 @@ export function useTopology(projectId: string): TopologyState {
     const prevLinkSamples = useRef<
         Map<string, { bytesIn: number; bytesOut: number; msgsIn: number; msgsOut: number; at: number }>
     >(new Map());
-
-    // Initial fetch.
-    useEffect(() => {
-        let cancelled = false;
-        setLoading(true);
-        setError(null);
-        fetchTopologySnapshot(projectId)
-            .then((snap) => {
-                if (cancelled) return;
-                setSnapshot(snap);
-                setLoading(false);
-            })
-            .catch((e) => {
-                if (cancelled) return;
-                setError(String(e));
-                setLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [projectId]);
 
     // Subscribe to topology.* notify events.
     useEffect(() => {
@@ -219,7 +229,7 @@ export function useTopology(projectId: string): TopologyState {
                 if (payload.project_id !== projectId) return;
                 // Refresh from REST — link_up may add a mesh node we
                 // haven't seen yet. Cheap: same endpoint used on mount.
-                fetchTopologySnapshot(projectId).then(setSnapshot).catch(() => {});
+                void queryClient.invalidateQueries({ queryKey: snapshotKey });
             }),
         );
 
@@ -244,7 +254,9 @@ export function useTopology(projectId: string): TopologyState {
         return () => {
             for (const u of unsubs) u();
         };
-    }, [projectId]);
+        // All three are stable — useCallback, useQueryClient and a
+        // useMemo on projectId — so naming them does not re-subscribe.
+    }, [projectId, setSnapshot, queryClient, snapshotKey]);
 
     const state = useMemo<TopologyState>(
         () => ({

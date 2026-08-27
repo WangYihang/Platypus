@@ -67,6 +67,7 @@ export const qk = {
     adminRoles: () => ["adminRoles"] as const,
     adminPermissions: () => ["adminPermissions"] as const,
     adminSettings: () => ["adminSettings"] as const,
+    topology: (projectId: string) => ["topology", projectId] as const,
 
     // --- Account (current user) ----------------------------------
     accountTokens: () => ["accountTokens"] as const,

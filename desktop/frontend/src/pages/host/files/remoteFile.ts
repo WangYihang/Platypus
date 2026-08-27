@@ -146,3 +146,37 @@ export function useRemotePreviewURL(args: RemoteObjectURLArgs) {
 
     return { ...q, url };
 }
+
+export interface RemoteFileRangeArgs extends RemoteFileArgs {
+    /** Byte offset to start at. */
+    offset: number;
+    /** How many bytes to ask for. */
+    length: number;
+}
+
+/**
+ * A byte range of a remote file, decoded as text.
+ *
+ * Keyed on the range as well as the path, so paging through a large
+ * file walks the cache rather than refetching a page the operator
+ * already visited — and, more to the point, so the offset drives the
+ * read. The paged viewer used to have that backwards: a loadPage()
+ * callback fetched and then set the offset it had just used, which
+ * made the offset a result of the fetch instead of its input.
+ */
+export function useRemoteFileRangeText(args: RemoteFileRangeArgs) {
+    const { projectID, sessionHash, path, offset, length, enabled = true } = args;
+    const q = useQuery({
+        queryKey: [...remoteFileKey({ projectID, sessionHash, path }), "range", offset, length],
+        queryFn: async () =>
+            bytesFromWailsRead(await ReadFile(projectID, sessionHash, path, offset, length)),
+        enabled,
+        refetchOnWindowFocus: false,
+        retry: false,
+        // Keep the previous page on screen while the next one loads,
+        // instead of flashing empty between pages.
+        placeholderData: (prev) => prev,
+    });
+    const text = useMemo(() => (q.data ? decodeText(q.data) : null), [q.data]);
+    return { ...q, text };
+}
