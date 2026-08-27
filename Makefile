@@ -256,12 +256,15 @@ clean:
 # webkit2gtk-4.1 ships on Ubuntu 22.04+ / Fedora 37+ / Debian 12+).
 # subst normalises GOPATH separators so Wails resolves on Windows too.
 
+# Keep in step with the wails/v2 require in desktop/go.mod and with
+# the CLI pin in .github/workflows/desktop.yaml.
+WAILS_VERSION ?= v2.15.0
 WAILS_TAGS ?= webkit2_41
 WAILS      ?= $(subst \,/,$(shell $(GO) env GOPATH))/bin/wails$(shell $(GO) env GOEXE)
 
 desktop-deps:
 	@$(call require-bin,pnpm,npm i -g pnpm)
-	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@latest
+	$(GO) install github.com/wailsapp/wails/v2/cmd/wails@$(WAILS_VERSION)
 	cd desktop/frontend && pnpm install
 
 desktop-bindings:  ; cd desktop && $(WAILS) generate module

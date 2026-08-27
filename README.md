@@ -105,7 +105,7 @@ Requires Node 22+, Wails CLI dependencies (`wails doctor`), and the platform's W
 
 ```bash
 make desktop-deps       # one-time: install Wails CLI + pnpm packages
-make desktop-build      # → desktop/build/bin/platypus-desktop
+make desktop-build      # → desktop/build/bin/desktop
 make desktop-dev        # hot-reload dev mode
 ```
 
