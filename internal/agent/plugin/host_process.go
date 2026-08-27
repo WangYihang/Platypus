@@ -393,7 +393,20 @@ func relayPipes(ctx context.Context, wire io.ReadWriter, h *processHandle) proce
 		}
 	}()
 
-	waitErr := h.cmd.Wait()
+	// Drain both pipes to EOF *before* Wait. cmd.StdoutPipe and
+	// cmd.StderrPipe hand back pipes that Wait closes the moment it
+	// reaps the process, which is why os/exec documents that "it is
+	// incorrect to call Wait before all reads from the pipe have
+	// completed". Waiting first raced the two reader goroutines: for a
+	// short-lived command the close often won, the pending Read
+	// returned an error instead of the bytes, and the consumer saw an
+	// exit frame with no stdout frame at all. `/bin/echo hello` lost
+	// its output roughly one run in three.
+	//
+	// Not calling Wait yet is safe: the process keeps running, and its
+	// exit is what closes the write ends and lands us here. The
+	// ctx.Done() escapes bound the case where a forked child inherits
+	// the pipes and holds them open past its parent's exit.
 	select {
 	case <-stdoutDone:
 	case <-ctx.Done():
@@ -402,6 +415,7 @@ func relayPipes(ctx context.Context, wire io.ReadWriter, h *processHandle) proce
 	case <-stderrDone:
 	case <-ctx.Done():
 	}
+	waitErr := h.cmd.Wait()
 
 	exit := waitInfoFor(h.cmd, waitErr)
 	_ = write(&v2pb.ProcessFrame{Payload: &v2pb.ProcessFrame_Exit{Exit: exit}})
