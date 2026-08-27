@@ -131,7 +131,14 @@ test.describe("recording playback", () => {
                 // Post-2466550 IA: /audit/recordings → /activity/recordings.
                 await page.goto(`${origin}/projects/default/activity/recordings`);
                 await expect(page.getByRole("tab", { name: /Recordings/ })).toBeVisible();
-                const previewBtn = page.getByRole("button", { name: /Preview/ }).first();
+                // exact: true matters. Each card also mounts a
+                // thumbnail button labelled "Preview recording", and a
+                // loose /Preview/ matched that first — so the click
+                // landed on the thumbnail of whichever card happened
+                // to be on top rather than this test's own recording.
+                const previewBtn = page
+                    .getByRole("button", { name: "Preview", exact: true })
+                    .first();
                 await expect(previewBtn).toBeVisible({ timeout: 15_000 });
 
                 // Thumbnail regression: each completed recording's

@@ -17,6 +17,7 @@ import { z } from "zod";
 
 import EmptyState from "../components/EmptyState";
 import StatusBar from "../components/StatusBar";
+import TerminalDock from "../terminal/TerminalDock";
 import { TransfersDrawer, TransfersDrawerProvider } from "../components/TransfersPill";
 import { Project, createProject, listProjects } from "../lib/api";
 import { humanizeError } from "../lib/humanizeError";
@@ -223,7 +224,13 @@ function ShellChrome({
                     overflow: "hidden",
                 }}
             >
-                <MainColumn>{children}</MainColumn>
+                {/* TerminalDock wraps the routed page so the terminal
+                    drawer — and the WebSocket behind every open shell —
+                    survives navigating between project sections. It
+                    hides itself off host routes. */}
+                <MainColumn>
+                    <TerminalDock>{children}</TerminalDock>
+                </MainColumn>
             </div>
             <StatusBar />
             <Suspense fallback={null}>

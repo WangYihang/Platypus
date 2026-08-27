@@ -209,6 +209,21 @@ func (s *Session) Finish(ctx context.Context, errMsg string) {
 		bytes = fi.Size()
 	}
 
+	// A clean session that captured nothing has no playback value: the
+	// .cast file holds only its header, the thumbnail renders as an
+	// error tile, and the row still occupies a slot in the operator's
+	// Recordings list. Opening a terminal and closing it without
+	// typing produced one of these every time. Drop it instead.
+	//
+	// Only for clean exits — a failed session with zero frames is
+	// evidence that something went wrong early, which is worth
+	// keeping.
+	if errMsg == "" && frames == 0 {
+		_ = os.Remove(s.absPath)
+		_ = s.manager.db.TerminalRecordings().Delete(ctx, s.id)
+		return
+	}
+
 	status := storage.RecordingStatusCompleted
 	if errMsg != "" {
 		status = storage.RecordingStatusFailed

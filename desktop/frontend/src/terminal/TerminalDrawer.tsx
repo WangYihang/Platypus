@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, Plus, TerminalSquare, X } from "lucide-react";
 
 import Terminal from "../pages/Terminal";
@@ -16,6 +16,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShellEntry, useGlobalTerminal } from "./GlobalTerminalContext";
+import { useRouteHostId } from "./useRouteHostId";
 
 // Tab bar height constant is exported because ShellChrome needs to size
 // the resizable drawer panel to exactly the tab bar when the operator
@@ -55,11 +56,10 @@ export default function TerminalDrawer() {
         closeDrawer,
     } = useGlobalTerminal();
 
-    const { hostId: routeHostId } = useParams<{
-        projectSlug?: string;
-        hostId?: string;
-        tab?: string;
-    }>();
+    // Not useParams: the drawer is mounted in ShellChrome, above the
+    // route that carries :hostId, so useParams would always see
+    // undefined here. See useRouteHostId.
+    const routeHostId = useRouteHostId();
 
     const visibleShells = useMemo(
         () => shells.filter((s) => s.hostId === routeHostId),

@@ -18,8 +18,6 @@ import { icons } from "../lib/icons";
 import { listHosts, pendingApprovalCount } from "../lib/api";
 import { qk } from "../lib/queryKeys";
 import { isOnline } from "../lib/time";
-import { useGlobalTerminal } from "../terminal/GlobalTerminalContext";
-import TerminalDrawer, { TAB_BAR_HEIGHT } from "../terminal/TerminalDrawer";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -31,12 +29,11 @@ import EnrollAgentWizard from "./fleet/enroll/EnrollAgentWizard";
 // lives under /hosts/:id/:tab and renders inside the same shell so
 // the chrome stays in place when jumping between hosts.
 //
-// HostsShell also owns the bottom terminal drawer because every shell
-// is host-scoped — the drawer should not appear on /activity, /security,
-// /enrollment, etc. The drawer is mounted whenever any /hosts/* route
-// is active and only renders content (height > 0) when the URL has a
-// :hostId in scope. The GlobalTerminalProvider stays at ProjectShell
-// level so existing shell sessions survive cross-tab navigation.
+// The bottom terminal drawer is NOT owned here. Shells are host-scoped
+// and the drawer does hide itself off /hosts, but that is a visibility
+// concern it handles internally; mounting it here also unmounted it on
+// every navigation away, closing the WebSocket behind each open shell.
+// It now sits in ShellChrome via terminal/TerminalDock.
 const VIEWS = ["list", "topology"] as const;
 type HostsView = (typeof VIEWS)[number];
 
@@ -155,99 +152,14 @@ export default function HostsShell() {
     );
 }
 
-// HostsBody stacks the routed view on top of the terminal drawer.
-// The drawer has three regimes:
-//   · no shells visible on this host  → 0 px (drawer hidden)
-//   · drawer collapsed (Ctrl+`)        → TAB_BAR_HEIGHT (tab strip only)
-//   · drawer open                      → drawerHeight (operator-chosen)
-// drawerHeight is owned by GlobalTerminalContext (per-server
-// localStorage); the seam's pointermove handler feeds drag deltas
-// straight back into setDrawerHeight.
+// HostsBody is just the routed view now. The terminal drawer used to be
+// stacked here, which meant clicking Overview unmounted it and closed
+// every open shell's WebSocket. It lives in ShellChrome instead — see
+// terminal/TerminalDock.
 function HostsBody() {
-    const { shells, drawerOpen, drawerHeight, setDrawerHeight } = useGlobalTerminal();
-    const { hostId: routeHostId } = useParams<{ hostId?: string }>();
-    const visibleShells = useMemo(
-        () => shells.filter((s) => s.hostId === routeHostId),
-        [shells, routeHostId],
-    );
-    const drawerActive = !!routeHostId && visibleShells.length > 0;
-    const seamLive = drawerActive && drawerOpen;
-
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    const onSeamPointerDown = useCallback(
-        (event: React.PointerEvent<HTMLDivElement>) => {
-            if (!seamLive) return;
-            event.preventDefault();
-            const seam = event.currentTarget;
-            seam.setPointerCapture(event.pointerId);
-
-            const onMove = (ev: PointerEvent) => {
-                const container = containerRef.current;
-                if (!container) return;
-                const rect = container.getBoundingClientRect();
-                setDrawerHeight(rect.bottom - ev.clientY);
-            };
-            const onUp = (ev: PointerEvent) => {
-                if (seam.hasPointerCapture(ev.pointerId)) {
-                    seam.releasePointerCapture(ev.pointerId);
-                }
-                window.removeEventListener("pointermove", onMove);
-                window.removeEventListener("pointerup", onUp);
-                window.removeEventListener("pointercancel", onUp);
-            };
-            window.addEventListener("pointermove", onMove);
-            window.addEventListener("pointerup", onUp);
-            window.addEventListener("pointercancel", onUp);
-        },
-        [seamLive, setDrawerHeight],
-    );
-
-    const drawerPx = !drawerActive ? 0 : drawerOpen ? drawerHeight : TAB_BAR_HEIGHT;
-
     return (
-        <div
-            ref={containerRef}
-            style={{
-                flex: 1,
-                minHeight: 0,
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-            }}
-        >
-            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <Outlet />
-            </div>
-            {/* Drag seam: visible-but-inert when the drawer is collapsed,
-                interactive when open, hidden when no shells exist. */}
-            <div
-                role="separator"
-                aria-orientation="horizontal"
-                aria-disabled={!seamLive}
-                onPointerDown={onSeamPointerDown}
-                className={cn(
-                    "relative h-px shrink-0 touch-none",
-                    drawerActive ? "bg-border" : "invisible",
-                    seamLive
-                        ? "cursor-row-resize hover:bg-primary/40"
-                        : "pointer-events-none",
-                    "after:absolute after:inset-x-0 after:-inset-y-1 after:bg-transparent",
-                )}
-            />
-            {/* TerminalDrawer stays mounted across all regimes — the
-                xterm WebSocket is owned by its children and would tear
-                down on unmount. We just clamp height: 0 when inactive,
-                TAB_BAR_HEIGHT when collapsed, drawerHeight when open. */}
-            <div
-                style={{
-                    height: drawerPx,
-                    flexShrink: 0,
-                    overflow: "hidden",
-                }}
-            >
-                <TerminalDrawer />
-            </div>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <Outlet />
         </div>
     );
 }

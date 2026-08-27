@@ -3,6 +3,7 @@ package recording
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -172,5 +173,92 @@ func TestSummarise_NoClientIsNoop(t *testing.T) {
 	rec, _ := db.TerminalRecordings().Get(context.Background(), id)
 	if rec.Summary != "" {
 		t.Errorf("summary = %q, want empty when no LLM is configured", rec.Summary)
+	}
+}
+
+// TestFinish_DropsEmptyRecording covers the junk-row case: a terminal
+// opened and closed without producing output leaves a cast holding only
+// its header, which has nothing to play back and renders as an error
+// tile in the Recordings list.
+func TestFinish_DropsEmptyRecording(t *testing.T) {
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if err := db.Users().Create(ctx, &user.User{
+		ID: "u1", Username: "admin", PasswordHash: "hash", Role: user.RoleAdmin,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := db.Projects().Create(ctx, &storage.Project{
+		ID: "p1", Name: "P", Slug: "p", CreatedBy: "u1",
+	}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	m := New(db, t.TempDir(), true)
+	sess, err := m.Begin(ctx, BeginInput{
+		ProjectID: "p1", HostID: "h1", AgentID: "a1", UserID: "u1",
+		Cols: 80, Rows: 24, Shell: "bash",
+	})
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	id := sess.ID()
+	castPath := sess.AbsolutePath()
+
+	// No WriteOutput calls at all — zero frames.
+	sess.Finish(ctx, "")
+
+	if _, err := db.TerminalRecordings().Get(ctx, id); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("row still present after an empty session; got err=%v", err)
+	}
+	if _, err := os.Stat(castPath); !os.IsNotExist(err) {
+		t.Errorf("cast file still on disk at %s", castPath)
+	}
+}
+
+// TestFinish_KeepsFailedEmptyRecording is the other half: a session
+// that failed before capturing anything is evidence, not junk.
+func TestFinish_KeepsFailedEmptyRecording(t *testing.T) {
+	db, err := storage.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if err := db.Users().Create(ctx, &user.User{
+		ID: "u1", Username: "admin", PasswordHash: "hash", Role: user.RoleAdmin,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := db.Projects().Create(ctx, &storage.Project{
+		ID: "p1", Name: "P", Slug: "p", CreatedBy: "u1",
+	}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	m := New(db, t.TempDir(), true)
+	sess, err := m.Begin(ctx, BeginInput{
+		ProjectID: "p1", HostID: "h1", AgentID: "a1", UserID: "u1",
+		Cols: 80, Rows: 24, Shell: "bash",
+	})
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	id := sess.ID()
+
+	sess.Finish(ctx, "agent link dropped")
+
+	rec, err := db.TerminalRecordings().Get(ctx, id)
+	if err != nil {
+		t.Fatalf("failed session was dropped: %v", err)
+	}
+	if rec.Status != storage.RecordingStatusFailed {
+		t.Errorf("status = %q, want failed", rec.Status)
 	}
 }
