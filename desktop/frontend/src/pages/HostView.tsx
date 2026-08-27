@@ -165,7 +165,7 @@ export default function HostView({ projectID, hostID }: Props) {
         // and markSeen is idempotent on unknown ids anyway).
         const parsed = parsePluginActivity(key);
         if (parsed) markSeen(parsed.pluginID);
-        navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
+        void navigate(`/projects/${project.slug}/hosts/${hostID}/${key}`);
     };
 
     // BottomPanel state (open/collapsed, active tab, height) lives
@@ -190,7 +190,7 @@ export default function HostView({ projectID, hostID }: Props) {
             void queryClient.invalidateQueries({ queryKey: qk.pendingHosts(project.id) });
             void queryClient.invalidateQueries({ queryKey: qk.pendingHostsCount(project.id) });
             setArchiveOpen(false);
-            navigate(`/projects/${project.slug}/hosts`);
+            void navigate(`/projects/${project.slug}/hosts`);
         },
         onError: (e) => toast.error(humanizeError(e)),
     });
@@ -219,17 +219,17 @@ export default function HostView({ projectID, hostID }: Props) {
     }, [activeActivity]);
 
     const refresh = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: qk.host(projectID, hostID) });
-        queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
-        queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
+        void queryClient.invalidateQueries({ queryKey: qk.host(projectID, hostID) });
+        void queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
+        void queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
     }, [queryClient, projectID, hostID]);
 
     const refreshSysInfo = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
+        void queryClient.invalidateQueries({ queryKey: qk.hostSysInfo(projectID, hostID) });
     }, [queryClient, projectID, hostID]);
 
     const refetchSessions = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
+        void queryClient.invalidateQueries({ queryKey: qk.hostSessions(projectID, hostID) });
     }, [queryClient, projectID, hostID]);
 
     useEffect(() => {
@@ -238,12 +238,12 @@ export default function HostView({ projectID, hostID }: Props) {
         const offs: Array<() => void> = [];
         offs.push(
             onNotify(NotifyEvent.SessionOpened, (data) => {
-                if (matches(data as SessionEventPayload)) void refetchSessions();
+                if (matches(data as SessionEventPayload)) refetchSessions();
             }),
         );
         offs.push(
             onNotify(NotifyEvent.SessionClosed, (data) => {
-                if (matches(data as SessionEventPayload)) void refetchSessions();
+                if (matches(data as SessionEventPayload)) refetchSessions();
             }),
         );
         return () => offs.forEach((off) => off());

@@ -143,7 +143,7 @@ export default function ProjectMembers({ project }: Props) {
             toast.success("Member added");
             addForm.reset({ user_id: "", role: "operator" });
             if (closeAfterAdd) setAddOpen(false);
-            invalidateMembers();
+            void invalidateMembers();
         } catch (e) {
             toast.error(`add: ${humanizeError(e)}`);
         }
@@ -153,7 +153,7 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await addProjectMember(project.id, m.user_id, role);
             toast.success(`${m.username} → ${role}`);
-            invalidateMembers();
+            void invalidateMembers();
         } catch (e) {
             toast.error(`role: ${humanizeError(e)}`);
         }
@@ -166,7 +166,7 @@ export default function ProjectMembers({ project }: Props) {
         try {
             await removeProjectMember(project.id, m.user_id);
             toast.success(`${m.username} removed`);
-            invalidateMembers();
+            void invalidateMembers();
         } catch (e) {
             toast.error(`remove: ${humanizeError(e)}`);
         }

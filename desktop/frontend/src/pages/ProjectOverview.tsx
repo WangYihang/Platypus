@@ -74,9 +74,9 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
         serverInfoQuery.error ?? hostsQuery.error ?? sessions24hQuery.error ?? null;
 
     function refresh() {
-        queryClient.invalidateQueries({ queryKey: qk.serverInfo() });
-        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({ queryKey: qk.serverInfo() });
+        void queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+        void queryClient.invalidateQueries({
             queryKey: ["projectSessions", project.id, "since-24h"],
         });
     }
@@ -145,7 +145,7 @@ export default function ProjectOverview({ project, onOpenMembers }: Props) {
             }
             actions={
                 <>
-                    <RefreshButton loading={loading} onClick={() => void refresh()} />
+                    <RefreshButton loading={loading} onClick={refresh} />
                     {onOpenMembers && (
                         <Button size="sm" variant="outline" onClick={onOpenMembers}>
                             <Users className="size-3.5" />

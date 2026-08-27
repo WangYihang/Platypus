@@ -70,8 +70,11 @@ jobs:
         working-directory: desktop/frontend
         run: pnpm exec tsc --noEmit
 
-      # Fails on the "correctness" class only; the pre-existing warning
-      # backlog is printed but does not block. See .oxlintrc.json.
+      # Blocking. `lint` runs oxlint with --type-aware, so this covers
+      # both the parser-only correctness class and the type-aware rules
+      # (no-floating-promises, no-base-to-string, …). The remaining
+      # react-hooks / set-state-in-effect warnings print but do not
+      # fail — see .oxlintrc.json for why each is a warning.
       - name: Lint
         working-directory: desktop/frontend
         run: pnpm run lint

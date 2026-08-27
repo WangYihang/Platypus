@@ -91,7 +91,7 @@ export default function RecordingThumbnail({
     useEffect(() => {
         if (!visible) return;
         let cancelled = false;
-        (async () => {
+        void (async () => {
             try {
                 const [api, resp] = await Promise.all([
                     loadAsciinemaPlayer(),

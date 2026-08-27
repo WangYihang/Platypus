@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 
 // Wails EventsOn registry: capture handlers so tests can synthesise
 // the desktop OS-drop event without going through the real bridge.
-const wailsListeners = new Map<string, (payload: unknown) => void>();
+const wailsListeners = new Map<string, (payload: unknown) => void | Promise<void>>();
 
 vi.mock("@wails/runtime/runtime", () => ({
     EventsOn: (name: string, fn: (payload: unknown) => void) => {

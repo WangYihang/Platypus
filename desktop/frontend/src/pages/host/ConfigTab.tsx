@@ -102,10 +102,10 @@ export function ConfigTab({ projectID, hostID, agentID, active }: Props) {
         },
         onSuccess: (fresh) => {
             queryClient.setQueryData(qk.hostConfigAudit(projectID, hostID), fresh);
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: qk.hostConfigAudits(projectID, hostID, 10),
             });
-            queryClient.invalidateQueries({ queryKey: qk.hosts(projectID) });
+            void queryClient.invalidateQueries({ queryKey: qk.hosts(projectID) });
         },
     });
 

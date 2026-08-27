@@ -207,7 +207,12 @@ describe("downloadArchive", () => {
         delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
         // Track URL.createObjectURL / revokeObjectURL.
         const created: Blob[] = [];
+        // Stashed to restore in the finally below, never invoked as
+        // methods — URL.createObjectURL / revokeObjectURL are statics
+        // that don't read `this`.
+        // oxlint-disable-next-line typescript/unbound-method
         const origCreate = URL.createObjectURL;
+        // oxlint-disable-next-line typescript/unbound-method
         const origRevoke = URL.revokeObjectURL;
         URL.createObjectURL = vi.fn((b: Blob) => {
             created.push(b);

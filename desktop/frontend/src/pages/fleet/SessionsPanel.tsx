@@ -64,8 +64,8 @@ export default function SessionsPanel() {
     const error = sessionsQuery.error ?? hostsQuery.error ?? null;
     const loading = sessionsQuery.isFetching || hostsQuery.isFetching;
     const refresh = () => {
-        queryClient.invalidateQueries({ queryKey: sessionsKey });
-        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+        void queryClient.invalidateQueries({ queryKey: sessionsKey });
+        void queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
     };
 
     useEffect(() => {

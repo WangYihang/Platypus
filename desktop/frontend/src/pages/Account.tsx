@@ -60,7 +60,7 @@ export default function Account() {
         try {
             await changePassword(v.old_password, v.new_password);
             toast.success("Password updated — please log in again");
-            navigate("/login", { replace: true });
+            void navigate("/login", { replace: true });
         } catch (e) {
             toast.error(`change password: ${humanizeError(e)}`);
         }

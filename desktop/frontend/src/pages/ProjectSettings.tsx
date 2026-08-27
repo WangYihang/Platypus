@@ -47,7 +47,7 @@ export default function ProjectSettings() {
             await deleteProject(project.id);
             toast.success(`Deleted project ${project.slug}`);
             await refresh();
-            navigate("/projects", { replace: true });
+            void navigate("/projects", { replace: true });
         } catch (e) {
             toast.error(`delete: ${humanizeError(e)}`);
             setDeleting(false);

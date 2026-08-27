@@ -71,7 +71,7 @@ export default function InstallPanel({ projectID, projectSlug }: Props) {
         queryFn: () => listInstallArtifacts(projectID, filter === "all"),
     });
     const refresh = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: installArtifactsKey });
+        void queryClient.invalidateQueries({ queryKey: installArtifactsKey });
     }, [queryClient, installArtifactsKey]);
 
     useEffect(() => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { humanizeError } from "../../lib/humanizeError";
+import { leafText } from "@/lib/displayValue";
 
 import Card from "../../components/Card";
 import EmptyState from "../../components/EmptyState";
@@ -47,7 +48,9 @@ function formValueFor(d: SettingDescriptor): string {
         if (Array.isArray(d.effective)) return (d.effective as string[]).join("\n");
         return "";
     }
-    return String(d.effective);
+    // `effective` is unknown by design: it mirrors whatever JSON the
+    // server has for this key.
+    return leafText(d.effective);
 }
 
 // parseFormValue converts a form string back to the JSON-typed value
@@ -82,8 +85,15 @@ function parseFormValue(
                 .filter((s) => s !== "");
             return { ok: true, value: items };
         }
-        default:
-            return { ok: false, error: `unknown type ${d.type}` };
+        default: {
+            // Every SettingType is handled above, so `d.type` is never
+            // here — which is why interpolating it directly tripped
+            // restrict-template-expressions. The branch still earns its
+            // keep at runtime: a newer server can send a type this
+            // build has never heard of.
+            const unhandled: never = d.type;
+            return { ok: false, error: `unknown type ${String(unhandled)}` };
+        }
     }
 }
 
@@ -116,7 +126,7 @@ export default function AdminSettings() {
     }, []);
 
     useEffect(() => {
-        refresh();
+        void refresh();
     }, [refresh]);
 
     const sections = useMemo(() => {

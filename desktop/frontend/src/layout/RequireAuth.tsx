@@ -23,7 +23,7 @@ export default function RequireAuth() {
     const location = useLocation();
 
     useEffect(() => {
-        (async () => {
+        void (async () => {
             if (getSession()) {
                 setHasSession(true);
             } else {

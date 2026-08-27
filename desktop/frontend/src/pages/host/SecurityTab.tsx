@@ -145,11 +145,11 @@ export default function SecurityTab({
         },
         onSuccess: (fresh) => {
             queryClient.setQueryData(qk.hostSecurityScan(projectID, hostID), fresh);
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: qk.hostSecurityScans(projectID, hostID, 10),
             });
-            queryClient.invalidateQueries({ queryKey: qk.hosts(projectID) });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: qk.hosts(projectID) });
+            void queryClient.invalidateQueries({
                 queryKey: ["projectSecurityFindings", projectID],
             });
         },

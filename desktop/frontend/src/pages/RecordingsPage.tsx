@@ -124,7 +124,7 @@ export default function RecordingsPage() {
             await deleteRecording(project.id, rec.id);
             toast.success("Recording deleted");
             setDeleting(null);
-            refresh(currentCursor);
+            void refresh(currentCursor);
         } catch (e) {
             toast.error(`delete: ${humanizeError(e)}`);
         }
@@ -136,7 +136,7 @@ export default function RecordingsPage() {
             await updateRecording(project.id, renaming.id, { title: renameDraft });
             toast.success("Recording renamed");
             setRenaming(null);
-            refresh(currentCursor);
+            void refresh(currentCursor);
         } catch (e) {
             toast.error(`rename: ${humanizeError(e)}`);
         }

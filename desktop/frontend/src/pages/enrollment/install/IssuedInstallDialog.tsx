@@ -63,7 +63,7 @@ export default function IssuedInstallDialog({
 
     function done() {
         onClose();
-        navigate(`/projects/${projectSlug}/hosts?await=enroll`);
+        void navigate(`/projects/${projectSlug}/hosts?await=enroll`);
     }
 
     // Pick the per-flavour map for both the script and bundle tabs.

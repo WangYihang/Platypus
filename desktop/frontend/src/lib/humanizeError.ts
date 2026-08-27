@@ -74,6 +74,44 @@ function isNetworkError(e: unknown): boolean {
  *   · otherwise: the underlying message with leading "Error: "
  *     stripped, which is at least readable.
  */
+// errorText coerces an unknown throw into readable text.
+//
+// The naive String(e) is what this whole module exists to replace, and
+// it was still the last line of the fallback path: anything that
+// reached it as a plain object — a parsed JSON error body, a rejected
+// value that isn't an Error — rendered as the literal string
+// "[object Object]" in the user's toast. That is strictly worse than
+// the raw message it was meant to improve on.
+//
+// Order matters: prefer a message-shaped field over JSON, because an
+// API body like {"error":"insufficient role"} should read as
+// "insufficient role", not as its own JSON source.
+function errorText(e: unknown): string {
+    if (e === null || e === undefined) return "";
+    if (typeof e === "string") return e;
+    if (e instanceof Error) return e.message;
+    if (typeof e === "object") {
+        const rec = e as Record<string, unknown>;
+        for (const key of ["message", "error", "detail", "reason"]) {
+            const v = rec[key];
+            if (typeof v === "string" && v.trim() !== "") return v;
+        }
+        try {
+            const json = JSON.stringify(e);
+            // "{}" carries nothing a reader can act on; fall through to
+            // the generic message rather than showing empty braces.
+            if (json && json !== "{}") return json;
+        } catch {
+            // Circular or otherwise non-serialisable — fall through.
+        }
+        return "";
+    }
+    // Everything readable is handled above. What is left is a symbol
+    // or a function, neither of which has a rendering a user should
+    // see — a function would stringify to its own source.
+    return "";
+}
+
 export function humanizeError(e: unknown): string {
     // Network: caught before HTTP because TypeError("Failed to fetch")
     // is not in the "<status>: ..." shape.
@@ -136,7 +174,8 @@ export function humanizeError(e: unknown): string {
         return capitalise(e.message.replace(/^Error:\s*/i, "").trim());
     }
 
-    return String(e);
+    const text = errorText(e).trim();
+    return text === "" ? "Something went wrong. Try again." : capitalise(text);
 }
 
 function capitalise(s: string): string {
@@ -166,8 +205,7 @@ function pluginIDDisplay(id: string): string {
  * available in the original message for log/copy purposes.
  */
 function tryParsePluginNotInstalled(e: unknown): string | null {
-    const text = e instanceof Error ? e.message : String(e ?? "");
-    const m = text.match(/plugin_not_installed:\s*([A-Za-z0-9._-]+)/);
+    const m = errorText(e).match(/plugin_not_installed:\s*([A-Za-z0-9._-]+)/);
     if (!m) return null;
     return pluginIDDisplay(m[1]);
 }

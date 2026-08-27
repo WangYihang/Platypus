@@ -1,6 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { leafText } from "@/lib/displayValue";
 
 import Card from "../components/Card";
 import PageShell from "../components/PageShell";
@@ -297,7 +298,10 @@ function labelFor(k: keyof PreferenceDefs): string {
 
 function formatValue(v: PreferenceDefs[keyof PreferenceDefs]): string {
     if (typeof v === "boolean") return v ? "on" : "off";
-    return String(v);
+    // Not every preference is a primitive — ui.files.columnWidths is a
+    // Record<string, number> — so String(v) would render "[object
+    // Object]" here.
+    return leafText(v);
 }
 
 function clamp(n: number, lo: number, hi: number): number {

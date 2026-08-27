@@ -64,8 +64,8 @@ export default function RolesTab() {
     const error = rolesQuery.error ?? permissionsQuery.error ?? null;
 
     function refresh() {
-        queryClient.invalidateQueries({ queryKey: qk.adminRoles() });
-        queryClient.invalidateQueries({ queryKey: qk.adminPermissions() });
+        void queryClient.invalidateQueries({ queryKey: qk.adminRoles() });
+        void queryClient.invalidateQueries({ queryKey: qk.adminPermissions() });
     }
 
     async function openEdit(slug: string) {

@@ -81,7 +81,10 @@ describe("servers — pure helpers", () => {
         // location object isn't writable, so swap it through defineProperty.
         Object.defineProperty(window, "location", {
             configurable: true,
-            value: { ...original, protocol: "wails:", origin: "wails://app" },
+            // Not { ...original }: spreading a Location instance
+            // loses its prototype, and the accessors that come with
+            // it. defaultServerURL only reads these two.
+            value: { protocol: "wails:", origin: "wails://app" },
         });
         try {
             expect(defaultServerURL()).toBe("http://127.0.0.1:7331");

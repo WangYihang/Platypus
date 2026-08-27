@@ -150,7 +150,15 @@ function formatRate(bps: number): string {
 // a layout re-run is necessary — rates-only updates don't change
 // this.
 function idHash(els: ElementDefinition[]): string {
-    return els.map((e) => e.data.id).sort().join(",");
+    // Explicit comparator: ids are strings but the element type
+    // allows undefined, and Array.prototype.sort's default coerces to
+    // string per element, which is a different (and slower) thing than
+    // comparing strings.
+    return els
+        .map((e) => e.data.id)
+        .filter((id): id is string => typeof id === "string")
+        .sort((a, b) => a.localeCompare(b))
+        .join(",");
 }
 
 export default function MeshGraph(props: MeshGraphProps) {

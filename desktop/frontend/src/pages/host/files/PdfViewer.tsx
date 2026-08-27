@@ -56,7 +56,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
             // own Range fetches against /fs/read for lazy-page
             // rendering. Opening a 50 MB PDF doesn't have to download
             // the whole file before the first page paints.
-            (async () => {
+            void (async () => {
                 try {
                     const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
                     if (!cancelled) setUrl(previewURL);
@@ -75,7 +75,7 @@ export default function PdfViewer({ projectID, sessionHash, path, size }: Props)
         // pdf.js can't Range-fetch over Wails IPC anyway, so this is
         // the same behaviour the desktop binary has always had.
         let createdURL: string | null = null;
-        (async () => {
+        void (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled) return;

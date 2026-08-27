@@ -69,7 +69,7 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
         setLoaded(false);
         setLoadError(null);
         setDirty(false);
-        (async () => {
+        void (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled || pathRef.current !== path) return;
@@ -94,7 +94,7 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
         let cancelled = false;
         const lang = inferLanguage(path);
         setLangExt(null);
-        (async () => {
+        void (async () => {
             let ext: Extension | null = null;
             switch (lang) {
                 case "json": {
@@ -178,7 +178,7 @@ export default function FileEditor({ projectID, sessionHash, path, size, onSaved
                 keydown(event) {
                     if ((event.metaKey || event.ctrlKey) && event.key === "s") {
                         event.preventDefault();
-                        save();
+                        void save();
                         return true;
                     }
                     return false;

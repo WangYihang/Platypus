@@ -27,7 +27,7 @@ vi.mock("react-pdf", () => {
 
     const Document = ({ file, onLoadSuccess, onLoadError, children }: DocProps) => {
         fileProps.push(file);
-        Promise.resolve().then(() => {
+        void Promise.resolve().then(() => {
             try {
                 if (file == null) throw new Error("missing file");
                 onLoadSuccess?.({ numPages: 3 });

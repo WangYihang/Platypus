@@ -40,7 +40,7 @@ export default function UserMenu({ user, serverURL, variant = "stack" }: Props) 
     async function handleLogout() {
         setMenuOpen(false);
         await logout();
-        navigate("/login", { replace: true });
+        void navigate("/login", { replace: true });
     }
 
     const popoverContent = (

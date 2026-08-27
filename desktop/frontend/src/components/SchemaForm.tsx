@@ -1,5 +1,6 @@
 import { ReactNode, useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { leafText } from "@/lib/displayValue";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,7 +195,7 @@ function LeafField({
                 value={
                     value === undefined || value === null
                         ? ""
-                        : String(value)
+                        : leafText(value)
                 }
                 onChange={(e) => {
                     const raw = e.target.value;
@@ -225,7 +226,7 @@ function LeafField({
         return (
             <select
                 id={id}
-                value={String(value ?? schema.default ?? "")}
+                value={leafText(value ?? schema.default ?? "")}
                 onChange={(e) => onChange(e.target.value)}
                 className="border rounded px-2 py-1 text-sm bg-surface"
             >
@@ -278,7 +279,7 @@ function ArrayField({
                 >
                     <Input
                         type="text"
-                        value={String(item ?? "")}
+                        value={leafText(item ?? "")}
                         onChange={(e) => {
                             const next = [...value];
                             next[i] = coerceLeaf(itemSchema, e.target.value);

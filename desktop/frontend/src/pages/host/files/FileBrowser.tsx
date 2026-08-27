@@ -503,7 +503,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
               : joinPath(dir.path, toDirName);
         const destPath = joinPath(destDir, from.name);
         if (sourcePath === destPath) return;
-        (async () => {
+        void (async () => {
             try {
                 await RenameFile(projectID, sessionHash, sourcePath, destPath);
                 toast.success(`Moved ${from.name} → ${destDir}`);
@@ -540,7 +540,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                 preview.close();
             } else if (ev.key === "Enter" && selectedEntries.length === 1) {
                 ev.preventDefault();
-                openEntry(selectedEntries[0]);
+                void openEntry(selectedEntries[0]);
             } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "l") {
                 // Cmd/Ctrl-L mirrors the browser's "focus location
                 // bar" — opens the path-input mode in the chrome.

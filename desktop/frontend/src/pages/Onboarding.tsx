@@ -101,7 +101,7 @@ export default function Onboarding() {
 
     async function finish(profile: ServerProfile) {
         toast.success(t("welcomeToast", { name: profile.name }));
-        navigate("/projects", { replace: true });
+        void navigate("/projects", { replace: true });
     }
 
     async function doLogin() {
@@ -124,7 +124,7 @@ export default function Onboarding() {
         try {
             await bootstrap(profile, secret, bootstrapUsername, bootstrapPassword);
             showAdminCreatedToast();
-            navigate("/projects", { replace: true });
+            void navigate("/projects", { replace: true });
         } catch (err) {
             toast.error(`bootstrap: ${humanizeError(err)}`);
             forgetAndRemoveServer(profile.id);

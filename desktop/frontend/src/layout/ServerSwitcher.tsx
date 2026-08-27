@@ -79,7 +79,7 @@ export default function ServerSwitcher({
             setOpen(false);
             const { loggedIn } = await switchServer(profile.id);
             if (loggedIn) return;
-            navigate("/login", {
+            void navigate("/login", {
                 state: {
                     serverId: profile.id,
                     serverURL: profile.url,

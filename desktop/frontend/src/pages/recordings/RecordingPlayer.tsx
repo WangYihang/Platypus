@@ -42,7 +42,7 @@ export default function RecordingPlayer({ projectId, recordingId, autoPlay = fal
         setLoading(true);
         setError(null);
 
-        (async () => {
+        void (async () => {
             try {
                 const [api, resp] = await Promise.all([
                     loadAsciinemaPlayer(),

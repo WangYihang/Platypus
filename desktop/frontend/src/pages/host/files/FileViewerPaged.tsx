@@ -70,7 +70,7 @@ export default function FileViewerPaged({ projectID, sessionHash, path, size, on
     );
 
     useEffect(() => {
-        loadPage(0);
+        void loadPage(0);
     }, [loadPage]);
 
     const page = Math.floor(offset / PAGE_SIZE) + 1;
@@ -119,7 +119,7 @@ export default function FileViewerPaged({ projectID, sessionHash, path, size, on
                     onSubmit={(e) => {
                         e.preventDefault();
                         const n = parseInt(gotoInput, 10);
-                        if (Number.isFinite(n)) loadPage(n);
+                        if (Number.isFinite(n)) void loadPage(n);
                     }}
                 >
                     <span className="text-muted-foreground">go to offset:</span>

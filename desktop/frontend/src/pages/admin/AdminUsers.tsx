@@ -150,7 +150,7 @@ export default function AdminUsers() {
             toast.success(`Created ${v.username}`);
             setCreateOpen(false);
             createForm.reset({ username: "", password: "", role: "operator" });
-            invalidateUsers();
+            void invalidateUsers();
         } catch (e) {
             toast.error(`create: ${humanizeError(e)}`);
         }
@@ -163,7 +163,7 @@ export default function AdminUsers() {
         try {
             await deleteUser(u.id);
             toast.success(`Deleted ${u.username}`);
-            invalidateUsers();
+            void invalidateUsers();
         } catch (e) {
             toast.error(`delete: ${humanizeError(e)}`);
         }
@@ -173,7 +173,7 @@ export default function AdminUsers() {
         try {
             await updateUser(u.id, { role });
             toast.success(`Updated ${u.username} role`);
-            invalidateUsers();
+            void invalidateUsers();
         } catch (e) {
             toast.error(`role: ${humanizeError(e)}`);
         }

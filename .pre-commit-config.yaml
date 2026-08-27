@@ -45,10 +45,12 @@ repos:
           "$BIN" run ./...'
 
       # Frontend. oxlint stands in for ESLint — see the note at the top
-      # of desktop/frontend/.oxlintrc.json. It reads its own config, so
-      # this only fires when a frontend source file is staged, and it
-      # no-ops when node_modules is absent: a Go-only contributor should
-      # not have to install the frontend toolchain to commit.
+      # of desktop/frontend/.oxlintrc.json. --type-aware matches what CI
+      # runs; it needs the whole program so it costs seconds rather than
+      # milliseconds. This only fires when a frontend source file is
+      # staged, and it no-ops when node_modules is absent: a Go-only
+      # contributor should not have to install the frontend toolchain to
+      # commit.
       - id: oxlint
         name: oxlint (desktop/frontend)
         language: system
@@ -60,4 +62,4 @@ repos:
             echo "oxlint not installed (cd desktop/frontend && pnpm install) - skipping";
             exit 0;
           fi;
-          node_modules/.bin/oxlint'
+          node_modules/.bin/oxlint --type-aware'

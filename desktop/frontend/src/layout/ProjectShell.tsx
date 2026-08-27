@@ -287,7 +287,7 @@ function CreateProjectDialog({
             // Land inside the new project on Hosts — Overview at zero
             // hosts is uninformative; Hosts is the canonical "now
             // enrol your first agent" surface.
-            navigate(`/projects/${v.slug}/hosts`);
+            void navigate(`/projects/${v.slug}/hosts`);
         } catch (e) {
             toast.error(`create: ${humanizeError(e)}`);
         }

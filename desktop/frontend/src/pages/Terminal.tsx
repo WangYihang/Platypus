@@ -145,14 +145,19 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
         OpenTerminal(projectID, sessionHash)
             .then((id: string) => {
                 if (cancelled) {
-                    CloseTerminal(id);
+                    void CloseTerminal(id);
                     return;
                 }
                 termIDRef.current = id;
 
                 const encoder = new TextEncoder();
+                // void, not await or .catch: these are per-keystroke
+                // RPCs to the Go side. There is no useful place to put
+                // a failure — you cannot toast on every character —
+                // and a dead link makes itself obvious immediately, by
+                // the terminal no longer echoing.
                 xterm.onData((data) => {
-                    SendTerminalInput(id, Array.from(encoder.encode(data)));
+                    void SendTerminalInput(id, Array.from(encoder.encode(data)));
                 });
 
                 // The xterm viewport must track the container element, not
@@ -186,7 +191,7 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
                     }
                     lastCols = xterm.cols;
                     lastRows = xterm.rows;
-                    ResizeTerminal(id, xterm.cols, xterm.rows);
+                    void ResizeTerminal(id, xterm.cols, xterm.rows);
                 };
                 const scheduleResize = () => {
                     if (rafHandle !== null) return;
@@ -238,7 +243,7 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
                 // forward at least MIN_TERM_* — better than a 9×7
                 // PTY; the next ResizeObserver fire delivers the
                 // steady-state size.
-                ResizeTerminal(
+                void ResizeTerminal(
                     id,
                     Math.max(xterm.cols, MIN_TERM_COLS),
                     Math.max(xterm.rows, MIN_TERM_ROWS),
@@ -255,7 +260,7 @@ export default function Terminal({ projectID, sessionHash, shellId, onClose }: P
                 if (sid && consume) {
                     const cmd = consume(sid);
                     if (cmd) {
-                        SendTerminalInput(id, Array.from(encoder.encode(cmd)));
+                        void SendTerminalInput(id, Array.from(encoder.encode(cmd)));
                     }
                 }
             })

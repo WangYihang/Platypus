@@ -66,3 +66,51 @@ describe("humanizeError — plugin_not_installed", () => {
         );
     });
 });
+
+// The fallback path used to end in String(e), so anything arriving as
+// a plain object — a parsed JSON error body, a rejected non-Error —
+// reached the user's toast as the literal "[object Object]". That is
+// worse than the raw message this module was written to replace.
+describe("humanizeError on non-Error throws", () => {
+    it("never renders [object Object]", () => {
+        for (const thrown of [
+            { error: "insufficient role" },
+            { message: "boom" },
+            { detail: "nope" },
+            { status: 500 },
+            {},
+            [1, 2, 3],
+        ]) {
+            expect(humanizeError(thrown)).not.toMatch(/\[object Object\]/);
+        }
+    });
+
+    it("prefers a message-shaped field over raw JSON", () => {
+        expect(humanizeError({ error: "insufficient role" })).toMatch(/insufficient role/i);
+        expect(humanizeError({ message: "disk full" })).toMatch(/disk full/i);
+    });
+
+    it("falls back to something actionable when the object carries nothing", () => {
+        const out = humanizeError({});
+        expect(out.trim()).not.toBe("");
+        expect(out).not.toMatch(/\[object Object\]/);
+    });
+
+    it("handles null, undefined and circular objects without throwing", () => {
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+        for (const thrown of [null, undefined, circular]) {
+            expect(() => humanizeError(thrown)).not.toThrow();
+            expect(humanizeError(thrown).trim()).not.toBe("");
+        }
+    });
+
+    // plugin_not_installed detection reads the same text. An object-
+    // shaped error used to stringify to "[object Object]" before the
+    // regex ran, so the marker could never match and the operator got
+    // a generic message instead of "install this plugin".
+    it("still detects plugin_not_installed inside an object-shaped error", () => {
+        const out = humanizeError({ error: "plugin_not_installed: sys-file-read" });
+        expect(out).toMatch(/sys-file-read/i);
+    });
+});

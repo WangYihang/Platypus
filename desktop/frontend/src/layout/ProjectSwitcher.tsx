@@ -47,7 +47,7 @@ export function ProjectSwitcherMenu({
                         className="pl-popover-btn"
                         onClick={() => {
                             onClose?.();
-                            navigate(`/projects/${p.slug}/overview`);
+                            void navigate(`/projects/${p.slug}/overview`);
                         }}
                     >
                         <span style={{ flex: 1, minWidth: 0 }}>
@@ -76,7 +76,7 @@ export function ProjectSwitcherMenu({
                     className="pl-popover-btn"
                     onClick={() => {
                         onClose?.();
-                        navigate("/projects");
+                        void navigate("/projects");
                     }}
                 >
                     <span style={{ color: palette.textSecondary }}>All projects</span>

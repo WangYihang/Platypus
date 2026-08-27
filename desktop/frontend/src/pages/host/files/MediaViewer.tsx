@@ -47,7 +47,7 @@ export default function MediaViewer({
         if (import.meta.env.MODE === "web") {
             // Web path: mint a signed URL and let the browser stream
             // it natively. No bytes flow through React's render loop.
-            (async () => {
+            void (async () => {
                 try {
                     const previewURL = await fsReadPreviewURL(projectID, sessionHash, path);
                     if (!cancelled) setUrl(previewURL);
@@ -64,7 +64,7 @@ export default function MediaViewer({
 
         // Desktop fallback: existing blob-URL path.
         let createdURL: string | null = null;
-        (async () => {
+        void (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled) return;

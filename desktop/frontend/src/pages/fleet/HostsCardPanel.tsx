@@ -62,8 +62,8 @@ export default function HostsCardPanel() {
     const artifacts = artifactsQuery.data ?? [];
 
     function refresh() {
-        queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
-        queryClient.invalidateQueries({ queryKey: artifactsKey });
+        void queryClient.invalidateQueries({ queryKey: qk.hosts(project.id) });
+        void queryClient.invalidateQueries({ queryKey: artifactsKey });
     }
 
     useEffect(() => {

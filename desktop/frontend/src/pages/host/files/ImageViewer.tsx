@@ -39,7 +39,7 @@ export default function ImageViewer({ projectID, sessionHash, path, size, mime }
         let createdURL: string | null = null;
         setUrl(null);
         setError(null);
-        (async () => {
+        void (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled) return;

@@ -44,7 +44,7 @@ export default function MarkdownViewer({ projectID, sessionHash, path, size }: P
         let cancelled = false;
         setText(null);
         setError(null);
-        (async () => {
+        void (async () => {
             try {
                 const raw = await ReadFile(projectID, sessionHash, path, 0, 0);
                 if (cancelled) return;

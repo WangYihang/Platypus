@@ -69,7 +69,7 @@ export default function PATPanel({ projectID }: Props) {
         queryFn: () => listEnrollmentTokens(projectID, filter === "all"),
     });
     const refresh = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: enrollmentTokensKey });
+        void queryClient.invalidateQueries({ queryKey: enrollmentTokensKey });
     }, [queryClient, enrollmentTokensKey]);
 
     useEffect(() => {

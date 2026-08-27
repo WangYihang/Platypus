@@ -449,7 +449,7 @@ function NewShellButton({ activeShell }: NewShellButtonProps) {
                                             // navigate there instead of just
                                             // dropping a shell into a hidden
                                             // bucket.
-                                            navigate(
+                                            void navigate(
                                                 `/projects/${project.slug}/hosts/${h.id}/files`,
                                             );
                                         }}

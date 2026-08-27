@@ -7,9 +7,18 @@
   // The alternatives were to pin TypeScript back to 6.x for the
   // linter's benefit, or to run a second TS copy side by side and lint
   // against a compiler the code isn't built with. oxlint parses TS
-  // itself, needs no TypeScript API, and covers the rules that were
-  // actually worth having here. Revisit if typescript-eslint ships
-  // TS 7 support and the type-aware rules start looking worth it.
+  // itself and needs no TypeScript API.
+  //
+  // Type-aware rules come from oxlint-tsgolint, which builds on the
+  // Go port of tsc and so has no such version ceiling. `npm run lint`
+  // passes --type-aware and is a hard gate: everything it reports is
+  // an error, and the first run of it cleared 87 findings, including
+  // humanizeError's own fallback rendering "[object Object]" into the
+  // user's toast and a tsconfig option that TS 7 had removed.
+  //
+  // It needs the whole program, so it is slower than the parser-only
+  // pass — seconds, not milliseconds. Run bare `oxlint` while editing
+  // if that matters; CI and pre-commit run the type-aware one.
 
   "plugins": ["react", "typescript", "unicorn", "oxc"],
 

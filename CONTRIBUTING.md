@@ -49,11 +49,18 @@ and the justification. If you need a new suppression, write the reason
 
 **Frontend** — `desktop/frontend/.oxlintrc.json`. oxlint, not ESLint:
 typescript-eslint does not load against TypeScript 7, which this project
-is on. Only the `correctness` class fails the run. There is a standing
-backlog of warnings (mostly `set-state-in-effect` and
-`exhaustive-deps`); they print but don't block. Don't add to it, and
-`pnpm run lint:strict` shows the whole list as failures if you want to
-chip away at it.
+is on. `pnpm run lint` runs it with `--type-aware`, which adds the rules
+that need the whole program — `no-floating-promises`,
+`no-base-to-string` and friends — via oxlint-tsgolint. Everything it
+reports is an error and blocks.
+
+That pass needs to build the program, so it takes seconds rather than
+milliseconds. Bare `pnpm exec oxlint` gives you the fast parser-only
+subset while editing; CI and pre-commit run the type-aware one.
+
+A standing backlog of React warnings (`set-state-in-effect`,
+`exhaustive-deps`) prints but does not block. Don't add to it;
+`pnpm run lint:strict` shows the whole list as failures.
 
 ## Layout
 
