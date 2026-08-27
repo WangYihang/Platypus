@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext } from "@dnd-kit/core";
 import type { SortingState } from "@tanstack/react-table";
 import { PanelRightOpen } from "lucide-react";
@@ -59,7 +59,7 @@ import { useDragDrop } from "./useDragDrop";
 import { usePreviewPane } from "./usePreviewPane";
 
 import FilePreview, { SMALL_FILE_LIMIT } from "./FilePreview";
-import FilesChrome from "./FilesChrome";
+import FilesChrome, { type FilesChromeHandle } from "./FilesChrome";
 import EmptyDirectoryState from "./EmptyDirectoryState";
 import { pickViewerKind } from "./viewerKind";
 
@@ -104,8 +104,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
     // chrome subscribe via `useEffect([signal])` and re-trigger every
     // press, even if the chrome was already in the open state when
     // the previous press fired.
-    const [pathInputOpenSignal, setPathInputOpenSignal] = useState(0);
-    const [filterFocusSignal, setFilterFocusSignal] = useState(0);
+    // Actions the chrome exposes, invoked by the shortcuts below.
+    // These were two counters this component incremented for the
+    // chrome to watch; see FilesChromeHandle for why that was worse.
+    const chromeRef = useRef<FilesChromeHandle>(null);
     const terminal = useGlobalTerminalSafe();
 
     // Apply hidden-file filtering + the active sort once at the
@@ -559,10 +561,10 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                 // Cmd/Ctrl-L mirrors the browser's "focus location
                 // bar" — opens the path-input mode in the chrome.
                 ev.preventDefault();
-                setPathInputOpenSignal((n) => n + 1);
+                chromeRef.current?.openPathInput();
             } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "f") {
                 ev.preventDefault();
-                setFilterFocusSignal((n) => n + 1);
+                chromeRef.current?.focusFilter();
             } else if (ev.altKey && ev.key === "ArrowLeft") {
                 ev.preventDefault();
                 if (dir.canBack) dir.back();
@@ -715,8 +717,7 @@ export default function FileBrowser({ projectID, sessionHash, host = null }: Pro
                     setSorting={setSorting}
                     filter={filter}
                     setFilter={setFilter}
-                    pathInputOpenSignal={pathInputOpenSignal}
-                    filterFocusSignal={filterFocusSignal}
+                    handleRef={chromeRef}
                 />
 
                 {previewExpanded ? (

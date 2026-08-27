@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -113,10 +114,9 @@ export default function RecordingsPage() {
     // Reset to page 1 whenever the filter or query changes. Same
     // shape as RPCTable: the dependencies are the trigger, the body
     // reads none of them.
-    useEffect(() => {
+    useOnValueChange(`${project.id}:${statusFilter}:${debouncedQuery}`, () => {
         setPageStack([undefined]);
-        // oxlint-disable-next-line react/exhaustive-effect-dependencies
-    }, [statusFilter, debouncedQuery, project.id]);
+    });
 
     const totalPagesHint = useMemo(() => {
         if (total <= PAGE_SIZE) return 1;

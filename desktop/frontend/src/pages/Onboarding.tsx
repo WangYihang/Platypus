@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -42,10 +43,17 @@ export default function Onboarding() {
     const [name, setName] = useState("");
     const [probing, setProbing] = useState(false);
     const [probeInfo, setProbeInfo] = useState<PublicServerInfo | null>(null);
-    const [probeError, setProbeError] = useState<string | null>(null);
+    // One state, not two. `probeError` and `lastFailedURL` were the
+    // two halves of a single fact — "probing <url> failed with
+    // <message>" — and keeping halves in step is what the effect below
+    // used to do. As one value, the derivations fall out and there is
+    // nothing to synchronise: editing the URL makes both `blocked` and
+    // the visible error false because they are computed from it.
+    const [failedProbe, setFailedProbe] = useState<{ url: string; message: string } | null>(
+        null,
+    );
     // URL the last failed probe was attempted with. Continue stays
     // disabled until the user edits the URL.
-    const [lastFailedURL, setLastFailedURL] = useState<string | null>(null);
 
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -59,41 +67,35 @@ export default function Onboarding() {
         [name, url],
     );
 
-    // Reset login / bootstrap fields when returning to Step 2.
-    useEffect(() => {
-        if (step === "probe") {
-            setProbeInfo(null);
-            setProbeError(null);
-            setLastFailedURL(null);
-            setUsername("");
-            setPassword("");
-            setSecret("");
-            setBootstrapPassword("");
-        }
-    }, [step]);
+    // Returning to step 2 clears what the later steps collected.
+    useOnValueChange(step, (next) => {
+        if (next !== "probe") return;
+        setProbeInfo(null);
+        setFailedProbe(null);
+        setUsername("");
+        setPassword("");
+        setSecret("");
+        setBootstrapPassword("");
+    });
 
-    // Editing the URL after a failed probe re-enables Continue.
-    useEffect(() => {
-        if (lastFailedURL !== null && url !== lastFailedURL) {
-            setProbeError(null);
-            setLastFailedURL(null);
-        }
-    }, [url, lastFailedURL]);
+    // Derived, so there is no second effect keeping them honest: a
+    // failure applies only to the URL it happened to.
+    const blocked = failedProbe !== null && failedProbe.url === url;
+    const probeError = blocked ? failedProbe.message : null;
 
     async function doProbe() {
         setProbing(true);
         setProbeInfo(null);
-        setProbeError(null);
+        setFailedProbe(null);
         try {
             const info = await probeServer(url);
             setProbeInfo(info);
-            setLastFailedURL(null);
+            setFailedProbe(null);
             setStep(info.admin_bootstrapped ? "login" : "bootstrap");
         } catch (err) {
             // probeServer throws a humanised ProbeError already.
             const message = err instanceof Error ? err.message : String(err);
-            setProbeError(message);
-            setLastFailedURL(url);
+            setFailedProbe({ url, message });
         } finally {
             setProbing(false);
         }
@@ -149,7 +151,7 @@ export default function Onboarding() {
                         probing={probing}
                         probeError={probeError}
                         probeInfo={probeInfo}
-                        blocked={lastFailedURL !== null && lastFailedURL === url}
+                        blocked={blocked}
                         onURL={setUrl}
                         onName={setName}
                         onBack={() => setStep("welcome")}

@@ -76,27 +76,25 @@ export default function TransferThroughputPill() {
     // Cumulative-since-mount baseline: the sum of bytes_transferred
     // across all rows on the very first useEffect tick. After that
     // we render `current - baseline`.
-    // State, not a ref: this is read during render to compute the
-    // cumulative figure, and a ref write does not schedule a render.
-    // The baseline was set in the effect below — i.e. after commit —
-    // so the first paint with data showed 0 transferred and only
-    // corrected itself when some other update happened to re-render
-    // the pill.
-    const [baseline, setBaseline] = useState<number | null>(null);
-
     const totalSourceBytes = useMemo(
         () => rows.reduce((s, r) => s + r.bytes_transferred, 0),
         [rows],
     );
+
+    // "The total when this pill first rendered", which is what
+    // useState's initial value already means — it is read once and
+    // ignored on every later render. This was a nullable state
+    // written from the effect below, which is to say after commit, so
+    // the first paint with data showed 0 transferred and corrected
+    // itself only when something else re-rendered the pill. No setter,
+    // no null case, nothing to keep in step.
+    const [baseline] = useState(totalSourceBytes);
     const runningRows = useMemo(
         () => rows.filter((r) => r.status === "running" || r.status === "pending"),
         [rows],
     );
 
     useEffect(() => {
-        if (baseline === null) {
-            setBaseline(totalSourceBytes);
-        }
         // No active transfers → flush the ring so the next session
         // starts fresh. Keeps "rate" honest: an idle pill must read 0,
         // not the average from the last burst.
@@ -113,12 +111,12 @@ export default function TransferThroughputPill() {
         );
         samplesRef.current = next;
         setSamples(next);
-    }, [totalSourceBytes, runningRows.length, baseline]);
+    }, [totalSourceBytes, runningRows.length]);
 
     const rate = computeInstantaneousRate(samples);
     const active = runningRows.length > 0;
     const cumulativeBytes =
-        baseline !== null ? Math.max(0, totalSourceBytes - baseline) : 0;
+        Math.max(0, totalSourceBytes - baseline);
 
     const rateText = active && rate !== null ? formatBytesPerSec(rate) : "—";
     const cumulativeText = active ? formatBytes(cumulativeBytes) : "";

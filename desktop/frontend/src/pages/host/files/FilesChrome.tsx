@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useImperativeHandle, useRef, useState } from "react";
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import {
     ArrowDown,
     ArrowLeft,
@@ -71,12 +72,9 @@ interface Props {
     setSorting: (next: SortingState) => void;
     filter: string;
     setFilter: (s: string) => void;
-    // Counter-style signals from parent: when they tick the chrome
-    // pops the corresponding affordance (path input / filter focus).
-    // Counters rather than booleans so re-pressing the shortcut
-    // re-triggers even if the chrome is already in that state.
-    pathInputOpenSignal: number;
-    filterFocusSignal: number;
+    // Imperative handle for the two things the parent's keyboard
+    // shortcuts need to *do* here — see FilesChromeHandle.
+    handleRef?: React.Ref<FilesChromeHandle>;
 }
 
 interface SortOption {
@@ -92,6 +90,21 @@ const SORT_OPTIONS: SortOption[] = [
     { id: "modTimeUnix", label: "Modified", ascLabel: "Oldest first", descLabel: "Newest first" },
     { id: "type", label: "Type", ascLabel: "Folders first", descLabel: "Files first" },
 ];
+
+/**
+ * What the file browser's keyboard shortcuts need the chrome to do.
+ *
+ * These are actions, not state, and expressing them as actions is the
+ * point: they used to be numbers the parent incremented, which the
+ * chrome watched with an effect. A counter cannot say "do this now"
+ * without also being a value, so the child needed a `=== 0` guard to
+ * ignore the first render, and the effect that read the current path
+ * had to depend on it — re-firing on navigation.
+ */
+export interface FilesChromeHandle {
+    openPathInput: () => void;
+    focusFilter: () => void;
+}
 
 export default function FilesChrome({
     crumbs,
@@ -121,8 +134,7 @@ export default function FilesChrome({
     setSorting,
     filter,
     setFilter,
-    pathInputOpenSignal,
-    filterFocusSignal,
+    handleRef,
 }: Props) {
     const head = sorting[0];
     const activeSortId = (head?.id as FileSortId | undefined) ?? "name";
@@ -135,10 +147,13 @@ export default function FilesChrome({
     const [pathInputValue, setPathInputValue] = useState(currentPath);
     const pathInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Open + select the current path each time the parent ticks the
-    // signal — Cmd+L and the pencil button both do this.
-    useEffect(() => {
-        if (pathInputOpenSignal === 0) return;
+    // Cmd+L / the pencil button ask for this by calling it. It used to
+    // arrive as a counter prop the parent incremented, watched by an
+    // effect — which meant the "command" was a value change, and the
+    // effect had to list currentPath as a dependency to read it. So
+    // navigating while the input was open re-ran the whole thing and
+    // overwrote whatever the operator was typing.
+    const openPathInput = useCallback(() => {
         setPathInputOpen(true);
         setPathInputValue(currentPath);
         // Defer focus until React commits the input to the DOM.
@@ -146,24 +161,28 @@ export default function FilesChrome({
             pathInputRef.current?.focus();
             pathInputRef.current?.select();
         });
-    }, [pathInputOpenSignal, currentPath]);
+    }, [currentPath]);
 
     // Sync the input with the live path when it's not being edited
     // (the user clicks a breadcrumb or hits Back, the input should
     // reflect the new location next time it opens).
-    useEffect(() => {
-        if (!pathInputOpen) setPathInputValue(currentPath);
-    }, [currentPath, pathInputOpen]);
+    useOnValueChange(currentPath, (next) => {
+        if (!pathInputOpen) setPathInputValue(next);
+    });
 
-    // Filter focus signal: pop focus into the search field on Cmd+F.
+    // Cmd+F.
     const filterRef = useRef<HTMLInputElement | null>(null);
-    useEffect(() => {
-        if (filterFocusSignal === 0) return;
+    const focusFilter = useCallback(() => {
         queueMicrotask(() => {
             filterRef.current?.focus();
             filterRef.current?.select();
         });
-    }, [filterFocusSignal]);
+    }, []);
+
+    useImperativeHandle(handleRef, () => ({ openPathInput, focusFilter }), [
+        openPathInput,
+        focusFilter,
+    ]);
 
     function chooseSort(id: FileSortId) {
         if (activeSortId === id) {

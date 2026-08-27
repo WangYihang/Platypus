@@ -12,6 +12,7 @@
 // a YAML DSL.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useOnValueChange } from "@/lib/useOnValueChange";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     ChevronLeft,
@@ -363,14 +364,10 @@ export default function RPCTable<TResponse, TRow>(
         () => JSON.stringify(baseRequest ?? {}),
         [baseRequest],
     );
-    // baseRequestKey is the trigger — paging resets when the request
-    // changes. The body reads nothing from it, which is exactly what
-    // the rule objects to.
-    useEffect(() => {
+    useOnValueChange(baseRequestKey, () => {
         setOffset(0);
         setCursorReq(null);
-        // oxlint-disable-next-line react/exhaustive-effect-dependencies
-    }, [baseRequestKey]);
+    });
 
     // ----- RPC query -----
     const requestPayload = useMemo(() => {
