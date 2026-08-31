@@ -51,11 +51,11 @@ importers:
         specifier: ^1.3.3
         version: 1.3.3(@types/react@19.2.18)(react@19.2.8)
       '@tanstack/react-query':
-        specifier: ^5.102.6
-        version: 5.102.6(react@19.2.8)
+        specifier: ^5.102.8
+        version: 5.102.8(react@19.2.8)
       '@tanstack/react-query-devtools':
-        specifier: ^5.102.6
-        version: 5.102.6(@tanstack/react-query@5.102.6(react@19.2.8))(react@19.2.8)
+        specifier: ^5.102.8
+        version: 5.102.8(@tanstack/react-query@5.102.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -93,8 +93,8 @@ importers:
         specifier: ^8.2.1
         version: 8.2.1
       lucide-react:
-        specifier: ^1.34.0
-        version: 1.34.0(react@19.2.8)
+        specifier: ^1.35.0
+        version: 1.35.0(react@19.2.8)
       pdfjs-dist:
         specifier: 5.4.296
         version: 5.4.296
@@ -1820,20 +1820,20 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/query-core@5.102.6':
-    resolution: {integrity: sha512-jp+GucyQ+fel2ILb8ZLQeqMaAqZL/Bzaj+dKOQiPk4vPdf2rQPEV7heUyEVIhatpY42j4AFHav4DzBa1oTIp/A==}
+  '@tanstack/query-core@5.102.8':
+    resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
 
-  '@tanstack/query-devtools@5.102.6':
-    resolution: {integrity: sha512-k5k+iZmHRRZTeON7Gva34+HSdbMaibeZezyLn/XyUY05tQLlgj4MgC9UpuZOBiDe9aMKGg8buGCl+zk8VRA9Zw==}
+  '@tanstack/query-devtools@5.102.8':
+    resolution: {integrity: sha512-ZgeMKuF5d/zOE+tgWm3cSbD6Zcbr6IugVsnbHzUcSismqLZDSUPBKM6ILUxExgwe6rPAOox2x5bA5T+PSOQG0Q==}
 
-  '@tanstack/react-query-devtools@5.102.6':
-    resolution: {integrity: sha512-WKa5PQo4BtsYqAp//pI22RUk5ENzmJKwetvl9AF9J8hRK7hwM8GXVqUPMq9O4NbVWxSlXCtMIcu9CJnUkjn/PQ==}
+  '@tanstack/react-query-devtools@5.102.8':
+    resolution: {integrity: sha512-QKb7A44BZOU7nxsGA4gFN1fofjYovar5O0T83Ff4Y+2eRq09RGFrAzzutVdF/6/emfSaMDohp6e759BjB3fxEw==}
     peerDependencies:
-      '@tanstack/react-query': ^5.102.6
+      '@tanstack/react-query': ^5.102.8
       react: ^18 || ^19
 
-  '@tanstack/react-query@5.102.6':
-    resolution: {integrity: sha512-ANz4KZ8z80D85fiz5IAHjpb8XBPLrjOb/0natlD9Ascyy/3p96V86Zw8UbOfA0HDLcvK/A4gNd95r723y5UT2w==}
+  '@tanstack/react-query@5.102.8':
+    resolution: {integrity: sha512-TYBea4OuXWD7MhaSHq069TWbFe7rcwWN6kzT7JF0OKi1K6c1gTv2IzD6A6ExJsCMozdkqBWeuIUZmu4KQg0O5A==}
     peerDependencies:
       react: ^18 || ^19
 
@@ -2179,8 +2179,8 @@ packages:
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
-  baseline-browser-mapping@2.11.19:
-    resolution: {integrity: sha512-Grytf1xOxOEMTGRwx6rLGKkTabd4vMg3VrKdj/7joCmV0qgh4QwMMO6xh34YEXQqirAuUdgQGa5orJQQ+69RBw==}
+  baseline-browser-mapping@2.11.20:
+    resolution: {integrity: sha512-H0ulySigv6icDJ1F7SjtdCD6PrhTpdYCmP0CactWy1+ekh0AFd0o1Wn5T8b+hnTmdBx19u9yhL6wvCylXMY7zw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -2650,8 +2650,8 @@ packages:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
     engines: {node: 20 || >=22}
 
-  lucide-react@1.34.0:
-    resolution: {integrity: sha512-vnjGJNI7Htk5+oWW8gXGuaLgwgAb0T6/iZbBrp9JCfRFwdNWZ0YTm3eyxjOLgwN6r8iyAf3UA70zNmBRBNv7yg==}
+  lucide-react@1.35.0:
+    resolution: {integrity: sha512-yXCCWxGFYT6bLIPYC4SY6fPQPRs/d797rRIue+J9XP2Td6vQvD53gaQRBCnIVT1kTQRHtAtxlfOQNWAuIF8ELg==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -4816,19 +4816,19 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.2(jiti@2.7.0)
 
-  '@tanstack/query-core@5.102.6': {}
+  '@tanstack/query-core@5.102.8': {}
 
-  '@tanstack/query-devtools@5.102.6': {}
+  '@tanstack/query-devtools@5.102.8': {}
 
-  '@tanstack/react-query-devtools@5.102.6(@tanstack/react-query@5.102.6(react@19.2.8))(react@19.2.8)':
+  '@tanstack/react-query-devtools@5.102.8(@tanstack/react-query@5.102.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@tanstack/query-devtools': 5.102.6
-      '@tanstack/react-query': 5.102.6(react@19.2.8)
+      '@tanstack/query-devtools': 5.102.8
+      '@tanstack/react-query': 5.102.8(react@19.2.8)
       react: 19.2.8
 
-  '@tanstack/react-query@5.102.6(react@19.2.8)':
+  '@tanstack/react-query@5.102.8(react@19.2.8)':
     dependencies:
-      '@tanstack/query-core': 5.102.6
+      '@tanstack/query-core': 5.102.8
       react: 19.2.8
 
   '@tanstack/react-table@8.21.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
@@ -5106,7 +5106,7 @@ snapshots:
 
   bail@2.0.2: {}
 
-  baseline-browser-mapping@2.11.19: {}
+  baseline-browser-mapping@2.11.20: {}
 
   bidi-js@1.0.3:
     dependencies:
@@ -5500,7 +5500,7 @@ snapshots:
 
   lru-cache@11.5.2: {}
 
-  lucide-react@1.34.0(react@19.2.8):
+  lucide-react@1.35.0(react@19.2.8):
     dependencies:
       react: 19.2.8
 
@@ -5876,7 +5876,7 @@ snapshots:
     dependencies:
       '@next/env': 16.2.4
       '@swc/helpers': 0.5.15
-      baseline-browser-mapping: 2.11.19
+      baseline-browser-mapping: 2.11.20
       caniuse-lite: 1.0.30001810
       postcss: 8.5.26
       react: 19.2.8
