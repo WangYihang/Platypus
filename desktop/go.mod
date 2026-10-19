@@ -20,7 +20,7 @@ go 1.27.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/google/uuid v1.6.0
-	github.com/wailsapp/wails/v2 v2.15.0
+	github.com/wailsapp/wails/v2 v2.16.0
 	github.com/zalando/go-keyring v0.2.8
 )
 
